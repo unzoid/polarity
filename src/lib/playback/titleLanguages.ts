@@ -19,19 +19,21 @@ export interface TitleLanguages {
 
 /** An anime setting's value, with "Same as other titles" (or none yet) and "Original language" worked out. */
 function own(value: string | undefined, others: string, original: string | undefined) {
-  if (value === undefined || value === SAME_AS_OTHERS) return others;
-  return value === ORIGINAL_LANGUAGE ? original || ANIME_ORIGINAL : value;
+  const v = value === undefined || value === SAME_AS_OTHERS ? others : value;
+  return v === ORIGINAL_LANGUAGE ? original || ANIME_ORIGINAL : v;
 }
 
 /**
  * The audio and subtitle language a title plays with: Settings → Anime's own
  * for an anime, Subtitles & Audio's for everything else (#235). `original`: the
- * language the title was made in, when its details say.
+ * language the title was made in, when its details say. Subtitles & Audio's
+ * "Original language" is that language, else the file's default track (#326);
+ * an anime's is Japanese when its details don't say.
  */
 export function titleLanguages(settings: Settings | undefined, anime: boolean, original?: string): TitleLanguages {
   const audio = settings?.audioLanguage ?? "";
   const subtitle = settings?.subtitleLanguage ?? "";
-  if (!anime) return { audio, subtitle };
+  if (!anime) return { audio: audio === ORIGINAL_LANGUAGE ? (original ?? "") : audio, subtitle };
   return { audio: own(settings?.animeAudioLanguage, audio, original), subtitle: own(settings?.animeSubtitleLanguage, subtitle, original) };
 }
 
@@ -41,7 +43,7 @@ export function titleLanguages(settings: Settings | undefined, anime: boolean, o
  * nothing else to follow them.
  */
 export function settingsForTitle(settings: Settings | undefined, anime: boolean, original?: string): Settings | undefined {
-  if (!settings || !anime) return settings;
+  if (!settings || (!anime && settings.audioLanguage !== ORIGINAL_LANGUAGE)) return settings;
   const { audio, subtitle } = titleLanguages(settings, anime, original);
   return { ...settings, audioLanguage: audio, subtitleLanguage: subtitle };
 }
@@ -49,7 +51,8 @@ export function settingsForTitle(settings: Settings | undefined, anime: boolean,
 /**
  * Where the player keeps a language you pick a track in: Subtitles & Audio's
  * setting, or for an anime, Settings → Anime's while it has one of its own.
- * Picking the original language again leaves "Original language" as it is.
+ * Picking the original language again leaves "Original language" as it is,
+ * under Subtitles & Audio (#326) as under Settings → Anime.
  */
 export function rememberLanguage(
   settings: Settings | undefined,
@@ -57,11 +60,18 @@ export function rememberLanguage(
   original: string | undefined,
   patch: { audioLanguage?: string; subtitleLanguage?: string },
 ): Partial<Settings> {
-  if (!anime) return patch;
+  // Subtitles & Audio's "Original language", with the title's own one picked: stays as it is.
+  const isOriginal = (lang: string, others: string | undefined, fallback?: string) =>
+    others === ORIGINAL_LANGUAGE && !!lang && !!(original || fallback) && langMatches(lang, (original || fallback)!);
+  if (!anime) {
+    const { audioLanguage, ...rest } = patch;
+    return audioLanguage !== undefined && isOriginal(audioLanguage, settings?.audioLanguage) ? rest : patch;
+  }
   const out: Partial<Settings> = {};
   const keep = (lang: string, value: string | undefined, others: "audioLanguage" | "subtitleLanguage", ownKey: "animeAudioLanguage" | "animeSubtitleLanguage") => {
-    if (value === undefined || value === SAME_AS_OTHERS) out[others] = lang;
-    else if (value === ORIGINAL_LANGUAGE && lang && langMatches(lang, original || ANIME_ORIGINAL)) return;
+    if (value === undefined || value === SAME_AS_OTHERS) {
+      if (!isOriginal(lang, settings?.[others], ANIME_ORIGINAL)) out[others] = lang;
+    } else if (value === ORIGINAL_LANGUAGE && lang && langMatches(lang, original || ANIME_ORIGINAL)) return;
     else out[ownKey] = lang;
   };
   if (patch.audioLanguage !== undefined) keep(patch.audioLanguage, settings?.animeAudioLanguage, "audioLanguage", "animeAudioLanguage");
