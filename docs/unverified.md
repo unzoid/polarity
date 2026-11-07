@@ -1183,6 +1183,37 @@ it was shown by a real system. To check, with New episodes, New seasons and Down
   episode with a listed air date still arrives at that time; a click with the app closed opens the show.
 - **iOS**: as Android; background refresh isn't used, so only listed air dates arrive with the app closed.
 
+## Dev channel (#355)
+
+Checked here: the version rule, file names, which builds are kept and which files go, the feed's
+updater entries and the kept list (`tests/devChannel.test.ts`); connection codes, refused keys and
+that only dev builds read a stored connection (`tests/devDatabase.test.ts`); the workflow files parse,
+the dev build's own name, identifier and link scheme agree between the overlay, the shell and the
+web view (`tests/devChannel.test.ts`, `tests/deepLink.test.ts`), and `src-tauri` type-checks with
+the new command. Nothing here ran on GitHub or in a built app. Once
+the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
+1. Merge a pull request into `dev`: the "Dev build" workflow ends green and Releases has one "Dev
+   build" pre-release (not "Latest") named by the merge's hash, with the installers, their `.sig`
+   files, the mpv sources, `latest-dev.<N>.json` and `latest.json`.
+2. Install that build on Windows, macOS and Linux (AppImage): Settings → About says "Dev build <hash>
+   (<version>)". Merge another pull request: the build offers the new one and updates to it.
+3. About → Earlier builds lists both; Install this build on the older one downloads it; Restart to
+   Update puts it in place. The next check offers the newest again; with Pause updates on, it doesn't
+   until Check for Updates.
+4. A fresh dev build: the profile menu says no database is connected; Settings → Advanced → Database
+   takes a code from `scripts/devDatabaseCode.ts`, and after Restart Now signing in reaches that
+   database. An email that wasn't invited is told to ask for an invite. Remove brings it back to
+   signed out.
+5. `bun tauri dev` and a hand-made build: About says "Local build <hash>" and nothing offers an update.
+6. A release build (next tag): About shows the version and updates from releases as before.
+7. After the 12th dev build, the files of the oldest are gone from the entry.
+8. On Windows, with the released Polarity installed and signed in, install the dev build: both are in
+   the Start menu ("Polarity" and "Polarity Dev"), the dev window's title says "Polarity Dev", the dev
+   build starts empty and signed out, and the released app's settings and sign-in are unchanged.
+   Each updates only from its own line. A `polarity://title/movie/tt0000000` link opens the released
+   app, the same link with `polarity-dev://` the dev build; starting either a second time brings its
+   own window forward. Uninstalling the dev build leaves the released app as it was.
+
 ## Screens in headless Chromium (T-051)
 
 - How: `bun run dev`, then open `http://localhost:1420/fake.html` in any browser. The

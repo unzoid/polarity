@@ -11,7 +11,7 @@ use windows::Foundation::TypedEventHandler;
 use windows::UI::Notifications::{NotificationSetting, ToastNotification, ToastNotificationManager};
 
 /// The bundle identifier (tauri.conf.json), which the installer gives the shortcut as its AppUserModelID.
-const APP_ID: &str = "app.getpolar.desktop";
+const APP_ID: &str = crate::dev_channel::IDENTIFIER;
 
 /// The toasts on screen, by note id: kept so their click handlers live as long as they do.
 static TOASTS: Mutex<Option<HashMap<String, ToastNotification>>> = Mutex::new(None);

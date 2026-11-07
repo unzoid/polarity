@@ -1,12 +1,17 @@
 import { useSyncExternalStore } from "react";
 import { appUpdates, type FoundUpdate } from "./platform/updates";
 import { inShell } from "./platform/bridge";
+import { buildChannel } from "./platform/build";
 import { isRecord, str, storedJson } from "./parse";
 import { errorMessage } from "./errors";
 import { getPrefs } from "./settings/prefs";
+import { compareVersions, parseDevBuilds, type DevBuild } from "./updateFeed";
+
+export { compareVersions, parseDevBuilds, type DevBuild };
 
 /**
- * App updates, from the signed `latest.json` on the newest GitHub release.
+ * App updates, from the signed `latest.json` on the newest GitHub release, or in a dev build on
+ * the "Dev build" pre-release (docs/dev-channel.md). Local builds never check.
  *
  * Checked a few seconds after launch and then every few hours. With
  * "Download updates automatically" on (the default) a new build downloads in
@@ -17,14 +22,15 @@ export type UpdateState =
   | { phase: "idle" }
   | { phase: "checking" }
   | { phase: "current"; checkedAt: number }
-  | { phase: "available"; version: string; notes: string }
-  | { phase: "downloading"; version: string; notes: string; progress: number | null }
-  | { phase: "ready"; version: string; notes: string }
-  | { phase: "installing"; version: string }
+  | { phase: "available"; version: string; name: string; notes: string }
+  | { phase: "downloading"; version: string; name: string; notes: string; progress: number | null }
+  | { phase: "ready"; version: string; name: string; notes: string }
+  | { phase: "installing"; version: string; name: string }
   | { phase: "error"; message: string };
 
 const RELEASES = "https://github.com/unzoid/polarity/releases";
-export const releaseUrl = (version?: string) => (version ? `${RELEASES}/tag/v${version}` : RELEASES);
+export const releaseUrl = (version?: string) =>
+  buildChannel === "dev" ? `${RELEASES}/tag/dev` : version ? `${RELEASES}/tag/v${version}` : RELEASES;
 
 let state: UpdateState = { phase: "idle" };
 let update: FoundUpdate | null = null;
@@ -50,6 +56,8 @@ export function dismissUpdate() {
 
 export async function checkForUpdates({ quiet = false } = {}) {
   if (!inShell || !appUpdates.canUpdate) return;
+  // Paused in a dev build's About: only "Check for Updates" asks.
+  if (quiet && devUpdatesPaused()) return;
   // Already found one: nothing newer is worth interrupting a download for.
   if (state.phase === "checking" || state.phase === "downloading" || state.phase === "ready" || state.phase === "installing") return;
   if (!quiet) set({ phase: "checking" });
@@ -60,9 +68,7 @@ export async function checkForUpdates({ quiet = false } = {}) {
       set({ phase: "current", checkedAt: Date.now() });
       return;
     }
-    update = found;
-    const info = { version: found.version, notes: found.notes };
-    set({ phase: "available", ...info });
+    offer(found);
     if (getPrefs().autoDownloadUpdates) void downloadUpdate();
   } catch (e) {
     // Offline, or no release feed yet: a background check stays silent.
@@ -70,15 +76,20 @@ export async function checkForUpdates({ quiet = false } = {}) {
   }
 }
 
+function offer(found: FoundUpdate) {
+  update = found;
+  set({ phase: "available", version: found.version, name: found.name, notes: found.notes });
+}
+
 export async function downloadUpdate() {
   if (!update || state.phase !== "available") return;
-  const { version, notes } = state;
-  set({ phase: "downloading", version, notes, progress: null });
+  const { version, name, notes } = state;
+  set({ phase: "downloading", version, name, notes, progress: null });
   try {
     await update.download((got, total) => {
-      if (total) set({ phase: "downloading", version, notes, progress: Math.min(1, got / total) });
+      if (total) set({ phase: "downloading", version, name, notes, progress: Math.min(1, got / total) });
     });
-    set({ phase: "ready", version, notes });
+    set({ phase: "ready", version, name, notes });
   } catch (e) {
     set({ phase: "error", message: describe(e) });
   }
@@ -87,9 +98,9 @@ export async function downloadUpdate() {
 /** Installs the downloaded build and starts it again. On Windows the installer closes the app itself. */
 export async function installUpdate() {
   if (!update || state.phase !== "ready") return;
-  const { version, notes } = state;
+  const { version, name, notes } = state;
   rememberNotes(version, notes);
-  set({ phase: "installing", version });
+  set({ phase: "installing", version, name });
   try {
     await update.install();
     await appUpdates.relaunch();
@@ -102,6 +113,51 @@ function describe(e: unknown) {
   const s = errorMessage(e);
   if (/network|dns|connect|timed out|offline/i.test(s)) return "Couldn't reach the update server. Check your connection.";
   return s;
+}
+
+// --- Dev builds: pausing updates, going back --------------------------------------------------
+
+const PAUSED = "polar.devUpdatesPaused";
+
+/** Only in dev builds: no background checks while paused (after going back to an older build, say). */
+export function devUpdatesPaused() {
+  if (buildChannel !== "dev") return false;
+  try {
+    return localStorage.getItem(PAUSED) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setDevUpdatesPaused(paused: boolean) {
+  try {
+    if (paused) localStorage.setItem(PAUSED, "1");
+    else localStorage.removeItem(PAUSED);
+  } catch {}
+  listeners.forEach((l) => l());
+}
+export const useDevUpdatesPaused = () => useSyncExternalStore(subscribe, devUpdatesPaused);
+
+/** The kept dev builds (Settings → About in a dev build). */
+export async function devBuilds(): Promise<DevBuild[]> {
+  if (buildChannel !== "dev" || !inShell || !appUpdates.canUpdate) return [];
+  const { feed } = await appUpdates.devFeed();
+  return parseDevBuilds(feed);
+}
+
+/**
+ * Downloads a kept dev build, older ones included, through the usual flow: it is offered, then
+ * downloads, then waits for "Restart to Update". The next check offers the newest build again.
+ */
+export async function installDevBuild(build: number) {
+  if (buildChannel !== "dev" || state.phase === "downloading" || state.phase === "installing") return;
+  try {
+    const { update: found } = await appUpdates.devFeed(build);
+    offer(found);
+    await downloadUpdate();
+  } catch (e) {
+    set({ phase: "error", message: describe(e) });
+  }
 }
 
 let started = false;
@@ -142,8 +198,8 @@ export async function takeWhatsNew(): Promise<WhatsNew | null> {
   const saved = storedJson(localStorage, PENDING_NOTES);
   if (isRecord(saved) && saved.version === version) notes = str(saved.notes) ?? "";
   localStorage.removeItem(PENDING_NOTES);
-  // Installed by hand: ask GitHub for the release's notes.
-  if (!notes) {
+  // Installed by hand: ask GitHub for the release's notes (dev builds have no release of their own).
+  if (!notes && buildChannel === "release") {
     try {
       const res = await fetch(`https://api.github.com/repos/unzoid/polarity/releases/tags/v${version}`);
       if (res.ok) {
@@ -159,16 +215,6 @@ export async function takeWhatsNew(): Promise<WhatsNew | null> {
 function releaseNotesSection(body: string) {
   const m = body.match(/#+\s*What's new\s*\n([\s\S]*?)(?=\n#+\s|\n\s*mpv is still bundled|$)/i);
   return (m ? m[1] : body).trim();
-}
-
-export function compareVersions(a: string, b: string) {
-  const pa = a.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
-  const pb = b.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d) return Math.sign(d);
-  }
-  return 0;
 }
 
 export const appVersion = () => (inShell ? appUpdates.version() : Promise.resolve("dev"));
