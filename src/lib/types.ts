@@ -169,6 +169,10 @@ export interface StreamsResult {
   failed: string[];
   /** Left out by the filters in Settings → Sources. */
   hidden?: number;
+  /** The add-ons asked, whatever they answered (the player's start log). */
+  asked?: string[];
+  /** The ids they were asked for: the episode's, then its other ids. */
+  ids?: string[];
 }
 
 /** What `search` returns: matches of each kind. */

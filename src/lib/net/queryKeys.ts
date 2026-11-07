@@ -74,6 +74,7 @@ export const keys = {
     seasons: (anilistId: number | undefined) => ["anime", "seasons", anilistId] as const,
     /** An entry's IMDb id from the id lists on the device (landscape card art). */
     listedImdb: (anilistId: number) => ["anime", "listed-imdb", anilistId] as const,
+    listedKitsu: (anilistId: number) => ["anime", "listed-kitsu", anilistId] as const,
     link: (anilistId: number) => ["anime", "link", anilistId] as const,
     media: (anilistId: number) => ["anime", "media", anilistId] as const,
     /** An entry's second page of recommendations (lib/anime/anilist.ts useMoreRecommendations). */

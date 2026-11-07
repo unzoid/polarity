@@ -13,6 +13,10 @@ time the page is opened (`usePlayback` in `src/screens/AnimeDetail.tsx`, `TvAnim
 (`src/lib/anime/search.ts`), which can override ani.zip's link with a Cinemeta title search
 (also, since #78, for a part with a part name, "… 1st Stage", "… 2nd - 3rd Stage", that IMDb lists
 as a series of its own: the entry plays from that series, its episodes matched by air date).
+Since #360 an episode that hasn't aired yet goes on from the aired ones instead of by its own date
+(`episodeMatcher` in `src/lib/anime/anizip.ts`): the catalogs list it under a placeholder name with a
+guessed date. A split part's second entry, which borrows its prequel's ani.zip record, is also asked
+for by its own Kitsu id from the id lists.
 
 Nothing remembers that choice. So the same show splits into several items when:
 

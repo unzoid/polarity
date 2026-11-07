@@ -164,3 +164,29 @@ export function formatReport(steps: StartStep[], info: { app: string; platform: 
   ];
   return redact(lines.join("\n"));
 }
+
+// --- Asking the add-ons ---------------------------------------------------
+
+const NO_ADDONS = "No sources found. Install a stream add-on in Settings.";
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** The start log's line when the add-ons asked answered with nothing: not the same as none answering ("No answer from: …"). */
+export const noneFound = (asked: number) => `No sources from the ${plural(asked, "add-on")} asked`;
+
+/** The start log's line for who was asked for what: "Asked 2 add-ons (A, B) for tt0000001:1:8, kitsu:1:8". */
+export function askedLine(asked: string[], ids: string[]) {
+  const what = ids.join(", ");
+  return asked.length ? `Asked ${plural(asked.length, "add-on")} (${asked.join(", ")}) for ${what}` : `None of your add-ons serves ${what}, so none was asked`;
+}
+
+/**
+ * Why the add-ons' answer leaves nothing to try. No add-on asked (or an older backend that doesn't say): install
+ * one. Asked but none answered, asked and nothing found, or everything found left out by the source filters, each
+ * says so; the filters' links to Settings → Sources.
+ */
+export function noSources(r: { asked?: number; answered?: number; found: number; filtered: number }): { reason: string; settings?: "sources" } {
+  if (r.found && r.filtered >= r.found) return { reason: "Your source filters left out every source.", settings: "sources" };
+  if (!r.asked) return { reason: NO_ADDONS };
+  if (!r.answered) return { reason: "None of your add-ons answered. Try again in a moment." };
+  return { reason: "Your add-ons found no sources for this." };
+}

@@ -99,3 +99,16 @@ test("a YouTube video that can't play here (Android) says so and offers Open in 
   await click(open);
   expect(opened).toBe(1);
 });
+
+test("a logo that doesn't load leaves the name, not a broken image (#360)", async () => {
+  const logo = "https://images.example.com/broken-logo.png";
+  const { container } = await render(<PlayerStatus state={{ status: "searching" }} error={null} logo={logo} name="Sintel" steps={[]} backend="mpv" />);
+  const img = container.querySelector<HTMLImageElement>(".load-mark img");
+  expect(img).toBeTruthy();
+  await act(async () => void img!.dispatchEvent(new Event("error")));
+  expect(container.querySelector(".load-mark img")).toBeNull();
+  expect(container.querySelector(".load-mark-base")!.textContent).toBe("Sintel");
+  // Opened again, it doesn't try the broken logo a second time.
+  const again = await render(<PlayerStatus state={{ status: "searching" }} error={null} logo={logo} name="Sintel" steps={[]} backend="mpv" />);
+  expect(again.container.querySelector(".load-mark img")).toBeNull();
+});

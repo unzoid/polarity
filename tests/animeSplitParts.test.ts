@@ -4,6 +4,7 @@ import type { AniZip } from "../src/lib/anime/anizip";
 import { animeEpisodes } from "../src/lib/anime/episodes";
 import { walkSeasons } from "../src/lib/anime/seasons";
 import { entryZip, prequelOf, sameSplitEntry } from "../src/lib/anime/splitParts";
+import { ownEpisodeName } from "../src/lib/format";
 import type { Links, Lookup } from "../src/lib/anime/search";
 import type { MetaPreview, SearchResults, Video } from "../src/lib/types";
 
@@ -217,5 +218,42 @@ describe("a split part IMDb lists as a series of its own (#78)", () => {
     expect(withoutPart("Kestrel Hollow 2nd Season")).toBe("Kestrel Hollow");
     expect(withoutPart("Kestrel Hollow Part 2")).toBe("Kestrel Hollow");
     expect(withoutPart("Ryokou-dan")).toBe("Ryokou-dan");
+  });
+});
+
+// The catalogs list a coming episode under a placeholder name ("Episode #1.9") and a date that's a guess (#360):
+// here the coming ones are dated a week early, so by date each would sit on the next episode's video.
+const guessed = (list: Video[], from: number) =>
+  list.map((v) => (v.episode < from ? v : { ...v, title: `Episode #${v.season}.${v.episode}`, released: new Date(Date.parse(v.released!) - WEEK).toISOString() }));
+
+describe("a split part's episodes that haven't aired yet (#360)", () => {
+  test("on the part's own series they go on from the aired ones, whatever date the catalog guessed", () => {
+    const zip = entryZip(leg2Named, leg2Zip, leg1Zip);
+    // Episodes 1-7 aired; the series' episode 9 onwards (the part's 8 onwards) are placeholders.
+    const eps = animeEpisodes({ anime: leg2Named, zip, videos: guessed(partVideos, 9), imdb: PART, titles: "english", now: NOW });
+    expect(eps.map((e) => [e.number, e.video?.id])).toEqual(Array.from({ length: 11 }, (_, i) => [i + 1, `${PART}:1:${i + 2}`]));
+  });
+
+  test("on the show ani.zip links, the same", () => {
+    const zip = entryZip(leg2Page, leg2Zip, leg1Zip);
+    const eps = animeEpisodes({ anime: leg2Page, zip, videos: guessed(videos, 9), imdb: "tt0000001", titles: "english", now: NOW });
+    expect(eps.map((e) => [e.number, e.video?.id])).toEqual(Array.from({ length: 11 }, (_, i) => [i + 1, `tt0000001:3:${i + 2}`]));
+  });
+
+  test("with nothing aired to go by, the dates still place them", () => {
+    const zip = entryZip(leg2Named, leg2Zip, leg1Zip);
+    const eps = animeEpisodes({ anime: leg2Named, zip, videos: partVideos, imdb: PART, titles: "english", now: at(-2) });
+    expect(eps.map((e) => e.video?.id)).toEqual(Array.from({ length: 11 }, (_, i) => `${PART}:1:${i + 2}`));
+  });
+});
+
+describe("placeholder episode names (#360)", () => {
+  test("only real names count as an episode's own", () => {
+    expect(ownEpisodeName("Episode #1.9")).toBeUndefined();
+    expect(ownEpisodeName("Episode #12.103")).toBeUndefined();
+    expect(ownEpisodeName("Episode 9")).toBeUndefined();
+    expect(ownEpisodeName(undefined)).toBeUndefined();
+    expect(ownEpisodeName("Episode #1.9: The Return")).toBe("Episode #1.9: The Return");
+    expect(ownEpisodeName("The Lantern Road")).toBe("The Lantern Road");
   });
 });
