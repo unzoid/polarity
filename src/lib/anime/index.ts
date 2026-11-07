@@ -13,6 +13,7 @@ export * from "./episodes";
 export * from "./format";
 export * from "./franchiseEntry";
 export * from "./franchise";
+export * from "./franchiseSummary";
 export * from "./groups";
 export * from "./kitsu";
 export * from "./landscapeArt";

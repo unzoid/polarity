@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { useTrailerOpen } from "../components/Trailer";
 import { AnimeCharacters } from "../components/anime/AnimeCharacters";
 import { AnimeDetails } from "../components/anime/AnimeDetails";
-import { AnimeEpisodes, SeasonTabs, type Franchise } from "../components/anime/AnimeEpisodes";
-import { AnimeHero } from "../components/anime/AnimeHero";
+import { AnimeEpisodes, FilmPick, SeasonTabs, type Franchise } from "../components/anime/AnimeEpisodes";
+import { AnimeHero, type HeroFranchise } from "../components/anime/AnimeHero";
 import { AnimeListPanels } from "../components/anime/AnimeListPanel";
 import { AnimeRelated } from "../components/anime/AnimeRelated";
 import { Img } from "../components/Img";
@@ -13,6 +14,10 @@ import { Skeleton } from "../components/ui/Skeleton";
 import {
   type Anime,
   animeArt,
+  animeEntries,
+  animeQuery,
+  continuePart,
+  distinctLabels,
   type AnimeCard as Card,
   baseTitle,
   franchiseArt,
@@ -24,7 +29,7 @@ import {
   useLinkedImdb,
   useLinkedImdbs,
 } from "../lib/anime";
-import { useMeta } from "../lib/net";
+import { useMeta, useProgressOf } from "../lib/net";
 import { usePrefs } from "../lib/settings";
 import { useFoldSnap, useFormFactor } from "../lib/ui";
 
@@ -44,7 +49,7 @@ import { useFoldSnap, useFormFactor } from "../lib/ui";
  * among the related titles.
  */
 export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
-  const { animeSeparateEntries: separate } = usePrefs();
+  const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const [activeId, setActiveId] = useState(id);
   const { data: opened } = useAnime(id);
   const { data: walk, isPending: walking } = useAnimeSeasons(separate ? undefined : opened);
@@ -70,6 +75,25 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const linkedOf = useLinkedImdbs(found ? found.map((s) => s.card.id) : []);
   const base = found && baseTitle(found.map((s) => s.card), linkedOf);
 
+  // A grouped page's top is the whole franchise's (#327): the base title's name, story and facts, the parts'
+  // summary, and Play carrying on wherever you left off, the same on every tab.
+  const { data: baseAnime } = useQuery({ ...animeQuery(base?.card.id ?? 0), enabled: !!base });
+  const linkedIds = found ? found.map((s) => linkedOf(s.card.id)).filter((x): x is string => !!x?.startsWith("tt")) : [];
+  const played = useProgressOf([...new Set(linkedIds)]);
+  const heroFranchise = useMemo((): HeroFranchise | undefined => {
+    if (!found || !base) return undefined;
+    const labels = distinctLabels(
+      found.map((s) => [title(s.card.title), s.card.title.romaji, s.card.title.english]),
+      found.map((s) => s.label),
+    );
+    const parts = found.map((s, i) => ({ card: s.card, label: labels[i] }));
+    const play = continuePart(parts, played, (v) => animeEntries.entryAt(v)?.anilist, linkedOf) ?? base.card;
+    const at = parts.findIndex((p) => p.card.id === play.id);
+    return { parts, play, following: parts[at + 1]?.card };
+    // `linkedOf` and `title` are new functions every render; what they answer is in `base` and the title setting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found, base?.card, played, animeTitles]);
+
   // The IMDb trailer behind the page, as a show's page has (test report 1, item 17): one IMDb id
   // covers the whole franchise and its trailer is the base title's, so only on that entry.
   const root = useRef<HTMLDivElement>(null);
@@ -82,7 +106,6 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const firstEntry = separate
     ? !!opened && !opened.relations.edges.some((e) => e.relationType === "PREQUEL" && e.node.type !== "MANGA" && isSeason(e.node))
     : firstKnown && (!base || base.card.id === activeId);
-  const trailer = useBackdropTrailer(firstEntry && imdb?.startsWith("tt") ? imdb : undefined, { active: onTop, paused: scrolledAway || bigTrailer });
   const onImdb = useCallback((id: string | null | undefined) => setImdb(id), []);
 
   // One background and logo for every season tab (#27): the base title's linked series, else its ani.zip art.
@@ -103,6 +126,9 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const kept = useRef<{ first: number; imdb: string | null }>(undefined);
   if (first && resolved !== undefined && kept.current?.first !== first.id) kept.current = { first: first.id, imdb: resolved };
   const franchiseImdb = first && kept.current?.first === first.id ? kept.current.imdb : resolved;
+  // A grouped page's trailer is the base title's on every tab, as its top is (#327).
+  const trailerId = found ? (firstKnown ? franchiseImdb : undefined) : firstEntry ? imdb : undefined;
+  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, { active: onTop, paused: scrolledAway || bigTrailer });
   const { data: meta, isLoading: metaLoading } = useMeta(
     first?.format === "MOVIE" ? "movie" : "series",
     franchiseImdb ?? "",
@@ -137,7 +163,20 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
         onScroll={(e) => setScrolledAway(e.currentTarget.scrollTop > e.currentTarget.clientHeight * 0.25)}
       >
         {phone && backdrop}
-        <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} />
+        {heroFranchise && base ? (
+          <AnimeHero
+            item={base.card}
+            anime={baseAnime}
+            logo={art.logo}
+            background={art.background}
+            name={title(base.card.title)}
+            onImdb={onImdb}
+            trailer={trailer}
+            franchise={heroFranchise}
+          />
+        ) : (
+          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+        )}
         {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} />}
       </div>
     </div>
@@ -160,6 +199,7 @@ function Body({ anime, franchise, switching }: { anime: Anime; franchise?: Franc
       {isMovie && franchise && (
         <section className="seasons">
           <SeasonTabs franchise={franchise} />
+          <FilmPick key={anime.id} anime={anime} />
         </section>
       )}
       <AnimeListPanels key={`list-${anime.id}`} anime={anime} />
