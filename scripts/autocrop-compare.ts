@@ -13,7 +13,7 @@
  * detector over the same frames, each through the same CropTracker, and
  * prints a table: how soon bars are cropped, how often the crop changes, and
  * frames that cut picture off or leave bars on screen; then how each crop change
- * would be shown (on the cut, followed, eased late, correcting a misread),
+ * would be shown (on the cut, followed, late, correcting a misread),
  * and per shot, the frames that cut picture off.
  *
  * Needs ffmpeg and ffprobe on PATH (a GPL build, for cropdetect) and Rust.

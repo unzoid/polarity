@@ -3,14 +3,15 @@
 //! inside mpv and by our own detector (`polar_player::bars`) from
 //! screenshots, as `polar_player::sampler` decides: around cropdetect's
 //! changes by default, every frame on macOS and with the setting.
+//! `polar_player::frames` says which bars the frame on screen gets.
 
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use polar_player::bars::{levels_for, Levels, Measured};
-use polar_player::crop::{cropdetect_for, cropdetect_reading, zoom_for, CropTracker, CropZoom, Rect, Why, CROPDETECT};
-use polar_player::motion::Easing;
-use polar_player::sampler::{Feed, Sampler};
+use polar_player::crop::{cropdetect_for, cropdetect_reading, zoom_for, CropZoom, Rect, CROPDETECT};
+use polar_player::frames::{Ask, Frames};
+use polar_player::sampler::Sampler;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
@@ -67,6 +68,11 @@ async fn crop_geometry(mpv: &Mpv) -> Option<CropGeometry> {
 struct Shot {
     load: u64,
     size: (i64, i64),
+    /// The [`Ask`] it answers (the frame on screen while paused), if any.
+    still: Option<u64>,
+    /// The pts of the frame read, when it's sure (macOS: `time-pos` the
+    /// same before and after reading it), for [`Sampler::predict`].
+    pts: Option<f64>,
     /// The reading (`Some(None)`: a black frame), `None` if no frame came.
     measured: Option<Option<Measured>>,
     /// Bytes mpv wrote for it (none on macOS, where it comes in memory).
@@ -78,14 +84,14 @@ struct Shot {
 /// Take a screenshot of the frame shown now and read it with our detector:
 /// an uncompressed PNG mpv writes to this app's folder, read and deleted.
 #[cfg(not(mpv_apple))]
-async fn take_shot(app: AppHandle, load: u64, g: CropGeometry) -> Shot {
+async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64>) -> Shot {
     use std::sync::atomic::AtomicU64;
 
     use polar_player::bars::detect;
     use polar_player::png::decode_stored;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let mut shot = Shot { load, size: g.size, measured: None, written: 0, ours: Duration::ZERO };
+    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, written: 0, ours: Duration::ZERO };
     let path = super::shots_dir().join(format!("autocrop-{}.png", NEXT.fetch_add(1, Ordering::Relaxed)));
     let mpv = &app.state::<AppState>().mpv;
     let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "video"])).await;
@@ -108,17 +114,22 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry) -> Shot {
 /// Read the frame shown now with our detector, in memory: libmpv runs in
 /// the app here ([`super::apple::Frames`]).
 #[cfg(mpv_apple)]
-async fn take_shot(app: AppHandle, load: u64, g: CropGeometry) -> Shot {
+async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64>) -> Shot {
     use std::sync::{Arc, Mutex as StdMutex};
 
     use polar_player::bars::detect;
+    use polar_player::lookahead::PTS_SLACK;
 
     use super::{apple::Frames, Conn, Engine};
 
     /// The reader of the running player's frames, by the player it reads.
     static FRAMES: StdMutex<Option<(usize, Arc<Frames>)>> = StdMutex::new(None);
 
-    let mut shot = Shot { load, size: g.size, measured: None, written: 0, ours: Duration::ZERO };
+    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, written: 0, ours: Duration::ZERO };
+    let time_pos = || async {
+        let mpv = &app.state::<AppState>().mpv;
+        mpv.request(json!(["get_property", "time-pos"])).await.ok().and_then(|t| t.as_f64())
+    };
     let frames = {
         let state = app.state::<AppState>();
         let guard = state.mpv.conn.lock().await;
@@ -135,6 +146,7 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry) -> Shot {
         }
     };
     let started = Instant::now();
+    let before = time_pos().await;
     let read = tokio::task::spawn_blocking(move || {
         frames.read(|frame| detect(&frame, g.levels).map(|m| m.scaled((frame.w as i64, frame.h as i64), g.size)))
     })
@@ -145,6 +157,9 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry) -> Shot {
         // The player may have gone: open a reader of the next one.
         *FRAMES.locked() = None;
     }
+    // A new frame shown meanwhile: which of the two was read isn't sure.
+    let after = time_pos().await;
+    shot.pts = before.zip(after).filter(|(b, a)| (a - b).abs() <= PTS_SLACK).map(|(b, _)| b);
     shot.measured = read;
     shot.ours = started.elapsed();
     shot
@@ -184,41 +199,39 @@ impl Cost {
 }
 
 /// While autocrop is on: mpv reports cropdetect's reading whenever it
-/// changes, and the playback position once per displayed frame, observed in
-/// that order so each frame's reading arrives before its tick. [`Sampler`]
-/// says which reading of each frame goes to [`CropTracker`] (cropdetect's,
-/// or our detector's from a screenshot, [`take_shot`], one at a time), and
-/// [`CropZoom`] moves the zoom: at once for a
-/// switch the tracker believes on the frame it happens (readings run a
-/// frame ahead of the screen, as mpv filters a frame before showing it, so
-/// it lands on the cut) and for bars the film animates, eased (ease-out)
-/// for one believed a few frames late or read from a screenshot (which
-/// comes late). A change the lookahead ([`preroll::ahead`](super::preroll::ahead))
-/// scheduled goes to the tracker as a cut on the frame it's due, or on the
-/// first frame before it whose cropdetect reading shows it, ahead of that
-/// frame's reading. Each change is logged with the rule that made it. While paused
-/// no frames come and nothing changes, except finishing a move and keeping
-/// the zoom right for the window.
+/// changes, the playback position once per displayed frame and whether
+/// it's paused, observed in that order so each frame's reading arrives
+/// before its tick. [`Frames`] says which bars each frame gets: playing
+/// on, the next frame's, from cropdetect's reading or our detector's from a
+/// screenshot ([`take_shot`], one at a time, as [`Sampler`] says) and the
+/// changes the lookahead ([`preroll::ahead`](super::preroll::ahead))
+/// scheduled on it; after a seek or a frame step, the bars the lookahead
+/// read for that frame, checked (paused) by a screenshot of it, or
+/// playback held until that screenshot is read. [`CropZoom`] sends the
+/// zoom, always as a jump. Each change is logged with the rule that made
+/// it. While paused no frames come and nothing changes, except keeping the
+/// zoom right for the window.
 pub(super) async fn autocrop(app: AppHandle, run: u64) {
-    let meta_id = CROP_OBSERVE_BASE + run * 2;
+    let meta_id = CROP_OBSERVE_BASE + run * 4;
     let frame_id = meta_id + 1;
+    let pause_id = meta_id + 2;
     let (tx, mut rx) = mpsc::unbounded_channel();
     {
         let state = app.state::<AppState>();
         *state.mpv.crop_events.locked() = Some((run, tx));
         let _ = state.mpv.request(json!(["observe_property", meta_id, "vf-metadata/autocrop"])).await;
         let _ = state.mpv.request(json!(["observe_property", frame_id, "time-pos"])).await;
+        let _ = state.mpv.request(json!(["observe_property", pause_id, "pause"])).await;
     }
-    let mut tracker = CropTracker::default();
+    let mut frames = Frames::new(app.state::<AppState>().mpv.tuned.locked().sampling());
     let mut reading: Option<Rect> = None;
+    let mut paused = false;
     let mut geometry: Option<(CropGeometry, Instant)> = None;
-    let mut zoom = CropZoom::new(Easing::default());
+    let mut zoom = CropZoom::default();
     // Fit and Fill switch at once (panscan does): the zoom follows at once too.
     let mut filled: Option<bool> = None;
-    let clock = Instant::now();
     let mut filter = CROPDETECT; // what mpv_tune added
     let mut opened = 0; // the last load checked for opening bars
-    let mut sampler = Sampler::new(app.state::<AppState>().mpv.tuned.locked().sampling());
     let (shot_tx, mut shot_rx) = mpsc::unbounded_channel::<Shot>();
     let mut in_flight: Option<Instant> = None; // the screenshot on its way, since when
     let mut cost = Cost::default();
@@ -228,9 +241,29 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
             Some(shot) = shot_rx.recv() => {
                 in_flight = None;
                 cost.add(&shot);
-                let load = app.state::<AppState>().mpv.loads.load(Ordering::SeqCst);
-                if let Some(m) = shot.measured.filter(|_| shot.load == load && geometry.is_some_and(|(g, _)| g.size == shot.size)) {
-                    sampler.measured(m);
+                let state = app.state::<AppState>();
+                let mpv = &state.mpv;
+                let load = mpv.loads.load(Ordering::SeqCst);
+                let Some((g, _)) = geometry.filter(|(g, _)| shot.load == load && g.size == shot.size) else {
+                    if frames.give_up() {
+                        paused = false;
+                        let _ = mpv.request(json!(["set_property", "pause", false])).await;
+                    }
+                    continue;
+                };
+                let play_on = match shot.measured {
+                    Some(m) => {
+                        let mut ahead = mpv.ahead.locked();
+                        frames.shot(load, (g.size, g.display), shot.still, shot.pts, m, ahead.as_mut())
+                    }
+                    None => shot.still.is_some() && frames.give_up(),
+                };
+                if shot.still.is_some() {
+                    send_zoom(mpv, &frames, &mut zoom, load, g).await;
+                }
+                if play_on {
+                    paused = false;
+                    let _ = mpv.request(json!(["set_property", "pause", false])).await;
                 }
                 continue;
             }
@@ -241,9 +274,9 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
         if !tune.autocrop || mpv.autocrop_run.load(Ordering::SeqCst) != run {
             break;
         }
-        // The setting changed: mpv_tune has added or removed cropdetect.
-        if tune.sampling() != sampler.sampling() {
-            sampler = Sampler::new(tune.sampling());
+        // The setting changed (mpv_tune may have added or removed cropdetect): read afresh.
+        if tune.sampling() != frames.sampler.sampling() {
+            frames.sampler = Sampler::new(tune.sampling());
             (filter, reading) = (CROPDETECT, None);
         }
         // mpv was shut down (idle, or it exited): the next start turns autocrop on afresh.
@@ -254,6 +287,10 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
             Ok(None) => break, // a newer run took over
             Ok(Some((id, data))) if id == meta_id => {
                 reading = cropdetect_reading(&data);
+                continue;
+            }
+            Ok(Some((id, data))) if id == pause_id => {
+                paused = data.as_bool().unwrap_or(false);
                 continue;
             }
             Ok(Some((id, data))) if id == frame_id => data.as_f64(),
@@ -293,7 +330,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
                 match *slot {
                     Some(Opening::Probing(l)) if l == load => continue,
                     Some(Opening::Ready { load: l, full, bars }) if l == load => {
-                        tracker.open(load, full, bars);
+                        frames.tracker.open(load, full, bars);
                         *slot = None;
                         bars
                     }
@@ -301,51 +338,53 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
                 }
             };
             opened = load;
-            sampler.reset();
+            frames.reset();
             let source = mpv.source.locked().clone().filter(|(l, ..)| *l == load);
             if let Some((_, url, fields)) = source.filter(|_| mpv.tuned.locked().lookahead) {
                 tauri::async_runtime::spawn(ahead(app.clone(), run, load, url, fields, bars));
             }
         }
+        // A screenshot held playback for too long: play on without it.
+        if frames.holding() && in_flight.is_none_or(|t| t.elapsed() >= SHOT_GIVE_UP) && frames.give_up() {
+            paused = false;
+            let _ = mpv.request(json!(["set_property", "pause", false])).await;
+        }
         if let Some(t) = frame {
-            // The reading is of the next frame (mpv filters one ahead): so is the change.
             let live = reading.filter(|_| tune.cropdetect());
-            let next = t + g.frame;
-            let due = mpv.ahead.locked().as_mut().and_then(|s| {
-                let due = s.take(load, next).map(|c| (c, Why::Keyframe));
-                due.or(s.found(load, next, live).map(|c| (c, Why::Window)))
-            });
-            if let Some((change, why)) = due {
-                tracker.cut(load, g.size, change.bars, why);
+            let ask = {
+                let mut ahead = mpv.ahead.locked();
+                frames.frame(load, (g.size, g.display), t, paused, g.frame, live, ahead.as_mut(), tune.lookahead)
+            };
+            if let Some(why) = frames.tracker.changed() {
+                let (v, h) = frames.tracker.bars(load);
+                let on = if paused { t } else { t + g.frame };
+                tracing::info!("autocrop: bars {v}/{h} px from {on:.3} s, {}", why.describe());
             }
-            match sampler.frame(live, tracker.following()) {
-                Feed::Cropdetect(r) => tracker.update(load, g.size, g.display, r),
-                // A screenshot's, of a frame already shown: a change it brings is eased.
-                Feed::Measured(m) => tracker.update_late(load, g.size, g.display, m),
-                // No reading for this frame: a lookahead cut still lands on it.
-                Feed::Wait => tracker.update(load, g.size, g.display, None),
-            }
-            if let Some(why) = tracker.changed() {
-                let (v, h) = tracker.bars(load);
-                tracing::info!("autocrop: bars {v}/{h} px from {next:.3} s, {}", why.describe());
-            }
-            if sampler.wants_shot() && in_flight.is_none_or(|t| t.elapsed() >= SHOT_GIVE_UP) {
+            let still = match ask {
+                Ask::Nothing => None,
+                Ask::Still(n) => Some(n),
+                Ask::Hold(n) => {
+                    // Paused first, so the frame after this one waits for its crop.
+                    paused = true;
+                    let _ = mpv.request(json!(["set_property", "pause", true])).await;
+                    Some(n)
+                }
+            };
+            let wanted = still.is_some() || frames.sampler.wants_shot();
+            if wanted && (still.is_some() || in_flight.is_none_or(|t| t.elapsed() >= SHOT_GIVE_UP)) {
                 in_flight = Some(Instant::now());
                 let (app, tx) = (app.clone(), shot_tx.clone());
                 tauri::async_runtime::spawn(async move {
-                    let _ = tx.send(take_shot(app, load, g).await);
+                    let _ = tx.send(take_shot(app, load, g, still).await);
                 });
             }
         }
-        let target = zoom_for(tracker.bars(load), g.size, g.display, g.window, g.fill);
         let switched = filled.is_some_and(|f| f != g.fill);
         filled = Some(g.fill);
-        let at_once = switched || (frame.is_some() && tracker.on_cut());
-        if let Some(z) = zoom.next(load, g.window, target, at_once, clock.elapsed().as_secs_f64()) {
-            if mpv.request(json!(["set_property", "video-zoom", z])).await.is_err() {
-                zoom.unsent();
-            }
+        if switched {
+            zoom.unsent();
         }
+        send_zoom(mpv, &frames, &mut zoom, load, g).await;
     }
     let state = app.state::<AppState>();
     {
@@ -356,4 +395,15 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
     }
     let _ = state.mpv.request(json!(["unobserve_property", meta_id])).await;
     let _ = state.mpv.request(json!(["unobserve_property", frame_id])).await;
+    let _ = state.mpv.request(json!(["unobserve_property", pause_id])).await;
+}
+
+/// Send the zoom for the tracker's bars, if it differs from what mpv has.
+async fn send_zoom(mpv: &Mpv, frames: &Frames, zoom: &mut CropZoom, load: u64, g: CropGeometry) {
+    let target = zoom_for(frames.tracker.bars(load), g.size, g.display, g.window, g.fill);
+    if let Some(z) = zoom.next(load, g.window, target, frames.tracker.changed().is_some()) {
+        if mpv.request(json!(["set_property", "video-zoom", z])).await.is_err() {
+            zoom.unsent();
+        }
+    }
 }

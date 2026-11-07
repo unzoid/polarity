@@ -188,9 +188,9 @@ struct Run {
     /// Bars of the stretch being timed, and frames into it.
     timing: Option<((i64, i64), usize)>,
     prev_want: (i64, i64),
-    /// How each change would be shown (`CropZoom`): [on the cut, followed,
-    /// eased because late, correcting a misread at once, the same eased,
-    /// into a misread].
+    /// How each change would be shown (each a jump, `CropZoom`): [on the
+    /// cut, followed, late, correcting a misread on the frame, the same
+    /// late, into a misread].
     kinds: [usize; 6],
     /// The bars shown now came from a misread.
     misread: bool,
@@ -292,7 +292,7 @@ fn table(runs: &[Run], frames: usize, fps: f64) -> String {
         );
     }
     out += "\nHow each change would be shown (docs/autocrop.md §6):\n\n";
-    out += "| method | on the cut | following animated bars | eased: caught late | correcting a misread: at once / eased | into a misread |\n";
+    out += "| method | on the cut | following animated bars | caught late | correcting a misread: on the frame / late | into a misread |\n";
     out += "|---|---|---|---|---|---|\n";
     for r in runs {
         let [a, b, c, d, e, f] = r.kinds;
@@ -370,7 +370,7 @@ mod tests {
         }
         assert_eq!(r.finish(), vec![Some(3)], "a common shape: cropped on its 4th frame");
         assert_eq!((r.changes, r.cut, r.left), (1, 0, 3));
-        assert_eq!(r.kinds, [0, 0, 1, 0, 0, 0], "caught late: eased");
+        assert_eq!(r.kinds, [0, 0, 1, 0, 0, 0], "caught late");
         // A dark shot misread as wider bars, then corrected on the frame it lights up.
         let dark = Rect { w: 1920, h: 700, x: 0, y: 190 };
         for _ in 0..12 {

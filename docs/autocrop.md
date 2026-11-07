@@ -2,17 +2,18 @@
 
 Status, 2026-11-06: built and tested in `crates/player`: the detector and the crisp-edge lock
 (§2), the pre-roll's choice of opening bars (§3, `crop::opening_bars`, `CropTracker::open`),
-animated bars (§5, `CropTracker::following`), eased moves (§6, `motion::Glide`,
-`crop::CropZoom`). The desktop engine (`src-tauri/src/player/autocrop.rs`) jumps on the cut
-and eases late changes, and reads frames with our detector (§2, "Our detector on the desktop"):
+animated bars (§5, `CropTracker::following`), every change a jump (§6, `crop::CropZoom`), the
+bars of the frame on screen after a seek or a frame step (§4, `frames::Frames`). The desktop
+engine (`src-tauri/src/player/autocrop.rs`) jumps for every change, and reads frames with our
+detector (§2, "Our detector on the desktop"):
 every frame on macOS, around cropdetect's changes on Windows and Linux, every frame there with a
 setting; built and type-checked, untested with a real mpv (docs/unverified.md). The
 pre-roll probe (§3) is wired in the desktop engine (`src-tauri/src/player/preroll.rs`) for
 mpv as its own process (Windows), not yet for libmpv in the app (macOS); it type-checks here and is untested with a real mpv
 (docs/unverified.md). The lookahead (§4) is wired there too, by range requests from a second
 probe (way 2), untested with a real mpv and not yet measured.
-The aim is crop changes the viewer doesn't notice: a change on a cut jumps on the cut frame,
-and ease-out is the default for the rest.
+The aim is crop changes the viewer doesn't notice: every frame shown with the crop worked out for
+that frame, and every change a jump (#344: never eased).
 
 ## 1. Before our detector (desktop)
 
@@ -20,8 +21,9 @@ mpv ran FFmpeg's `cropdetect` on every frame (`crop::CROPDETECT`, `reset=1`), an
 `CropTracker` (`crates/player/src/crop.rs`) decided from those readings which bars to remove;
 `src-tauri/src/player/autocrop.rs` turns that into `video-zoom`. What the viewer saw: the first
 crop came a few frames into the film, and on a change of bars the crop followed a few frames
-late (4 frames for a common shape, 12 for an odd one). Such a late change is eased
-(§6) and one seen on the frame it happens (back to full frame, picture in a cropped bar) jumps.
+late (4 frames for a common shape, 12 for an odd one). Every change jumps (§6); a late one
+lands frames after its cut, one seen on the frame it happens (back to full frame, picture in a
+cropped bar) lands on it.
 cropdetect still reads each frame on Windows and Linux; §2 says where our detector takes over.
 
 ## 2. Our own detector (`crates/player/src/bars.rs`)
@@ -49,8 +51,8 @@ or 4:3 at 1920x1080, so the truth is known, and runs both detectors through the 
 (`cargo run --release -p polar-player --example autocrop_compare`). Columns: time to first crop
 per change of bars, bars never cropped, crop changes per minute, frames that cut picture off,
 frames that leave bars on screen. A second table counts how each crop change would be shown (§6):
-on the cut, following animated bars, eased because caught late, correcting a misread (at once
-or eased), and changes into a misread. A third table gives, per shot, the frames that cut picture
+on the cut, following animated bars, caught late, correcting a misread (on the frame or late),
+and changes into a misread. A third table gives, per shot, the frames that cut picture
 off, and our detector also runs at its earlier limit (24) and at cropdetect's level (8) for comparison. Needs an ffmpeg built
 with `cropdetect` (a GPL build) and a test film (Sintel from download.blender.org).
 
@@ -98,7 +100,8 @@ subtitles). `polar_player::sampler` decides, frame by frame, which reading goes 
 - **macOS: every frame, in memory.** libmpv runs in the app, so `screenshot-raw video` hands
   the frame over as `bgr0` through a weak client of the player (`mac::Frames`,
   `polar_mpv_frame` in `src-tauri/src/macos/mpv_view.m`). cropdetect isn't run, so hardware
-  decoding stays zero-copy (no copy-back, `Tune::hwdec_mode`).
+  decoding stays zero-copy (no copy-back, `Tune::hwdec_mode`). Each reading carries its frame's
+  pts (`time-pos` the same before and after reading it), for following animated bars (§5).
 - **Windows and Linux, by default: around changes.** cropdetect reads each frame. When its
   reading changes, a screenshot is taken (an uncompressed PNG, `--screenshot-png-compression=0`,
   read by `polar_player::png` and deleted), then more, one at a time, while our readings keep
@@ -107,7 +110,8 @@ subtitles). `polar_player::sampler` decides, frame by frame, which reading goes 
   that hasn't come within 12 frames gives way to cropdetect again.
 - **Windows and Linux, opt-in: every frame.** Settings → Advanced, "Check every frame for black
   bars" (off by default, for powerful computers): a screenshot of every frame, one at a time,
-  and no cropdetect, so no copy-back either.
+  and cropdetect still reading each frame, with its copy-back from the GPU (#344): its reading
+  comes on time, so animated bars are followed on their frame (§5).
 
 A screenshot is of the frame on screen and arrives a frame or two after it was asked for, so a
 change it finds lands that much after its cut (cropdetect's readings run a frame ahead). The
@@ -223,12 +227,48 @@ new bars where the frame before didn't is taken as the cut: the change is applie
 with no keyframe at all whose bars differ from both its neighbours; that is the live tracker's,
 and its end is put right on the next keyframe.
 
+**Finding the cut by reading frames** (`lookahead::CutSearch`). The live reading only finds such
+a cut where cropdetect runs and reads it clearly, so on the desktop the lookahead also finds it
+itself: a third mpv (`--hr-seek=yes`, every frame decoded) seeks exactly into the window between
+the two keyframes and reads the frame there with our detector, halving the window each time,
+until the last frame with the old bars and the first with the new are next to each other (about
+8 readings for 10 s at 24 fps). The change is then due on that frame exactly
+(`Change::exact`, logged as found between keyframes) and no longer waits for a live reading. A
+frame with neither the old nor the new bars (a shot with no keyframe of its own) splits the
+window into a search each side of it; an unclear reading ends the search without a cut (left to
+the live reading as before); a black frame counts as the new bars, since a crop can't be seen on
+black. Between keyframes that agree, one frame 1 s past the first is read (`CutSearch::check`):
+encoders skip the keyframe on a cut less than `min-keyint` after the last one, right after a
+short shot, so a shot with other bars is most likely there. Searches for cuts already shown are
+skipped.
+
+**The frame on screen** (`frames::Frames`, `lookahead::Timeline`). Everything the lookahead
+reads also goes into a timeline of bars by pts, kept for the whole load: between two keyframes
+read one after the other, their bars when they agree, or the old bars up to the cut found and
+the new from it on; single frames read exactly; only bars crisp on both sides (a dark shot read
+as bars isn't believed from one keyframe). The engine hands every `time-pos` to `Frames`, which
+tells playing on from a jump:
+
+- Playing on: the readings and the scheduled changes are of the next frame, as above.
+- A frame step either way (paused): the frame on screen is the one the zoom lands on. It gets
+  its bars from the timeline at once (`Why::Known`), and a screenshot of it (paused, so of that
+  very frame) checks them, or decides them where nothing was read (`CropTracker::still`, judged
+  as a file's first frame: crisp bars of a common shape, or picture in the bars shown). The
+  frames one step either side are asked of the exact probe meanwhile (`Schedule::want`), so the
+  next step finds them read. Stepping back, the changes after the frame are due again
+  (`Schedule::rewind`).
+- A seek (playing): the next frame's bars from the timeline. With the lookahead on and nothing
+  read there yet, playback is held (paused) until a screenshot of the frame on screen is read,
+  for at most 2 s, rather than play on with the wrong crop. Without the lookahead the live
+  readings decide, as when playing.
+
 **How much lands on the cut** (`lookahead::tests::with_the_lookahead_changes_land_on_their_cut`,
 an invented episode of 120 shots played through the engine's default path, cropdetect on every
 frame and a screenshot 2 frames late): with keyframes placed as x264 places them (keyint 250,
 min-keyint 24, every eighth shot under a second, 14 of 119 cuts between keyframes) 91.6% of the
-changes land on their cut frame with the lookahead, 52.1% without; with only every other cut a
-keyframe, 88.2% against 52.1%. `scripts/autocrop-keyframes.ts` encodes the same episode for real
+changes land on their cut frame with the lookahead, 52.1% without, and all of them (100%) once
+the exact probe finds the cuts between keyframes (below); with only every other cut a keyframe,
+88.2% against 52.1%, and 93.3% with the exact probe. `scripts/autocrop-keyframes.ts` encodes the same episode for real
 (`make`), counts how many of any video's bar changes fall on a keyframe (`measure`), and scores
 a playback from the player's log (`score`).
 
@@ -257,87 +297,54 @@ Some films move their own bars: the bars open or close over a few seconds within
 **follow mode** when 3 frames in a row have crisp edges that move the same way by a small step
 (at most 3% of the frame per frame), and then shows each frame's crisp reading as it is: no
 hold, no easing, and the 1% minimum zoom change (`zoom_changed`) is skipped so each step is
-sent. It leaves follow mode when the edges hold still for 2 frames (then normal rules apply), or
-an edge stops being crisp (then it keeps the last bars until the usual rules decide).
+sent. It leaves follow mode when the edges hold still for 2 frames (shown where they came to rest,
+then normal rules apply), or an edge stops being crisp (then it keeps the last bars until the
+usual rules decide).
 
-## 6. Moves Polarity makes itself: eased, not linear
+On the desktop the crisp readings are screenshots, which arrive a frame or two after their frame.
+So while following, the bars shown are where they stand on the frame the zoom lands on
+(`Sampler::lead`, `CropTracker::lead`), not where the newest screenshot saw them (#344):
 
-Where the crop changes without a cut to hide it (the live detector catches a change a few frames
-late, or corrects itself), the zoom moves along a curve instead of jumping or moving linearly.
-Three curves, from `crop::Easing`:
+- **Windows and Linux:** cropdetect's reading of that frame, which comes on time. The screenshots
+  still say whether the edges are crisp, and so when following starts and ends. A cropdetect
+  reading more than 4 frames' worth of the fastest step (3% of the frame) from the newest
+  screenshot is taken for a misreading and left out.
+- **macOS:** no cropdetect, so the movement of the last two screenshots is carried on to that
+  frame (`Sampler::predict`), but only for edges moving outwards (the picture growing). Edges
+  moving inwards stay where the last screenshot saw them, so the crop never cuts into the
+  picture where a move stops: while bars close in, a few pixels of bar show for as many frames
+  as the screenshots run late, and where opening bars stop, a few pixels of bar show for that
+  long too, until the screenshots see them at rest. So on macOS the crop can be a frame or two
+  off while bars move.
 
-- **ease-out** (default): fast at first, settling slowly (cubic, 400 ms);
-- **spring**: a critically damped spring, fast and settling with no overshoot, which also
-  keeps its speed when the target changes mid-move (settles to 99% in about 550 ms);
-- **ease-in-out**: slow, fast, slow (cubic, 500 ms).
+## 6. Every change is a jump
 
-The path each takes, frame by frame at 24 fps, so they can be compared (short
-side-by-side clips follow when the desktop build runs); redraw both with
-`cargo run -p polar-player --example autocrop_easing [-- --table]`:
+A change of crop always jumps to the new zoom, in every mode and for every reason; nothing is
+eased (#344). An eased zoom showed frames with a crop that belonged to none of them, and while
+paused (stepping frame by frame) it moved in steps of half a second. So the aim is that each
+change lands on its frame, and where it can't, that it is one jump as soon as it is known:
 
-![The crop's path per frame for each easing](autocrop-easing.svg)
+- **On the frame it belongs to:** the lookahead's keyframe (`Why::Keyframe`), the cut found
+  between keyframes, by the exact probe or by the first frame's own reading in the window
+  (`Why::Window`), a reading of that very frame (cropdetect's, which runs a frame ahead of the
+  screen) that changes the bars where the frame before had others (`Why::Cut`), the bars read
+  for the frame on screen after a seek or a step (`Why::Known`), and, paused, that frame's own
+  screenshot (`Why::Still`). Followed animated bars (§5) move frame by frame (`Why::Follow`).
+- **Late, as one jump** (`Why::Late`): a change believed a few frames after its cut (the live
+  tracker's hold for unclear bars), or brought by a screenshot, which arrives a frame or two
+  after the frame it shows. With the lookahead on this is left for what it can't see (a shot
+  with no keyframe whose bars differ from both neighbours) and the detector correcting itself;
+  with it off, any change seen live can come this late (the setting's caption says so).
 
-| frame | ms | ease-out | spring | ease-in-out |
-|---|---|---|---|---|
-| 0 | 0 | 0% | 0% | 0% |
-| 1 | 42 | 28% | 9% | 0% |
-| 2 | 83 | 50% | 26% | 2% |
-| 3 | 125 | 68% | 44% | 6% |
-| 4 | 167 | 80% | 59% | 15% |
-| 5 | 208 | 89% | 71% | 29% |
-| 6 | 250 | 95% | 80% | 50% |
-| 7 | 292 | 98% | 86% | 71% |
-| 8 | 333 | 100% | 91% | 85% |
-| 9 | 375 | 100% | 94% | 94% |
-| 10 | 417 | 100% | 96% | 98% |
-| 11 | 458 | 100% | 97% | 100% |
-| 12 | 500 | 100% | 98% | 100% |
-| 13 | 542 | 100% | 99% | 100% |
-| 14 | 583 | 100% | 99% | 100% |
-| 15 | 625 | 100% | 100% | 100% |
-| 16 | 667 | 100% | 100% | 100% |
+Each change is logged with its rule ("autocrop: bars 140/0 px from 12.375 s, on the cut: jump
+(lookahead, keyframe)"). In code: `CropTracker::changed` says which rule changed the bars on the
+newest frame, and `crop::CropZoom` sends the new zoom at once; without a change of bars, a drift
+of the zoom under 1% (`zoom_changed`) isn't sent.
 
-(From frame 16 on all three are at 100%.)
-
-A change that lands on a cut (§4) or follows animated bars (§5) is never eased (the cut
-hides the jump). Ease-out is the default; the other two stay for comparison.
-
-**When does easing happen at all?** Almost every real change of bars is either at a scene cut
-or a move the film makes itself, and neither is eased. Easing is the fallback for what slips
-past those two:
-
-- a change the lookahead can't see (a shot with no keyframe whose bars differ from both its
-  neighbours) or whose cut cropdetect didn't read, so it is only believed a few frames late;
-- no lookahead: switched off (phones, §4, or the setting), a live stream, or macOS (no probe):
-  a change seen live is believed after 1 or 2 frames with crisp edges, 2, 4 or 12 otherwise, and
-  eased when late;
-- right after a seek, before the lookahead has caught up;
-- above all, the detector correcting its own misread: a dark or fading shot read as wider
-  bars, then the picture lighting up again.
-
-So the priority is that the detector rarely misreads, and easing only softens what still gets
-through. The rule that guards it: the picture is never shrunk (bars cropped further) on a dark
-or fading shot unless the bars are confirmed: crisp on both sides (§2), or held still for 2 frames
-at bars this file has shown, 4 at a common shape and 12 at any other; un-cropping is always at once, on the frame the
-picture appears in a cropped bar (`CropTracker::revealed`), so a misread hides picture for as
-little as possible and its correction is shown on the frame it happens. How often each case
-happens is the second table of §2's comparison, run on the test films.
-
-**One rule for the jump.** A change on its cut jumps; any other is eased, the same way every
-time. On the cut means: the lookahead's keyframe (`Why::Keyframe`), the first frame between
-keyframes whose own reading shows the lookahead's bars (`Why::Window`), or a reading of that
-very frame (cropdetect's, which runs a frame ahead of the screen) that changes the bars where
-the frame before had others (`Why::Cut`). A screenshot for our detector arrives a few frames
-after the frame it shows, so a change it brings is never on the cut (`Why::Late`, eased), even
-on its first reading; on the frame cropdetect's reading changes, that reading is fed first, so
-picture back in a bar still un-crops on the cut. Followed animated bars (§5) move frame by
-frame (`Why::Follow`). Each change is logged with its rule ("autocrop: bars 140/0 px from
-12.375 s, on the cut: jump (lookahead, keyframe)").
-
-In code: `CropTracker::changed` says which rule changed the bars on the newest frame,
-`on_cut` whether it jumps, and `crop::CropZoom` jumps for those, a new file and a new window
-size, and otherwise glides past the 1% threshold (`zoom_changed`), sending the zoom on every
-frame until it settles.
+The rule that keeps misreads rare stays: the picture is never shrunk (bars cropped further) on a
+dark or fading shot unless the bars are confirmed: crisp on both sides (§2), or held still for 2
+frames at bars this file has shown, 4 at a common shape and 12 at any other; un-cropping is
+always at once, on the frame the picture appears in a cropped bar (`CropTracker::revealed`).
 
 ## 7. Open
 

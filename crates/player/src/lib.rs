@@ -6,10 +6,10 @@
 //!   * [`tune`]: device-level picture and sound options as mpv settings.
 //!   * [`crop`]: which black bars to remove and the zoom that removes them.
 //!   * [`bars`]: our own per-frame bar detector, for builds without `cropdetect`.
-//!   * [`lookahead`]: bar changes read ahead of the playhead, due on their cut.
+//!   * [`lookahead`]: bar changes read ahead of the playhead, due on their cut, and the bars of each frame by pts.
 //!   * [`png`]: the uncompressed PNG screenshots autocrop's pre-roll probe reads.
+//!   * [`frames`]: which bars the frame on screen gets: playing on, after a seek, stepping either way.
 //!   * [`sampler`]: which frames our detector reads on the desktop, and which reading feeds the tracker.
-//!   * [`motion`]: eased crop moves (ease-out, spring, ease-in-out).
 //!   * [`headers`]: which of an add-on's request headers playback sends.
 //!   * [`certs`]: one certificate bundle from a folder of certificates (Android's mpv).
 
@@ -17,9 +17,9 @@ pub mod allow;
 pub mod bars;
 pub mod certs;
 pub mod crop;
+pub mod frames;
 pub mod headers;
 pub mod lookahead;
-pub mod motion;
 pub mod png;
 pub mod sampler;
 pub mod tune;
