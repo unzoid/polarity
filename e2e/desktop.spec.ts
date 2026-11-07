@@ -1,5 +1,5 @@
 import { deflateRawSync } from "node:zlib";
-import { card, clock, expect, partySurfaces, test } from "./fixtures";
+import { card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
 
@@ -94,6 +94,14 @@ test("a title page adds to and removes from the Library", async ({ app }) => {
   await nav.getByRole("button", { name: "Library", exact: true }).click();
   await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
   await expect(card(app, "Northbound")).toHaveCount(0);
+});
+
+test("season tabs show a name's descenders and accents whole (#353)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
+  await card(app, "Fieldwork").click();
+  const tab = app.locator(".seasons-bar .segmented-active .segmented-item").first();
+  await expect(tab).toBeVisible();
+  for (const name of TALL_LABELS) expect(await labelShowsWhole(tab, name), name).toBe(true);
 });
 
 test("a wheel turn down a show's page lands its season tabs below the navbar's blur (#20)", async ({ app }) => {

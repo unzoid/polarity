@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, partySurfaces, test } from "./fixtures";
+import { expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 
 // TV mode at 1920×1080, driven only by the arrow keys, Enter and Backspace (a remote's Back).
 test.use({ tv: true });
@@ -89,6 +89,17 @@ test("in the player's Sources, up and down move between the rows of filter chips
   expect(await row()).toBe("Add-on");
   await press(app, "ArrowUp");
   expect(await row()).toBe("Quality");
+});
+
+test("in TV mode's larger type, the player's season dropdown shows a name's descenders and accents whole (#353)", async ({ app }) => {
+  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await expect(focused(app)).toHaveAccessibleName("Play First Episode");
+  await press(app, "Enter");
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await app.getByRole("button", { name: "Episodes", exact: true }).click();
+  const value = app.locator('.select-trigger[data-size="large"] .select-value').filter({ visible: true }).first();
+  await expect(value).toBeVisible();
+  for (const name of TALL_LABELS) expect(await labelShowsWhole(value, name), name).toBe(true);
 });
 
 test("in the player, the remote walks the episode rail to the season's last episode (#226)", async ({ app }) => {
