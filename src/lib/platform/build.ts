@@ -12,6 +12,9 @@ export function channelOf(value: unknown): BuildChannel {
 }
 
 export const buildChannel: BuildChannel = channelOf(import.meta.env.VITE_POLAR_CHANNEL);
+/** A dev build is an app of its own next to the released one (scripts/devChannel.ts, `devConf`): its name and link scheme. */
+export const appName = buildChannel === "dev" ? "Polarity Dev" : "Polarity";
+export const linkScheme = buildChannel === "dev" ? "polarity-dev" : "polarity";
 /** The short hash of the commit this build is made from. */
 export const buildCommit: string = typeof __GIT_COMMIT__ === "string" ? __GIT_COMMIT__ : "unknown";
 

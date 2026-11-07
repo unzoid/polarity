@@ -20,8 +20,8 @@ use std::sync::Mutex;
 
 use crate::locks::Locked;
 
-/// The scheme the website's pages open.
-pub const SCHEME: &str = "polarity";
+/// The scheme the website's pages open (a dev build's own is `polarity-dev`).
+pub const SCHEME: &str = crate::dev_channel::LINK_SCHEME;
 /// Longer than any link Polarity makes (a watch-together link carries a video's address, up to
 /// 2048 characters before it's escaped); anything longer isn't one of ours.
 const MAX_LEN: usize = 8192;

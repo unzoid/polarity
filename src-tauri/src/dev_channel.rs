@@ -3,6 +3,11 @@
 //! older ones included, which the updater plugin's own check never offers. Each kept build has a
 //! feed of its own (`latest-dev.<N>.json`, scripts/devChannel.ts) signed with the same dev key the
 //! running build trusts, so nothing else can be installed this way.
+//!
+//! A dev build is also an app of its own next to the released one, "Polarity Dev": its own
+//! identifier (so its own install folder, app data, keychain entries and single-instance lock),
+//! link scheme and window title. `devConf` in scripts/devChannel.ts sets the bundle's side; the
+//! names the code needs at build time are here.
 
 use serde::Serialize;
 
@@ -10,10 +15,26 @@ use crate::commands::{CmdError, Result};
 
 /// dev-build.yml sets it to `dev`; in any other build the command refuses.
 const CHANNEL: Option<&str> = option_env!("VITE_POLAR_CHANNEL");
+/// Whether this is a dev build (`VITE_POLAR_CHANNEL=dev`).
+pub const DEV: bool = match CHANNEL {
+    Some(c) => matches!(c.as_bytes(), b"dev"),
+    None => false,
+};
+/// The app's identifier, as tauri.conf.json (or a dev build's overlay) gives it to the bundle.
+#[cfg_attr(mobile, allow(dead_code))]
+pub const IDENTIFIER: &str = if DEV { "app.getpolar.desktop.dev" } else { "app.getpolar.desktop" };
+/// The scheme of links into the app: `polarity://`, or `polarity-dev://` for a dev build.
+#[cfg_attr(mobile, allow(dead_code))]
+pub const LINK_SCHEME: &str = if DEV { "polarity-dev" } else { "polarity" };
+/// The main window's title, for the taskbar and window lists.
+#[cfg_attr(mobile, allow(dead_code))]
+pub const TITLE: &str = if DEV { "Polarity Dev" } else { "Polarity" };
 /// Where the "Dev build" pre-release keeps its files (scripts/devChannel.ts, `download`).
+#[cfg_attr(mobile, allow(dead_code))]
 const RELEASE_FILES: &str = "https://github.com/unzoid/polarity/releases/download/dev/";
 
 /// The channel's feed (every kept build listed in it), or build `n`'s own.
+#[cfg_attr(mobile, allow(dead_code))]
 fn feed_url(build: Option<u32>) -> String {
     match build {
         Some(n) => format!("{RELEASE_FILES}latest-dev.{n}.json"),

@@ -43,19 +43,36 @@ function cmp(a: number[], b: number[] | null) {
   return 0;
 }
 
-/** The overlay `tauri build -c` takes: the version, the macOS build number, the dev feed and its key. */
-export function devConf(version: string, run: number, pubkey: string) {
+/**
+ * A dev build is an app of its own, installed next to the released Polarity and never over it:
+ * its own name, files, identifier (so install folder, app data, settings, keychain entries and
+ * single-instance lock) and link scheme. src-tauri/src/dev_channel.rs and src/lib/platform/build.ts
+ * use the same identifier, scheme and name.
+ */
+export const DEV_APP = { productName: "Polarity Dev", mainBinaryName: "polarity-dev", identifier: "app.getpolar.desktop.dev", scheme: "polarity-dev" };
+
+/**
+ * The overlay `tauri build -c` takes: the dev app's names, the version, the macOS build number, the
+ * dev feed and its key. `platform` is the runner's (macOS also takes links meant for Stremio, as
+ * tauri.macos.conf.json lists them; an overlay's list replaces the platform file's).
+ */
+export function devConf(version: string, run: number, pubkey: string, platform: string = process.platform) {
   if (!pubkey.trim()) throw new Error("No dev updater public key");
+  const { scheme, ...app } = DEV_APP;
   return {
+    ...app,
     version,
     bundle: { macOS: { bundleVersion: String(run) } },
-    plugins: { updater: { pubkey: pubkey.trim(), endpoints: [FEED] } },
+    plugins: {
+      updater: { pubkey: pubkey.trim(), endpoints: [FEED] },
+      "deep-link": { desktop: { schemes: platform === "darwin" ? [scheme, "stremio"] : [scheme] } },
+    },
   };
 }
 
 /** What a built file is called in the release: the build number in it, so ten builds fit side by side. */
 export function devFileName(file: string, run: number): string | null {
-  const p = `Polarity-dev.${run}`;
+  const p = `polarity-dev.${run}`;
   const rules: [RegExp, string][] = [
     [/_x64-setup\.exe(\.sig)?$/, `${p}-Windows-x64-setup.exe$1`],
     [/_x64_mpv-sources\.tar$/, `${p}-Windows-x64-mpv-sources.tar`],
@@ -75,7 +92,7 @@ export function devFileName(file: string, run: number): string | null {
 
 /** The build a release file belongs to; null for the channel's own `latest.json`. */
 export function buildOf(asset: string): number | null {
-  const m = /^Polarity-dev\.(\d+)-/.exec(asset) ?? /^latest-dev\.(\d+)\.json$/.exec(asset);
+  const m = /^polarity-dev\.(\d+)-/.exec(asset) ?? /^latest-dev\.(\d+)\.json$/.exec(asset);
   return m ? Number(m[1]) : null;
 }
 
@@ -124,7 +141,7 @@ type Platforms = Record<string, { signature: string; url: string }>;
 
 /** Updater entries for the files of one build that have a signature next to them. */
 export function platformsOf(files: string[], run: number, signature: (file: string) => string): Platforms {
-  const p = `Polarity-dev.${run}`;
+  const p = `polarity-dev.${run}`;
   const platforms: Platforms = {};
   const add = (keys: string[], file: string) => {
     if (!files.includes(file) || !files.includes(`${file}.sig`)) return;

@@ -1167,7 +1167,9 @@ it was shown by a real system. To check, with New episodes, New seasons and Down
 Checked here: the version rule, file names, which builds are kept and which files go, the feed's
 updater entries and the kept list (`tests/devChannel.test.ts`); connection codes, refused keys and
 that only dev builds read a stored connection (`tests/devDatabase.test.ts`); the workflow files parse,
-and `src-tauri` type-checks with the new command. Nothing here ran on GitHub or in a built app. Once
+the dev build's own name, identifier and link scheme agree between the overlay, the shell and the
+web view (`tests/devChannel.test.ts`, `tests/deepLink.test.ts`), and `src-tauri` type-checks with
+the new command. Nothing here ran on GitHub or in a built app. Once
 the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
 1. Merge a pull request into `dev`: the "Dev build" workflow ends green and Releases has one "Dev
    build" pre-release (not "Latest") named by the merge's hash, with the installers, their `.sig`
@@ -1184,6 +1186,12 @@ the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
 5. `bun tauri dev` and a hand-made build: About says "Local build <hash>" and nothing offers an update.
 6. A release build (next tag): About shows the version and updates from releases as before.
 7. After the 12th dev build, the files of the oldest are gone from the entry.
+8. On Windows, with the released Polarity installed and signed in, install the dev build: both are in
+   the Start menu ("Polarity" and "Polarity Dev"), the dev window's title says "Polarity Dev", the dev
+   build starts empty and signed out, and the released app's settings and sign-in are unchanged.
+   Each updates only from its own line. A `polarity://title/movie/tt0000000` link opens the released
+   app, the same link with `polarity-dev://` the dev build; starting either a second time brings its
+   own window forward. Uninstalling the dev build leaves the released app as it was.
 
 ## Screens in headless Chromium (T-051)
 

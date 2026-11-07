@@ -8,6 +8,8 @@ name: Dev build
 #   Updates:  dev builds check the "Dev build" entry only, with their own key; release builds
 #             never see it. The entry keeps this build and the previous 10 for going back.
 #   Database: none built in. A dev build connects to one from a pasted connection code.
+#   App:      "Polarity Dev" (polarity-dev, app.getpolar.desktop.dev, polarity-dev://), its own app
+#             next to the released Polarity: own install folder, data, settings and keychain entries.
 #
 # Needs the dev updater key (not the release one): repository secrets DEV_UPDATER_PRIVATE_KEY and
 # DEV_UPDATER_PRIVATE_KEY_PASSWORD, and its public key as the repository variable
@@ -97,7 +99,8 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      # The version, the dev feed and the dev public key, over tauri.conf.json.
+      # The dev app's own name, identifier and link scheme (installed next to the released Polarity),
+      # the version, the dev feed and the dev public key, over tauri.conf.json.
       - name: Dev build settings
         env:
           PUBKEY: ${{ vars.DEV_UPDATER_PUBLIC_KEY }}
@@ -146,8 +149,8 @@ jobs:
               cp src-tauri/vendor/mpv-sources/polarity-windows-mpv-sources.tar "out/Polarity_${VERSION}_x64_mpv-sources.tar" ;;
             macOS)
               cp "$b"/dmg/*_aarch64.dmg out/
-              cp "$b/macos/Polarity.app.tar.gz" "out/Polarity_${VERSION}_aarch64.app.tar.gz"
-              cp "$b/macos/Polarity.app.tar.gz.sig" "out/Polarity_${VERSION}_aarch64.app.tar.gz.sig"
+              cp "$b/macos/Polarity Dev.app.tar.gz" "out/Polarity_${VERSION}_aarch64.app.tar.gz"
+              cp "$b/macos/Polarity Dev.app.tar.gz.sig" "out/Polarity_${VERSION}_aarch64.app.tar.gz.sig"
               cp "$b/Polarity_${VERSION}_aarch64_mpv-sources.tar" out/ ;;
             Linux)
               cp "$b"/appimage/*.AppImage "$b"/appimage/*.AppImage.sig "$b"/deb/*.deb "$b"/rpm/*.rpm out/ ;;

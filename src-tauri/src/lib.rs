@@ -262,6 +262,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move { install_bundled_addons(handle).await });
             #[cfg(windows)]
             automation::create_main_window(app)?;
+            // A dev build's window says it's the dev build, in the taskbar and window lists (dev_channel.rs).
+            if dev_channel::DEV {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.set_title(dev_channel::TITLE);
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

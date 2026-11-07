@@ -23,9 +23,9 @@ use crate::locks::Locked;
 use crate::AppState;
 
 /// The service every entry is filed under: the app id, so it stays when the name changes
-/// (`src/ios/keys.m` files its entries under the same one).
+/// (`src/ios/keys.m` files its entries under the same one), and a dev build's are its own.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-const SERVICE: &str = "app.getpolar.desktop";
+const SERVICE: &str = crate::dev_channel::IDENTIFIER;
 
 /// What the web view may keep here: the auth client's own keys, settings sync's copy of the
 /// keys and passphrase (src/lib/account/localSecrets.ts), the sign-ins of linked list services per

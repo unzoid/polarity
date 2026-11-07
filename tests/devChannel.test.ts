@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  DEV_APP,
   FEED,
   KEEP,
   buildList,
@@ -44,23 +46,39 @@ test("the overlay points the updater at the dev feed with the dev key", () => {
   expect(() => devConf("0.18.1-dev.57", 57, "")).toThrow();
 });
 
+test("a dev build is its own app next to the released one", () => {
+  const conf = devConf("0.18.1-dev.57", 57, "PUBKEY", "win32");
+  expect(conf.productName).toBe("Polarity Dev");
+  expect(conf.mainBinaryName).toBe("polarity-dev");
+  expect(conf.identifier).toBe("app.getpolar.desktop.dev");
+  expect(conf.plugins["deep-link"].desktop.schemes).toEqual(["polarity-dev"]);
+  expect(devConf("0.18.1-dev.57", 57, "PUBKEY", "darwin").plugins["deep-link"].desktop.schemes).toEqual(["polarity-dev", "stremio"]);
+  // The shell and the web view build in the same names; the released app keeps its own.
+  const shell = readFileSync(join(import.meta.dir, "../src-tauri/src/dev_channel.rs"), "utf8");
+  const released = JSON.parse(readFileSync(join(import.meta.dir, "../src-tauri/tauri.conf.json"), "utf8"));
+  expect(shell).toContain(`if DEV { "${DEV_APP.identifier}" } else { "${released.identifier}" }`);
+  expect(shell).toContain(`if DEV { "${DEV_APP.scheme}" } else { "${released.plugins["deep-link"].desktop.schemes[0]}" }`);
+  expect(shell).toContain(`if DEV { "${DEV_APP.productName}" } else { "${released.productName}" }`);
+  expect(released.identifier).not.toBe(DEV_APP.identifier);
+});
+
 test("files carry the build number", () => {
-  expect(devFileName("Polarity_0.18.1-dev.57_x64-setup.exe", 57)).toBe("Polarity-dev.57-Windows-x64-setup.exe");
-  expect(devFileName("Polarity_0.18.1-dev.57_x64-setup.exe.sig", 57)).toBe("Polarity-dev.57-Windows-x64-setup.exe.sig");
-  expect(devFileName("Polarity_0.18.1-dev.57_x64_mpv-sources.tar", 57)).toBe("Polarity-dev.57-Windows-x64-mpv-sources.tar");
-  expect(devFileName("Polarity_0.18.1-dev.57_aarch64.dmg", 57)).toBe("Polarity-dev.57-macOS-arm64.dmg");
-  expect(devFileName("Polarity_0.18.1-dev.57_aarch64.app.tar.gz.sig", 57)).toBe("Polarity-dev.57-macOS-arm64.app.tar.gz.sig");
-  expect(devFileName("Polarity_0.18.1-dev.57_aarch64_mpv-sources.tar", 57)).toBe("Polarity-dev.57-macOS-arm64-mpv-sources.tar");
-  expect(devFileName("Polarity_0.18.1-dev.57_amd64.AppImage", 57)).toBe("Polarity-dev.57-Linux-x64.AppImage");
-  expect(devFileName("Polarity_0.18.1-dev.57_amd64.deb", 57)).toBe("Polarity-dev.57-Linux-x64.deb");
-  expect(devFileName("Polarity-0.18.1-dev.57-1.x86_64.rpm", 57)).toBe("Polarity-dev.57-Linux-x64.rpm");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_x64-setup.exe", 57)).toBe("polarity-dev.57-Windows-x64-setup.exe");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_x64-setup.exe.sig", 57)).toBe("polarity-dev.57-Windows-x64-setup.exe.sig");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_x64_mpv-sources.tar", 57)).toBe("polarity-dev.57-Windows-x64-mpv-sources.tar");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_aarch64.dmg", 57)).toBe("polarity-dev.57-macOS-arm64.dmg");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_aarch64.app.tar.gz.sig", 57)).toBe("polarity-dev.57-macOS-arm64.app.tar.gz.sig");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_aarch64_mpv-sources.tar", 57)).toBe("polarity-dev.57-macOS-arm64-mpv-sources.tar");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_amd64.AppImage", 57)).toBe("polarity-dev.57-Linux-x64.AppImage");
+  expect(devFileName("Polarity Dev_0.18.1-dev.57_amd64.deb", 57)).toBe("polarity-dev.57-Linux-x64.deb");
+  expect(devFileName("Polarity Dev-0.18.1-dev.57-1.x86_64.rpm", 57)).toBe("polarity-dev.57-Linux-x64.rpm");
   expect(devFileName("notes.md", 57)).toBeNull();
-  expect(buildOf("Polarity-dev.57-Linux-x64.deb")).toBe(57);
+  expect(buildOf("polarity-dev.57-Linux-x64.deb")).toBe(57);
   expect(buildOf("latest-dev.57.json")).toBe(57);
   expect(buildOf("latest.json")).toBeNull();
 });
 
-const filesOf = (b: number) => [`Polarity-dev.${b}-Windows-x64-setup.exe`, `Polarity-dev.${b}-Windows-x64-setup.exe.sig`, `latest-dev.${b}.json`];
+const filesOf = (b: number) => [`polarity-dev.${b}-Windows-x64-setup.exe`, `polarity-dev.${b}-Windows-x64-setup.exe.sig`, `latest-dev.${b}.json`];
 
 test("the current build and the previous ten are kept; the eleventh-oldest's files go", () => {
   expect(KEEP).toBe(11);
@@ -74,12 +92,12 @@ test("the current build and the previous ten are kept; the eleventh-oldest's fil
 });
 
 test("the updater entries point at this build's signed files", () => {
-  const files = [...filesOf(57), "Polarity-dev.57-macOS-arm64.app.tar.gz", "Polarity-dev.57-Linux-x64.AppImage", "Polarity-dev.57-Linux-x64.AppImage.sig"];
+  const files = [...filesOf(57), "polarity-dev.57-macOS-arm64.app.tar.gz", "polarity-dev.57-Linux-x64.AppImage", "polarity-dev.57-Linux-x64.AppImage.sig"];
   const p = platformsOf(files, 57, (f) => `sig of ${f}\n`);
   expect(Object.keys(p).sort()).toEqual(["linux-x86_64", "linux-x86_64-appimage", "windows-x86_64", "windows-x86_64-nsis"]);
   expect(p["windows-x86_64"]).toEqual({
-    signature: "sig of Polarity-dev.57-Windows-x64-setup.exe.sig",
-    url: "https://github.com/unzoid/polarity/releases/download/dev/Polarity-dev.57-Windows-x64-setup.exe",
+    signature: "sig of polarity-dev.57-Windows-x64-setup.exe.sig",
+    url: "https://github.com/unzoid/polarity/releases/download/dev/polarity-dev.57-Windows-x64-setup.exe",
   });
 });
 

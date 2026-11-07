@@ -21,7 +21,7 @@ import { Button } from "../../components/ui/Button";
 import { ActionRow, Card, ExpandRow, LinkRow, PickRow, RowText, ToggleRow, useExpanded, type Expandable } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { cachedBytes, clearCached, keys } from "../../lib/net";
-import { appUpdates, buildChannel, buildCommit, buildLabel } from "../../lib/platform";
+import { appName, appUpdates, buildChannel, buildCommit, buildLabel } from "../../lib/platform";
 import { errorMessage } from "../../lib/errors";
 
 /** Where this build's updates come from (lib/platform/build.ts, docs/dev-channel.md). */
@@ -62,7 +62,7 @@ export function AboutPage() {
 
   return (
     <>
-      <Card title="Polarity" footer={FOOTER[buildChannel]}>
+      <Card title={appName} footer={FOOTER[buildChannel]}>
         <PickRow title="Version" caption={updates ? status : "Doesn't check for updates"}>
           <span className="settings-row-value settings-version">{version ? buildLabel(buildChannel, version) : "…"}</span>
         </PickRow>
