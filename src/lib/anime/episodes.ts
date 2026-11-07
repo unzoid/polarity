@@ -118,6 +118,8 @@ export interface UpNext {
   /** Seconds in, when it resumes. */
   resumeAt?: number;
   kind: "resume" | "next" | "start";
+  /** Everything was watched: it starts over (a grouped page's Play goes on to the next part instead, #327). */
+  finished?: boolean;
 }
 
 /** Past this many seconds an unfinished episode resumes; before it, it plays again from the top. */
@@ -141,7 +143,7 @@ export function upNext({
   if (isMovie) {
     const p = metaId ? byVideo.get(metaId) : undefined;
     const resumeAt = p && !done(p) && p.position > RESUME_FROM ? p.position : undefined;
-    return { resumeAt, kind: resumeAt ? "resume" : "start" };
+    return { resumeAt, kind: resumeAt ? "resume" : "start", finished: (!!p && done(p)) || undefined };
   }
   const playable = episodes.filter((e) => e.video && !e.upcoming);
   const touched = playable
@@ -155,6 +157,7 @@ export function upNext({
     }
     const after = playable.find((e) => e.number > touched.e.number);
     if (after) return { ep: after, kind: "next" };
+    return { ep: playable[0], kind: "start", finished: true };
   }
   return { ep: playable[0], kind: "start" };
 }

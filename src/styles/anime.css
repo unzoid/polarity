@@ -361,6 +361,11 @@
   margin: 0;
   color: var(--text-3);
 }
+/* A grouped page's pick, for the selected part: under its season tabs (#327). */
+.anime-part-pick {
+  margin: -0.5rem 0 1rem;
+  padding: 0 var(--gutter) 0 var(--content-start);
+}
 /* Choosing the series an anime plays from by hand (components/anime/AnimeSeriesPick.tsx, #189). */
 .anime-pick-trigger {
   /* A link in the caption line, lined up with the text around it. */

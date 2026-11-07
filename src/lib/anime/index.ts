@@ -15,6 +15,7 @@ export * from "./franchiseEntry";
 export * from "./franchise";
 export * from "./franchiseBanner";
 export * from "./franchiseBannerQuery";
+export * from "./franchiseSummary";
 export * from "./groups";
 export * from "./kitsu";
 export * from "./landscapeArt";

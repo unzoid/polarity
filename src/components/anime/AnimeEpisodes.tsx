@@ -28,6 +28,7 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { SearchField } from "../ui/SearchField";
 import { Switch } from "../ui/Switch";
+import { AnimeSeriesPick } from "./AnimeSeriesPick";
 import { useAnimePlayback } from "./useAnimePlayback";
 
 /** The franchise's seasons, which one is showing (lib/anime/relatedRows.ts), and how to show another. */
@@ -56,6 +57,8 @@ export function AnimeEpisodes({
 }) {
   const pb = useAnimePlayback(anime);
   const prefs = usePrefs();
+  // A grouped page's series pick is the selected part's, under its tabs (#327).
+  const pick = franchise && <PartPick anime={anime} pb={pb} />;
   const { data: flags } = useEpisodeFlags(pb.malId, [anime.title.english, anime.title.romaji]);
   const [layout, setLayout] = useEpisodeLayout();
   const sources = useSourcePicker();
@@ -132,6 +135,7 @@ export function AnimeEpisodes({
     return franchise ? (
       <section className="seasons">
         <SeasonTabs franchise={franchise} />
+        {pick}
         {empty}
       </section>
     ) : (
@@ -199,13 +203,17 @@ export function AnimeEpisodes({
     <section className="seasons">
       {franchise && !picker ? (
         // Nothing to page through: the tools share the season tabs' row, right above the episodes.
-        <div className="seasons-bar">
-          <SeasonTabs franchise={franchise} />
-          {tools}
-        </div>
+        <>
+          <div className="seasons-bar">
+            <SeasonTabs franchise={franchise} />
+            {tools}
+          </div>
+          {pick}
+        </>
       ) : (
         <>
           {franchise && <SeasonTabs franchise={franchise} />}
+          {pick}
           <div className="seasons-bar">
             <div className="seasons-picker">{picker}</div>
             {tools}
@@ -240,6 +248,25 @@ export function AnimeEpisodes({
       <SourcePicker picker={sources} />
     </section>
   );
+}
+
+/**
+ * "Wrong series?" or "Choose the series" for the selected part of a grouped page (#327), under its season
+ * tabs: a franchise's parts can play from different series, so it isn't in the page's top, which is the
+ * whole franchise's. Nothing while the part's link is being found, or when it came from the id lists.
+ */
+export function PartPick({ anime, pb }: { anime: Anime; pb: Pick<ReturnType<typeof useAnimePlayback>, "pickable" | "isMovie" | "metaId" | "malId" | "kitsu"> }) {
+  if (!pb.pickable) return null;
+  return (
+    <p className="anime-unavailable anime-part-pick t-caption">
+      <AnimeSeriesPick anime={anime} isMovie={pb.isMovie} current={pb.metaId} mal={pb.malId} kitsu={pb.kitsu} />
+    </p>
+  );
+}
+
+/** {@link PartPick} for a film's tab, which has no episode list to share its playback with. */
+export function FilmPick({ anime }: { anime: Anime }) {
+  return <PartPick anime={anime} pb={useAnimePlayback(anime)} />;
 }
 
 /** Id prefix for an episode that's scheduled but has nothing to play yet. */
