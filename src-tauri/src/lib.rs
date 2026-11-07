@@ -3,6 +3,7 @@ mod automation;
 mod commands;
 mod controllers;
 mod deep_link;
+mod dev_channel;
 mod discord;
 mod disk;
 mod downloads;
@@ -310,6 +311,7 @@ pub fn run() {
             commands::anime_cache,
             commands::anime_cache_clear,
             commands::trailer,
+            dev_channel::dev_build_feed,
             keychain::keychain_get,
             keychain::keychain_set,
             keychain::keychain_delete,

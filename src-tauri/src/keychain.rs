@@ -28,11 +28,15 @@ use crate::AppState;
 const SERVICE: &str = "app.getpolar.desktop";
 
 /// What the web view may keep here: the auth client's own keys, settings sync's copy of the
-/// keys and passphrase (src/lib/account/localSecrets.ts) and the sign-ins of linked list
-/// services per profile (`polar.link.<service>.<profile>`, src/lib/lists/linkStore.ts), nothing
-/// else; never [`vault::NAME`].
+/// keys and passphrase (src/lib/account/localSecrets.ts), the sign-ins of linked list services per
+/// profile (`polar.link.<service>.<profile>`, src/lib/lists/linkStore.ts) and a dev build's
+/// database connection (`polar.devdb`, src/lib/account/devDatabase.ts), nothing else; never
+/// [`vault::NAME`].
 fn allowed(name: &str) -> bool {
-    (name.starts_with("polar.auth") || name.starts_with("polar.sync.") || name.starts_with("polar.link."))
+    (name.starts_with("polar.auth")
+        || name.starts_with("polar.sync.")
+        || name.starts_with("polar.link.")
+        || name == "polar.devdb")
         && name.len() <= 64
         && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
 }
@@ -326,6 +330,8 @@ mod tests {
         assert!(allowed("polar.sync.local"));
         assert!(allowed("polar.sync.00000000-0000-4000-8000-000000000000"));
         assert!(!allowed("polar.syncx"));
+        assert!(allowed("polar.devdb"));
+        assert!(!allowed("polar.devdbx"));
         assert!(allowed("polar.link.anilist.00000000-0000-4000-8000-000000000000"));
         assert!(allowed("polar.link.anilist.local"));
         assert!(!allowed("polar.linkx"));

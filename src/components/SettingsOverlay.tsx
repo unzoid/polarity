@@ -8,6 +8,7 @@ import { dismissDepth, onDismissDepth, useFormFactor } from "../lib/ui";
 import { tvModeAvailable } from "../tv/tvMode";
 import { SearchField } from "./ui/SearchField";
 import { useAccount } from "../lib/account";
+import { buildChannel } from "../lib/platform";
 import { closeSettings, type PageId, prefsCustomized, resetPrefs, searchSettings, type SettingEntry, usePrefs, useSettingsOverlay } from "../lib/settings";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
@@ -225,6 +226,14 @@ export function SettingsOverlay() {
               )}
             </div>
 
+            {!account.enabled && buildChannel === "dev" && (
+              <div className="t3s-sidebar-foot">
+                <button className="t3s-nav-item" onClick={() => go("advanced")}>
+                  <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
+                  <span>No database: connect one</span>
+                </button>
+              </div>
+            )}
             {account.enabled && (
               <div className="t3s-sidebar-foot">
                 {account.status === "guest" ? (

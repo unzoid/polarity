@@ -57,7 +57,7 @@ bump("src-tauri/tauri.conf.json", /("version": )"[^"]+"/, `$1"${version}"`);
 
 // 2. Build and sign.
 if (!flags.has("--no-build")) {
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = { VITE_POLAR_CHANNEL: "release" }; // updates from the releases (src/lib/platform/build.ts)
   if (!process.env.TAURI_SIGNING_PRIVATE_KEY) {
     const keyPath = join(homedir(), ".tauri", "polar.key");
     if (!existsSync(keyPath)) {

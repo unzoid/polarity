@@ -55,6 +55,7 @@ export const keys = {
   storeProblem: ["store-problem"] as const,
   secretsPlace: ["secrets-place"] as const,
   appVersion: ["app-version"] as const,
+  devBuilds: ["dev-builds"] as const,
   marketplace: ["marketplace"] as const,
 
   animeLinks: ["animeLinks"] as const,

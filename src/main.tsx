@@ -6,7 +6,7 @@ import { MotionConfig } from "motion/react";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { queryClient } from "./lib/net";
-import { AccountProvider } from "./lib/account";
+import { AccountProvider, startAccountBackend } from "./lib/account";
 import { installKeepFieldInView, mirrorFormFactor } from "./lib/ui";
 import { inShell, os } from "./lib/platform";
 
@@ -75,6 +75,8 @@ if (!inShell) {
   );
 } else {
   installGamepad();
+  // A dev build's database connection is in the keychain (lib/account/devDatabase.ts).
+  await startAccountBackend().catch(() => undefined);
   root.render(
     <StrictMode>
       {/* reducedMotion="user": springs become instant cross-fades when the OS asks for less motion. */}
