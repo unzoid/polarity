@@ -362,6 +362,12 @@ img[data-logo-look="halo-dark"] {
   font-weight: 650;
   letter-spacing: -0.018em;
 }
+/* The label clips its overflow (for the ellipsis), so it can't keep the pill's line height of 1: that cut the
+   line short of the font's descent and the bottom of a "g" was cut off (#353). The font's own line height holds
+   descenders and accents; the pill's min-height still sets its size. */
+.select-trigger[data-size="large"] .select-value {
+  line-height: normal;
+}
 .select-trigger[data-size="large"] .select-icon svg {
   width: 0.77em;
   height: 0.77em;

@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import { serveMedia } from "./media";
 
 /**
@@ -76,3 +76,24 @@ export const partySurfaces = (page: Page) =>
   page
     .locator(".party-dialog, .party-link-confirm, .party-popover, .tv-party, .tv-join, .options-overlay[data-open=true]:has(.party-pane, .party-column)")
     .filter({ visible: true });
+
+/** Season names whose letters reach below the baseline, and above the capitals (#353). */
+export const TALL_LABELS = ["Gypsy Jig Spring", "Ça Ÿ Été Ñ Å"];
+
+/**
+ * Puts `text` in a label and says whether all of it shows (#353): its glyph box, from the font's ascent to its
+ * descent, inside the nearest box that clips it. A line height of 1 under `overflow: hidden` cut off the "g".
+ */
+export const labelShowsWhole = (label: Locator, text: string) =>
+  label.evaluate((el, text) => {
+    el.textContent = text;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const glyphs = range.getBoundingClientRect();
+    let clip: Element | null = el;
+    while (clip && getComputedStyle(clip).overflowY === "visible") clip = clip.parentElement;
+    if (!clip) return true;
+    const box = clip.getBoundingClientRect();
+    const top = box.top + clip.clientTop;
+    return glyphs.top >= top - 0.5 && glyphs.bottom <= top + clip.clientHeight + 0.5;
+  }, text);

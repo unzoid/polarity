@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { card, expect, partySurfaces, test } from "./fixtures";
+import { card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 
 // Phone width (Pixel 7: 412×915, touch). The same components as desktop in the phone layout (docs/ARCHITECTURE.md §4).
 
@@ -131,6 +131,14 @@ test("the season picker keeps its own row on a phone (#151)", async ({ app }) =>
   // The whole bar's width, not squeezed beside Download Season and the layout switch.
   expect(box!.width).toBeGreaterThan(app.viewportSize()!.width * 0.8);
   expect(await fitsWidth(app)).toBe(true);
+});
+
+test("the season dropdown shows a name's descenders and accents whole (#353)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).tap();
+  await card(app, "Kingsbridge").tap();
+  const value = app.locator(".seasons-picker .select-value");
+  await expect(value).toBeVisible();
+  for (const name of TALL_LABELS) expect(await labelShowsWhole(value, name), name).toBe(true);
 });
 
 test("settings on a phone: the sections, then one section with a way back", async ({ app }) => {
