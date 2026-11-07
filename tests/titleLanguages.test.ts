@@ -137,10 +137,57 @@ describe("Settings → Anime", () => {
       if (c?.kind !== "choice") throw new Error(id);
       return choicesOf(c, current).map((x) => x.value);
     };
-    expect(choices("animeAudioLanguage", "same").slice(0, 3)).toEqual(["same", "original", ""]);
-    expect(choices("animeSubtitleLanguage", "same").slice(0, 2)).toEqual(["same", ""]);
+    // The common anime languages pinned between Original language and Default, not repeated below (#326).
+    const audioList = choices("animeAudioLanguage", "same");
+    expect(audioList.slice(0, 7)).toEqual(["same", "original", "ja", "en", "zh", "ko", ""]);
+    for (const pinned of ["ja", "en", "zh", "ko"]) expect(audioList.filter((v) => v === pinned)).toEqual([pinned]);
+    expect(audioList.slice(7)).toContain("fr");
+    // Subtitles keep their order.
+    expect(choices("animeSubtitleLanguage", "same").slice(0, 3)).toEqual(["same", "", "en"]);
     // A language outside the usual list stays selectable, once.
     expect(choices("animeAudioLanguage", "tl").filter((v) => v === "tl")).toEqual(["tl"]);
+    expect(choices("animeAudioLanguage", "original").filter((v) => v === "original")).toEqual(["original"]);
+  });
+});
+
+describe("Original language under Subtitles & Audio (#326)", () => {
+  const orig: Settings = { ...same, audioLanguage: "original" };
+  const choices = (current: string) => {
+    const c = settingDef("audioLanguage").control;
+    if (c?.kind !== "choice") throw new Error("audioLanguage");
+    return choicesOf(c, current).map((x) => x.value);
+  };
+  test("is offered after Default, before the languages, and once", () => {
+    expect(choices("").slice(0, 3)).toEqual(["", "original", "en"]);
+    expect(choices("original").filter((v) => v === "original")).toEqual(["original"]);
+  });
+  test("a film or series plays the language it was made in", () => {
+    expect(titleLanguages(orig, false, "it").audio).toBe("it");
+    expect(settingsForTitle(orig, false, "it")!.audioLanguage).toBe("it");
+  });
+  test("when the title's language isn't known, the file's default track", () => {
+    expect(titleLanguages(orig, false).audio).toBe("");
+    expect(settingsForTitle(orig, false)!.audioLanguage).toBe("");
+  });
+  test("an anime on Same as other titles follows it: its own language, else Japanese", () => {
+    expect(titleLanguages(orig, true, "ko").audio).toBe("ko");
+    expect(titleLanguages(orig, true).audio).toBe("ja");
+    // Its own setting still comes first.
+    expect(titleLanguages({ ...orig, animeAudioLanguage: "en" }, true, "ja").audio).toBe("en");
+  });
+  test("the source list, auto-pick and Best Match follow it", () => {
+    const forFilm = settingsForTitle(orig, false, "it");
+    expect(defaultFilter([dubbed, italian], forFilm).lang).toBe("it");
+    expect(autoPickOrder([dubbed, italian], forFilm)[0]).toBe(italian);
+    const scores = scoreSources([dubbed, italian], { ...NEUTRAL, audioLanguage: forFilm!.audioLanguage });
+    expect(scores.get(italian)!.score).toBeGreaterThan(scores.get(dubbed)!.score);
+  });
+  test("picking the original track in the player leaves it as it is; another language replaces it", () => {
+    expect(rememberLanguage(orig, false, "it", { audioLanguage: "it" })).toEqual({});
+    expect(rememberLanguage(orig, false, "it", { audioLanguage: "it", subtitleLanguage: "en" })).toEqual({ subtitleLanguage: "en" });
+    expect(rememberLanguage(orig, false, "it", { audioLanguage: "en" })).toEqual({ audioLanguage: "en" });
+    expect(rememberLanguage(orig, false, undefined, { audioLanguage: "en" })).toEqual({ audioLanguage: "en" });
+    expect(rememberLanguage(orig, true, undefined, { audioLanguage: "ja" })).toEqual({});
   });
 });
 

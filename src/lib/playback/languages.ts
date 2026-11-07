@@ -35,5 +35,5 @@ export function langMatches(code: string | undefined, pref: string) {
 
 /** Settings → Anime's "Same as other titles": the language under Subtitles & Audio (#235). */
 export const SAME_AS_OTHERS = "same";
-/** Settings → Anime's "Original language": the one the show was made in. */
+/** "Original language" (Settings → Anime, #235; Subtitles & Audio, #326): the one the title was made in. */
 export const ORIGINAL_LANGUAGE = "original";
