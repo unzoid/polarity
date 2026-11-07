@@ -1,14 +1,14 @@
 name: App end to end
 
 # The built app driven through tauri-driver (e2e/app/smoke.ts): slow, so
-# nightly and on master only (docs/plan-tests.md, I-010), not on every push.
+# nightly and on pushes to master and dev only (docs/plan-tests.md, I-010), not on every push.
 # macOS has no WKWebView driver, so Linux and Windows only; job android starts the
 # debug APK in an emulator (e2e/android/smoke.sh).
 on:
   schedule:
     - cron: '17 3 * * *'
   push:
-    branches: [master]
+    branches: [master, dev]
   workflow_dispatch:
 
 permissions:

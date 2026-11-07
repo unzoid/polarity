@@ -233,9 +233,43 @@ export const airsWith = (ep: AniZipEpisode, videos: Video[]) => !!videoAiredWith
  * Blood War's S2E10 is dated with S2E1) is placed by its position next to
  * the nearest episodes that did match. A date match is trusted only when at
  * least one other episode lines up the same way, so a stray date can't move
- * an episode onto another one's video.
+ * an episode onto another one's video. An episode that hasn't aired yet goes
+ * by the aired ones, as in {@link episodeMatcher}.
  */
-export function alignByAirDate(eps: AniZipEpisode[], videos: Video[]): (ep: AniZipEpisode) => Video | undefined {
+export function alignByAirDate(eps: AniZipEpisode[], videos: Video[], now = Date.now()): (ep: AniZipEpisode) => Video | undefined {
+  const { ordered, offsetOf, agreed, anchors, upcoming } = lineUp(eps, videos, now);
+  return (ep) => {
+    const later = upcoming(ep);
+    if (later !== null) return later;
+    const n = Number(ep.episode);
+    const off = offsetOf(ep);
+    if (!anchors.length || agreed(off)) return off === undefined ? undefined : ordered[n + off];
+    return ordered[n + nearest(anchors, n).off];
+  };
+}
+
+/**
+ * Which of `videos` (the show `imdb`) each of the entry's episodes is: the show ani.zip links matches
+ * by {@link matchVideo}, another show (a part IMDb lists as a show of its own) by {@link alignByAirDate}.
+ * Either way an episode that hasn't aired yet sits next to the aired ones, the same number of
+ * episodes on: the catalogs list a coming episode under a placeholder ("Episode #1.9") with a date
+ * that is often a guess, which can put it one episode off from the aired ones (#360), and the aired
+ * ones are the numbering the add-ons already list.
+ */
+export function episodeMatcher(zip: AniZip | null | undefined, videos: Video[], imdb: string | undefined, now = Date.now()): (ep: AniZipEpisode) => Video | undefined {
+  if (imdb !== zip?.mappings.imdb_id) return alignByAirDate(regularEpisodes(zip), videos, now);
+  const { upcoming } = lineUp(regularEpisodes(zip), videos, now);
+  return (ep) => {
+    const v = upcoming(ep);
+    return v !== null ? v : matchVideo(ep, videos);
+  };
+}
+
+const airTime = (e: AniZipEpisode) => time(e.airDateUtc ?? e.airDate ?? e.airdate);
+const nearest = <T extends { n: number }>(anchors: T[], n: number) => anchors.reduce((best, a) => (Math.abs(a.n - n) < Math.abs(best.n - n) ? a : best));
+
+/** What {@link alignByAirDate} and {@link episodeMatcher} share: the episodes' offsets into the show, by air date. */
+function lineUp(eps: AniZipEpisode[], videos: Video[], now: number) {
   const ordered = videos.filter((v) => v.season > 0).sort((a, b) => a.season - b.season || a.episode - b.episode);
   const index = new Map(ordered.map((v, i) => [v.id, i]));
   // How far into the show an episode sits relative to its own number.
@@ -243,18 +277,23 @@ export function alignByAirDate(eps: AniZipEpisode[], videos: Video[]): (ep: AniZ
     const v = videoAiredWith(ep, ordered);
     return v ? index.get(v.id)! - Number(ep.episode) : undefined;
   };
-  const dated = eps.map((e) => ({ n: Number(e.episode), off: offsetOf(e) })).filter((d): d is { n: number; off: number } => d.off !== undefined);
+  const dated = eps
+    .map((e) => ({ n: Number(e.episode), off: offsetOf(e), aired: airTime(e) <= now }))
+    .filter((d): d is { n: number; off: number; aired: boolean } => d.off !== undefined);
   const seen = new Map<number, number>();
   for (const d of dated) seen.set(d.off, (seen.get(d.off) ?? 0) + 1);
   const agreed = (off: number | undefined) => off !== undefined && (seen.get(off) ?? 0) >= 2;
   const anchors = dated.filter((d) => agreed(d.off)).sort((a, b) => a.n - b.n);
-  return (ep) => {
+  // Aired episodes that line up with the show by date: one is enough when no other aired one disagrees.
+  const airedOffsets = new Set(dated.filter((d) => d.aired).map((d) => d.off));
+  const aired = dated.filter((d) => d.aired && (agreed(d.off) || airedOffsets.size === 1));
+  // An episode yet to air, next to the nearest aired one; null for one that has aired or has no date, or with no aired one to go by.
+  const upcoming = (ep: AniZipEpisode): Video | undefined | null => {
+    if (!aired.length || !(airTime(ep) > now)) return null;
     const n = Number(ep.episode);
-    const off = offsetOf(ep);
-    if (!anchors.length || agreed(off)) return off === undefined ? undefined : ordered[n + off];
-    const nearest = anchors.reduce((best, a) => (Math.abs(a.n - n) < Math.abs(best.n - n) ? a : best));
-    return ordered[n + nearest.off];
+    return ordered[n + nearest(aired, n).off];
   };
+  return { ordered, offsetOf, agreed, anchors, upcoming };
 }
 
 /** An episode's title in the language from Settings → Anime, falling back to whatever it has. */

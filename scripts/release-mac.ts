@@ -58,7 +58,7 @@ if (!flags.has("--no-build")) requireAccountEnv(root, flags);
 
 // 1. Build.
 if (!flags.has("--no-build")) {
-  const env: Record<string, string> = { CI: "true" }; // no Finder scripting for the DMG window
+  const env: Record<string, string> = { CI: "true", VITE_POLAR_CHANNEL: "release" }; // CI: no Finder scripting for the DMG window; the channel: updates from the releases (src/lib/platform/build.ts)
   if (!process.env.TAURI_SIGNING_PRIVATE_KEY) {
     const keyPath = join(homedir(), ".tauri", "polar.key");
     if (!existsSync(keyPath)) {

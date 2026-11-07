@@ -279,7 +279,7 @@ export const contract = {
     wheelAction: true,
   } satisfies Keys<Settings>,
   Span: { end: true, start: true } satisfies Keys<Span>,
-  StreamsResult: { failed: true, hidden: true, streams: true } satisfies Keys<StreamsResult>,
+  StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true } satisfies Keys<StreamsResult>,
   SubtitleOption: { addon: true, id: true, lang: true, url: true } satisfies Keys<SubtitleOption>,
   SubtitleStyle: {
     background: true,

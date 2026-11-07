@@ -112,3 +112,10 @@ test("a title link goes to the title's page, through a lookup for TMDB and MyAni
   expect(await titleRoute({ kind: "tmdb", type: "movie", id: 603 }, down)).toContain("couldn't reach TMDB");
   expect(await titleRoute({ kind: "anime", source: "mal", id: 5114 }, down)).toContain("couldn't reach AniList");
 });
+
+test("a dev build's links are its own: polarity-dev:// there, never the released app's", () => {
+  expect(parseDeepLink("polarity-dev://title/movie/tt0000000", "polarity-dev")).toEqual({ kind: "title", type: "movie", id: "tt0000000" });
+  expect(parseDeepLink("polarity://title/movie/tt0000000", "polarity-dev")).toBeNull();
+  expect(parseDeepLink("polarity-dev://title/movie/tt0000000")).toBeNull();
+  expect(parseDeepLink("polarity-dev://together?u=https%3A%2F%2Fmedia.example.com%2Ffilm.mkv", "polarity-dev")).toMatchObject({ kind: "together" });
+});

@@ -3,13 +3,16 @@
  * in a new file and return it here; nothing else in the app changes.
  *
  * With no provider configured, `backend` is null and Polarity runs fully
- * local (no sign-in screen).
+ * local (no sign-in screen). Dev builds have none built in: they use the
+ * database a connection code named (devDatabase.ts), read before the app starts.
  *
  * This file is the folder's public surface: code outside src/lib imports
  * this folder, code inside src/lib imports the file.
  */
 import type { AccountBackend } from "./backend";
 import { createSupabaseBackend } from "./supabase";
+import { devDatabase, loadDevDatabase } from "./devDatabase";
+import { buildChannel } from "../platform/build";
 
 function pick(): AccountBackend | null {
   // fake.html's stand-in account (lib/platform/fake/account.ts): dev server only, never in a build.
@@ -17,13 +20,24 @@ function pick(): AccountBackend | null {
     const fake = (globalThis as { __polarFakeAccount?: AccountBackend }).__polarFakeAccount;
     if (fake) return fake;
   }
+  if (buildChannel === "dev") {
+    const db = devDatabase();
+    return db ? createSupabaseBackend(db.url, db.key) : null;
+  }
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
   if (url && key) return createSupabaseBackend(url, key);
   return null;
 }
 
-export const backend = pick();
+export let backend = pick();
+
+/** Before the app renders: a dev build connects to the database its connection code names, if any. */
+export async function startAccountBackend() {
+  if (buildChannel !== "dev") return;
+  await loadDevDatabase();
+  backend = pick();
+}
 
 export * from "./backend";
 export * from "./avatars";
@@ -31,6 +45,7 @@ export * from "./AccountProvider";
 export * from "./sync";
 export * from "./settingsSync";
 export { SECRET_KEYS } from "./settingsDoc";
+export { databaseHost, devDatabase, removeDevDatabase, saveDevDatabase } from "./devDatabase";
 export * from "./spacePush";
 export { linkHasKey } from "./keyedLink";
 export { formatTvCode, isTvCode, TV_CODE_LENGTH, type TvSignInRequest } from "./tvSignIn";

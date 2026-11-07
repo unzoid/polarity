@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { episodeState, watchedFraction } from "../../lib/library";
-import { formatDate, formatRemaining, shortRuntime } from "../../lib/format";
+import { airLabel, formatRemaining, shortRuntime } from "../../lib/format";
 import type { Meta, Progress, Video } from "../../lib/types";
 import { DownloadButton } from "../DownloadButton";
 import { buttonClass } from "../ui/Button";
@@ -19,6 +19,9 @@ import { prefersReducedMotion } from "../../lib/ui";
  * up/down turns into left/right, Home's shelf paddles (RowPaddle, #250) at the ends page it on
  * desktop, and the arrow keys move card by card (OptionsOverlay's moveFocus), the focused card
  * scrolled into view.
+ *
+ * Like the title page's episodes (#167, #350), one listed for the coming week can already be opened and
+ * downloaded ("Airs …"); further ahead it stays disabled ("Coming …").
  */
 export function EpisodeRail({
   meta,
@@ -99,7 +102,7 @@ export function EpisodeRail({
       <div className="episode-rail" ref={rail}>
         {episodes.map((v) => {
           const p = progress.get(v.id);
-          const { released, fraction, watched, inProgress } = episodeState(v, p, watchedFraction());
+          const { released, openable, fraction, watched, inProgress } = episodeState(v, p, watchedFraction());
           const current = v.id === playing;
           const length = inProgress && p ? formatRemaining(p.position, p.duration) : shortRuntime(meta.runtime);
           return (
@@ -107,14 +110,14 @@ export function EpisodeRail({
               {/* The one playing can't be picked again, but takes the focus when the panel opens (a remote starts from it). */}
               <button
                 className="episode-rail-main"
-                disabled={!released}
+                disabled={!openable}
                 aria-disabled={current || undefined}
                 onClick={() => !current && onPlay(v.id)}
                 aria-label={`${v.episode}. ${v.title}${current ? ", playing" : ""}`}
               >
                 <span className="episode-rail-still">
                   {still(v) ? <Img src={still(v)} alt="" /> : <StillPlaceholder />}
-                  {!current && released && (
+                  {!current && openable && (
                     <span className="episode-rail-play" aria-hidden>
                       <Play size={20} fill="currentColor" strokeWidth={0} />
                     </span>
@@ -135,8 +138,8 @@ export function EpisodeRail({
                   {v.episode}. {v.title}
                 </span>
               </button>
-              {released && <DownloadButton item={meta} video={v} className={buttonClass("plain", true, "episode-rail-download pressable")} size={20} />}
-              <p className="episode-rail-meta t-callout tabular">{released ? length : `Coming ${formatDate(v.released)}`}</p>
+              {openable && <DownloadButton item={meta} video={v} className={buttonClass("plain", true, "episode-rail-download pressable")} size={20} />}
+              <p className="episode-rail-meta t-callout tabular">{released ? length : airLabel(v)}</p>
               {v.overview && <p className="episode-rail-overview t-callout">{v.overview}</p>}
             </article>
           );

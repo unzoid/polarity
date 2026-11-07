@@ -668,7 +668,8 @@ function authError(e: AuthError): AccountError {
       return new AccountError("captcha_needed", "Confirm you're a person to get a code.");
     case "otp_disabled":
     case "signup_disabled":
-      return new AccountError("unknown", "Email sign-in is turned off for this server.");
+      // Also an email the server has not invited while sign-ups are closed (a dev database, docs/dev-channel.md).
+      return new AccountError("unknown", "This server isn't taking sign-ins from this email. Ask whoever runs it to invite you.");
     case "over_email_send_rate_limit":
     case "over_request_rate_limit":
       return new AccountError("rate_limited", "Too many attempts. Try again in a few minutes.");

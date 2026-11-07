@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Sources, Trailer as TrailerIcon } from "../icons";
 import { Img } from "../Img";
 import { Button } from "../ui/Button";
-import { ease } from "../../lib/ui";
+import { ease, imageBroken, markImageBroken } from "../../lib/ui";
 import { osName } from "../../lib/platform";
 import { appVersion } from "../../lib/updater";
 import { failedStage, formatReport, STAGE_LABEL, type StartStage, type StartStep } from "../../lib/playback";
@@ -51,6 +51,9 @@ export function PlayerStatus({
   /** A YouTube video that can't play here (Android): open it in YouTube. */
   onYouTube?: () => void;
 }) {
+  // A logo that doesn't load leaves the name, never a broken-image icon (#360).
+  const [, setBroken] = useState(0);
+  const mark = logo && !imageBroken(logo) ? logo : undefined;
   const failed = state.status === "failed" || !!error;
   const stageAt = failed ? failedStage(steps) : undefined;
 
@@ -73,13 +76,21 @@ export function PlayerStatus({
       <div className="player-status-content">
         <div
           className="load-mark"
-          data-long={!logo && (name?.length ?? 0) > LONG_NAME}
+          data-long={!mark && (name?.length ?? 0) > LONG_NAME}
           style={{ "--fill": `${failed ? 0 : FILL[stage]}%` } as React.CSSProperties}
         >
-          {logo ? (
+          {mark ? (
             <>
-              <img src={logo} alt={name ?? ""} className="load-mark-base" />
-              <img src={logo} alt="" aria-hidden className="load-mark-fill" />
+              <img
+                src={mark}
+                alt={name ?? ""}
+                className="load-mark-base"
+                onError={() => {
+                  markImageBroken(mark);
+                  setBroken((n) => n + 1);
+                }}
+              />
+              <img src={mark} alt="" aria-hidden className="load-mark-fill" />
             </>
           ) : (
             <>

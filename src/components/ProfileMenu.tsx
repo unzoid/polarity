@@ -13,7 +13,7 @@ import { useFormFactor } from "../lib/ui";
 import { Avatar } from "./Avatar";
 import { Sheet } from "./Sheet";
 import { MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "./ui/Menu";
-import { anchorOf, nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
+import { anchorOf, buildChannel, nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
 
 /** Used for the template profile when nobody's signed in. */
@@ -62,7 +62,10 @@ export function ProfileMenu() {
     ? [{ id: "sign-out", label: "Sign Out", icon: <SignOut />, run: () => void account.signOut() }]
     : account.enabled
       ? [{ id: "sign-in", label: "Sign In", icon: <Profile />, run: account.showSignIn }]
-      : [];
+      : // A dev build without a database (docs/dev-channel.md): signed out until one is connected.
+        buildChannel === "dev"
+        ? [{ id: "connect-database", label: "Connect a Database…", icon: <Profile />, run: () => openSettings("advanced"), stay: true }]
+        : [];
 
   if (nativeDialogsAvailable) {
     // The web menu below, as groups of choices (a separator between groups).
@@ -104,7 +107,11 @@ export function ProfileMenu() {
           <Avatar id={avatar} />
           <div>
             <strong>{name}</strong>
-            {me ? <span className="profile-menu-email">{account.user?.email}</span> : <span>Not signed in</span>}
+            {me ? (
+              <span className="profile-menu-email">{account.user?.email}</span>
+            ) : (
+              <span>{!account.enabled && buildChannel === "dev" ? "No database connected" : "Not signed in"}</span>
+            )}
           </div>
         </div>
         {[...profiles, ...manage].map((c) => (

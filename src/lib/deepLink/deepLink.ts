@@ -20,6 +20,7 @@
  */
 import { isJoinToken } from "../party/discordJoin";
 import { checkLink } from "../party/links";
+import { linkScheme } from "../platform/build";
 import type { ContentType } from "../types";
 
 export const SITE = "https://getpolar.app";
@@ -43,10 +44,13 @@ export const isSharedId = (id: string) => SHARED_ID.test(id);
 const TMDB_ID = /^tmdb:([1-9]\d{0,9})$/;
 const NUMBER = /^[1-9]\d{0,9}$/;
 
-export function parseDeepLink(link: string): DeepLink | null {
+/** `scheme`: this build's own (a dev build's links are `polarity-dev://…`); the other app's links aren't ours. */
+export function parseDeepLink(link: string, scheme: string = linkScheme): DeepLink | null {
   const text = link.trim();
-  if (text.startsWith("polarity://together?")) return parseTogether(text.slice("polarity://together?".length));
-  const m = /^polarity:\/\/(title|anime|party)\/([^?#]*)$/.exec(text);
+  if (!text.startsWith(`${scheme}://`)) return null;
+  const rest = text.slice(scheme.length + 3);
+  if (rest.startsWith("together?")) return parseTogether(rest.slice("together?".length));
+  const m = /^(title|anime|party)\/([^?#]*)$/.exec(rest);
   if (!m) return null;
   const parts = m[2].split("/").map((p) => {
     try {
