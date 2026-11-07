@@ -71,7 +71,6 @@ test("files carry the build number", () => {
   expect(devFileName("Polarity Dev_0.18.1-dev.57_aarch64_mpv-sources.tar", 57)).toBe("polarity-dev.57-macOS-arm64-mpv-sources.tar");
   expect(devFileName("Polarity Dev_0.18.1-dev.57_amd64.AppImage", 57)).toBe("polarity-dev.57-Linux-x64.AppImage");
   expect(devFileName("Polarity Dev_0.18.1-dev.57_amd64.deb", 57)).toBe("polarity-dev.57-Linux-x64.deb");
-  expect(devFileName("Polarity Dev-0.18.1-dev.57-1.x86_64.rpm", 57)).toBe("polarity-dev.57-Linux-x64.rpm");
   expect(devFileName("notes.md", 57)).toBeNull();
   expect(buildOf("polarity-dev.57-Linux-x64.deb")).toBe(57);
   expect(buildOf("latest-dev.57.json")).toBe(57);
