@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
 
-use super::preroll::{ahead, Opening};
+use super::preroll::{ahead, stop_ahead, Opening};
 use super::Mpv;
 use crate::locks::Locked;
 use crate::AppState;
@@ -232,6 +232,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
     let mut filled: Option<bool> = None;
     let mut filter = CROPDETECT; // what mpv_tune added
     let mut opened = 0; // the last load checked for opening bars
+    let mut reading_ahead = None; // the load the lookahead was started for, while its setting stays on
     let (shot_tx, mut shot_rx) = mpsc::unbounded_channel::<Shot>();
     let mut in_flight: Option<Instant> = None; // the screenshot on its way, since when
     let mut cost = Cost::default();
@@ -323,24 +324,34 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
         }
         // The pre-roll probe's opening bars: wait for them (the load is
         // paused meanwhile), then start this load's tracker with them.
-        // Then the lookahead starts from those bars.
         if opened != load {
-            let bars = {
+            {
                 let mut slot = mpv.opening.locked();
                 match *slot {
                     Some(Opening::Probing(l)) if l == load => continue,
                     Some(Opening::Ready { load: l, full, bars }) if l == load => {
                         frames.tracker.open(load, full, bars);
                         *slot = None;
-                        bars
                     }
-                    _ => (0, 0),
+                    _ => {}
                 }
-            };
+            }
             opened = load;
             frames.reset();
+            reading_ahead = None;
+        }
+        // The lookahead starts with the load (from its opening bars), or
+        // later when its setting turns on mid-video (from the bars shown
+        // then), and stops when it turns off.
+        if !tune.lookahead {
+            if reading_ahead.take().is_some() {
+                stop_ahead(mpv);
+            }
+        } else if reading_ahead != Some(load) {
+            reading_ahead = Some(load);
+            let bars = frames.tracker.bars(load);
             let source = mpv.source.locked().clone().filter(|(l, ..)| *l == load);
-            if let Some((_, url, fields)) = source.filter(|_| mpv.tuned.locked().lookahead) {
+            if let Some((_, url, fields)) = source {
                 tauri::async_runtime::spawn(ahead(app.clone(), run, load, url, fields, bars));
             }
         }

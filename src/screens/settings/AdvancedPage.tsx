@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Reset } from "../../components/icons";
 import { api } from "../../lib/api";
 import { keys } from "../../lib/net";
-import { resetPrefs, settingDef, usePrefs } from "../../lib/settings";
-import { lookaheadCaption } from "../../lib/playback";
+import { resetPrefs, usePrefs } from "../../lib/settings";
+import { lookaheadStatus } from "../../lib/playback";
 import { Button } from "../../components/ui/Button";
 import { errorMessage } from "../../lib/errors";
 import { Card, ExpandRow, useExpanded, type Expandable } from "../../components/settings/rows";
@@ -15,15 +16,8 @@ import { StremioImport } from "../../components/settings/StremioImport";
 
 export function AdvancedPage() {
   const expand = useExpanded();
-  const { autocrop, autocropLookahead } = usePrefs();
+  const { autocrop } = usePrefs();
   const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
-  // What the lookahead does in the video playing now, kept current while this page is open.
-  const { data: lookahead = null } = useQuery({
-    queryKey: keys.mpvLookahead,
-    queryFn: api.mpvLookahead,
-    enabled: hasMpv === true && autocrop && autocropLookahead,
-    refetchInterval: 3000,
-  });
   const account = useAccount();
   return (
     <>
@@ -34,11 +28,7 @@ export function AdvancedPage() {
         <SettingRow id="hwdec" disabled={hasMpv === false} />
         <SettingRow id="deband" disabled={hasMpv === false} />
         <SettingRow id="autocrop" disabled={hasMpv === false} />
-        <SettingRow
-          id="autocropLookahead"
-          caption={lookaheadCaption(settingDef("autocropLookahead").caption ?? "", autocrop && autocropLookahead ? lookahead : null)}
-          disabled={hasMpv === false || !autocrop}
-        />
+        <LookaheadRow hasMpv={hasMpv} />
         {/* macOS and iOS read every frame anyway, in memory. */}
         {os !== "macos" && os !== "ios" && <SettingRow id="autocropEveryFrame" disabled={hasMpv === false || !autocrop} />}
         <SettingRow id="buffer" />
@@ -51,6 +41,29 @@ export function AdvancedPage() {
       </Card>
     </>
   );
+}
+
+/** "Look ahead for bar changes", with what the lookahead does in the video playing now, kept current while it's shown. */
+export function LookaheadRow({ hasMpv }: { hasMpv: boolean | undefined }) {
+  const { autocrop, autocropLookahead } = usePrefs();
+  const on = hasMpv === true && autocrop && autocropLookahead;
+  // Each time the setting turns on or off, what the player said before is forgotten: the status
+  // shows once the player answers for the new state, never an old answer meanwhile.
+  const [was, setWas] = useState(on);
+  const [turns, setTurns] = useState(0);
+  if (was !== on) {
+    setWas(on);
+    setTurns(turns + 1);
+  }
+  const { data: state = null } = useQuery({
+    queryKey: [...keys.mpvLookahead, turns],
+    queryFn: api.mpvLookahead,
+    enabled: on,
+    gcTime: 0,
+    // Quickly until the reader has started (or said why not), then now and then.
+    refetchInterval: (q) => (q.state.data ? 3000 : 500),
+  });
+  return <SettingRow id="autocropLookahead" status={on ? lookaheadStatus(state) : null} disabled={hasMpv === false || !autocrop} />;
 }
 
 function ResetRow(props: Expandable) {

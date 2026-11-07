@@ -5,17 +5,19 @@ import { NumberRow, PickRow, ToggleRow } from "./rows";
 /**
  * A desktop row drawn from the settings schema (lib/settings/schema.ts): a switch, a dropdown
  * or a slider, with the schema's title, caption, choices and range. `caption` overrides the
- * schema's when it depends on the moment ("This screen is 4K…"); `onChanged` runs after a change
- * (a sound, clearing a list).
+ * schema's when it depends on the moment ("This screen is 4K…"); `status` (a switch's) adds what the
+ * setting does right now on a line of its own; `onChanged` runs after a change (a sound, clearing a list).
  */
 export function SettingRow({
   id,
   caption,
+  status,
   disabled,
   onChanged,
 }: {
   id: string;
   caption?: string;
+  status?: string | null;
   disabled?: boolean;
   onChanged?: (v: Value) => void;
 }) {
@@ -30,7 +32,7 @@ export function SettingRow({
 
   switch (control.kind) {
     case "toggle":
-      return <ToggleRow {...shared} checked={!!value} disabled={disabled} onChange={change} />;
+      return <ToggleRow {...shared} status={status} checked={!!value} disabled={disabled} onChange={change} />;
     case "number":
       return (
         <NumberRow
