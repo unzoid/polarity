@@ -138,7 +138,7 @@ mod imp {
 
     use polar_player::bars::{detect, levels_for, Levels, Measured};
     use polar_player::crop::{opening_bars, opening_points};
-    use polar_player::lookahead::{Schedule, PTS_SLACK};
+    use polar_player::lookahead::{CutSearch, Schedule, PTS_SLACK};
     use polar_player::png::decode_stored;
     use serde_json::{json, Value};
     use tauri::{AppHandle, Manager};
@@ -253,15 +253,16 @@ mod imp {
         }
     }
 
-    /// A probe's mpv, started with the IPC endpoint and folder named `tag`.
-    async fn start(tag: &str) -> Option<Probe> {
+    /// A probe's mpv, started with the IPC endpoint and folder named `tag`:
+    /// reading only keyframes, or (`exact`) any frame, sought exactly.
+    async fn start(tag: &str, exact: bool) -> Option<Probe> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
         let bin = mpv_binary()?;
         let pipe = ipc::endpoint(&format!("{tag}-{n}"));
         let dir = shots_dir().join(format!("{tag}-{n}"));
         std::fs::create_dir_all(&dir).ok()?;
-        let args: Vec<String> = vec![
+        let mut args: Vec<String> = vec![
             format!("--input-ipc-server={pipe}"),
             "--config=no".into(),
             "--idle=yes".into(),
@@ -291,6 +292,12 @@ mod imp {
             "--screenshot-high-bit-depth=no".into(),
             "--screenshot-tag-colorspace=no".into(),
         ];
+        if exact {
+            // Every frame decoded, and seeks land on the frame asked for.
+            args.retain(|a| a != "--vd-lavc-skipframe=nonkey");
+            args.retain(|a| a != "--hr-seek=no");
+            args.push("--hr-seek=yes".into());
+        }
         let (child, client) = match launch(&bin, &args, true, &pipe).await.ok()? {
             Some(ok) => ok,
             None => launch(&bin, &args, false, &pipe).await.ok()??,
@@ -307,6 +314,8 @@ mod imp {
         display: (i64, i64),
         levels: Levels,
         duration: Option<f64>,
+        /// How long a frame lasts, in seconds (1/24 when mpv doesn't say).
+        frame: f64,
     }
 
     impl Probe {
@@ -324,7 +333,9 @@ mod imp {
             let int = |k: &str| params.get(k).and_then(Value::as_i64).filter(|n| *n > 0);
             let (full, display) = ((int("w")?, int("h")?), (int("dw")?, int("dh")?));
             let levels = levels_for(params.get("gamma").and_then(Value::as_str));
-            Some(Video { full, display, levels, duration })
+            let fps = self.command(json!(["get_property", "container-fps"])).await.and_then(|f| f.as_f64());
+            let frame = 1.0 / fps.filter(|f| (1.0..=300.0).contains(f)).unwrap_or(24.0);
+            Some(Video { full, display, levels, duration, frame })
         }
 
         /// Seek (`how`: mpv's seek flags) and wait for the frame: `Ok(true)`
@@ -354,6 +365,75 @@ mod imp {
             let shot = (img.w as i64, img.h as i64);
             Some(detect(&img.frame(), video.levels).map(|m| m.scaled(shot, video.full)))
         }
+
+        /// Seek exactly to `at` (an `exact` probe) and read the frame it
+        /// lands on: its pts and our detector's reading.
+        async fn frame_at(&mut self, video: &Video, at: f64) -> Option<(f64, Option<Measured>)> {
+            if self.seek(at, "absolute+exact").await != Ok(true) {
+                return None;
+            }
+            let pts = self.command(json!(["get_property", "time-pos"])).await.and_then(|t| t.as_f64())?;
+            Some((pts, self.reading(video).await?))
+        }
+    }
+
+    /// What the exact probe reads for the lookahead: a frame the engine
+    /// wants read before it's shown, or the cut between two keyframes.
+    enum Job {
+        Frame(f64),
+        Search(CutSearch),
+    }
+
+    /// The lookahead's exact probe, opened when there's first something
+    /// for it to read; `None` once it couldn't be (then nothing is read
+    /// exactly, and changes between keyframes are left to the live readings).
+    struct Exact {
+        probe: Option<Option<(Probe, Video)>>,
+    }
+
+    impl Exact {
+        /// Do `job` for `load`, reading frames of `url`; the result goes to the schedule.
+        async fn run(&mut self, app: &AppHandle, load: u64, url: &str, fields: &[String], job: Job) {
+            if self.probe.is_none() {
+                let mut opened = None;
+                if let Some(mut p) = self::start("exact", true).await {
+                    if let Some(video) = p.open(url, fields).await {
+                        opened = Some((p, video));
+                    }
+                }
+                if opened.is_none() {
+                    tracing::info!("autocrop lookahead: frames between keyframes can't be read exactly here");
+                }
+                self.probe = Some(opened);
+            }
+            let Some(Some((p, video))) = self.probe.as_mut() else { return };
+            let mpv = &app.state::<AppState>().mpv;
+            match job {
+                Job::Frame(at) => {
+                    let Some((pts, measured)) = p.frame_at(video, at).await else { return };
+                    if let Some(s) = mpv.ahead.locked().as_mut() {
+                        s.frame(load, pts, measured);
+                    }
+                }
+                Job::Search(mut search) => {
+                    let frame = video.frame;
+                    if search.to < f64::from_bits(mpv.playhead.load(Ordering::SeqCst)) {
+                        return; // shown already
+                    }
+                    while let Some(at) = search.next(frame) {
+                        let Some((pts, measured)) = p.frame_at(video, at).await else { return };
+                        let mut slot = mpv.ahead.locked();
+                        let Some(s) = slot.as_mut() else { return };
+                        if let Some(rest) = search.read(at, pts, s.frame_bars(measured)) {
+                            s.push_search(load, rest);
+                        }
+                    }
+                    if let Some(s) = mpv.ahead.locked().as_mut() {
+                        s.searched(load, &search, frame);
+                    }
+                }
+            }
+        }
     }
 
     /// Open `url` in a probe and send a reading of each keyframe at
@@ -361,7 +441,7 @@ mod imp {
     /// mpv isn't cut short (a process mid-start would be left running), so
     /// the probe may outlast the load's wait by that much.
     async fn probe(url: String, fields: Vec<String>, start: f64, tx: mpsc::UnboundedSender<Reading>) -> Option<()> {
-        let mut p = self::start("probe").await?;
+        let mut p = self::start("probe", false).await?;
         tokio::select! {
             done = measure(&mut p, url, fields, start, &tx) => done,
             () = tx.closed() => None,
@@ -439,7 +519,7 @@ mod imp {
         fields: &[String],
         bars: (i64, i64),
     ) -> Result<(), Lookahead> {
-        let mut p = self::start("ahead").await.ok_or(Lookahead::NoReader)?;
+        let mut p = self::start("ahead", false).await.ok_or(Lookahead::NoReader)?;
         let video = p.open(url, fields).await.ok_or(Lookahead::NotOpened)?;
         let duration = video.duration.ok_or(Lookahead::Live)?;
         let mpv = &app.state::<AppState>().mpv;
@@ -451,7 +531,18 @@ mod imp {
         let (mut reopens, mut refused) = (0, 0);
         // Read to the file's end: nothing more until a seek.
         let mut at_end = false;
+        let mut exact = Exact { probe: None };
         while wanted(app, run, load) {
+            // Frames a step would show first (the viewer waits on them), then cuts between keyframes.
+            let job = mpv
+                .ahead
+                .locked()
+                .as_mut()
+                .and_then(|s| s.take_wanted(load).map(Job::Frame).or_else(|| s.take_search(load).map(Job::Search)));
+            if let Some(job) = job {
+                exact.run(app, load, url, fields, job).await;
+                continue;
+            }
             let head = f64::from_bits(mpv.playhead.load(Ordering::SeqCst));
             if !head.is_finite() {
                 tokio::time::sleep(Duration::from_millis(250)).await;
@@ -496,7 +587,7 @@ mod imp {
                     }
                     if p.open(url, fields).await.is_none() {
                         // mpv itself is gone: another one.
-                        p = self::start("ahead").await.ok_or(Lookahead::NoReader)?;
+                        p = self::start("ahead", false).await.ok_or(Lookahead::NoReader)?;
                         p.open(url, fields).await.ok_or(Lookahead::Stopped)?;
                     }
                     at_end = end;

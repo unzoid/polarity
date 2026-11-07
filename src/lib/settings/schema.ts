@@ -1176,7 +1176,8 @@ export const SETTINGS: SettingDef[] = [
     id: "autocropLookahead",
     page: "advanced",
     title: "Look ahead for bar changes",
-    caption: "Reads a little of the video ahead, so a change of black bars happens exactly on the scene cut. Uses some extra data.",
+    caption:
+      "Reads a little of the video ahead, so a change of black bars happens exactly on the frame it belongs to, also after a seek or when stepping frame by frame. Uses some extra data. Off, a change can come a few frames late.",
     keywords: "autocrop crop black bars lookahead scene cut",
     bind: p("autocropLookahead"),
     control: toggle,

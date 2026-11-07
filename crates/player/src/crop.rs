@@ -5,7 +5,6 @@ use std::collections::VecDeque;
 use serde_json::Value;
 
 use crate::bars::Measured;
-use crate::motion::{Easing, Glide};
 
 /// Finds the picture's edges in each frame (`reset=1`: no memory between
 /// frames; [`CropTracker`] does the remembering): rows and columns whose
@@ -90,15 +89,14 @@ pub fn zoom_for(
     (picture / full).log2().max(0.0)
 }
 
-/// The `video-zoom` to send mpv, frame by frame (docs/autocrop.md §6): a
-/// change [`CropTracker::on_cut`] says lands with the picture, a new file
-/// or a new window size is shown at once; any other change of 1% or more
-/// ([`zoom_changed`]) glides along `easing`, sent on every frame until it
-/// settles. Times are seconds on a steady clock.
-#[derive(Debug, Clone)]
+/// The `video-zoom` to send mpv, frame by frame (docs/autocrop.md §6):
+/// every change of bars is a jump, never a glide, so the zoom mpv has is
+/// always the one for the frame it belongs to. A change under 1% of the
+/// size ([`zoom_changed`]) isn't worth a jump, unless it comes with a change
+/// of bars ([`CropTracker::changed`]), a new file or a new window size.
+#[derive(Debug, Clone, Default)]
 pub struct CropZoom {
-    glide: Glide,
-    /// The load and window size the glide belongs to.
+    /// The load and window size the zoom belongs to.
     load: Option<u64>,
     window: (i64, i64),
     /// The zoom mpv has (`None`: unknown, send the next one).
@@ -106,30 +104,21 @@ pub struct CropZoom {
 }
 
 impl CropZoom {
-    pub fn new(easing: Easing) -> Self {
-        CropZoom { glide: Glide::new(easing, 0.0), load: None, window: (0, 0), sent: None }
-    }
-
     /// The zoom to send now, if it differs from what mpv has. `target` is
-    /// [`zoom_for`] the tracker's bars; `at_once` is its [`on_cut`](CropTracker::on_cut).
-    pub fn next(&mut self, load: u64, window: (i64, i64), target: f64, at_once: bool, now: f64) -> Option<f64> {
+    /// [`zoom_for`] the tracker's bars; `changed`: the bars changed on this frame.
+    pub fn next(&mut self, load: u64, window: (i64, i64), target: f64, changed: bool) -> Option<f64> {
         let fresh = self.load != Some(load) || self.window != window;
-        if fresh {
-            (self.load, self.window) = (Some(load), window);
-            self.glide.jump(target, now);
-        } else if target != self.glide.target() {
-            if at_once {
-                self.glide.jump(target, now);
-            } else if zoom_changed(Some((load, self.glide.target())), load, target) {
-                self.glide.go(target, now);
-            }
-        }
-        let zoom = self.glide.at(now);
-        if self.sent.is_some_and(|s| (s - zoom).abs() < 1e-6) {
+        (self.load, self.window) = (Some(load), window);
+        let worth = match self.sent {
+            None => true,
+            Some(s) if fresh || changed => (s - target).abs() >= 1e-6,
+            Some(s) => zoom_changed(Some((load, s)), load, target),
+        };
+        if !worth {
             return None;
         }
-        self.sent = Some(zoom);
-        Some(zoom)
+        self.sent = Some(target);
+        Some(target)
     }
 
     /// mpv didn't take the last zoom: send again next time.
@@ -276,8 +265,9 @@ pub struct CropTracker {
 }
 
 /// Which rule changed the bars on a frame (docs/autocrop.md §6), for the
-/// log line of each change and for [`CropTracker::on_cut`]: the zoom jumps
-/// for all but [`Why::Late`], which is eased, the same way every time.
+/// log line of each change and for [`CropTracker::on_cut`]. The zoom jumps
+/// for every one of them: [`Why::Late`] too lands as a jump, only frames
+/// after its cut.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Why {
     /// The lookahead read the new bars on this keyframe.
@@ -292,6 +282,11 @@ pub enum Why {
     /// Believed frames after they changed, or from a reading that came
     /// late (a screenshot): away from the cut.
     Late,
+    /// After a seek or a frame step: the bars the lookahead read for the
+    /// frame on screen ([`Timeline`](crate::lookahead::Timeline)).
+    Known,
+    /// Paused (a frame step): the frame on screen's own reading.
+    Still,
 }
 
 impl Why {
@@ -302,7 +297,9 @@ impl Why {
             Why::Window => "on the cut: jump (lookahead, found between keyframes)",
             Why::Cut => "on the cut: jump (this frame's reading)",
             Why::Follow => "following animated bars: frame by frame",
-            Why::Late => "away from the cut: eased",
+            Why::Late => "away from the cut: jump (a late reading)",
+            Why::Known => "on the frame shown: jump (lookahead, read for this frame)",
+            Why::Still => "on the frame shown: jump (paused, this frame's reading)",
         }
     }
 }
@@ -341,7 +338,7 @@ impl CropTracker {
     }
 
     /// The same for a reading that came frames after the frame it's of (a
-    /// screenshot): a change it brings is never on the cut, so it's eased.
+    /// screenshot): a change it brings is never on the cut ([`Why::Late`]).
     pub fn update_late(&mut self, load: u64, full: (i64, i64), display: (i64, i64), measured: Option<Measured>) {
         let crisp = measured.map_or([false; 2], |m| [m.crisp[0] && m.crisp[1], m.crisp[2] && m.crisp[3]]);
         self.feed(load, full, display, measured.map(|m| m.rect), crisp, false);
@@ -454,12 +451,50 @@ impl CropTracker {
         self.cut = Some(why);
     }
 
+    /// The frame on screen is no longer the one after the last fed (a seek,
+    /// a frame step either way): show `bars`, the bars read for it
+    /// ([`Why::Known`]), at once. The readings before say nothing about it;
+    /// the bars this file has shown still count as known.
+    pub fn show(&mut self, load: u64, full: (i64, i64), bars: (i64, i64)) {
+        self.jumped(load, full);
+        self.change = (bars != self.shown).then_some(Why::Known);
+        for (known, b) in self.known.iter_mut().zip([bars.0, bars.1]) {
+            if b > 0 && !known.iter().any(|k| (k - b).abs() <= EDGE_SLACK) {
+                known.push(b);
+            }
+        }
+        self.shown = bars;
+    }
+
+    /// The same when nothing was read for that frame: paused, `measured` is
+    /// our detector's reading of the frame on screen (a screenshot of it),
+    /// judged as a file's first frame: crisp bars of a common shape, and
+    /// picture in the bars shown, change the bars ([`Why::Still`]); anything
+    /// less clear keeps them.
+    pub fn still(&mut self, load: u64, full: (i64, i64), display: (i64, i64), measured: Option<Measured>) {
+        self.jumped(load, full);
+        let crisp = measured.map_or([false; 2], |m| [m.crisp[0] && m.crisp[1], m.crisp[2] && m.crisp[3]]);
+        self.feed(load, full, display, measured.map(|m| m.rect), crisp, true);
+        if self.change.is_some() {
+            self.change = Some(Why::Still);
+        }
+    }
+
+    /// Forget the readings of frames before a jump, keeping the bars shown.
+    fn jumped(&mut self, load: u64, full: (i64, i64)) {
+        if load != self.load || full != self.full {
+            *self = CropTracker { load, full, ..Default::default() };
+        }
+        (self.recent, self.crisp, self.crisp_run, self.follow) = (VecDeque::new(), [false; 2], [0; 2], [false; 2]);
+        (self.change, self.cut) = (None, None);
+    }
+
     /// Whether the newest frame changed the bars on the very frame the
     /// picture's own bars changed (the first frame of a file, a cut, a known
-    /// shape coming back) or by following animated bars: then the zoom jumps
-    /// to it, since readings run a frame ahead of the screen and the jump
-    /// lands with the picture. A change believed a few frames late, or
-    /// from a late reading, is eased instead ([`CropZoom`]).
+    /// shape coming back, the bars read for the frame on screen) or by
+    /// following animated bars: readings run a frame ahead of the screen, so
+    /// the jump lands with the picture. A change believed a few frames late,
+    /// or from a late reading, jumps too, but away from its cut.
     pub fn on_cut(&self) -> bool {
         self.change.is_some_and(|w| w != Why::Late)
     }
@@ -845,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn a_late_reading_never_jumps_and_each_change_says_why() {
+    fn a_late_reading_is_away_from_the_cut_and_each_change_says_why() {
         let crisp = |rect: Rect| Some(Measured { rect, crisp: [true, true, false, false] });
         let mut t = CropTracker::default();
         feed(&mut t, &[Some(FULL); 3]);
@@ -868,28 +903,50 @@ mod tests {
     }
 
     #[test]
-    fn crop_zoom_jumps_on_cuts_and_glides_otherwise() {
+    fn crop_zoom_always_jumps() {
         const WIN: (i64, i64) = (2000, 837);
-        let fps = 1.0 / 24.0;
-        let mut z = CropZoom::new(Easing::EaseOut);
-        assert_eq!(z.next(1, WIN, 0.0, false, 0.0), Some(0.0), "the first value is sent");
-        assert_eq!(z.next(1, WIN, 0.0, false, fps), None, "nothing new");
-        // A late change: eased over several frames, each one sent.
-        let sent: Vec<f64> = (2..20).filter_map(|n| z.next(1, WIN, 0.4, false, n as f64 * fps)).collect();
-        assert!(sent.len() >= 8 && sent.windows(2).all(|w| w[1] > w[0]), "{sent:?}");
-        assert!(sent[0] > 0.0 && sent[0] < 0.2 && *sent.last().unwrap() == 0.4, "{sent:?}");
-        assert_eq!(z.next(1, WIN, 0.4, false, 1.0), None, "settled");
-        // A change under 1% isn't started.
-        assert_eq!(z.next(1, WIN, 0.402, false, 1.1), None);
-        // On a cut: there at once.
-        assert_eq!(z.next(1, WIN, 0.0, true, 1.2), Some(0.0));
-        // A new file or a new window size: at once too.
-        assert_eq!(z.next(2, WIN, 0.3, false, 1.3), Some(0.3));
-        assert_eq!(z.next(2, (1920, 1080), 0.0, false, 1.4), Some(0.0));
+        let mut z = CropZoom::default();
+        assert_eq!(z.next(1, WIN, 0.0, false), Some(0.0), "the first value is sent");
+        assert_eq!(z.next(1, WIN, 0.0, false), None, "nothing new");
+        // A late change: there at once, one value, never a glide.
+        assert_eq!(z.next(1, WIN, 0.4, true), Some(0.4));
+        assert_eq!(z.next(1, WIN, 0.4, false), None, "nothing more to send");
+        // A drift under 1% without a change of bars isn't worth a jump; with one it is.
+        assert_eq!(z.next(1, WIN, 0.402, false), None);
+        assert_eq!(z.next(1, WIN, 0.402, true), Some(0.402));
+        // A new file or a new window size: at once.
+        assert_eq!(z.next(2, WIN, 0.3, false), Some(0.3));
+        assert_eq!(z.next(2, (1920, 1080), 0.301, false), Some(0.301));
         // mpv refused it: sent again.
         z.unsent();
-        assert_eq!(z.next(2, (1920, 1080), 0.0, false, 1.5), Some(0.0));
+        assert_eq!(z.next(2, (1920, 1080), 0.301, false), Some(0.301));
     }
+
+    #[test]
+    fn after_a_jump_the_frame_on_screen_decides() {
+        let crisp = |rect: Rect| Some(Measured { rect, crisp: [true, true, false, false] });
+        let mut t = CropTracker::default();
+        feed(&mut t, &[Some(SCOPE); 5]);
+        // Stepped back onto a frame the lookahead read as full frame: uncropped at once.
+        t.show(1, HD, (0, 0));
+        assert_eq!((t.bars(1), t.changed(), t.on_cut()), ((0, 0), Some(Why::Known), true));
+        // The same bars again: no change.
+        t.show(1, HD, (0, 0));
+        assert_eq!(t.changed(), None);
+        // Paused on a frame nothing was read for: its own crisp reading crops it at once.
+        t.still(1, HD, HD, crisp(SCOPE));
+        assert_eq!((t.bars(1), t.changed()), ((140, 0), Some(Why::Still)));
+        // Picture in the bars: uncropped at once.
+        t.still(1, HD, HD, Some(Measured { rect: FULL, crisp: [false; 4] }));
+        assert_eq!((t.bars(1), t.changed()), ((0, 0), Some(Why::Still)));
+        // A dark frame read as bars, not crisp: kept as it is.
+        t.still(1, HD, HD, Some(Measured { rect: SCOPE, crisp: [false; 4] }));
+        assert_eq!((t.bars(1), t.changed()), ((0, 0), None));
+        // A black frame says nothing.
+        t.still(1, HD, HD, None);
+        assert_eq!((t.bars(1), t.changed()), ((0, 0), None));
+    }
+
     #[test]
     fn opening_points_spread_over_the_first_minutes() {
         let film = opening_points(Some(5400.0), 0.0);

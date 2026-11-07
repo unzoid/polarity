@@ -627,13 +627,24 @@ against a real project.
 - Shortcuts synced between a Mac and a PC: Ctrl+K set on Windows arrives as ⌘K on the Mac. Tested as functions
   only; check by changing a ⌘ shortcut on one machine and looking at Settings → Controls on the other.
 
-## Eased autocrop moves (docs/autocrop.md §6)
+## Autocrop: every change a jump, the frame on screen's own crop (docs/autocrop.md §4, §6; #344)
 
-- `crop::CropZoom` and `CropTracker::on_cut` are tested in `crates/player`; their wiring in
-  `src-tauri/src/player/autocrop.rs` only type-checks here (no mpv, no WebKitGTK). Unknown: whether mpv shows
-  a `video-zoom` sent on every frame smoothly (no dropped or doubled steps), and whether a jump lands on the
-  cut frame itself, with `--video-sync=display-resample` and without. To check: play a film with bars that change
-  mid-shot on the desktop build and watch the crop settle.
+- `crop::CropZoom`, `frames::Frames`, `lookahead::Timeline` and `lookahead::CutSearch` are tested in
+  `crates/player` (stepping back and forth across a change, a change between keyframes, a seek, a late reading);
+  their wiring in `src-tauri/src/player/autocrop.rs` and the exact probe in `preroll.rs` only type-check here
+  (no mpv may run on this machine). To check on the Windows build, autocrop and "Look ahead for bar changes" on,
+  on a file whose bars change between keyframes:
+  - the log has no `eased` lines; changes say `jump`, and the one between keyframes says `found between
+    keyframes` (logged a frame before it, as `from <pts>` of the frame it lands on);
+  - stepping with `,` and `.` across the change: every frame with its own crop, both ways, no zoom animation;
+  - playing across it: no frame with the wrong crop; whether a jump lands on its frame with
+    `--video-sync=display-resample` and without;
+  - a seek past what the lookahead read: playback pauses for a moment (at most 2 s) and starts with the right crop;
+  - that `seek … absolute+exact` in the third mpv (`--hr-seek=yes`) lands on the frame asked for, and how long a
+    search takes (each reading decodes from the keyframe before; log `autocrop lookahead: frames between
+    keyframes can't be read exactly here` if that mpv couldn't open the source a third time).
+- Paused right after a step, the zoom is sent once mpv reports the new `time-pos`, so mpv may draw the stepped
+  frame once with the zoom before it: whether that can be seen is for the desktop build.
 
 ## Autocrop pre-roll probe (docs/autocrop.md §3)
 
