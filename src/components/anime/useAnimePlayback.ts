@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import {
   type Anime,
@@ -9,6 +9,7 @@ import {
   entryZip,
   knowsNothing,
   linkAnime,
+  listedKitsuQuery,
   playContext,
   prequelOf,
   progressByVideo,
@@ -39,7 +40,9 @@ export function useAnimePlayback(anime: AnimeCard | Anime) {
     [anime, own, borrow, prequelZip, noPrequel],
   );
   const isMovie = anime.format === "MOVIE";
-  const kitsu = zip?.mappings.kitsu_id;
+  // A borrowed record leaves out the prequel's Kitsu id; the id lists may have the entry's own, which stream add-ons know its episodes by.
+  const { data: listedKitsu } = useQuery({ ...listedKitsuQuery(anime.id), enabled: borrow });
+  const kitsu = zip?.mappings.kitsu_id ?? (borrow ? (listedKitsu ?? undefined) : undefined);
   // ani.zip's IMDb show, unless its episodes stop before this entry's (then the
   // show that has them), or the same title on Cinemeta when ani.zip has no link.
   const { data: found, isPending: linking, isSuccess: imdbKnown } = useAnimeImdb(anime, zip);

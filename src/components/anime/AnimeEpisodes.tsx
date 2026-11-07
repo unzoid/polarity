@@ -1,13 +1,11 @@
 import { useQueries } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import {
-  alignByAirDate,
   type Anime,
-  type AniZipEpisode,
   aniZipQuery,
   distinctLabels,
+  episodeMatcher,
   type FranchiseTabs,
-  matchVideo,
   playContext,
   regularEpisodes,
   rememberStill,
@@ -17,6 +15,7 @@ import {
 } from "../../lib/anime";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../../lib/settings";
 import type { PlayRequest } from "../../lib/playback";
+import { ownEpisodeName } from "../../lib/format";
 import type { Video } from "../../lib/types";
 import { Dropdown } from "../Dropdown";
 import { LayoutList, LayoutRow } from "../icons";
@@ -72,7 +71,8 @@ export function AnimeEpisodes({
       const f = flags?.get(e.number);
       return {
         id: e.video?.id ?? `${PENDING}${e.number}`,
-        title: e.title ?? e.video?.title ?? `Episode ${e.number}`,
+        // The video's name only when it's a real one: "Episode 9" or "Episode #1.9" may be another number than this entry's (#360).
+        title: e.title ?? ownEpisodeName(e.video?.title) ?? `Episode ${e.number}`,
         season: 1,
         episode: e.number,
         released: e.airDate ?? e.video?.released,
@@ -311,7 +311,7 @@ function useFranchiseStills(ids: number[], metaId: string | undefined, videos: V
     if (!imdb || !videos?.length) return;
     for (const { data: zip } of zips) {
       if (!zip) continue;
-      const match = zip.mappings.imdb_id === imdb ? (e: AniZipEpisode) => matchVideo(e, videos) : alignByAirDate(regularEpisodes(zip), videos);
+      const match = episodeMatcher(zip, videos, imdb);
       for (const e of regularEpisodes(zip)) {
         const v = e.image ? match(e) : undefined;
         if (v) rememberStill(v.id, e.image!);

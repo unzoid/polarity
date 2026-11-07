@@ -173,6 +173,11 @@ pub struct StreamsResult {
     failed: Vec<String>,
     /// Sources left out by the filters in Settings → Sources.
     hidden: usize,
+    /// The addons asked (whatever they answered), for the player's start log: "none asked" and "asked,
+    /// nothing found" are different failures.
+    asked: Vec<String>,
+    /// The ids they were asked for: the episode's, then its other ids.
+    ids: Vec<String>,
 }
 
 /// Query every installed stream addon concurrently, then rank and dedupe.
@@ -236,9 +241,12 @@ pub async fn streams(
         .filter(|a| !answered.contains(&a.manifest_url) && named.insert(&a.manifest_url))
         .map(|a| a.manifest.name.clone())
         .collect();
+    let mut seen = std::collections::HashSet::new();
+    let asked: Vec<String> =
+        jobs.iter().filter(|(a, _)| seen.insert(&a.manifest_url)).map(|(a, _)| a.manifest.name.clone()).collect();
     let filter = state.store.locked().data.settings.stream_filter(&ty);
     let (streams, hidden) = rank_asked(all, &filter, wanted.as_ref());
-    Ok(StreamsResult { streams, failed, hidden })
+    Ok(StreamsResult { streams, failed, hidden, asked, ids })
 }
 
 #[derive(Serialize)]

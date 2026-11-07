@@ -5,6 +5,7 @@ import { Spinner } from "../components/Spinner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { byDay, dayLabel, monthWeeks, useCalendar, weekDays, weekStart, type CalendarEntry } from "../lib/catalog";
 import { useRouter } from "../lib/router";
+import { ownEpisodeName } from "../lib/format";
 import { useBack, useFocusTrap } from "./shell";
 import { focusWhenReady } from "./spatial";
 
@@ -26,7 +27,6 @@ function weekRange(days: number[]) {
 /** A week, near enough: rounding absorbs a DST hour. */
 const WEEK = 7 * 86_400_000;
 const aired = (v: { released?: string }) => !!v.released && Date.parse(v.released) <= Date.now();
-const episodeTitle = (title?: string) => (title && !/^Episode \d+$/.test(title) ? title : undefined);
 
 /**
  * The Calendar in TV mode: a week at a time, a column per day like a TV guide,
@@ -133,7 +133,7 @@ export function TvCalendar() {
                       </span>
                     </span>
                     <span className="tv-cal-show">{e.show.name}</span>
-                    {episodeTitle(e.video.title) && <span className="tv-cal-title">{episodeTitle(e.video.title)}</span>}
+                    {ownEpisodeName(e.video.title) && <span className="tv-cal-title">{ownEpisodeName(e.video.title)}</span>}
                   </button>
                 ))}
               </div>
@@ -151,7 +151,7 @@ export function TvCalendar() {
             </span>
             <strong className="tv-cal-detail-title">
               {focused.show.name}
-              {episodeTitle(focused.video.title) && <span> · {episodeTitle(focused.video.title)}</span>}
+              {ownEpisodeName(focused.video.title) && <span> · {ownEpisodeName(focused.video.title)}</span>}
             </strong>
             {focused.video.overview && <p className="tv-cal-detail-text">{focused.video.overview}</p>}
           </>

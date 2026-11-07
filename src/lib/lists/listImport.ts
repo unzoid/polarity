@@ -1,4 +1,4 @@
-import { alignByAirDate, cachedAniZip, matchVideo, regularEpisodes, type AniZip } from "../anime/anizip";
+import { cachedAniZip, episodeMatcher, regularEpisodes, type AniZip } from "../anime/anizip";
 import { animeLinks } from "../anime/links";
 import { api } from "../api";
 import type { AnimeLink } from "../library/identity";
@@ -122,7 +122,7 @@ async function watchedVideos(e: ListEntry, id: string, meta: Meta, n: number, zi
   const z = zip ?? (await deps.aniZip(e.mediaId).catch(() => null));
   const eps = regularEpisodes(z).slice(0, n);
   // An entry ani.zip files under this IMDb show matches as its page does; one linked to another show, by air date.
-  const match = z?.mappings.imdb_id === id ? (ep: (typeof eps)[number]) => matchVideo(ep, meta.videos) : alignByAirDate(regularEpisodes(z), meta.videos);
+  const match = episodeMatcher(z, meta.videos, id);
   const seen = new Set<string>();
   return eps.map(match).filter((v): v is Video => !!v && !seen.has(v.id) && (seen.add(v.id), true));
 }

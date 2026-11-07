@@ -35,6 +35,12 @@ export function episodeCode(season?: number, episode?: number) {
   return `S${season}, E${episode}`;
 }
 
+/**
+ * An episode's name when it has one of its own: undefined for the catalogs' stand-ins, "Episode 9", and
+ * IMDb's "Episode #1.9" for one it knows nothing about yet (#360), which may not even be the number shown.
+ */
+export const ownEpisodeName = (title?: string) => (title && !/^Episode (?:\d+|#\d+\.\d+)$/.test(title.trim()) ? title : undefined);
+
 /** "49 min" → 2940 seconds; 0 when unknown. */
 export const runtimeSeconds = (runtime?: string) => Number(runtime?.match(/(\d+)\s*min/)?.[1] ?? 0) * 60;
 

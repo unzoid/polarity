@@ -1,5 +1,5 @@
 import type { Anime, AnimeCard } from "./anilist";
-import { alignByAirDate, episodeTitle, matchVideo, regularEpisodes, type AniZip, type AniZipEpisode } from "./anizip";
+import { episodeMatcher, episodeTitle, regularEpisodes, type AniZip, type AniZipEpisode } from "./anizip";
 import { formatTime } from "../format";
 import type { Progress, Video } from "../types";
 
@@ -49,7 +49,7 @@ export function animeEpisodes({
   if (anime.format === "MOVIE") return [];
   // A Kitsu show's videos are numbered like the anime's; an IMDb one's are matched by air date.
   // ani.zip's numbers (TVDB's seasons) only apply to the show ani.zip links; another show is lined up by air date.
-  const byImdb = imdb === zip?.mappings.imdb_id ? (e: AniZipEpisode) => matchVideo(e, videos) : alignByAirDate(regularEpisodes(zip), videos);
+  const byImdb = episodeMatcher(zip, videos, imdb, now);
   const videoFor = (e: AniZipEpisode) => (!videos.length ? undefined : imdb ? byImdb(e) : videos.find((v) => v.episode === Number(e.episode)));
   const fromZip = regularEpisodes(zip).map((e: AniZipEpisode): AnimeEpisode => {
     const airDate = e.airDateUtc ?? e.airDate ?? e.airdate;

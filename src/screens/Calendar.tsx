@@ -4,6 +4,7 @@ import { Img } from "../components/Img";
 import { byDay, dayLabel, useCalendar, type CalendarEntry } from "../lib/catalog";
 import { useRouter } from "../lib/router";
 import { episodeEntry } from "../lib/library";
+import { ownEpisodeName } from "../lib/format";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Skeleton } from "../components/ui/Skeleton";
 
@@ -83,7 +84,7 @@ function CalendarItem({ entry: { show, video } }: { entry: CalendarEntry }) {
         <span className="calendar-show">{show.name}</span>
         <span className="calendar-episode t-callout">
           S{video.season} E{video.episode}
-          {video.title && !/^Episode \d+$/.test(video.title) ? ` · ${video.title}` : ""}
+          {ownEpisodeName(video.title) ? ` · ${video.title}` : ""}
         </span>
       </span>
     </button>

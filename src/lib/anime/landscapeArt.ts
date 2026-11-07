@@ -57,6 +57,20 @@ export const listedImdbQuery = (anilistId: number) => ({
 });
 
 /**
+ * The Kitsu id the id lists give an AniList entry, for one ani.zip knows nothing about: a split part's
+ * second entry borrows its prequel's record (splitParts.ts), whose Kitsu id is the prequel's (#360).
+ */
+export const listedKitsuQuery = (anilistId: number) => ({
+  queryKey: keys.anime.listedKitsu(anilistId),
+  queryFn: () =>
+    call<{ kitsu_id?: number | null } | null>("anime_ids", { key: "anilist_id", value: String(anilistId) })
+      .then((m) => m?.kitsu_id ?? null)
+      .catch(() => null),
+  staleTime: Infinity,
+  gcTime: 60 * 60_000,
+});
+
+/**
  * The IMDb id a card links an AniList entry to (#34): the one its page found when it was opened (a stored
  * link, docs/anime-identity.md), else the id lists' one, so an entry never opened has it too. Undefined
  * until both have answered, so the art doesn't change once drawn; null when neither has one.

@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import { useMeta, useProgress, useStreams } from "../../lib/net";
 import {
+  askedLine,
   autoPickOrder,
   describeStream,
   describeTorrent,
+  noneFound,
+  noSources,
   recordFail,
   recordTry,
   torrentBlocked,
@@ -87,6 +90,8 @@ export function useSource(
   }, [needsRanking, log]);
 
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  /** Why there's nothing to try, once the add-ons have answered with nothing to play. */
+  const none = useRef<{ reason: string; settings?: "sources" } | undefined>(undefined);
   useEffect(() => {
     if (candidates) return;
     if (picked) {
@@ -107,16 +112,23 @@ export function useSource(
       const ranked = autoPickOrder(streams.data.streams, settings, metaId, matchRef.current);
       // The room's file first, even past Settings' filters: same file, same timing.
       const same = prefer ? streams.data.streams.find((r) => sameFile(r.stream, prefer)) : undefined;
-      const { streams: all, failed, hidden = 0 } = streams.data;
+      const { streams: all, failed, hidden = 0, asked, ids } = streams.data;
       const addons = new Set(all.map((r) => r.addon)).size;
       const filtered = all.length - ranked.length + hidden;
-      log(
-        `Found ${all.length + hidden} source${all.length + hidden === 1 ? "" : "s"} from ${addons} add-on${addons === 1 ? "" : "s"}` +
-          (filtered > 0 ? `; ${filtered} left out by your source filters` : ""),
-        all.length ? "ok" : "warn",
-        "sources",
-      );
+      const found = all.length + hidden;
+      // Which add-ons were asked, and for which ids: a source missing for one episode is most often asked for under another id (#360).
+      if (asked) log(askedLine(asked, ids ?? [videoId]), asked.length ? "info" : "warn", "sources");
+      if (found || !asked)
+        log(
+          `Found ${found} source${found === 1 ? "" : "s"} from ${addons} add-on${addons === 1 ? "" : "s"}` +
+            (filtered > 0 ? `; ${filtered} left out by your source filters` : ""),
+          all.length ? "ok" : "warn",
+          "sources",
+        );
+      // Nothing found: the add-ons asked answered with nothing (said here), or didn't answer (said next).
+      else if (asked.length > failed.length) log(noneFound(asked.length), "warn", "sources");
       if (failed.length) log(`No answer from: ${failed.join(", ")}`, "warn", "sources");
+      none.current = noSources({ asked: asked?.length, answered: asked ? asked.length - failed.length : undefined, found, filtered });
       const others = all.filter((r) => r.otherEpisode).length;
       if (others) log(`${others} of them ${others === 1 ? "is a file" : "are files"} of another episode, left for last and not tried`, "info", "sources");
       if (same) log("Using the watch party's file", "info", "sources");
@@ -129,7 +141,7 @@ export function useSource(
       log(`Couldn't ask the add-ons: ${errorMessage(streams.error)}`, "fail", "sources");
       setCandidates([]);
     }
-  }, [candidates, picked, prefer, saved, streams.data, streams.isError, streams.error, settings, metaId, log]);
+  }, [candidates, picked, prefer, saved, streams.data, streams.isError, streams.error, settings, metaId, videoId, log]);
 
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SourceState>({ status: "searching" });
@@ -144,10 +156,11 @@ export function useSource(
     if (!candidates) return;
     const candidate = candidates[attempt];
     if (!candidate) {
-      const reason = candidates.length ? "None of the sources could be played." : "No sources found. Install a stream add-on in Settings.";
-      // Out of sources: the attempts above say why; with none at all, it's the add-ons.
+      const empty = none.current ?? noSources({ found: 0, filtered: 0 });
+      const reason = candidates.length ? "None of the sources could be played." : empty.reason;
+      // Out of sources: the attempts above say why; with none at all, the add-ons or the filters.
       if (!candidates.length) log(reason, "fail", "sources");
-      setState({ status: "failed", reason });
+      setState({ status: "failed", reason, ...(!candidates.length && empty.settings && { settings: empty.settings }) });
       return;
     }
     let cancelled = false;
