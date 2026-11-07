@@ -114,6 +114,12 @@ impl Frames {
                 // No reading for this frame: a lookahead cut still lands on it.
                 Feed::Wait => self.tracker.update(load, full, display, None),
             }
+            // Animated bars: where they stand on the next frame, not where a late screenshot saw them.
+            if self.tracker.following() {
+                if let Some(at) = self.sampler.lead(live, next) {
+                    self.tracker.lead(load, full, at);
+                }
+            }
             return Ask::Nothing;
         }
         if paused && last.is_some_and(|l| (l - pts).abs() <= PTS_SLACK) {
@@ -147,17 +153,19 @@ impl Frames {
 
     /// A screenshot's reading came: of the frame on screen asked for by
     /// [`Ask::Still`] or [`Ask::Hold`] with `shot`, or (`shot` none) one the
-    /// sampler wanted. True when held playback may go on.
+    /// sampler wanted, of the frame with `pts` when that's known. True when
+    /// held playback may go on.
     pub fn shot(
         &mut self,
         load: u64,
         (full, display): ((i64, i64), (i64, i64)),
         shot: Option<u64>,
+        pts: Option<f64>,
         measured: Option<Measured>,
         ahead: Option<&mut Schedule>,
     ) -> bool {
         let Some(n) = shot else {
-            self.sampler.measured(measured);
+            self.sampler.measured(pts, measured);
             return false;
         };
         let Some((_, pts)) = self.still.filter(|(asked, _)| *asked == n) else { return false };
@@ -247,7 +255,7 @@ mod tests {
         let ask = f.frame(1, SIZES, n as f64 * F, paused, F, live, s.as_deref_mut(), true);
         let mut why = f.tracker.changed();
         if let Ask::Still(shot) | Ask::Hold(shot) = ask {
-            f.shot(1, SIZES, Some(shot), ours(v.bars(n)), s);
+            f.shot(1, SIZES, Some(shot), None, ours(v.bars(n)), s);
             why = f.tracker.changed().or(why);
         }
         (f.tracker.bars(1).0, why, ask)
@@ -258,6 +266,75 @@ mod tests {
         f.tracker.open(1, HD, (0, 0));
         v.read_ahead(s, 480);
         f
+    }
+
+    /// Bars the film animates: `from` px up to frame 40, then 4 px a frame
+    /// towards `to`, then `to`.
+    fn animated(from: i64, to: i64, n: usize) -> i64 {
+        let moved = 4 * n.saturating_sub(40) as i64;
+        if to < from {
+            (from - moved).max(to)
+        } else {
+            (from + moved).min(to)
+        }
+    }
+
+    /// Play 120 frames of `bars` as the desktop engine does: screenshots
+    /// read 2 frames after their frame (with their pts on macOS), and
+    /// cropdetect's reading of the next frame where it runs. Per frame: the
+    /// bars of the frame the zoom lands on, the bars shown, and following.
+    fn play_animated(sampling: Sampling, bars: impl Fn(usize) -> i64) -> Vec<(i64, i64, bool)> {
+        let mut f = Frames::new(sampling);
+        f.tracker.open(1, HD, (bars(0), 0));
+        let cropdetect = sampling != Sampling::EveryFrame;
+        (0..120)
+            .map(|n| {
+                if n >= 2 {
+                    let pts = (!cropdetect).then_some((n - 2) as f64 * F);
+                    f.shot(1, SIZES, None, pts, ours(bars(n - 2)), None);
+                }
+                let live = cropdetect.then(|| rect(bars(n + 1)));
+                assert_eq!(f.frame(1, SIZES, n as f64 * F, false, F, live, None, true), Ask::Nothing);
+                (bars(n + 1), f.tracker.bars(1).0, f.tracker.following())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn animated_bars_are_followed_on_their_frame_where_cropdetect_runs() {
+        for (from, to) in [(140, 40), (40, 140)] {
+            let played = play_animated(Sampling::EveryFrameAndCropdetect, |n| animated(from, to, n));
+            let first = played.iter().position(|p| p.2).expect("followed");
+            assert!(first <= 46, "followed from frame {first}: {played:?}");
+            for (n, &(want, shown, _)) in played.iter().enumerate().skip(first) {
+                assert_eq!(shown, want, "frame {n} ({from} to {to}): {played:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn animated_bars_from_screenshots_only_never_cut_into_the_picture() {
+        // Opening: carried on to the frame, exact while the pace holds; where
+        // the move stops, a few pixels of bar for as many frames as the
+        // screenshots run late, then at rest on them.
+        let played = play_animated(Sampling::EveryFrame, |n| animated(140, 40, n));
+        let first = played.iter().position(|p| p.2).expect("followed");
+        assert!(first <= 46, "followed from frame {first}: {played:?}");
+        for (n, &(want, shown, _)) in played.iter().enumerate().skip(first) {
+            assert!(shown <= want && want - shown <= 12, "frame {n}: {played:?}");
+            if n < 64 {
+                assert_eq!(shown, want, "frame {n}: {played:?}");
+            }
+        }
+        assert!(played[70..].iter().all(|&(want, shown, _)| shown == want), "{played:?}");
+        // Closing: held where the screenshots saw them, a few pixels of bar
+        // while they move, then at rest on the last.
+        let played = play_animated(Sampling::EveryFrame, |n| animated(40, 140, n));
+        let first = played.iter().position(|p| p.2).expect("followed");
+        for (n, &(want, shown, _)) in played.iter().enumerate().skip(first) {
+            assert!(shown <= want && want - shown <= 12, "frame {n}: {played:?}");
+        }
+        assert!(played[70..].iter().all(|&(want, shown, _)| shown == want), "{played:?}");
     }
 
     #[test]
@@ -335,7 +412,7 @@ mod tests {
         let ask = f.frame(1, SIZES, 2000.0 * F, false, F, Some(rect(140)), Some(&mut s), true);
         let Ask::Hold(shot) = ask else { panic!("{ask:?}") };
         assert!(f.holding());
-        assert!(f.shot(1, SIZES, Some(shot), ours(140), Some(&mut s)), "play on once it's read");
+        assert!(f.shot(1, SIZES, Some(shot), None, ours(140), Some(&mut s)), "play on once it's read");
         assert_eq!((f.tracker.bars(1).0, f.holding()), (140, false));
         // Without the lookahead nothing is held: the live readings decide, as when playing.
         let mut f = Frames::new(Sampling::AroundChanges);

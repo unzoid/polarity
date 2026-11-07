@@ -70,6 +70,9 @@ struct Shot {
     size: (i64, i64),
     /// The [`Ask`] it answers (the frame on screen while paused), if any.
     still: Option<u64>,
+    /// The pts of the frame read, when it's sure (macOS: `time-pos` the
+    /// same before and after reading it), for [`Sampler::predict`].
+    pts: Option<f64>,
     /// The reading (`Some(None)`: a black frame), `None` if no frame came.
     measured: Option<Option<Measured>>,
     /// Bytes mpv wrote for it (none on macOS, where it comes in memory).
@@ -88,7 +91,7 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     use polar_player::png::decode_stored;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let mut shot = Shot { load, size: g.size, still, measured: None, written: 0, ours: Duration::ZERO };
+    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, written: 0, ours: Duration::ZERO };
     let path = super::shots_dir().join(format!("autocrop-{}.png", NEXT.fetch_add(1, Ordering::Relaxed)));
     let mpv = &app.state::<AppState>().mpv;
     let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "video"])).await;
@@ -115,13 +118,18 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     use std::sync::{Arc, Mutex as StdMutex};
 
     use polar_player::bars::detect;
+    use polar_player::lookahead::PTS_SLACK;
 
     use super::{apple::Frames, Conn, Engine};
 
     /// The reader of the running player's frames, by the player it reads.
     static FRAMES: StdMutex<Option<(usize, Arc<Frames>)>> = StdMutex::new(None);
 
-    let mut shot = Shot { load, size: g.size, still, measured: None, written: 0, ours: Duration::ZERO };
+    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, written: 0, ours: Duration::ZERO };
+    let time_pos = || async {
+        let mpv = &app.state::<AppState>().mpv;
+        mpv.request(json!(["get_property", "time-pos"])).await.ok().and_then(|t| t.as_f64())
+    };
     let frames = {
         let state = app.state::<AppState>();
         let guard = state.mpv.conn.lock().await;
@@ -138,6 +146,7 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
         }
     };
     let started = Instant::now();
+    let before = time_pos().await;
     let read = tokio::task::spawn_blocking(move || {
         frames.read(|frame| detect(&frame, g.levels).map(|m| m.scaled((frame.w as i64, frame.h as i64), g.size)))
     })
@@ -148,6 +157,9 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
         // The player may have gone: open a reader of the next one.
         *FRAMES.locked() = None;
     }
+    // A new frame shown meanwhile: which of the two was read isn't sure.
+    let after = time_pos().await;
+    shot.pts = before.zip(after).filter(|(b, a)| (a - b).abs() <= PTS_SLACK).map(|(b, _)| b);
     shot.measured = read;
     shot.ours = started.elapsed();
     shot
@@ -242,7 +254,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
                 let play_on = match shot.measured {
                     Some(m) => {
                         let mut ahead = mpv.ahead.locked();
-                        frames.shot(load, (g.size, g.display), shot.still, m, ahead.as_mut())
+                        frames.shot(load, (g.size, g.display), shot.still, shot.pts, m, ahead.as_mut())
                     }
                     None => shot.still.is_some() && frames.give_up(),
                 };
@@ -262,7 +274,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
         if !tune.autocrop || mpv.autocrop_run.load(Ordering::SeqCst) != run {
             break;
         }
-        // The setting changed: mpv_tune has added or removed cropdetect.
+        // The setting changed (mpv_tune may have added or removed cropdetect): read afresh.
         if tune.sampling() != frames.sampler.sampling() {
             frames.sampler = Sampler::new(tune.sampling());
             (filter, reading) = (CROPDETECT, None);

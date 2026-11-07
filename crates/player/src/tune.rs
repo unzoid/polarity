@@ -28,7 +28,7 @@ pub struct Tune {
     #[serde(default = "on")]
     pub lookahead: bool,
     /// With autocrop, where mpv is its own process (Windows, Linux): our
-    /// detector reads a screenshot of every frame instead of cropdetect
+    /// detector reads a screenshot of every frame, besides cropdetect
     /// (docs/autocrop.md §2). Off: screenshots only around cropdetect's
     /// changes. macOS and iOS always read every frame, in memory.
     #[serde(default)]
@@ -96,19 +96,22 @@ impl Tune {
 
     /// Whether autocrop runs cropdetect inside mpv. Not on macOS and iOS, where
     /// libmpv hands our detector every frame (and the iOS build, being LGPL, has
-    /// no cropdetect), nor with [`Tune::every_frame`].
+    /// no cropdetect). With [`Tune::every_frame`] it runs too: its reading of
+    /// each frame comes on time, so animated bars are followed on their frame.
     pub fn cropdetect(&self) -> bool {
         self.cropdetect_on(FRAMES_IN_MEMORY)
     }
 
     fn cropdetect_on(&self, frames_in_memory: bool) -> bool {
-        self.autocrop && !self.every_frame && !frames_in_memory
+        self.autocrop && !frames_in_memory
     }
 
     /// Which frames our detector reads, with autocrop on ([`crate::sampler`]).
     pub fn sampling(&self) -> Sampling {
-        if self.every_frame || FRAMES_IN_MEMORY {
+        if FRAMES_IN_MEMORY {
             Sampling::EveryFrame
+        } else if self.every_frame {
+            Sampling::EveryFrameAndCropdetect
         } else {
             Sampling::AroundChanges
         }
@@ -182,20 +185,23 @@ mod tests {
     }
 
     #[test]
-    fn every_frame_replaces_cropdetect_and_its_copy_back() {
+    fn every_frame_keeps_cropdetect_and_its_copy_back() {
         let on = Tune { autocrop: true, ..Tune::default() };
         let every = Tune { every_frame: true, ..on };
-        assert!(!every.cropdetect());
-        assert_eq!(every.sampling(), Sampling::EveryFrame);
-        assert_eq!(every.hwdec_mode(), "auto-safe");
         assert!(!Tune { autocrop: false, ..on }.cropdetect());
         if FRAMES_IN_MEMORY {
-            assert!(!on.cropdetect());
-            assert_eq!(on.sampling(), Sampling::EveryFrame);
+            for t in [on, every] {
+                assert!(!t.cropdetect());
+                assert_eq!(t.sampling(), Sampling::EveryFrame);
+                assert_eq!(t.hwdec_mode(), "auto-safe");
+            }
         } else {
-            assert!(on.cropdetect());
+            for t in [on, every] {
+                assert!(t.cropdetect());
+                assert_eq!(t.hwdec_mode(), "auto-copy-safe");
+            }
             assert_eq!(on.sampling(), Sampling::AroundChanges);
-            assert_eq!(on.hwdec_mode(), "auto-copy-safe");
+            assert_eq!(every.sampling(), Sampling::EveryFrameAndCropdetect);
         }
     }
 
@@ -212,7 +218,7 @@ mod tests {
         let on = Tune::default();
         assert_eq!(on.android_hwdec(), "mediacodec,mediacodec-copy");
         assert_eq!(Tune { autocrop: true, ..on }.android_hwdec(), "mediacodec-copy");
-        assert_eq!(Tune { autocrop: true, every_frame: true, ..on }.android_hwdec(), "mediacodec,mediacodec-copy");
+        assert_eq!(Tune { autocrop: true, every_frame: true, ..on }.android_hwdec(), "mediacodec-copy");
         assert_eq!(Tune { hwdec: false, ..on }.android_hwdec(), "no");
     }
 

@@ -100,7 +100,8 @@ subtitles). `polar_player::sampler` decides, frame by frame, which reading goes 
 - **macOS: every frame, in memory.** libmpv runs in the app, so `screenshot-raw video` hands
   the frame over as `bgr0` through a weak client of the player (`mac::Frames`,
   `polar_mpv_frame` in `src-tauri/src/macos/mpv_view.m`). cropdetect isn't run, so hardware
-  decoding stays zero-copy (no copy-back, `Tune::hwdec_mode`).
+  decoding stays zero-copy (no copy-back, `Tune::hwdec_mode`). Each reading carries its frame's
+  pts (`time-pos` the same before and after reading it), for following animated bars (§5).
 - **Windows and Linux, by default: around changes.** cropdetect reads each frame. When its
   reading changes, a screenshot is taken (an uncompressed PNG, `--screenshot-png-compression=0`,
   read by `polar_player::png` and deleted), then more, one at a time, while our readings keep
@@ -109,7 +110,8 @@ subtitles). `polar_player::sampler` decides, frame by frame, which reading goes 
   that hasn't come within 12 frames gives way to cropdetect again.
 - **Windows and Linux, opt-in: every frame.** Settings → Advanced, "Check every frame for black
   bars" (off by default, for powerful computers): a screenshot of every frame, one at a time,
-  and no cropdetect, so no copy-back either.
+  and cropdetect still reading each frame, with its copy-back from the GPU (#344): its reading
+  comes on time, so animated bars are followed on their frame (§5).
 
 A screenshot is of the frame on screen and arrives a frame or two after it was asked for, so a
 change it finds lands that much after its cut (cropdetect's readings run a frame ahead). The
@@ -295,8 +297,25 @@ Some films move their own bars: the bars open or close over a few seconds within
 **follow mode** when 3 frames in a row have crisp edges that move the same way by a small step
 (at most 3% of the frame per frame), and then shows each frame's crisp reading as it is: no
 hold, no easing, and the 1% minimum zoom change (`zoom_changed`) is skipped so each step is
-sent. It leaves follow mode when the edges hold still for 2 frames (then normal rules apply), or
-an edge stops being crisp (then it keeps the last bars until the usual rules decide).
+sent. It leaves follow mode when the edges hold still for 2 frames (shown where they came to rest,
+then normal rules apply), or an edge stops being crisp (then it keeps the last bars until the
+usual rules decide).
+
+On the desktop the crisp readings are screenshots, which arrive a frame or two after their frame.
+So while following, the bars shown are where they stand on the frame the zoom lands on
+(`Sampler::lead`, `CropTracker::lead`), not where the newest screenshot saw them (#344):
+
+- **Windows and Linux:** cropdetect's reading of that frame, which comes on time. The screenshots
+  still say whether the edges are crisp, and so when following starts and ends. A cropdetect
+  reading more than 4 frames' worth of the fastest step (3% of the frame) from the newest
+  screenshot is taken for a misreading and left out.
+- **macOS:** no cropdetect, so the movement of the last two screenshots is carried on to that
+  frame (`Sampler::predict`), but only for edges moving outwards (the picture growing). Edges
+  moving inwards stay where the last screenshot saw them, so the crop never cuts into the
+  picture where a move stops: while bars close in, a few pixels of bar show for as many frames
+  as the screenshots run late, and where opening bars stop, a few pixels of bar show for that
+  long too, until the screenshots see them at rest. So on macOS the crop can be a frame or two
+  off while bars move.
 
 ## 6. Every change is a jump
 

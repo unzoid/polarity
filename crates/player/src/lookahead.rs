@@ -898,7 +898,7 @@ mod tests {
                 t.cut(1, HD, c.bars, why);
             }
             if let Some((_, bars)) = shot.filter(|(at, _)| *at == i) {
-                sampler.measured(ours(bars));
+                sampler.measured(None, ours(bars));
                 shot = None;
             }
             match sampler.frame(live, t.following()) {

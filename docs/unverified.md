@@ -645,6 +645,16 @@ against a real project.
     keyframes can't be read exactly here` if that mpv couldn't open the source a third time).
 - Paused right after a step, the zoom is sent once mpv reports the new `time-pos`, so mpv may draw the stepped
   frame once with the zoom before it: whether that can be seen is for the desktop build.
+- Animated bars (a film that opens or closes its own bars within a shot), autocrop on: `Sampler::lead`,
+  `Sampler::predict` and `CropTracker::lead` are tested in `crates/player` with screenshots arriving 2 frames
+  late; the engine only type-checks here. To check:
+  - Windows, "Check every frame for black bars" on: the crop follows the moving bars on every frame (no bar or
+    picture edge lagging while they move), and the log says `following animated bars`; cropdetect still runs
+    (hardware decoding copies back, `hwdec-current` ends in `-copy`); GPU and CPU in Task Manager against the
+    setting off. The same with the setting off (cropdetect leads there too while screenshots are taken).
+  - macOS: the crop can be a frame or two off while bars move: opening bars may show a few pixels of bar where
+    they stop, closing bars a few pixels of bar while they move, and neither should cut into the picture.
+    Whether that can be seen at normal speed, and how often a reading's pts is unsure (no prediction then).
 
 ## Autocrop pre-roll probe (docs/autocrop.md §3)
 
