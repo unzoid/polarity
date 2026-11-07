@@ -129,14 +129,15 @@ jobs:
         if: runner.os == 'macOS'
         run: bun scripts/macSources.ts src-tauri/vendor/libmpv/formulae.json "target/release/bundle/Polarity_${VERSION}_aarch64_mpv-sources.tar"
 
+      # No RPM: an RPM's version can't carry "-dev.N", and Tauri can't give the RPM a version of its own.
       - name: Build (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libsoup-3.0-dev libayatana-appindicator3-dev \
-            librsvg2-dev libxdo-dev libssl-dev libudev-dev file rpm
-          bunx tauri build --bundles deb,rpm,appimage -c "$RUNNER_TEMP/dev.conf.json" -- --locked
+            librsvg2-dev libxdo-dev libssl-dev libudev-dev file
+          bunx tauri build --bundles deb,appimage -c "$RUNNER_TEMP/dev.conf.json" -- --locked
 
       # As built; the publish job gives them their build-numbered names.
       - name: Collect the installers
@@ -153,7 +154,7 @@ jobs:
               cp "$b/macos/Polarity Dev.app.tar.gz.sig" "out/Polarity_${VERSION}_aarch64.app.tar.gz.sig"
               cp "$b/Polarity_${VERSION}_aarch64_mpv-sources.tar" out/ ;;
             Linux)
-              cp "$b"/appimage/*.AppImage "$b"/appimage/*.AppImage.sig "$b"/deb/*.deb "$b"/rpm/*.rpm out/ ;;
+              cp "$b"/appimage/*.AppImage "$b"/appimage/*.AppImage.sig "$b"/deb/*.deb out/ ;;
           esac
           ls -la out
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

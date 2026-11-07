@@ -28,8 +28,9 @@ own feed, and each feed is signed with its own key.
 ## Dev builds (`.github/workflows/dev-build.yml`)
 
 - **Trigger:** every push to `dev`. It builds what `release.yml` builds (Windows NSIS installer,
-  macOS Apple Silicon app and DMG, Linux AppImage, `.deb` and `.rpm`) and the Android debug APK
-  (arm64), which stays a workflow artifact. Windows has no MSI: an MSI's version can't carry `-dev.N`.
+  macOS Apple Silicon app and DMG, Linux AppImage and `.deb`) and the Android debug APK
+  (arm64), which stays a workflow artifact. Windows has no MSI and Linux no `.rpm`: neither version
+  can carry `-dev.N`, and Tauri can't give them a version of their own.
 - **Version:** worked out at build time, never edited by hand (`scripts/devChannel.ts version`):
   the newest stable tag `vX.Y.Z` becomes `X.Y.(Z+1)-dev.N`, where `N` is the workflow's run number.
   After `v0.18.0` the builds are `0.18.1-dev.N`; after `v0.19.0` they become `0.19.1-dev.N` on

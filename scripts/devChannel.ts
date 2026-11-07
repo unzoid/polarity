@@ -81,7 +81,6 @@ export function devFileName(file: string, run: number): string | null {
     [/_aarch64_mpv-sources\.tar$/, `${p}-macOS-arm64-mpv-sources.tar`],
     [/\.AppImage(\.sig)?$/, `${p}-Linux-x64.AppImage$1`],
     [/\.deb$/, `${p}-Linux-x64.deb`],
-    [/\.rpm$/, `${p}-Linux-x64.rpm`],
   ];
   for (const [re, name] of rules) {
     const m = re.exec(file);

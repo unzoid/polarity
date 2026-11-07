@@ -220,7 +220,12 @@ jobs:
         run: cp -R "$RUNNER_TEMP/libmpv/out/jniLibs" "$RUNNER_TEMP/libmpv/out/assets" src-tauri/gen/android/app/src/main/
       # Pull requests build the debug APK for arm64 only (what phones run); master builds both. The
       # emulator test in e2e-app.yml builds its own x86_64 APK.
+      # The account backend (scripts/accountEnv.ts), so the APK has sign-in: master and tags only. Other branches
+      # (dev too) and pull requests build without it, so no artifact outside a release carries production's settings.
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_URL || '' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_PUBLISHABLE_KEY || '' }}
         run: bun run tauri android build --ci --debug --apk ${{ github.ref == 'refs/heads/master' && '--target x86_64 --target aarch64' || '--target aarch64' }}
       - name: Keep the APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -231,6 +236,9 @@ jobs:
       # The unsigned release APK and app bundle are built on master only.
       - name: Build the release (unsigned)
         if: github.ref == 'refs/heads/master'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: bun run tauri android build --ci --apk --aab --target x86_64 --target aarch64
       - name: Keep the release
         if: github.ref == 'refs/heads/master'
@@ -303,7 +311,11 @@ jobs:
           bun run tauri ios init --ci
           bun run tauri icon src-tauri/icons/icon.png --output "$RUNNER_TEMP/icons"
           cp "$RUNNER_TEMP"/icons/ios/*.png src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/
+      # The account backend: master and tags only, as for the APK.
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_URL || '' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_PUBLISHABLE_KEY || '' }}
         run: bun run tauri ios build --ci --no-sign
       - name: Keep the IPA
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
