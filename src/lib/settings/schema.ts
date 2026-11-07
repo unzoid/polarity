@@ -70,15 +70,36 @@ export function languageChoices(current: Value, none: string): Choice[] {
   return [{ value: "", label: none }, ...codes.map((c) => ({ value: c, label: languageName(c) ?? c }))];
 }
 
-/** Settings → Anime's languages (#235): "Same as other titles" first, then for audio "Original language", then languageChoices. */
-function animeLanguageChoices(current: Value, none: string, original: boolean): Choice[] {
+const ORIGINAL_CHOICE: Choice = { value: ORIGINAL_LANGUAGE, label: "Original language" };
+const SAME_CHOICE: Choice = { value: SAME_AS_OTHERS, label: "Same as other titles" };
+/** A setting's own language, leaving out the values that stand for another one. */
+const ownLanguage = (current: Value) => {
   const code = String(current ?? "");
-  const own = code === SAME_AS_OTHERS || code === ORIGINAL_LANGUAGE ? "" : code;
-  return [
-    { value: SAME_AS_OTHERS, label: "Same as other titles" },
-    ...(original ? [{ value: ORIGINAL_LANGUAGE, label: "Original language" }] : []),
-    ...languageChoices(own, none),
-  ];
+  return code === SAME_AS_OTHERS || code === ORIGINAL_LANGUAGE ? "" : code;
+};
+
+/** Subtitles & Audio's audio (#326): "Default", "Original language", then the languages. */
+function audioChoices(current: Value): Choice[] {
+  const [none, ...languages] = languageChoices(ownLanguage(current), "Default");
+  return [none, ORIGINAL_CHOICE, ...languages];
+}
+
+/** The languages most anime is heard in, first on Settings → Anime's audio list (#326). */
+const ANIME_AUDIO_PINNED = ["ja", "en", "zh", "ko"];
+
+/**
+ * Settings → Anime's audio (#235, #326): "Same as other titles", "Original language", the common anime languages,
+ * "Default", then the other languages.
+ */
+function animeAudioChoices(current: Value): Choice[] {
+  const [none, ...languages] = languageChoices(ownLanguage(current), "Default");
+  const pinned = ANIME_AUDIO_PINNED.map((c) => ({ value: c, label: languageName(c) ?? c }));
+  return [SAME_CHOICE, ORIGINAL_CHOICE, ...pinned, none, ...languages.filter((c) => !ANIME_AUDIO_PINNED.includes(String(c.value)))];
+}
+
+/** Settings → Anime's subtitles (#235): "Same as other titles" first, then languageChoices. */
+function animeSubtitleChoices(current: Value): Choice[] {
+  return [SAME_CHOICE, ...languageChoices(ownLanguage(current), "Off")];
 }
 
 /** TMDB's metadata languages, as locales. */
@@ -508,7 +529,7 @@ export const SETTINGS: SettingDef[] = [
     controlLabel: "Audio language",
     keywords: "audio language dub",
     bind: s("audioLanguage", ""),
-    control: choice((current) => languageChoices(current, "Default")),
+    control: choice(audioChoices),
     tv: "Audio Language",
   },
   {
@@ -814,7 +835,7 @@ export const SETTINGS: SettingDef[] = [
     caption: "Other titles keep the one under Subtitles & Audio",
     keywords: "anime audio language dub sub japanese original voices",
     bind: s("animeAudioLanguage", SAME_AS_OTHERS),
-    control: choice((current) => animeLanguageChoices(current, "Default", true)),
+    control: choice(animeAudioChoices),
     tv: "Anime Audio",
   },
   {
@@ -825,7 +846,7 @@ export const SETTINGS: SettingDef[] = [
     caption: "Other titles keep the one under Subtitles & Audio",
     keywords: "anime subtitle language captions subs",
     bind: s("animeSubtitleLanguage", SAME_AS_OTHERS),
-    control: choice((current) => animeLanguageChoices(current, "Off", false)),
+    control: choice(animeSubtitleChoices),
     tv: "Anime Subtitles",
   },
   {
