@@ -196,6 +196,9 @@ pub struct Mpv {
     ahead: StdMutex<Option<Schedule>>,
     /// Whether the lookahead reads ahead in this load, or why not, by load.
     lookahead: StdMutex<Option<(u64, preroll::Lookahead)>>,
+    /// Bumped each time a lookahead reader starts; an older reader sees it
+    /// and stops, leaving the newer one's schedule and state alone.
+    ahead_reader: AtomicU64,
     /// The `time-pos` of the frame shown last, as `f64` bits (NaN: none
     /// yet this load), from the autocrop loop for the lookahead.
     playhead: AtomicU64,

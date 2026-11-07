@@ -194,6 +194,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* What a setting does right now (Look ahead for bar changes), on a line of its own under the caption. */
+.settings-row-status {
+  display: block;
+}
 .settings-row-icon {
   flex: none;
   color: var(--text-2);

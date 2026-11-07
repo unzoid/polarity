@@ -11,6 +11,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
+use super::Mpv;
 use crate::locks::Locked;
 use crate::AppState;
 
@@ -52,11 +53,13 @@ impl Lookahead {
     }
 }
 
-/// Note the lookahead's state for `load`, if that's still the load playing.
-fn report(app: &AppHandle, load: u64, state: Option<Lookahead>) {
+/// Note the lookahead's state for `load`, if that's still the load playing
+/// and `reader` the newest reader.
+fn report(app: &AppHandle, reader: u64, load: u64, state: Option<Lookahead>) {
+    use std::sync::atomic::Ordering;
     let mpv = &app.state::<AppState>().mpv;
     let mut slot = mpv.lookahead.locked();
-    if mpv.loads.load(std::sync::atomic::Ordering::SeqCst) != load {
+    if mpv.loads.load(Ordering::SeqCst) != load || mpv.ahead_reader.load(Ordering::SeqCst) != reader {
         return;
     }
     if let Some(s) = state.filter(|s| slot.is_none_or(|(l, was)| l != load || was != *s)) {
@@ -93,10 +96,29 @@ pub(super) async fn opening(url: String, fields: Vec<String>, start: f64) -> Opt
 
 /// Read keyframes of `load` (`url` with header `fields`, opened with
 /// `bars` removed) ahead of the playhead into `Mpv::ahead`, while autocrop
-/// run `run` lasts and the lookahead is on for this load.
-pub(super) async fn ahead(app: AppHandle, run: u64, load: u64, url: String, fields: Vec<String>, bars: (i64, i64)) {
-    let ended = imp::ahead(&app, run, load, url, fields, bars).await;
-    report(&app, load, ended.err());
+/// run `run` lasts on this load and [`stop_ahead`] isn't called (the
+/// setting turned off, or a newer reader).
+pub(super) fn ahead(
+    app: AppHandle,
+    run: u64,
+    load: u64,
+    url: String,
+    fields: Vec<String>,
+    bars: (i64, i64),
+) -> impl std::future::Future<Output = ()> + Send + 'static {
+    let reader = stop_ahead(&app.state::<AppState>().mpv);
+    async move {
+        let ended = imp::ahead(&app, run, reader, load, url, fields, bars).await;
+        report(&app, reader, load, ended.err());
+    }
+}
+
+/// Stop the lookahead reader running, if any, and forget what it said;
+/// the number the next reader takes.
+pub(super) fn stop_ahead(mpv: &Mpv) -> u64 {
+    let mut slot = mpv.lookahead.locked();
+    *slot = None;
+    mpv.ahead_reader.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
 }
 
 /// Kill any probe still running (the app is closing).
@@ -113,6 +135,7 @@ mod imp {
     pub(super) async fn ahead(
         _app: &AppHandle,
         _run: u64,
+        _reader: u64,
         _load: u64,
         _url: String,
         _fields: Vec<String>,
@@ -472,13 +495,13 @@ mod imp {
     const STEP: f64 = 0.1;
     const MAX_STEP: f64 = 12.8;
 
-    /// Whether the lookahead of autocrop run `run` and `load` should go on.
-    fn wanted(app: &AppHandle, run: u64, load: u64) -> bool {
+    /// Whether lookahead `reader` of autocrop run `run` and `load` should go on.
+    fn wanted(app: &AppHandle, run: u64, reader: u64, load: u64) -> bool {
         let mpv = &app.state::<AppState>().mpv;
         let tune = *mpv.tuned.locked();
         tune.autocrop
-            && tune.lookahead
             && mpv.loads.load(Ordering::SeqCst) == load
+            && mpv.ahead_reader.load(Ordering::SeqCst) == reader
             && mpv.crop_events.locked().as_ref().is_some_and(|(r, _)| *r == run)
     }
 
@@ -487,15 +510,16 @@ mod imp {
     pub(super) async fn ahead(
         app: &AppHandle,
         run: u64,
+        reader: u64,
         load: u64,
         url: String,
         fields: Vec<String>,
         bars: (i64, i64),
     ) -> Result<(), Lookahead> {
-        let ended = read_ahead(app, run, load, &url, &fields, bars).await;
+        let ended = read_ahead(app, run, reader, load, &url, &fields, bars).await;
         let mpv = &app.state::<AppState>().mpv;
         let mut slot = mpv.ahead.locked();
-        if mpv.loads.load(Ordering::SeqCst) == load {
+        if mpv.loads.load(Ordering::SeqCst) == load && mpv.ahead_reader.load(Ordering::SeqCst) == reader {
             *slot = None;
         }
         ended
@@ -514,6 +538,7 @@ mod imp {
     async fn read_ahead(
         app: &AppHandle,
         run: u64,
+        reader: u64,
         load: u64,
         url: &str,
         fields: &[String],
@@ -523,8 +548,12 @@ mod imp {
         let video = p.open(url, fields).await.ok_or(Lookahead::NotOpened)?;
         let duration = video.duration.ok_or(Lookahead::Live)?;
         let mpv = &app.state::<AppState>().mpv;
+        // Opening took a while: it may have been stopped meanwhile.
+        if !wanted(app, run, reader, load) {
+            return Ok(());
+        }
         *mpv.ahead.locked() = Some(Schedule::new(load, video.full, bars));
-        report(app, load, Some(Lookahead::Reading));
+        report(app, reader, load, Some(Lookahead::Reading));
         let mut last_head = f64::NAN;
         let mut step = STEP;
         let mut led = false;
@@ -532,7 +561,7 @@ mod imp {
         // Read to the file's end: nothing more until a seek.
         let mut at_end = false;
         let mut exact = Exact { probe: None };
-        while wanted(app, run, load) {
+        while wanted(app, run, reader, load) {
             // Frames a step would show first (the viewer waits on them), then cuts between keyframes.
             let job = mpv
                 .ahead

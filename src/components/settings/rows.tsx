@@ -21,12 +21,20 @@ export function Card({ title, footer, children }: { title?: string; footer?: Rea
   );
 }
 
-/** A row's title and the caption under it. */
-export function RowText({ title, caption }: { title: string; caption?: ReactNode }) {
+/**
+ * A row's title and the caption under it. `status` (what the setting does right now) goes on a line
+ * of its own under the caption, so the caption wraps the same with it and without it.
+ */
+export function RowText({ title, caption, status }: { title: string; caption?: ReactNode; status?: string | null }) {
   return (
     <span className="settings-row-text">
       <span className="settings-row-title">{title}</span>
-      {caption && <span className="settings-row-caption">{caption}</span>}
+      {(caption || status) && (
+        <span className="settings-row-caption">
+          {caption}
+          {status && <span className="settings-row-status">{status}</span>}
+        </span>
+      )}
     </span>
   );
 }
@@ -36,6 +44,7 @@ export function ToggleRow({
   setting,
   title,
   caption,
+  status,
   checked,
   onChange,
   disabled,
@@ -44,13 +53,15 @@ export function ToggleRow({
   setting?: string;
   title: string;
   caption?: string;
+  /** What the setting does right now, on its own line under the caption. */
+  status?: string | null;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
 }) {
   return (
     <label className="settings-row" data-setting={setting}>
-      <RowText title={title} caption={caption} />
+      <RowText title={title} caption={caption} status={status} />
       <Switch checked={checked} disabled={disabled} onChange={onChange} />
     </label>
   );
