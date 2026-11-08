@@ -98,7 +98,7 @@ import { useRouter } from "../lib/router";
 import type { ContentType, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
-import { useTvMode } from "../tv/tvMode";
+import { setTvMode, useTvMode } from "../tv/tvMode";
 import { usePadGlyph } from "../tv/TvChrome";
 import { fileId, filePlace, fileStream, isFileId, recentPosition, useRecentFiles } from "../lib/localFiles";
 import {
@@ -168,7 +168,7 @@ export function Player({
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
-  const { back, replace } = useRouter();
+  const { back, replace, tab } = useRouter();
   // TV mode keeps the window fullscreen: no fullscreen toggle, and Esc simply goes back.
   const tv = useTvMode();
   // With a controller in TV mode, controls show the button that triggers them.
@@ -815,6 +815,20 @@ export function Player({
     if (fs) window.setTimeout(() => void win.setFullscreen(false), PLAYER_EXIT_MS);
   }, [back, tv]);
 
+  /**
+   * The Settings page a playback problem names. In TV mode (#435): Sources is TV's own Sources settings; Add-ons, which
+   * TV mode has no page for, is desktop mode's.
+   */
+  const openSettingsPage = useCallback(
+    (page: "sources" | "addons") => {
+      if (tv && page === "sources") return tab({ name: "settings", page: "sources" });
+      void exit();
+      if (tv) setTvMode(false);
+      openSettings(page);
+    },
+    [tv, tab, exit],
+  );
+
   const playVideo = useCallback(
     (id: string, s?: Stream) => {
       save();
@@ -1255,14 +1269,7 @@ export function Player({
                 name={title}
                 steps={steps}
                 backend="YouTube's embedded player"
-                onSettings={
-                  tv
-                    ? undefined
-                    : (page) => {
-                        void exit();
-                        openSettings(page);
-                      }
-                }
+                onSettings={openSettingsPage}
                 onRetry={source.retry}
               />
             )}
@@ -1352,14 +1359,7 @@ export function Player({
             steps={steps}
             backend={engine === "html" ? "built-in" : engine === "youtube" ? "YouTube's embedded player" : (engine ?? "not chosen yet")}
             onSources={link || local ? undefined : () => setOptions("sources")}
-            onSettings={
-              tv
-                ? undefined
-                : (page) => {
-                    void exit();
-                    openSettings(page);
-                  }
-            }
+            onSettings={openSettingsPage}
             onRetry={source.retry}
             onYouTube={ytOutside ? () => void api.openExternal(youtubeUrl(ytOutside)) : undefined}
           />
@@ -1378,8 +1378,7 @@ export function Player({
               ? undefined
               : () => {
                   source.answerNotice(false);
-                  void exit();
-                  openSettings("sources");
+                  openSettingsPage("sources");
                 }
           }
         />

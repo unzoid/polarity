@@ -304,3 +304,28 @@ test("signed out, the TV offers the phone first; denied, it says so and gets a n
   await expect(code).toHaveText(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
   expect(await code.textContent()).not.toBe(first);
 });
+
+test("when Settings' source filters leave out every source, the error screen opens TV's Sources settings (#435)", async ({ app }) => {
+  await app.goto("/fake.html?sources=filtered");
+  await openQuietMachines(app);
+  await expect(focused(app)).toHaveAccessibleName("Play First Episode");
+  await press(app, "Enter");
+  const status = app.locator(".player-status");
+  await expect(status).toContainText("Your source filters left out every source.");
+  await status.getByRole("button", { name: "Open Settings" }).focus();
+  await press(app, "Enter");
+  await expect(app.locator(".player")).toHaveCount(0);
+  await expect(app.locator(".tv-settings")).toContainText("Filters Hide Other Sources");
+});
+
+test("when no add-on was asked, the error screen opens Add-ons in desktop mode, which TV mode has no page for (#435)", async ({ app }) => {
+  await app.goto("/fake.html?sources=none");
+  await openQuietMachines(app);
+  await expect(focused(app)).toHaveAccessibleName("Play First Episode");
+  await press(app, "Enter");
+  const status = app.locator(".player-status");
+  await status.getByRole("button", { name: "Open Add-ons" }).focus();
+  await press(app, "Enter");
+  await expect(app.locator(".tv-main")).toHaveCount(0);
+  await expect(app.getByRole("dialog", { name: /^Settings/ }).getByRole("heading", { name: "Add-ons" }).first()).toBeVisible();
+});
