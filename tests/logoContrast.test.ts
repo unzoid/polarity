@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { backdropLuminance, chooseLogo, contrast, DARK_PAGE, logoLook, measureInk, pickLogo, type Ink } from "../src/lib/ui/logoContrast";
+import { backdropLuminance, chooseLogo, clearShare, contrast, DARK_PAGE, logoLook, logoShaped, measureInk, pickLogo, type Ink } from "../src/lib/ui/logoContrast";
 
 type Rgb = [number, number, number];
 
@@ -116,5 +116,50 @@ describe("chooseLogo", () => {
   test("an unmeasured logo with no backdrop to measure is left as it is", () => {
     expect(chooseLogo(logos.slice(0, 1), [null], DARK_PAGE)).toEqual({ src: logos[0], look: "as-is" });
     expect(chooseLogo(logos.slice(0, 1), [null], dark)).toEqual({ src: logos[0], look: "as-is" });
+  });
+});
+
+describe("logo shape (#371)", () => {
+  // A wide logo with its lettering on a see-through ground, a square cover, an upright poster, a wide opaque picture.
+  const wordmark = { width: 800, height: 310, clear: clearShare(pixels([600, 0, 0], [400, 245])) };
+  const cover = { width: 460, height: 460, clear: clearShare(pixels([1000, 120])) };
+  const poster = { width: 460, height: 650, clear: 0.6 };
+  const still = { width: 1280, height: 720, clear: clearShare(pixels([1000, 90])) };
+
+  test("a logo is clearly wider than tall and mostly see-through", () => {
+    expect(wordmark.clear).toBeCloseTo(0.6);
+    expect(logoShaped(wordmark)).toBe(true);
+    // A stacked two-line logo is still wider than tall.
+    expect(logoShaped({ width: 600, height: 480, clear: 0.5 })).toBe(true);
+  });
+
+  test("a square or upright picture, or one with nothing see-through, isn't a logo", () => {
+    expect(logoShaped(cover)).toBe(false);
+    expect(logoShaped({ ...cover, clear: 0.7 })).toBe(false);
+    expect(logoShaped(poster)).toBe(false);
+    expect(logoShaped(still)).toBe(false);
+  });
+
+  test("where the pixels can't be read, the shape alone decides", () => {
+    expect(logoShaped({ ...wordmark, clear: null })).toBe(true);
+    expect(logoShaped({ ...cover, clear: null })).toBe(false);
+  });
+
+  const white = ink([500, 245]);
+  const black = ink([500, 0]);
+  const urls = ["https://media.example.com/cover.jpg", "https://media.example.com/logo.png"];
+
+  test("a square cover handed over as the logo is passed over for the next candidate, even when it would read better", () => {
+    expect(chooseLogo(urls, [white, black], dark, [cover, wordmark])).toEqual({ src: urls[1], look: "silhouette" });
+    expect(chooseLogo(urls, [null, null], dark, [cover, wordmark])).toEqual({ src: urls[1], look: "as-is" });
+  });
+
+  test("no candidate shaped like a logo: none, so the name shows", () => {
+    expect(chooseLogo(urls.slice(0, 1), [white], dark, [cover])).toBe("none");
+    expect(chooseLogo(urls, [white, null], DARK_PAGE, [cover, poster])).toBe("none");
+  });
+
+  test("a picture that couldn't be loaded at all keeps today's choice", () => {
+    expect(chooseLogo(urls, [null, white], dark, [null, wordmark])).toEqual({ src: urls[1], look: "as-is" });
   });
 });

@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { call } from "../platform/bridge";
 import type { Video } from "../types";
 import { keys } from "../net/queryKeys";
 import { queryClient } from "../net/queryClient";
 import { aniZipLimiter, limitedFetch } from "../net/limiter";
+import type { Anime, AnimeCard } from "./anilist";
 import { readAniZip } from "./responses";
+import { borrowsFrom, playedZip } from "./splitParts";
 
 /**
  * ani.zip: the bridge between anime databases and everything else. For an
@@ -108,6 +111,18 @@ export function useAniZip(anilistId: number, enabled = true) {
   return useQuery({ ...aniZipQuery(anilistId), enabled });
 }
 
+/**
+ * The ani.zip record an entry plays from (`playedZip`): an entry ani.zip doesn't know may be the second half
+ * of a split part, listed under its prequel's record. Undefined while it's being asked; `borrow` when it's the prequel's.
+ */
+export function usePlayedZip(anime: AnimeCard | Anime | undefined, enabled = true) {
+  const { data: own } = useAniZip(anime?.id ?? 0, enabled && !!anime);
+  const prequel = anime && borrowsFrom(anime, own);
+  const { data, isError: failed } = useAniZip(prequel ?? 0, enabled && prequel !== undefined);
+  const zip = useMemo(() => anime && playedZip(anime, own, { data, failed }), [anime, own, data, failed]);
+  return { zip, borrow: prequel !== undefined };
+}
+
 export const anizipImage = (z: AniZip | null | undefined, type: "Fanart" | "Clearlogo" | "Banner" | "Poster") =>
   z?.images?.find((i) => i.coverType === type)?.url;
 
@@ -136,7 +151,9 @@ export function animeArt(
  * metadata language, so its logo is in that language where one exists), else from `animeArt` of the
  * base title (ani.zip's, whose logos carry no language). `imdb` is that title's id: undefined while it's being found, null when there's none.
  * Until it, its title and the base title's ani.zip (`firstLoading` while it's asked) have answered there's
- * no art and no logo (the name shows), so nothing changes once drawn (#339).
+ * no art and no logo (the name shows), so nothing changes once drawn (#339). `logos` are every logo to
+ * choose from, the general title's first, then ani.zip's: the heading draws the first that's shaped like a
+ * logo and reads on the backdrop (TitleLogo), as a source may hand over a cover as its logo (#371).
  */
 export function franchiseArt({
   imdb,
@@ -146,16 +163,18 @@ export function franchiseArt({
   firstLoading = false,
 }: {
   imdb: string | null | undefined;
-  meta: { background?: string | null; logo?: string | null } | undefined;
+  meta: { background?: string | null; logo?: string | null; logos?: string[] } | undefined;
   metaLoading: boolean;
   /** `animeArt` of the franchise's base title, with its own ani.zip. */
   first: { background?: string; logo?: string };
   firstLoading?: boolean;
-}): { background: string | undefined; logo: string | undefined } {
+}): { background: string | undefined; logo: string | undefined; logos: string[] } {
   const linked = imdb?.startsWith("tt");
-  if (imdb === undefined || (linked && metaLoading) || firstLoading) return { background: undefined, logo: undefined };
+  if (imdb === undefined || (linked && metaLoading) || firstLoading) return { background: undefined, logo: undefined, logos: [] };
   const general = linked ? meta : undefined;
-  return { background: general?.background ?? first.background, logo: general?.logo ?? first.logo };
+  const all = [general?.logo, ...(general?.logos ?? []), first.logo].filter((l): l is string => !!l);
+  const logos = all.filter((l, i) => all.indexOf(l) === i);
+  return { background: general?.background ?? first.background, logo: logos[0], logos };
 }
 
 /** The regular episodes (not specials), in order. */

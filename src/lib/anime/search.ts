@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { call } from "../platform/bridge";
 import { cachedLookup } from "../net/queries";
@@ -83,18 +83,24 @@ function byRelevance(items: AnimeCard[], query: string): AnimeCard[] {
     .map((x) => x.a);
 }
 
-/** {@link animeImdb} for a page, once ani.zip has answered: with the entry's other names (synonyms) once AniList has them. */
+/**
+ * {@link animeImdb} through the query cache, once ani.zip has answered (`zip`, the record the entry plays from:
+ * `usePlayedZip`): with the entry's other names (synonyms) once AniList has them. One answer per entry, shared
+ * by its page's hero, the page's art and the Anime tab's banner (#371).
+ */
+export const animeImdbQuery = (qc: QueryClient, a: AnimeCard | undefined, zip: AniZip | null | undefined) => ({
+  queryKey: keys.anime.imdb(a?.id ?? 0),
+  enabled: !!a && zip !== undefined,
+  staleTime: 6 * 60 * 60_000,
+  queryFn: async () => {
+    const full: Titled = "synonyms" in a! ? a : await qc.fetchQuery(animeQuery(a!.id)).catch(() => a!);
+    return animeImdb(full, zip ?? null, cachedLookup(qc));
+  },
+});
+
+/** {@link animeImdbQuery} for an entry's hero. */
 export function useAnimeImdb(a: AnimeCard, zip: AniZip | null | undefined) {
-  const qc = useQueryClient();
-  return useQuery({
-    queryKey: keys.anime.imdb(a.id),
-    enabled: zip !== undefined,
-    staleTime: 6 * 60 * 60_000,
-    queryFn: async () => {
-      const full: Titled = "synonyms" in a ? a : await qc.fetchQuery(animeQuery(a.id)).catch(() => a);
-      return animeImdb(full, zip ?? null, cachedLookup(qc));
-    },
-  });
+  return useQuery(animeImdbQuery(useQueryClient(), a, zip));
 }
 
 /** Where titles and episode lists come from: the app's addons, or a caller's cached copy of them. */

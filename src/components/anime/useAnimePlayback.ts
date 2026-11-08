@@ -6,17 +6,14 @@ import {
   type LinedEpisode,
   animeEntries,
   animeEpisodes,
-  entryZip,
-  knowsNothing,
   linkAnime,
   listedKitsuQuery,
   playContext,
-  prequelOf,
   progressByVideo,
   rememberStill,
   upNext,
   useAnimeImdb,
-  useAniZip,
+  usePlayedZip,
 } from "../../lib/anime";
 import { usePrefs } from "../../lib/settings";
 import { useLibrary, useMeta, useProgress } from "../../lib/net";
@@ -30,15 +27,7 @@ import { watchedFraction } from "../../lib/library";
  * episode is part of.
  */
 export function useAnimePlayback(anime: AnimeCard | Anime) {
-  const { data: own } = useAniZip(anime.id);
-  // An entry ani.zip doesn't know may be the second half of a split part, listed under its prequel's record.
-  const prequel = prequelOf(anime);
-  const borrow = own !== undefined && knowsNothing(own) && prequel !== undefined;
-  const { data: prequelZip, isError: noPrequel } = useAniZip(prequel ?? 0, borrow);
-  const zip = useMemo(
-    () => (borrow && prequelZip === undefined && !noPrequel ? undefined : entryZip(anime, own, prequelZip)),
-    [anime, own, borrow, prequelZip, noPrequel],
-  );
+  const { zip, borrow } = usePlayedZip(anime);
   const isMovie = anime.format === "MOVIE";
   // A borrowed record leaves out the prequel's Kitsu id; the id lists may have the entry's own, which stream add-ons know its episodes by.
   const { data: listedKitsu } = useQuery({ ...listedKitsuQuery(anime.id), enabled: borrow });

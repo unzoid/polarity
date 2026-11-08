@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type Anime,
   type AnimeCard,
@@ -51,6 +51,7 @@ export function AnimeHero({
   facts = item,
   anime,
   logo,
+  logos,
   background,
   name,
   onImdb,
@@ -64,6 +65,8 @@ export function AnimeHero({
   anime?: Anime;
   /** The franchise's logo (`franchiseArt`), the same on every season tab: this entry's name shows under it. */
   logo?: string;
+  /** Every logo to choose from, `logo` first (`franchiseArt`): the first shaped like a logo that reads shows (#371). */
+  logos?: string[];
   /** The page's backdrop: the logo or name waits for it (#173), and the logo is measured against it (#215). */
   background?: string;
   name: string;
@@ -101,7 +104,9 @@ export function AnimeHero({
       : !pb.metaLoading && pb.metaId && !target && !pb.isMovie
         ? "No episodes to play yet"
         : undefined;
-  const subtitle = heroSubtitle(item.title, prefs.animeTitles, !!logo);
+  // A logo that won't show leaves the name as the heading: the line under it then names it in the other script.
+  const [noLogo, setNoLogo] = useState<string>();
+  const subtitle = heroSubtitle(item.title, prefs.animeTitles, !!logo && noLogo !== logo);
   const score = useAnimeScore()(item.averageScore);
   const studio = anime?.studios.edges.find((e) => e.isMain && e.node.isAnimationStudio)?.node.name;
   const next = summary ? summary.airing : item.nextAiringEpisode;
@@ -120,7 +125,7 @@ export function AnimeHero({
   return (
     <section className="detail-hero anime-hero" {...gate}>
       <div className="detail-hero-main">
-        <TitleHeading name={name} logo={logo} backdrop={background} look="detail" />
+        <TitleHeading name={name} logo={logo} logos={logos} backdrop={background} look="detail" onLogoFail={() => setNoLogo(logo)} />
         {subtitle && <p className="anime-native t-callout">{subtitle}</p>}
         <p className="detail-facts anime-meta-line t-callout tabular">
           {score && (
