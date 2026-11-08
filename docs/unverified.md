@@ -198,6 +198,23 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
    windows resized: the tablet layout; under 600 px wide the player shows glyph-only actions and the title
    beside Back. With a keyboard and a trackpad: Escape is Back, the shortcuts work, hover shows on cards.
 
+## iOS green tint (#416)
+
+An iPhone showed video with a green tint over the whole picture. A cast over everything usually means the
+chroma plane is read wrongly between VideoToolbox and mpv's OpenGL ES output (mpv maps NV12's planes as
+LUMINANCE / LUMINANCE_ALPHA textures on iOS), but the cause isn't known yet. Nothing here runs iOS. To find
+it:
+- Each time the picture's format changes, the log has one line `video: decoder …; decoded …; drawn …`
+  (`polar_player::video_path`): the decoder (`videotoolbox` or `software`), the frames'
+  pixel format, colour matrix, range, primaries and transfer as decoded, and what mpv draws from.
+- `scripts/colour-bars.sh <dir>` makes SMPTE colour-bar clips (H.264 8-bit, HEVC 10-bit, HEVC 10-bit PQ,
+  AV1) and `bars.png`, how they should look. All four decode to those bars in software on Linux.
+
+To check on an iPhone: play each clip twice, once as set by default (hardware decoding) and once with
+Settings → Advanced → Video → hardware decoding off. The grey and white bars should have no cast, and the
+colours should match `bars.png` (the PQ clip dimmer, but not tinted). Note which are tinted and send
+polar.log's `video:` lines.
+
 ## iOS tab bar (#174)
 
 The sections (Home, Series, Movies, Anime, Library, and Calendar when it's on) are iOS's own tab bar: a

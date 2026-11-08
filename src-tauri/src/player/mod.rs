@@ -663,6 +663,28 @@ async fn launch(
     }
 }
 
+/// The video path last logged, so a reconfigure that changes nothing (a resize) logs nothing.
+static VIDEO_PATH: StdMutex<String> = StdMutex::new(String::new());
+
+/// Logs how mpv decodes and draws the video now, when that changed (#416: a colour cast is then
+/// readable from the device's log).
+async fn log_video_path(app: AppHandle) {
+    let state = app.state::<AppState>();
+    let mut values = Vec::new();
+    for name in polar_player::video_path::PROPERTIES {
+        values.push(state.mpv.request(json!(["get_property", name])).await.unwrap_or(Value::Null));
+    }
+    if values[1].is_null() {
+        return; // no video (audio only, or already stopped)
+    }
+    let line = polar_player::video_path::describe(&values[0], &values[1], &values[2]);
+    let mut last = VIDEO_PATH.locked();
+    if *last != line {
+        tracing::info!("video: {line}");
+        *last = line;
+    }
+}
+
 async fn read_loop(
     app: AppHandle,
     mut reader: BufReader<tokio::io::ReadHalf<IpcStream>>,
@@ -711,7 +733,10 @@ async fn read_loop(
                 }
                 let _ = app.emit("mpv://property", json!({ "name": name, "data": msg.get("data") }));
             }
-            Some(_) => {
+            Some(event) => {
+                if event == "video-reconfig" {
+                    tokio::spawn(log_video_path(app.clone()));
+                }
                 let _ = app.emit("mpv://event", &msg);
             }
             None => {}
