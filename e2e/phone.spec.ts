@@ -279,7 +279,7 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
   // Best Match's table scrolls sideways inside the card, never the page (#274).
   await expect(panel.getByRole("table").getByRole("rowheader", { name: "Total" })).toBeAttached();
   expect(await fitsWidth(app)).toBe(true);
-  await panel.getByRole("button", { name: "Done" }).tap();
+  await panel.getByRole("button", { name: "Close" }).tap();
   await expect(panel).toHaveCount(0);
   await expect(app.locator(".sheet")).toBeVisible();
 });

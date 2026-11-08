@@ -1130,7 +1130,7 @@ test("a source's i button shows what the source carries with every key masked, o
   await expect(list).toBeVisible();
 });
 
-test("the player's episode rail pages with Home's shelf paddles: blurred edge, shown on hover or keyboard focus, gone at the ends (#250)", async ({ app, browserName }) => {
+test("the player's episode rail pages with Home's shelf paddles: blurred edge, shown on hover but not for keyboard focus, gone at the ends (#250)", async ({ app, browserName }) => {
   // What makes a paddle look and act as it does, read from the next one in `viewport` while `shown` or not.
   const look = (viewport: Locator) =>
     viewport.locator(".row-paddle[data-dir=next]").evaluate((b) => {
@@ -1175,10 +1175,11 @@ test("the player's episode rail pages with Home's shelf paddles: blurred edge, s
   await expect.poll(async () => (await look(rail)).shown).toBe("0");
   await expect.poll(async () => (await look(rail)).blur.every((b) => b === "none")).toBe(true);
 
-  // A card reached by the keys shows them.
+  // A card reached by the keys doesn't: the keys move the rail along as on TV, the ring on the card's still.
   await app.locator(".episode-rail-card").first().locator(".episode-rail-main").focus();
   await app.keyboard.press("ArrowRight");
-  await expect.poll(async () => (await look(rail)).shown).toBe("1");
+  await expect(app.locator(".episode-rail-main:focus-visible .episode-rail-still")).toHaveCSS("outline-style", "solid");
+  expect((await look(rail)).shown).toBe("0");
 
   // At the start, the left one is gone and can't be clicked; it never takes the focus.
   await rail.locator(".episode-rail").evaluate((el) => (el.scrollLeft = 0));
@@ -1230,17 +1231,17 @@ test("the player's episode rail shows the playing and focused cards' whole ring 
   await expect(rail.locator('[aria-current="true"] > .episode-rail-main')).toBeFocused();
   await app.keyboard.press("ArrowLeft");
   await app.keyboard.press("ArrowRight");
-  await whole(".episode-rail-main:focus-visible");
+  await whole(".episode-rail-main:focus-visible .episode-rail-still");
 
   // Stepped by the keys to either end, the focused card's outline stays whole each step.
   for (let i = 0; i < 6; i++) {
     await app.keyboard.press("ArrowLeft");
-    await whole(".episode-rail-main:focus-visible");
+    await whole(".episode-rail-main:focus-visible .episode-rail-still");
   }
   expect(await rail.evaluate((el) => el.scrollLeft)).toBeLessThanOrEqual(1);
   for (let i = 0; i < 9; i++) {
     await app.keyboard.press("ArrowRight");
-    await whole(".episode-rail-main:focus-visible");
+    await whole(".episode-rail-main:focus-visible .episode-rail-still");
   }
   await expect(rail.locator(".episode-rail-card").last().locator(".episode-rail-main")).toBeFocused();
 
