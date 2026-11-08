@@ -19,6 +19,7 @@ import {
   setSearchText,
   useAddonSearches,
   useRecentSearches,
+  useListable,
   useSearchText,
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
@@ -221,11 +222,10 @@ function Results({ text }: { text: string }) {
   const aliases = useAnimeAliases();
   const fromAddons = useAddonSearches(hasQuery ? deferred : "");
 
-  // Titles without art are almost always stubs nobody's looking for.
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
-  const movies = withoutAnime(data?.movies.filter((m) => m.poster), anime.all, aliases);
-  const series = withoutAnime(data?.series.filter((m) => m.poster), anime.all, aliases);
+  const movies = withoutAnime(data?.movies, anime.all, aliases);
+  const series = withoutAnime(data?.series, anime.all, aliases);
   const waiting = !hasQuery || !data;
   const addonsBusy = fromAddons.some((r) => !r.items && !r.failed);
   const addonsFound = fromAddons.some((r) => r.items?.length);
@@ -253,7 +253,9 @@ function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   return <ResultRow title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`} items={data} />;
 }
 
-function ResultRow({ title, items }: { title: string; items?: MetaPreview[] }) {
+/** Leaves out what can't play and has nothing to show (#337): a stub whose poster and backdrop don't load. */
+function ResultRow({ title, items: found }: { title: string; items?: MetaPreview[] }) {
+  const items = useListable(found);
   if (items && !items.length) return null;
   return <Shelf title={title} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
 }

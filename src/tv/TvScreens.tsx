@@ -157,7 +157,7 @@ export function TvLibrary() {
           </TvRail>
         ) : null,
     },
-    { key: "saved", render: () => <TvItemsRail title="Saved" items={saved} shape="poster" watching={watching} /> },
+    { key: "saved", render: () => <TvItemsRail title="Saved" items={saved} shape="poster" watching={watching} saved /> },
     {
       key: "watched",
       render: () =>

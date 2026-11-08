@@ -31,6 +31,7 @@ import {
   useAddonCatalogRow,
   useFeatured,
   useHomeCatalogs,
+  useListable,
   useSeeds,
   useShownAbove,
   type AddonCatalog,
@@ -334,10 +335,12 @@ function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: bo
   const { data, isLoading, isError } = isCatalog ? catalog : recommended;
   const { navigate } = useRouter();
   const to = shelfRoute(shelf);
+  // Nothing to play and nothing to show (#337) stays out.
+  const shown = useListable(data);
   const items = useMemo(() => {
-    const fresh = (data ?? []).filter((m) => !exclude.has(m.id));
-    return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (data ?? []);
-  }, [data, exclude, shelf.kind]);
+    const fresh = (shown ?? []).filter((m) => !exclude.has(m.id));
+    return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (shown ?? []);
+  }, [shown, exclude, shelf.kind]);
 
   if (isError) return null; // one failing catalog shouldn't break the page
   // Nothing good to recommend: leave the row out rather than show a stub.
@@ -370,7 +373,8 @@ function LazyShelf({ shelf, eager, exclude }: { shelf: HomeShelf; eager: boolean
  */
 function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   const [ref, near] = useNearViewport<HTMLDivElement>();
-  const { data, isError } = useAddonCatalogRow(catalog, near);
+  const { data: found, isError } = useAddonCatalogRow(catalog, near);
+  const data = useListable(found);
   const { navigate } = useRouter();
   return (
     <div ref={ref} data-addon-row={catalog.id}>

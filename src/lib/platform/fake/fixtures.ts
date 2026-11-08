@@ -142,6 +142,20 @@ const openFilms: MetaPreview[] = FILMS
 
 export const movies = [...openFilms, ...MOVIE_NAMES.map((n, i) => preview("movie", n, i))];
 export const series = SERIES_NAMES.map((n, i) => preview("series", n, i));
+
+/**
+ * Found only by searching "quillmoor" (#337): stubs a list leaves out, a series whose pictures don't load (e2e answers
+ * media.example.com with 404) and one with nothing at all, beside an artless film and an announced series that stay.
+ */
+const stubArt = (n: string) => ({ poster: `https://media.example.com/${n}-poster.jpg`, background: `https://media.example.com/${n}-backdrop.jpg` });
+export const searchStubs: { movies: MetaPreview[]; series: MetaPreview[] } = {
+  movies: [{ id: "tt9300001", type: "movie", name: "Quillmoor Crossing", description: BLURB, imdbRating: "6.4", releaseInfo: "2021" }],
+  series: [
+    { id: "tt9300002", type: "series", name: "Quillmoor Blank", releaseInfo: "2017", ...stubArt("blank") },
+    { id: "tt9300003", type: "series", name: "Quillmoor Bare", releaseInfo: "2017" },
+    { id: "tt9300004", type: "series", name: "Quillmoor Announced", description: BLURB, releaseInfo: "2027–", ...stubArt("announced") },
+  ],
+};
 export const all = [...movies, ...series];
 
 /** A catalog page: the list rotated by the catalog's name so shelves differ. */
