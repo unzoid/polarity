@@ -328,6 +328,12 @@ const level = (p: Priority) => (typeof p === "function" ? p() : p);
 /** A row's priority from where it is on the page (lib/ui/viewport.ts useViewportPlace): far away it's background work. */
 export const rowPriority = (place: "in" | "near" | "far") => (place === "in" ? PRIORITY.visible : place === "near" ? PRIORITY.near : PRIORITY.background);
 
+/** `priority`, but a page's while entry `id`'s page is open: work a card started for it goes first once you open it. */
+export const pageWhenOpened =
+  (id: number, priority: Priority): Priority =>
+  () =>
+    opened.has(id) ? PRIORITY.page : level(priority);
+
 /** A row moved: AniList's queue looks at the priorities again. */
 export const reprioritiseAniList = () => anilistLimiter.wake();
 
@@ -417,8 +423,11 @@ export function useAnimeSeasons(anime: Anime | undefined) {
   return useQuery(seasonsQuery(useQueryClient(), anime));
 }
 
-/** The query behind {@link useAnimeSeasons}, for walking several franchises at once (the Anime tab's banner, #325). */
-export function seasonsQuery(client: QueryClient, anime: Anime | undefined) {
+/**
+ * The query behind {@link useAnimeSeasons}, for walking several franchises at once (the Anime tab's banner, #325,
+ * and wide cards, #336). `priority` places the walk's requests in AniList's queue (a visible row's by default).
+ */
+export function seasonsQuery(client: QueryClient, anime: Anime | undefined, priority?: Priority) {
   return {
     queryKey: keys.anime.seasons(anime?.id),
     enabled: !!anime,
@@ -435,6 +444,7 @@ export function seasonsQuery(client: QueryClient, anime: Anime | undefined) {
                 ${CARD} description(asHtml: false) relations { edges { relationType(version: 2) node { id type format } } } } } } } }`,
               { id },
               signal,
+              { priority },
             );
             const linked = readLinked(data.Media);
             if (!linked) throw new Error(`AniList has no anime ${id}`);
