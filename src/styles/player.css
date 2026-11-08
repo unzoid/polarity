@@ -294,6 +294,28 @@
   white-space: nowrap;
   cursor: pointer;
 }
+/* Paused on a stepped frame (#346): the frame number stays at the bottom right once the controls have gone,
+   with the subtitles' shadow so it reads on any picture; small and in the corner, clear of the subtitles. */
+.player-frame-label {
+  position: absolute;
+  right: max(2.5rem, var(--safe-right));
+  bottom: calc(1.25rem + var(--safe-bottom));
+  z-index: 2;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text);
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.9), 0 2px 3px rgb(0 0 0 / 0.8);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+.player[data-chrome="false"] .player-frame-label {
+  opacity: 1;
+}
+.player[data-instant="true"] .player-frame-label {
+  transition: none;
+}
 /* Labelled actions spread across the width — text, not boxes. */
 .player-actions {
   display: flex;
