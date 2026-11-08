@@ -2141,3 +2141,24 @@ test("in a narrow window nothing in the player's bars overlaps, the title is cut
   await expect(app.getByRole("menu")).toHaveCount(0);
   await expect(player).toHaveCount(1);
 });
+
+test("subtitle Font starts at From the subtitles; a picked font is kept (#347)", async ({ app }) => {
+  const open = async () => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Settings" }).click();
+    const settings = app.getByRole("dialog", { name: /^Settings/ });
+    await settings.getByRole("button", { name: "Subtitles & Audio", exact: true }).click();
+    return settings;
+  };
+  let settings = await open();
+  const font = () => settings.getByRole("combobox", { name: "Subtitle font" });
+  await expect(font()).toHaveText(/From the subtitles/);
+  await expect(settings.getByText("Styled subtitles keep their own font")).toBeVisible();
+  await font().click();
+  await app.getByRole("option", { name: "Segoe UI", exact: true }).click();
+  await expect(font()).toHaveText(/^Segoe UI/);
+  await expect(settings.getByText("Styled subtitles keep their own font")).toHaveCount(0);
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  settings = await open();
+  await expect(font()).toHaveText(/^Segoe UI/);
+});
