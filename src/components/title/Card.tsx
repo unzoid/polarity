@@ -1,4 +1,4 @@
-import { useState, type HTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type HTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useArtGate } from "../../lib/ui";
 import { Img } from "../Img";
 import { TitleLogo } from "../TitleLogo";
@@ -33,6 +33,8 @@ type CardProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
   trailing?: ReactNode;
   /** The title's tooltip; `title` is the caption. */
   hint?: string;
+  /** The card's root element (a button, or the `role="link"` div with `actions`). */
+  ref?: Ref<HTMLElement>;
 };
 
 /**
@@ -54,6 +56,7 @@ export function Card({
   trailing,
   hint,
   className,
+  ref,
   ...root
 }: CardProps) {
   const gate = useArtGate(art, artFallbacks);
@@ -74,7 +77,7 @@ export function Card({
   const cls = `card card-${shape}${className ? ` ${className}` : ""}`;
   if (!actions)
     return (
-      <button className={cls} title={hint} {...root}>
+      <button ref={ref as Ref<HTMLButtonElement>} className={cls} title={hint} {...root}>
         {body}
       </button>
     );
@@ -86,7 +89,7 @@ export function Card({
     }
   };
   return (
-    <div className={cls} role="link" tabIndex={0} title={hint} {...root} onKeyDown={onKeyDown}>
+    <div ref={ref as Ref<HTMLDivElement>} className={cls} role="link" tabIndex={0} title={hint} {...root} onKeyDown={onKeyDown}>
       {body}
     </div>
   );
@@ -113,20 +116,23 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
   );
 }
 
-/** The scrim and the title on landscape art: the logo when there is one and it loads, else the name. Both wait for the art. */
-export function ArtTitle({ name, logo }: { name: string; logo?: string }) {
+/**
+ * The scrim and the title on landscape art: the logo when there is one and it loads, else the name. Both wait for the art.
+ * `logos` are the title's other logos, `logo` first: the first shaped like a logo that reads is drawn (TitleLogo).
+ */
+export function ArtTitle({ name, logo, logos }: { name: string; logo?: string; logos?: string[] }) {
   return (
     <>
       <div className="card-art-scrim art-after" />
-      <LogoOrName logo={logo} alt={name} logoClass="card-logo" name={<span className="card-art-title t-title2 art-after">{name}</span>} />
+      <LogoOrName logo={logo} logos={logos} alt={name} logoClass="card-logo" name={<span className="card-art-title t-title2 art-after">{name}</span>} />
     </>
   );
 }
 
 /** A card's logo, or `name` while there's none or it doesn't load; a new `logo` gets a fresh try. The logo waits for the art (`art-after`). */
-export function LogoOrName({ logo, alt, logoClass, name }: { logo?: string; alt: string; logoClass: string; name: ReactNode }) {
+export function LogoOrName({ logo, logos, alt, logoClass, name }: { logo?: string; logos?: string[]; alt: string; logoClass: string; name: ReactNode }) {
   const { shown, onError } = useCardArt(logo);
-  return shown ? <TitleLogo src={shown} alt={alt} className={`${logoClass} art-after`} onFail={onError} /> : name;
+  return shown ? <TitleLogo src={shown} logos={logos} alt={alt} className={`${logoClass} art-after`} onFail={onError} /> : name;
 }
 
 /** A stripe along the bottom of the art for how far in you are (0–1). */

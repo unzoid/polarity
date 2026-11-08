@@ -22,6 +22,7 @@ import {
   type AnimeCard as Card,
   franchiseArt,
   isSeason,
+  noSeasonBefore,
   nothingKnownYet,
   useAnime,
   useAnimeSeasons,
@@ -82,9 +83,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   // the page was opened from (#339).
   const linkedOf = useLinkedImdbs(found ? found.map((s) => s.card.id) : shown ? [shown.id] : []);
   const [heroImdb, setHeroImdb] = useState<HeroImdb>();
-  const separateFirst = separate && opened
-    ? !opened.relations.edges.some((e) => e.relationType === "PREQUEL" && e.node.type !== "MANGA" && isSeason(e.node))
-    : undefined;
+  const separateFirst = separate && opened ? noSeasonBefore(opened) : undefined;
   const sourceOf = (played: HeroImdb | undefined) =>
     pageArtSource({ separate, seasonsLoading, found: found?.map((s) => s.card), shown, active: activeId, separateFirst, linked: linkedOf, played });
   const artEntry = sourceOf(undefined).first;
