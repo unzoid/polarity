@@ -25,6 +25,22 @@ type TitleLogoProps = ImgProps & {
  */
 export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
   const { src, onFail } = props;
+  const choice = useLogoChoice(src, logos, backdrop, spot);
+  const named = choice === "unsure" || choice === "none";
+  useEffect(() => {
+    if (named) onFail?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [named]);
+  if (named) return null;
+  const look = choice?.look ?? "as-is";
+  return <Img {...props} src={choice?.src ?? src} data-logo-look={look === "as-is" ? undefined : look} data-logo-pending={choice ? undefined : ""} />;
+}
+
+/**
+ * {@link TitleLogo}'s choice for a screen that draws the logo itself (the player's loading screen, #391): the
+ * logo to show and how, "none" or "unsure" when the name shows instead, undefined while it's being measured.
+ */
+export function useLogoChoice(src: string | undefined, logos?: string[], backdrop?: string, spot?: LogoSpot): Choice | undefined {
   const candidates = src && logos?.includes(src) ? logos.slice(0, MAX_CANDIDATES) : src ? [src] : [];
   const key = candidates.join(" ");
   const behindKey = backdrop && spot ? `${backdrop} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim}` : undefined;
@@ -57,18 +73,11 @@ export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
     // `candidates` and `spot` are new each render; `id` says when they change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-  const named = choice === "unsure" || choice === "none";
-  useEffect(() => {
-    if (named) onFail?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [named]);
-  if (named) return null;
-  const look = choice?.look ?? "as-is";
-  return <Img {...props} src={choice?.src ?? src} data-logo-look={look === "as-is" ? undefined : look} data-logo-pending={choice ? undefined : ""} />;
+  return candidates.length ? choice : undefined;
 }
 
 /** The logo to show and how, "none" when no candidate is shaped like a logo, or "unsure" when nothing could be measured. */
-type Choice = { src: string; look: LogoLook } | "unsure" | "none";
+export type Choice = { src: string; look: LogoLook } | "unsure" | "none";
 
 /** More logos than this aren't measured (each is a request). */
 const MAX_CANDIDATES = 6;

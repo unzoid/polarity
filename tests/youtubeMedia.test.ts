@@ -170,3 +170,14 @@ test("#383: in a party, a play pressed on a YouTube video that buffers first rea
   say("onStateChange", 1);
   expect(acts).toContainEqual(expect.objectContaining({ paused: false }));
 });
+
+test("#384: the player says once that it's ready, so the loading screen can leave YouTube's own controls clear", () => {
+  const { media, say } = setup();
+  let ready = 0;
+  media.addEventListener("playerready", () => ready++);
+  expect(media.playerReady).toBe(false);
+  say("onReady");
+  say("onReady");
+  expect(ready).toBe(1);
+  expect(media.playerReady).toBe(true);
+});
