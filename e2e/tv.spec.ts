@@ -203,6 +203,32 @@ test("in the player's Sources, holding OK on a row opens its menu, Info opens th
   await expect(app.locator(".player")).toHaveCount(1);
 });
 
+test("in the player's Sources, OK on a torrent row tries it, after one failed and for the failed one again (#393)", async ({ app }) => {
+  await app.addInitScript(() => {
+    localStorage.setItem("polar.fakeTorrents", "1");
+    localStorage.setItem("polar.prefs", JSON.stringify({ ...JSON.parse(localStorage.getItem("polar.prefs") ?? "{}"), torrentNotice: false }));
+  });
+  await app.reload();
+  const opens = () => app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0);
+  await expect(focused(app)).toHaveAccessibleName("The Understudies");
+  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await expect(focused(app)).toHaveAccessibleName("Play First Episode");
+  await press(app, "Enter");
+  // The fake shell has no engine: each torrent fails.
+  const choose = app.getByRole("button", { name: "Choose Another Source" });
+  await expect(choose).toBeFocused();
+  const rows = app.getByRole("radiogroup", { name: "Sources" }).locator(".options-item");
+  for (const n of [1, 0]) {
+    const before = await opens();
+    await press(app, "Enter");
+    await expect(rows.first()).toBeVisible();
+    await rows.nth(n).focus();
+    await press(app, "Enter");
+    await expect.poll(opens).toBe(before + 1);
+    await expect(choose).toBeFocused();
+  }
+});
+
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 

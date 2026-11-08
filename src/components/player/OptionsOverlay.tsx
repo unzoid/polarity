@@ -72,6 +72,7 @@ export function OptionsOverlay({
   columns,
   media,
   foreground,
+  beside = false,
 }: {
   open: boolean;
   /** The playing video, frosted behind the options. */
@@ -80,6 +81,11 @@ export function OptionsOverlay({
   columns: OptionColumn[];
   /** Drawn above the blur and the columns (e.g. a subtitle preview). */
   foreground?: ReactNode;
+  /**
+   * A panel beside the picture, which makes room for it, instead of a layer over it: for YouTube's
+   * player, which nothing may cover (#384). No frosted copy, no trapped focus; its columns stack.
+   */
+  beside?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   /** A press that may become a click outside the panel. */
@@ -100,7 +106,7 @@ export function OptionsOverlay({
   // Escape through the shared dismiss stack (lib/ui/dismiss.ts), Tab kept inside, focus back to the
   // opener on close. The parent passes a fresh onClose several times a second during playback;
   // useLayer reads the newest without re-running anything (which would snap the lists back mid-scroll).
-  useLayer(root, open, onClose);
+  useLayer(root, open, onClose, { modal: !beside });
 
   // Once per opening: show the current choice in every column, focus it for the keyboard.
   useEffect(() => {
@@ -144,14 +150,16 @@ export function OptionsOverlay({
       ref={root}
       className="options-overlay"
       data-open={open}
+      data-place={beside ? "beside" : undefined}
       role="dialog"
-      aria-modal
+      aria-modal={!beside}
+      aria-label={beside ? columns[0]?.title : undefined}
       tabIndex={-1}
       data-layer=""
       // A click clearly outside the panel closes it; one that just misses a control does nothing (#202).
       onPointerDown={(e) => {
         press.current = null;
-        if (e.button !== 0 || !missesPanel(e)) return;
+        if (beside || e.button !== 0 || !missesPanel(e)) return;
         // A dropdown open in the panel closes on this click by itself: the panel stays.
         if (document.querySelector(OPEN_POPUP)) return;
         press.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -166,8 +174,8 @@ export function OptionsOverlay({
     >
       {/* On Android mpv draws on a surface behind the clear page: a frosted snapshot over it jumped every
           time it was retaken (#181), so the live picture shows through the shade instead. */}
-      {!(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
-      <div className="options-shade" aria-hidden />
+      {!beside && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
+      {!beside && <div className="options-shade" aria-hidden />}
       <IconButton variant="player" className="options-close" onClick={onClose} label="Close" title="Close (Esc)">
         <Close size={26} />
       </IconButton>

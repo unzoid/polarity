@@ -52,7 +52,7 @@ import { Scrubber } from "../components/player/Scrubber";
 import { useSource } from "../components/player/useSource";
 import { useSourceRecord, useThroughput } from "../components/player/useSourceRecord";
 import { SkipButton, useSkipSegments } from "../components/player/SkipSegments";
-import { OptionsOverlay, type OptionItem } from "../components/player/OptionsOverlay";
+import { OptionsOverlay, type OptionColumn, type OptionItem } from "../components/player/OptionsOverlay";
 import { VolumeHud, type VolumePing } from "../components/player/VolumeHud";
 import { EpisodeRail } from "../components/player/EpisodeRail";
 import { Dropdown } from "../components/Dropdown";
@@ -108,7 +108,7 @@ import { partyPage, watchPage } from "../lib/deepLink";
 import { setWatching } from "../lib/friends";
 import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
-import { LinkForm, PartyBadge, PartyHold, PartyNotes, PartyStart } from "../components/party/PartyUI";
+import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
 import { More, Pin, WatchParty } from "../components/icons";
 import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
@@ -132,6 +132,11 @@ const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+/** What Subtitles & Audio and Speed say for a YouTube video: they're YouTube's own controls there (#384). */
+const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
+const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
+/** How long the party's hold lasts before YouTube's bar comes out to say so: longer than over a picture (400 ms), as the bar moves YouTube's. */
+const HOLD_SHOWS_MS = 1200;
 /** With "Up next" set to the very end, it appears this many seconds before. */
 const NEXT_UP_AT_END = 12;
 
@@ -167,6 +172,9 @@ export function Player({
   const ytId = link ? youtubeId(link) : undefined;
   // On Android YouTube's player can't go in a frame (lib/platform canEmbedOtherSites): the video opens in YouTube.
   const ytOutside = ytId && !canEmbedOtherSites() ? ytId : undefined;
+  // Otherwise it plays in the app with YouTube's own controls, and nothing of ours over it (#384: YouTube's
+  // terms forbid drawing over any part of an embedded player): a bar above it, the party panel beside it.
+  const ytFramed = !!ytId && !ytOutside;
   // A video file on this device (#204): its title is the file or its folder (lib/localFiles), its
   // source the file itself, and where it stopped is kept on this device; nothing is looked up online.
   const local = isFileId(metaId);
@@ -334,11 +342,18 @@ export function Player({
   // --- Chrome visibility --------------------------------------------------
   // Paused on a stepped frame, the controls hide after the set time, not the paused wait (#346).
   const frameSteps = useStepping(paused, buffering);
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping);
+  // YouTube's bar stays out of the way while paused too: showing it moves the picture (#384).
+  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping && !ytFramed);
   const ready = source.state.status === "ready" && !error;
   // The top bar's "More" menu (#396) keeps the controls up while it's open.
   const [moreOpen, setMoreOpen] = useState(false);
   const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready;
+  // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
+  const [ytPlayed, setYtPlayed] = useState(false);
+  useEffect(() => {
+    if (ytFramed && started && !paused) setYtPlayed(true);
+  }, [ytFramed, started, paused]);
+  const partyHold = useLasting(ytFramed && party && ready && started ? partyHoldText(party, videoId) : null, HOLD_SHOWS_MS);
   // Whether the controls showed when the press on the picture began: the
   // player's own pointerdown shows them before the click, so a tap that should
   // bring them back would otherwise hide them again at once.
@@ -358,6 +373,13 @@ export function Player({
   }, [meta, type, videoId, animeSkipFiller]);
   // A YouTube video is called by its own title once its player says it.
   const [ytTitle, setYtTitle] = useState<string | null>(null);
+  // YouTube's player is up with its own controls (#384): the loading screen leaves them clear, even before it plays.
+  const [ytShown, setYtShown] = useState(false);
+  useEffect(() => {
+    const onReady = () => setYtShown(true);
+    yt.addEventListener("playerready", onReady);
+    return () => yt.removeEventListener("playerready", onReady);
+  }, [yt]);
   useEffect(() => {
     const onTitle = () => setYtTitle(yt.title);
     yt.addEventListener("titlechange", onTitle);
@@ -555,7 +577,8 @@ export function Player({
     play: () => {
       setPaused(false);
       setEnded(false);
-      poke();
+      // YouTube's bar collapses once it plays, wherever the play came from (#384).
+      if (!ytFramed) poke();
     },
     pause: () => {
       setPaused(true);
@@ -979,6 +1002,7 @@ export function Player({
           togglePin();
           return true;
         case "fill":
+          if (ytFramed) return false;
           toggleFill();
           // TV mode has no button showing it: say which it is now.
           if (tv) flashNotice(getPrefs().videoFill ? "Fill" : "Fit", 1500);
@@ -995,6 +1019,11 @@ export function Player({
           return true;
         case "tracks":
         case "speed":
+          // YouTube's player has them in its own controls, and nothing may open over it (#384).
+          if (ytFramed) {
+            flashNotice(action === "tracks" ? YT_CAPTIONS : YT_SPEED, 4000);
+            return true;
+          }
           toggleOptions(action);
           return true;
         case "episodes":
@@ -1021,9 +1050,10 @@ export function Player({
     },
     // TV: volume keys show only the volume HUD, not the whole player.
     (action) => {
-      if (tv && (action === "volumeUp" || action === "volumeDown" || action === "mute")) return;
+      // YouTube's bar comes back for any of them (#384): there's no HUD or skip button over its player.
+      if (tv && !ytFramed && (action === "volumeUp" || action === "volumeDown" || action === "mute")) return;
       // A seek with the controls hidden shows just its skip button and the "+10" (SkipTransport), not the controls.
-      if (!chromeVisible && (action === "seekBack" || action === "seekForward")) return;
+      if (!chromeVisible && !ytFramed && (action === "seekBack" || action === "seekForward")) return;
       poke(true);
     },
   );
@@ -1096,6 +1126,131 @@ export function Player({
     if (!chromeVisible || !sliderFolded) setVolumeOpen(false);
   }, [chromeVisible, sliderFolded]);
 
+  // The Watch Party panel: over the picture, or beside YouTube's player (#384).
+  const partyColumns: OptionColumn[] = canParty
+    ? [
+        ...(party
+          ? [
+              {
+                title: "Watch Party",
+                size: "medium" as const,
+                options: [],
+                onSelect: () => {},
+                // Focus comes to Copy Invite when the party starts: what it replaces is gone (#247).
+                content: <PartyRoomPane party={party} onGo={() => setOptions(null)} autoFocus />,
+              },
+              {
+                title: "Settings",
+                size: "medium" as const,
+                options: [],
+                onSelect: () => {},
+                // TV mode: no pasting on a remote; links others put on still play there.
+                content: (
+                  <PartySettingsPane party={party} link={tv ? undefined : <LinkForm me={profile!} onDone={() => setOptions(null)} />} />
+                ),
+              },
+            ]
+          : [{ title: "Watch Party", size: "medium" as const, options: [], onSelect: () => {}, content: <PartyStart me={profile!} onStart={local ? undefined : startHere} /> }]),
+        // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
+        ...(party || tv
+          ? []
+          : [
+              {
+                title: "Watch a Link",
+                size: "medium" as const,
+                options: [],
+                onSelect: () => {},
+                content: (
+                  <div className="party-pane">
+                    <p className="party-lede">
+                      Start a party on a YouTube video, or a video file or stream from the web. Everyone's app opens the link itself, after seeing it.
+                    </p>
+                    <LinkForm me={profile!} onDone={() => setOptions(null)} />
+                  </div>
+                ),
+              },
+            ]),
+      ]
+    : [];
+
+  // A YouTube video in the app (#384): YouTube's player with its own controls, a bar above it and the party panel
+  // beside it. Nothing of ours is drawn over the frame; the loading screen only until YouTube's player is up.
+  if (ytFramed) {
+    const latestNote = party?.notes.at(-1);
+    const message =
+      notice ??
+      partyHold ??
+      (latestNote ? (latestNote.system || !latestNote.who ? latestNote.text : `${latestNote.who.name} ${latestNote.text}`) : null);
+    // Out until it plays; then it collapses to a strip along the top edge, and the pointer there, a key or a message brings it back.
+    const barShown = !ytPlayed || chrome.visible || options === "party" || !!message;
+    const failed = !ready && (!!error || source.state.status === "failed");
+    return (
+      <div
+        className="player player-yt"
+        data-engine="youtube"
+        data-chrome={barShown}
+        data-options={options === "party"}
+        data-started={started}
+        data-buffering={frameSteps.spinner && ready}
+        onPointerMove={() => poke()}
+        onPointerDown={() => poke()}
+      >
+        <div className="player-yt-main">
+          <div
+            className="player-yt-bar"
+            data-shown={barShown}
+            data-tauri-drag-region={pinned ? undefined : true}
+            onPointerEnter={() => (overControls.current = true)}
+            onPointerLeave={() => (overControls.current = false)}
+          >
+            <IconButton variant="player" onClick={() => void exit()} label="Back" title="Back (Esc)">
+              <ArrowLeft size={22} />
+            </IconButton>
+            <p className="player-yt-message t-callout" role="status" aria-live="polite" data-tauri-drag-region={pinned ? undefined : true}>
+              {message}
+            </p>
+            {party && <PartyBadge party={party} onOpen={() => setOptions((o) => (o === "party" ? null : "party"))} />}
+            {!fullscreen && !tv && <WindowControls pinned={pinned} />}
+          </div>
+          <iframe
+            ref={setYtFrame}
+            className="player-youtube"
+            data-hidden={failed || undefined}
+            src={youtubeEmbed(ytId, { api: true })}
+            title={title}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            // It runs its own page and nothing more: no popups, no taking the app's window elsewhere.
+            sandbox="allow-scripts allow-same-origin allow-presentation"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+          <AnimatePresence>
+            {!(ready && (started || ytShown)) && (
+              <PlayerStatus
+                key="status"
+                state={source.state}
+                error={error}
+                name={title}
+                steps={steps}
+                backend="YouTube's embedded player"
+                onSettings={
+                  tv
+                    ? undefined
+                    : (page) => {
+                        void exit();
+                        openSettings(page);
+                      }
+                }
+                onRetry={source.retry}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+        {canParty && <OptionsOverlay beside open={options === "party"} onClose={() => setOptions(null)} media={media} columns={partyColumns} />}
+      </div>
+    );
+  }
+
   return (
     <div
       className="player"
@@ -1112,19 +1267,6 @@ export function Player({
     >
       {engine === "html" && (
         <video ref={setVideoEl} className="player-video" playsInline style={subtitleCueVars(subStyle)} />
-      )}
-      {ytId && !ytOutside && (
-        // YouTube's own player, its controls off: the player's controls (and the party) drive it through its API.
-        <iframe
-          ref={setYtFrame}
-          className="player-video player-youtube"
-          src={youtubeEmbed(ytId, { controls: false, api: true })}
-          title={title}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          // It runs its own page and nothing more: no popups, no taking the app's window elsewhere.
-          sandbox="allow-scripts allow-same-origin allow-presentation"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
       )}
       {/* Click target over either engine: tap to play/pause, double-click for
           fullscreen (on touch, a side's double-tap seeks), wheel for volume. */}
@@ -1550,49 +1692,7 @@ export function Player({
           open={options === "party"}
           onClose={() => setOptions(null)}
           media={media}
-          columns={[
-            ...(party
-              ? [
-                  {
-                    title: "Watch Party",
-                    size: "medium" as const,
-                    options: [],
-                    onSelect: () => {},
-                    // Focus comes to Copy Invite when the party starts: what it replaces is gone (#247).
-                    content: <PartyRoomPane party={party} onGo={() => setOptions(null)} autoFocus />,
-                  },
-                  {
-                    title: "Settings",
-                    size: "medium" as const,
-                    options: [],
-                    onSelect: () => {},
-                    // TV mode: no pasting on a remote; links others put on still play there.
-                    content: (
-                      <PartySettingsPane party={party} link={tv ? undefined : <LinkForm me={profile!} onDone={() => setOptions(null)} />} />
-                    ),
-                  },
-                ]
-              : [{ title: "Watch Party", size: "medium" as const, options: [], onSelect: () => {}, content: <PartyStart me={profile!} onStart={local ? undefined : startHere} /> }]),
-            // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
-            ...(party || tv
-              ? []
-              : [
-                  {
-                    title: "Watch a Link",
-                    size: "medium" as const,
-                    options: [],
-                    onSelect: () => {},
-                    content: (
-                      <div className="party-pane">
-                        <p className="party-lede">
-                          Start a party on a YouTube video, or a video file or stream from the web. Everyone's app opens the link itself, after seeing it.
-                        </p>
-                        <LinkForm me={profile!} onDone={() => setOptions(null)} />
-                      </div>
-                    ),
-                  },
-                ]),
-          ]}
+          columns={partyColumns}
         />
       )}
 
@@ -1776,6 +1876,17 @@ function savedVolume() {
   if (systemVolume) return 1;
   const v = Number(localStorage.getItem("polar.volume") ?? 1);
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+}
+
+/** `value` once it has stayed the same for `ms`, else null: a blip never shows. */
+function useLasting<T>(value: T | null, ms: number): T | null {
+  const [lasting, setLasting] = useState<T | null>(null);
+  useEffect(() => {
+    if (value == null) return setLasting(null);
+    const t = window.setTimeout(() => setLasting(value), ms);
+    return () => window.clearTimeout(t);
+  }, [value, ms]);
+  return value == null ? null : lasting === value ? lasting : null;
 }
 
 /** A short message over the player (a source skipped, an intro skipped) that clears itself. */

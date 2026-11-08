@@ -2130,3 +2130,106 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root[data-compact="true"] .episode-rail {
   grid-auto-columns: min(78vw, 340px);
 }
+
+/* --- A YouTube video (#384): YouTube's player with its own controls, and nothing of ours over it (YouTube's
+   terms). A slim bar above the frame (Back, the party), collapsing to a strip along the top edge once it
+   plays: the pointer on the strip, a key or a message brings it back. The party panel sits beside the frame,
+   which narrows to make room; below it when the window stands upright. */
+.player-yt {
+  display: flex;
+}
+.player-yt-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.player-yt-bar {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: calc(3.5rem + var(--safe-top));
+  padding: var(--safe-top) var(--safe-right) 0 max(0.75rem, var(--safe-left));
+  overflow: hidden;
+  background: #000;
+  transition: height var(--dur-base) var(--ease-out);
+}
+/* The strip left when it's collapsed: thin, but there for a pointer to find. */
+.player-yt-bar[data-shown="false"] {
+  height: calc(0.5rem + var(--safe-top));
+}
+:root[data-form="phone"] .player-yt-bar[data-shown="false"] {
+  height: calc(1rem + var(--safe-top));
+}
+.player-yt-bar > * {
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+.player-yt-bar[data-shown="false"] > * {
+  opacity: 0;
+  pointer-events: none;
+}
+.player-yt-message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.player-yt .player-youtube {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #000;
+}
+/* Failed: the loading screen says why, and the player it would cover isn't shown at all. */
+.player-yt .player-youtube[data-hidden] {
+  visibility: hidden;
+}
+.player-yt .options-overlay[data-place="beside"] {
+  position: relative;
+  inset: auto;
+  flex: none;
+  display: block;
+  width: clamp(340px, 30vw, 430px);
+  max-width: 50%;
+  padding: calc(4.5rem + var(--safe-top)) max(1.25rem, var(--safe-right)) calc(1.25rem + var(--safe-bottom)) 1.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface-float);
+}
+.options-overlay[data-place="beside"] .options-columns {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2rem;
+  max-width: none;
+}
+.options-overlay[data-place="beside"] .options-column {
+  width: auto;
+  max-height: none;
+}
+.options-overlay[data-place="beside"] .options-close {
+  top: calc(1rem + var(--safe-top));
+  left: auto;
+  right: max(1rem, var(--safe-right));
+}
+@media (orientation: portrait) {
+  .player-yt {
+    flex-direction: column;
+  }
+  .player-yt .options-overlay[data-place="beside"] {
+    width: auto;
+    max-width: none;
+    height: 55%;
+    padding-top: 4rem;
+  }
+}

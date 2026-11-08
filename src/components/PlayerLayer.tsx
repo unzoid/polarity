@@ -15,6 +15,20 @@ export const preloadPlayer = () => whenIdle(() => void Player.preload());
 type PlayerRoute = Extract<Route, { name: "player" }>;
 
 /**
+ * Each opening of the player, a source picked in it included, is a route of its own (the router's `replace`), so
+ * it gets a number of its own: the player remounts and starts the new pick (#393). Keyed by the link alone, a
+ * torrent (no link) or the same source picked again after it failed kept the player as it was, and the pick did
+ * nothing.
+ */
+const picks = new WeakMap<PlayerRoute, number>();
+let nextPick = 0;
+const pickOf = (route: PlayerRoute) => {
+  let n = picks.get(route);
+  if (n === undefined) picks.set(route, (n = nextPick++));
+  return n;
+};
+
+/**
  * Which player to draw. It stays drawn for its exit fade after its route is
  * gone; the page beneath is already live, so leaving never waits on the
  * animation.
@@ -52,7 +66,7 @@ export function PlayerLayer({ player, leaving }: { player: PlayerRoute | null; l
   }, [watching]);
   const { back } = useRouter();
   if (!player) return null;
-  const key = `${player.videoId}|${player.stream?.url ?? ""}`;
+  const key = `${player.videoId}|${pickOf(player)}`;
   return (
     <div className="player-layer" data-leaving={leaving} inert={leaving}>
       <ErrorBoundary key={key} where="player" action={{ label: "Back", onClick: back }}>
