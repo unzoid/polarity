@@ -50,7 +50,7 @@ export function useAnimePlayback(anime: AnimeCard | Anime) {
 
   // The same answers give the same array wherever on the page it's asked (#397).
   const videos = meta?.videos ?? NO_VIDEOS;
-  const episodes = useMemo(() => sharedAnimeEpisodes({ anime, zip, videos, imdb, titles: animeTitles }), [zip, videos, anime, animeTitles, imdb]);
+  const episodes = useMemo(() => sharedAnimeEpisodes({ anime, zip, videos, imdb, titles: animeTitles, kitsu }), [zip, videos, anime, animeTitles, imdb, kitsu]);
 
   // The id this entry plays from, for the backend: library and progress kept under its other ids move onto it.
   // Only once the IMDb lookup has answered, so a failed lookup doesn't link the entry to its Kitsu id. A link

@@ -2,7 +2,7 @@ import { deflateRawSync } from "node:zlib";
 import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
-import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
+import { FRANCHISE, franchiseMedia, franchiseZip, GAP_ANIME, longAnimeMedia, longAnimeZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // The desktop layout (also run in WebKit on CI). Titles come from src/lib/platform/fake/fixtures.ts.
 
@@ -976,6 +976,41 @@ test("an anime season tab downloads its released episodes; a film's tab shows th
 
   // Pressing it plays the film.
   await film.getByRole("button", { name: `Play ${FRANCHISE.film.name}` }).click();
+  await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
+});
+
+test("a long anime lists the episodes its series' catalog skips, between their neighbours, and plays them by the entry's Kitsu id (#427)", async ({ app }) => {
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
+    await route.fulfill({ json: { data: variables?.id === GAP_ANIME.anilist ? { Media: longAnimeMedia(GAP_ANIME) } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) =>
+    Number(new URL(route.request().url()).searchParams.get("anilist_id")) === GAP_ANIME.anilist ? route.fulfill({ json: longAnimeZip(GAP_ANIME) }) : route.fulfill({ status: 404, json: {} }),
+  );
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), GAP_ANIME.anilist);
+  const page = app.locator(`.anime-detail[data-anime="${GAP_ANIME.anilist}"]`).last();
+  const find = page.getByRole("searchbox", { name: "Find an episode by number or title" });
+  // 99 and 102 are the catalog's own episodes; 100 and 101 aren't in it.
+  for (const [n, id] of [
+    [99, `${GAP_ANIME.imdb}:2:49`],
+    [100, `kitsu:${GAP_ANIME.kitsu}:100`],
+    [101, `kitsu:${GAP_ANIME.kitsu}:101`],
+    [102, `${GAP_ANIME.imdb}:3:2`],
+  ] as const) {
+    await find.fill(String(n));
+    const card = page.locator(".seasons .episode-card");
+    await expect(card).toHaveCount(1, { timeout: 15_000 });
+    await expect(card).toHaveAttribute("data-video", id);
+    await expect(card).toContainText(`The Lantern's Road, Part ${n}`);
+  }
+  // Every number from 1 to 150 is in the list, once.
+  await find.fill("");
+  const ranges = page.getByRole("radio", { name: /^\d+–\d+$/ });
+  await expect(ranges).toHaveText(["1–100", "101–150"]);
+  // 101 plays: the player opens on it.
+  await find.fill("101");
+  await page.locator(".seasons .episode-card .episode-card-main").click();
   await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
 });
 
