@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde::Serialize;
 
-use crate::episode::{file_episode, WantedEpisode};
+use crate::episode::{file_episode_for, WantedEpisode};
 use crate::types::Stream;
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
@@ -45,7 +45,7 @@ pub struct RankedStream {
     pub label: String,
     /// The id the add-on was asked by (`tt…:1:5`, `kitsu:12:5`): which request brought this source.
     pub request_id: Option<String>,
-    /// What the file's name says it is ("S01E05", "Episode 5"), when it says.
+    /// What the file's name says it is ("Season 1, Episode 5", "Episode 5"), when it says.
     pub file_episode: Option<String>,
     /// The file names another episode than the one asked for: listed last, never picked by itself.
     pub other_episode: bool,
@@ -170,7 +170,7 @@ static TAGS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new(|| {
         ("10-bit", r"(?i)\b10[\-. ]?bit\b"),
         ("IMAX", r"(?i)\bIMAX\b"),
         ("3D", r"(?i)\b3D\b"),
-        ("BluRay", r"(?i)\b(blu[\-. ]?ray|bdrip|brrip)\b"),
+        ("BluRay", r"(?i)\b(blu[\-. ]?ray|bdrip|brrip|bd|bdremux)\b"),
         ("WEB-DL", r"(?i:\bweb[\-. ]?(dl|rip)\b)|\bWEB\b"),
     ]
     .into_iter()
@@ -443,13 +443,13 @@ pub fn rank_asked(
         .filter(|a| a.stream.url.is_some() || a.stream.info_hash.is_some() || a.stream.yt_id.is_some())
         .map(|Asked { addon, request, stream }| {
             let quality = parse_quality(&stream);
-            let file = wanted.and(file_episode(&stream));
+            let file = wanted.and_then(|w| file_episode_for(&stream, w));
             RankedStream {
                 label: label(&quality),
                 quality,
                 addon,
                 request_id: request,
-                file_episode: file.map(|f| f.label()),
+                file_episode: file.map(|f| f.label(wanted)),
                 other_episode: matches!((file, wanted), (Some(f), Some(w)) if !f.fits(w)),
                 stream,
             }
@@ -535,7 +535,7 @@ mod tests {
         assert_eq!(
             rows,
             [
-                ("tt0000001:1:5", Some("S01E05"), false),
+                ("tt0000001:1:5", Some("Season 1, Episode 5"), false),
                 ("tt0000001:1:5", None, false),
                 ("kitsu:12:5", Some("Episode 5"), false),
                 ("kitsu:12:5", Some("Episode 6"), true),

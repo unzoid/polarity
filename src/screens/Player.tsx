@@ -30,6 +30,7 @@ import { SourceFilterBar } from "../components/SourceFilters";
 import { TvSourceMenu, useSourceInfo } from "../components/SourceInfo";
 import { playingReport } from "../components/player/playingReport";
 import {
+  airedAt,
   autoplayStreak,
   countAutoplay,
   requestHeaders,
@@ -889,7 +890,7 @@ export function Player({
   // title page. Ids stay the index into the ranked list, so selection works
   // regardless of the view. Kept for this show while the player stays open,
   // through picking a source or moving to another episode (each rebuilds it).
-  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime));
+  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
   const hiddenSources = streams.data?.hidden ?? 0;
   // The first few sources get a look ahead of time while the panel is open (#21).
   const readiness = useReadiness(

@@ -4,7 +4,7 @@ import { useRouter } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, useStreams } from "../lib/net";
 import { runtimeSeconds } from "../lib/format";
-import { READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
+import { airedAt, READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
 import type { ContentType, RankedStream, Readiness } from "../lib/types";
 import { SourceFilterBar } from "./SourceFilters";
 import { Button } from "./ui/Button";
@@ -39,7 +39,7 @@ export function StreamList({
   const { settings } = useTitleSettings(type, videoId);
   // The title's length, for Best Match's bitrates: its meta is usually already loaded (the page behind this list).
   const { data: meta } = useMeta(type, videoId.replace(/:\d+:\d+$/, ""));
-  const f = useSourceFilters(data?.streams, settings, undefined, runtimeSeconds(meta?.runtime));
+  const f = useSourceFilters(data?.streams, settings, undefined, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
   // The first few sources in view get a look ahead of time (#21).
   const ready = useReadiness(f.view.slice(0, Math.min(f.matched, READY_CHECKS)).map(({ r }) => r));
   // A source's "i" panel (#229); on TV, the row's menu that leads to it.
