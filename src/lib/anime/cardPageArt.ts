@@ -58,7 +58,9 @@ export function useAnimePageArt(card: AnimeCard, enabled: boolean, priority: Pri
     }
     if (noAnime) return null;
     if (!anime || !source?.known || imdb === undefined || zipPending || (imdb?.startsWith("tt") && metaLoading)) return undefined;
-    return franchiseArt({ imdb, meta, metaLoading, first: animeArt(anime, zip) });
+    // Everything it waits for has answered here, so the art is never pending (#343).
+    const { background, logo, logos } = franchiseArt({ imdb, meta, metaLoading, first: animeArt(anime, zip) });
+    return { background, logo, logos };
   })();
   // The same answer keeps the same object, so what draws it doesn't redraw.
   const key = JSON.stringify(result);

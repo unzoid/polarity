@@ -52,6 +52,7 @@ export function AnimeHero({
   anime,
   logo,
   logos,
+  logoPending,
   background,
   name,
   onImdb,
@@ -67,6 +68,8 @@ export function AnimeHero({
   logo?: string;
   /** Every logo to choose from, `logo` first (`franchiseArt`): the first shaped like a logo that reads shows (#371). */
   logos?: string[];
+  /** The logo isn't known yet (`franchiseArt`): neither it nor the name shows for now (#343). */
+  logoPending?: boolean;
   /** The page's backdrop: the logo or name waits for it (#173), and the logo is measured against it (#215). */
   background?: string;
   name: string;
@@ -125,7 +128,7 @@ export function AnimeHero({
   return (
     <section className="detail-hero anime-hero" {...gate}>
       <div className="detail-hero-main">
-        <TitleHeading name={name} logo={logo} logos={logos} backdrop={background} look="detail" onLogoFail={() => setNoLogo(logo)} />
+        <TitleHeading name={name} logo={logo} logos={logos} backdrop={background} look="detail" pending={logoPending} onLogoFail={() => setNoLogo(logo)} />
         {subtitle && <p className="anime-native t-callout">{subtitle}</p>}
         <p className="detail-facts anime-meta-line t-callout tabular">
           {score && (

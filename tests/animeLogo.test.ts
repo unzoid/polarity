@@ -19,8 +19,8 @@ test("every season of a franchise shows its linked general title's background an
 });
 
 test("while the link or the general title loads, no art and no logo, so a logo in another script never flashes", () => {
-  expect(franchiseArt({ imdb: undefined, meta: undefined, metaLoading: false, first: zip })).toEqual({ background: undefined, logo: undefined, logos: [] });
-  expect(franchiseArt({ imdb: "tt0000001", meta: undefined, metaLoading: true, first: zip })).toEqual({ background: undefined, logo: undefined, logos: [] });
+  expect(franchiseArt({ imdb: undefined, meta: undefined, metaLoading: false, first: zip })).toEqual({ background: undefined, logo: undefined, logos: [], pending: true });
+  expect(franchiseArt({ imdb: "tt0000001", meta: undefined, metaLoading: true, first: zip })).toEqual({ background: undefined, logo: undefined, logos: [], pending: true });
 });
 
 test("the first entry's ani.zip art where the general title has none, or there's no general title", () => {

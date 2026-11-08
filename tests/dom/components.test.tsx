@@ -117,7 +117,7 @@ test("Img: a picture that fails moves on to the next; none left, it's gone (test
 
   // A logo that 404s leaves the name as the heading.
   const page = await render(<TitleHeading name="Iron Wheel Race" logo="https://x.test/logo.png" look="detail" />);
-  expect(page.container.querySelector("h1")).toBeNull();
+  expect(page.container.querySelector("h1")!.textContent).toBe("");
   await fail(page.container.querySelector("img"));
   expect(page.container.querySelector("h1")!.textContent).toBe("Iron Wheel Race");
 });

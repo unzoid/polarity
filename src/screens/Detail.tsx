@@ -80,7 +80,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
         onScroll={(e) => setScrolledAway(e.currentTarget.scrollTop > e.currentTarget.clientHeight * 0.25)}
       >
         {phone && art}
-        <DetailHero item={shown} meta={meta} onSheet={onSheet} trailer={trailer} />
+        <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
         {type === "movie" && meta && (
           <section className="about">
@@ -98,11 +98,14 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
 function DetailHero({
   item,
   meta,
+  metaPending,
   onSheet,
   trailer,
 }: {
   item: MetaPreview;
   meta?: Meta;
+  /** The full metadata hasn't answered yet: the preview's missing logo may still come (#343). */
+  metaPending: boolean;
   onSheet: (open: boolean) => void;
   trailer: { visible: boolean; muted: boolean; toggleMute: () => void };
 }) {
@@ -131,7 +134,7 @@ function DetailHero({
   return (
     <section className="detail-hero" {...gate}>
       <div className="detail-hero-main">
-        <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="detail" />
+        <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="detail" pending={metaPending} />
         {item.description && <p className="detail-description t-callout">{item.description}</p>}
         <p className="detail-facts t-callout tabular">
           {/* The score row carries IMDb's when a ratings key found it. */}

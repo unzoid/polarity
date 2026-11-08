@@ -1,5 +1,5 @@
-import { useState, type HTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
-import { useArtGate } from "../../lib/ui";
+import { cloneElement, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type Ref } from "react";
+import { useArtGate, useNameWait } from "../../lib/ui";
 import { Img } from "../Img";
 import { TitleLogo } from "../TitleLogo";
 import { Skeleton } from "../ui/Skeleton";
@@ -119,20 +119,47 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
 /**
  * The scrim and the title on landscape art: the logo when there is one and it loads, else the name. Both wait for the art.
  * `logos` are the title's other logos, `logo` first: the first shaped like a logo that reads is drawn (TitleLogo).
+ * While `pending` (the logo isn't known yet) neither shows, for at most `NAME_WAIT` (#343).
  */
-export function ArtTitle({ name, logo, logos }: { name: string; logo?: string; logos?: string[] }) {
+export function ArtTitle({ name, logo, logos, pending }: { name: string; logo?: string; logos?: string[]; pending?: boolean }) {
   return (
     <>
       <div className="card-art-scrim art-after" />
-      <LogoOrName logo={logo} logos={logos} alt={name} logoClass="card-logo" name={<span className="card-art-title t-title2 art-after">{name}</span>} />
+      <LogoOrName
+        logo={logo}
+        logos={logos}
+        pending={pending}
+        alt={name}
+        logoClass="card-logo"
+        name={<span className="card-art-title t-title2 art-after">{name}</span>}
+      />
     </>
   );
 }
 
-/** A card's logo, or `name` while there's none or it doesn't load; a new `logo` gets a fresh try. The logo waits for the art (`art-after`). */
-export function LogoOrName({ logo, logos, alt, logoClass, name }: { logo?: string; logos?: string[]; alt: string; logoClass: string; name: ReactNode }) {
+/**
+ * A card's logo, or `name` while there's none or it doesn't load; a new `logo` gets a fresh try. The logo waits for the art (`art-after`).
+ * While `pending` (the logo isn't known yet) the name keeps its place unseen, for at most `NAME_WAIT` (#343).
+ */
+export function LogoOrName({
+  logo,
+  logos,
+  pending = false,
+  alt,
+  logoClass,
+  name,
+}: {
+  logo?: string;
+  logos?: string[];
+  pending?: boolean;
+  alt: string;
+  logoClass: string;
+  name: ReactElement<HTMLAttributes<HTMLElement>>;
+}) {
   const { shown, onError } = useCardArt(logo);
-  return shown ? <TitleLogo src={shown} logos={logos} alt={alt} className={`${logoClass} art-after`} onFail={onError} /> : name;
+  const waiting = useNameWait(pending && !logo, alt);
+  if (shown) return <TitleLogo src={shown} logos={logos} alt={alt} className={`${logoClass} art-after`} onFail={onError} />;
+  return waiting ? cloneElement(name, { "data-name-wait": "" } as HTMLAttributes<HTMLElement>) : name;
 }
 
 /** A stripe along the bottom of the art for how far in you are (0–1). */
