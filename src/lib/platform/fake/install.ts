@@ -72,7 +72,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
   streams: () => fx.streams(),
   subtitles: () => [],
-  skip_segments: () => ({}),
+  // `polar.fakeIntro` in localStorage: every video opens with an 80-second intro to skip (#331).
+  skip_segments: () => (localStorage.getItem("polar.fakeIntro") ? { intro: { start: 0, end: 80 } } : {}),
   // A linked MyAnimeList list (#84): a made-up account with a short list; sign-ins aren't faked.
   mal_api: (a) => fakeMal(a as { method: string; path: string; token: string }),
   mal_token: () => Promise.reject({ code: "upstream", message: "not in the fake shell" }),

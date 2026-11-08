@@ -328,6 +328,34 @@ test("the player steps one frame at a time with , and ., and the frame number st
   await expect(label).toHaveCount(0);
 });
 
+test("the Skip Intro button sits in the same place with the controls hidden and shown, and skips on the first click (#331)", async ({ app }) => {
+  await app.addInitScript(() => localStorage.setItem("polar.fakeIntro", "1"));
+  await app.reload();
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  const skip = app.locator(".skip-button");
+  await expect(skip).toHaveAttribute("data-visible", "true");
+  // The controls hide; the new segment's button stays up on its own for a while.
+  await expect(player).toHaveAttribute("data-chrome", "false", { timeout: 6000 });
+  await expect(skip).toHaveAttribute("data-visible", "true");
+  await expect(skip).toHaveCSS("opacity", "1");
+  const alone = await skip.boundingBox();
+  // Moving toward it brings the controls up; it doesn't move.
+  await app.mouse.move(alone!.x - 200, alone!.y - 100);
+  await expect(player).toHaveAttribute("data-chrome", "true");
+  await expect.poll(async () => (await skip.boundingBox())?.y).toBe(alone!.y);
+  expect(await skip.boundingBox()).toEqual(alone);
+  // It clears the timeline and the action row.
+  const timeline = await app.locator(".player-timeline").boundingBox();
+  expect(alone!.y + alone!.height).toBeLessThanOrEqual(timeline!.y);
+  // Straight to where it was before the controls came up: one click skips the intro.
+  await app.mouse.click(alone!.x + alone!.width / 2, alone!.y + alone!.height / 2);
+  await expect(skip).toHaveAttribute("data-segment", "false");
+});
+
 test("with an AirPlay receiver around, the player sends the video to it and back (#19)", async ({ app }) => {
   // WebKit's AirPlay surface, as WKWebView on macOS has it: a receiver is there, and the picker toggles to it and back.
   await app.addInitScript(() => {
