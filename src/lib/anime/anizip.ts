@@ -4,7 +4,7 @@ import { call } from "../platform/bridge";
 import type { Video } from "../types";
 import { keys } from "../net/queryKeys";
 import { queryClient } from "../net/queryClient";
-import { aniZipLimiter, limitedFetch } from "../net/limiter";
+import { aniZipLimiter, limitedFetch, type Priority } from "../net/limiter";
 import type { Anime, AnimeCard } from "./anilist";
 import { readAniZip } from "./responses";
 import { borrowsFrom, playedZip } from "./splitParts";
@@ -63,11 +63,11 @@ export interface AniZip {
  */
 type AniZipParams = { anilist_id: number } | { imdb_id: string } | { kitsu_id: number } | { mal_id: number };
 
-async function fetchAniZip(params: AniZipParams, signal?: AbortSignal): Promise<AniZip | null> {
+async function fetchAniZip(params: AniZipParams, signal?: AbortSignal, priority?: Priority): Promise<AniZip | null> {
   const [k, v] = Object.entries(params)[0];
   let res: Response;
   try {
-    res = await limitedFetch(aniZipLimiter, `https://api.ani.zip/mappings?${k}=${encodeURIComponent(String(v))}`, { signal });
+    res = await limitedFetch(aniZipLimiter, `https://api.ani.zip/mappings?${k}=${encodeURIComponent(String(v))}`, { signal }, { priority });
   } catch (e) {
     if (signal?.aborted) throw e;
     return fallback(k, String(v), e);
@@ -86,8 +86,11 @@ async function fallback(key: string, value: string, error: unknown): Promise<Ani
   return { mappings, episodes: {} };
 }
 
-/** The query for one ani.zip record: every lookup goes through the cache, so a show is asked for once. */
-export const aniZipLookup = (params: AniZipParams) => ({
+/**
+ * The query for one ani.zip record: every lookup goes through the cache, so a show is asked for once.
+ * `priority` places it in ani.zip's queue (lib/net/limiter.ts) when it's this lookup that asks.
+ */
+export const aniZipLookup = (params: AniZipParams, priority?: Priority) => ({
   queryKey:
     "anilist_id" in params
       ? keys.aniZip(params.anilist_id)
@@ -96,13 +99,13 @@ export const aniZipLookup = (params: AniZipParams) => ({
         : "mal_id" in params
           ? keys.aniZipMal(params.mal_id)
           : keys.aniZipKitsu(params.kitsu_id),
-  queryFn: ({ signal }: { signal?: AbortSignal }) => fetchAniZip(params, signal),
+  queryFn: ({ signal }: { signal?: AbortSignal }) => fetchAniZip(params, signal, priority),
   staleTime: 6 * 60 * 60_000,
   gcTime: 24 * 60 * 60_000,
   retry: 1,
 });
 
-export const aniZipQuery = (anilistId: number) => aniZipLookup({ anilist_id: anilistId });
+export const aniZipQuery = (anilistId: number, priority?: Priority) => aniZipLookup({ anilist_id: anilistId }, priority);
 
 /** ani.zip's record (or null) through the query cache, outside a component. */
 export const cachedAniZip = (params: AniZipParams) => queryClient.fetchQuery(aniZipLookup(params));
