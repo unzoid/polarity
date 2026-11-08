@@ -40,6 +40,12 @@ export function usePlayerKeyboard(
         if (isBack(e) && e.key !== "Escape" && dismissTop()) e.preventDefault();
         return;
       }
+      // A remote's Back closes an open panel first (Escape does through the dismiss stack before it gets
+      // here), as on TV's other screens: a panel beside YouTube's player (#434) keeps no focus trap to stop it.
+      if (isBack(e) && e.key !== "Escape" && dismissTop()) {
+        e.preventDefault();
+        return;
+      }
       const action = isBack(e) ? "escape" : actionFor(e, "player");
       if (action && latest.current.onAction(action)) {
         e.preventDefault();

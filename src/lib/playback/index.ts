@@ -23,3 +23,4 @@ export * from "./trackMemory";
 export * from "./trailers";
 export * from "./useTitlePlayback";
 export * from "./volume";
+export * from "./youtubeMenus";
