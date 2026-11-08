@@ -135,23 +135,25 @@ export function animeArt(
  * from the general title the franchise's base title (#246) is linked to (`meta`, fetched in the app's
  * metadata language, so its logo is in that language where one exists), else from `animeArt` of the
  * base title (ani.zip's, whose logos carry no language). `imdb` is that title's id: undefined while it's being found, null when there's none.
- * Until it and its title have answered there's no art and no logo (the name shows), so nothing
- * changes once drawn.
+ * Until it, its title and the base title's ani.zip (`firstLoading` while it's asked) have answered there's
+ * no art and no logo (the name shows), so nothing changes once drawn (#339).
  */
 export function franchiseArt({
   imdb,
   meta,
   metaLoading,
   first,
+  firstLoading = false,
 }: {
   imdb: string | null | undefined;
   meta: { background?: string | null; logo?: string | null } | undefined;
   metaLoading: boolean;
   /** `animeArt` of the franchise's base title, with its own ani.zip. */
   first: { background?: string; logo?: string };
+  firstLoading?: boolean;
 }): { background: string | undefined; logo: string | undefined } {
   const linked = imdb?.startsWith("tt");
-  if (imdb === undefined || (linked && metaLoading)) return { background: undefined, logo: undefined };
+  if (imdb === undefined || (linked && metaLoading) || firstLoading) return { background: undefined, logo: undefined };
   const general = linked ? meta : undefined;
   return { background: general?.background ?? first.background, logo: general?.logo ?? first.logo };
 }

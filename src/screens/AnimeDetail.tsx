@@ -19,14 +19,14 @@ import {
   continuePart,
   distinctLabels,
   type AnimeCard as Card,
-  baseTitle,
   franchiseArt,
   isSeason,
   useAnime,
   useAnimeSeasons,
   useAnimeTitle,
   useAniZip,
-  useLinkedImdb,
+  type HeroImdb,
+  pageArtSource,
   useLinkedImdbs,
 } from "../lib/anime";
 import { useMeta, useProgressOf } from "../lib/net";
@@ -71,9 +71,25 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const phone = useFormFactor().form === "phone";
 
   // The franchise's base title (#246): the series most of its TV entries play from, else its earliest TV
-  // entry, not the chain's first entry (a prequel film would cover the whole series with its art).
-  const linkedOf = useLinkedImdbs(found ? found.map((s) => s.card.id) : []);
-  const base = found && baseTitle(found.map((s) => s.card), linkedOf);
+  // entry, not the chain's first entry (a prequel film would cover the whole series with its art). The page's
+  // art comes from its linked title, else the one its hero plays from, worked out once everything has
+  // answered, so it's drawn once and the same wherever the page was opened from (#339).
+  const linkedOf = useLinkedImdbs(found ? found.map((s) => s.card.id) : shown ? [shown.id] : []);
+  const [heroImdb, setHeroImdb] = useState<HeroImdb>();
+  const separateFirst = separate && opened
+    ? !opened.relations.edges.some((e) => e.relationType === "PREQUEL" && e.node.type !== "MANGA" && isSeason(e.node))
+    : undefined;
+  const source = pageArtSource({
+    separate,
+    seasonsLoading,
+    found: found?.map((s) => s.card),
+    shown,
+    active: activeId,
+    separateFirst,
+    linked: linkedOf,
+    hero: heroImdb,
+  });
+  const { base, first, firstEntry, known: firstKnown } = source;
 
   // A grouped page's top is the whole franchise's (#327): the base title's name, story and facts, the parts'
   // summary, and Play carrying on wherever you left off, the same on every tab.
@@ -98,30 +114,17 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   // covers the whole franchise and its trailer is the base title's, so only on that entry.
   const root = useRef<HTMLDivElement>(null);
   const onTop = usePageOnTop(root);
-  const [imdb, setImdb] = useState<string | null>();
   const [scrolledAway, setScrolledAway] = useState(false);
   const bigTrailer = !!useTrailerOpen();
-  // An entry on its own (separate shows) is the base when no season comes before it.
-  const firstKnown = separate ? !!opened : !seasonsLoading && (!found || !!base);
-  const firstEntry = separate
-    ? !!opened && !opened.relations.edges.some((e) => e.relationType === "PREQUEL" && e.node.type !== "MANGA" && isSeason(e.node))
-    : firstKnown && (!base || base.card.id === activeId);
-  const onImdb = useCallback((id: string | null | undefined) => setImdb(id), []);
+  // What the hero finds is kept with the entry it's for, so an answer for the entry it showed before doesn't count.
+  const heroId = source.hero;
+  const onImdb = useCallback((id: string | null | undefined) => setHeroImdb(heroId === undefined ? undefined : { of: heroId, id }), [heroId]);
+  const imdb = heroId !== undefined && heroImdb?.of === heroId ? heroImdb.id : undefined;
 
   // One background and logo for every season tab (#27): the base title's linked series, else its ani.zip art.
   // A later entry on its own page (separate shows) has its own ani.zip art.
-  const first = found ? base?.card : shown;
-  const { data: firstZip } = useAniZip(first?.id ?? 0, !!first);
-  const firstLinked = useLinkedImdb(first?.id ?? 0);
-  const anyMovie = first?.format === "MOVIE" || shown?.format === "MOVIE";
-  // Another entry when the base has no known link: the title this one plays from, unless a movie is involved (its own title).
-  const resolved = !firstKnown
-    ? undefined
-    : firstEntry
-      ? (base?.imdb ?? imdb)
-      : separate
-        ? null
-        : (base?.imdb ?? firstLinked ?? (anyMovie ? null : imdb));
+  const { data: firstZip, isPending: firstZipPending } = useAniZip(first?.id ?? 0, !!first);
+  const resolved = source.imdb;
   // Kept once found, so switching tabs (each finds its own id again) never blanks the art.
   const kept = useRef<{ first: number; imdb: string | null }>(undefined);
   if (first && resolved !== undefined && kept.current?.first !== first.id) kept.current = { first: first.id, imdb: resolved };
@@ -138,7 +141,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   if (isError && !shown) return <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>;
   if (!shown) return <Skeleton className="detail-loading" />;
 
-  const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip) });
+  const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };
   const backdrop = (
     <div className="detail-bg" aria-hidden>
