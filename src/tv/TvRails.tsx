@@ -34,6 +34,7 @@ export function TvCard({
   localOnly,
   onFocusChange,
   staged,
+  stagePending = false,
   logoPending = false,
 }: {
   item: MetaPreview;
@@ -54,6 +55,8 @@ export function TvCard({
   onFocusChange?: (focused: boolean) => void;
   /** What the stage shows for this card where it isn't the card's own art (the Anime tab's featured row, #325). */
   staged?: MetaPreview;
+  /** The stage's art and logo aren't known yet: it shows neither, nor the name for a moment (#343, #431). */
+  stagePending?: boolean;
   /** The card's logo isn't known yet: the name waits a moment for it (#343). */
   logoPending?: boolean;
 }) {
@@ -69,9 +72,9 @@ export function TvCard({
   }, INTENT_MS);
   // Show on the stage until something is focused, if this is the page's first title.
   useEffect(() => {
-    if (el.current) seedStage({ item: onStage, kicker }, el.current);
+    if (el.current) seedStage({ item: onStage, kicker, pending: stagePending }, el.current);
     // Again once a placeholder title (a playlist entry still loading) fills in, or better art arrives.
-  }, [item.id, onStage.name, onStage.background, onStage.logo]);
+  }, [item.id, onStage.name, onStage.background, onStage.logo, stagePending]);
   // Art that won't load falls back to the title, not an empty frame; better art arriving gets a fresh try.
   const preferred = shape === "poster" ? (item.poster ?? item.background) : (item.background ?? item.poster);
   const { shown: art, onError: onArtError } = useCardArt(preferred);
@@ -88,7 +91,7 @@ export function TvCard({
       aria-label={item.name}
       onClick={open}
       onFocus={() => {
-        stage({ item: onStage, kicker });
+        stage({ item: onStage, kicker, pending: stagePending });
         onFocusChange?.(true);
         intent.onFocus();
       }}
