@@ -117,7 +117,7 @@ function useLinkedChoices(target: Target): Choices {
       id: "play",
       label: a.entryInProgress ? "Resume" : "Play",
       icon: <Play />,
-      run: () => navigate({ name: "player", type: entry.type, metaId: entry.metaId, videoId: entry.videoId, stream: entry.stream }),
+      run: () => navigate({ name: "player", type: entry.type, metaId: entry.metaId, videoId: entry.videoId }),
     });
   play.push(goTo(target, navigate, a.isSeries));
   if (a.trailerYtId || item.id.startsWith("tt"))

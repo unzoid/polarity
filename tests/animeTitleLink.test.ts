@@ -137,3 +137,20 @@ describe("lookupTitles", () => {
     expect(t).toEqual(["Stardust Wanderers Season 2", "Hoshikuzu Ryokou-dan 2nd Season", "Stardust Wanderers", "Hoshikuzu Ryokou-dan", "SW2", "星屑旅行団 第2期"]);
   });
 });
+
+describe("several series of one name (#394)", () => {
+  test("the animated one is linked, not a live-action series of the same name listed first", async () => {
+    const live = { ...series("tt0000911", "Stardust Wanderers"), genres: ["Adventure", "Drama"] };
+    const animated = { ...series("tt0000912", "Stardust Wanderers"), genres: ["Animation", "Adventure"] };
+    // Neither has dated episodes yet, so only the name and the year speak for them.
+    const { lookup } = catalog({ "Stardust Wanderers": [live, animated] });
+    expect(await animeImdb(show, zipWithEpisodes(), lookup, none)).toEqual({ id: "tt0000912", by: "title" });
+  });
+
+  test("with no genres to go by, the nearer year comes first", async () => {
+    const later = series("tt0000913", "Stardust Wanderers", `${year + 1}-`);
+    const same = series("tt0000914", "Stardust Wanderers");
+    const { lookup } = catalog({ "Stardust Wanderers": [later, same] });
+    expect(await animeImdb(show, zipWithEpisodes(), lookup, none)).toEqual({ id: "tt0000914", by: "title" });
+  });
+});

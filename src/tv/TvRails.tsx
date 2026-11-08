@@ -233,7 +233,7 @@ function TvContinueCard({ p }: { p: Progress }) {
       kicker={continueKicker(p, entry)}
       chip={continueChip(p, entry)}
       entry={p}
-      onOpen={() => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId, stream: p.stream })}
+      onOpen={() => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId })}
     />
   );
 }

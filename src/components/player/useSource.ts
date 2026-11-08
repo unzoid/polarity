@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { keys, useMeta, useProgress, useStreams } from "../../lib/net";
@@ -11,6 +11,8 @@ import {
   noSources,
   recordFail,
   recordTry,
+  savedDownload,
+  savedSource,
   torrentBlocked,
   torrentLimits,
   useMatchContext,
@@ -22,6 +24,7 @@ import { runtimeSeconds } from "../../lib/format";
 import { batterySaver, on, onMobileData } from "../../lib/platform";
 import { getPrefs, setPrefs } from "../../lib/settings";
 import type { ContentType, Playable, Progress, Stream } from "../../lib/types";
+import { downloadedStream, useDownloads } from "../../lib/library";
 import { sameFile, type StreamHint } from "../../lib/party";
 import { errorMessage } from "../../lib/errors";
 import type { LogStep } from "./useStartLog";
@@ -49,7 +52,9 @@ let torrentSteps = 0;
  * Decides what to play, with no user decision required:
  *   1. the stream explicitly picked in the source sheet, else
  *   2. in a watch party, the file the room is on (from your own add-ons), else
- *   3. the stream this video was last played with (resume = same file), else
+ *   3. the stream this video was last played with (resume = same file), only when it was saved for this
+ *      title and episode and the add-ons still offer it for this episode, or it's the episode's download
+ *      (#394: never a source the Sources list couldn't offer), else
  *   4. the top-ranked streams, in order.
  * The decision is frozen once made — saving progress mid-playback must never
  * re-trigger source selection. `next()` falls through after a playback error.
@@ -79,7 +84,14 @@ export function useSource(
     if (saved === undefined && progress.data) setSaved(progress.data.find((p) => p.videoId === videoId) ?? null);
   }, [progress.data, saved, videoId]);
 
-  const needsRanking = !picked && (!!prefer || (saved !== undefined && !saved?.stream));
+  // A finished download the episode was last played from goes on without asking; any other saved source
+  // only once the add-ons' answer has it (savedSource).
+  const downloads = useDownloads();
+  const resumeLocal = useMemo(
+    () => savedDownload(saved, { metaId, videoId }, downloadedStream(downloads.data, videoId)),
+    [saved, metaId, videoId, downloads.data],
+  );
+  const needsRanking = !picked && !resumeLocal && (!!prefer || saved !== undefined);
   const streams = useStreams(type, needsRanking ? videoId : undefined);
   const { settings } = useTitleSettings(type, videoId);
   // Best Match for this device; the runtime gives the files' bitrates.
@@ -104,10 +116,10 @@ export function useSource(
       return setCandidates([{ stream: picked }]);
     }
     if (!prefer) {
-      if (saved === undefined) return;
-      if (saved?.stream) {
-        log("Resuming with the source this was last played from", "info", "sources");
-        return setCandidates([{ stream: saved.stream }]);
+      if (saved === undefined || downloads.isPending) return;
+      if (resumeLocal) {
+        log("Resuming with this episode's download, the source it was last played from", "info", "sources");
+        return setCandidates([{ stream: resumeLocal }]);
       }
     }
     if (answer) {
@@ -137,8 +149,19 @@ export function useSource(
       const others = all.filter((r) => r.otherEpisode).length;
       if (others) log(`${others} of them ${others === 1 ? "is a file" : "are files"} of another episode, left for last and not tried`, "info", "sources");
       if (same) log("Using the watch party's file", "info", "sources");
+      // The source this episode was last played from, while the add-ons still offer it for this episode.
+      const resume = prefer ? undefined : savedSource(saved, { metaId, videoId }, all);
+      if (saved?.stream && !prefer)
+        log(
+          resume
+            ? `Resuming with the source this was last played from (${videoId})`
+            : `The source this was last played from isn't among the sources for ${videoId}: choosing again`,
+          resume ? "info" : "warn",
+          "sources",
+        );
+      const first = same ?? resume;
       setCandidates(
-        (same ? [same, ...ranked.filter((r) => r !== same)] : ranked)
+        (first ? [first, ...ranked.filter((r) => r !== first)] : ranked)
           .slice(0, 5)
           .map((s) => ({ stream: s.stream, label: s.label, addon: s.addon, group: s.quality.source })),
       );
@@ -146,7 +169,22 @@ export function useSource(
       log(`Couldn't ask the add-ons: ${errorMessage(streams.error)}`, "fail", "sources");
       setCandidates([]);
     }
-  }, [candidates, picked, prefer, saved, answer, streams.isError, streams.isFetching, streams.error, settings, metaId, videoId, log]);
+  }, [
+    candidates,
+    picked,
+    prefer,
+    saved,
+    resumeLocal,
+    downloads.isPending,
+    answer,
+    streams.isError,
+    streams.isFetching,
+    streams.error,
+    settings,
+    metaId,
+    videoId,
+    log,
+  ]);
 
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SourceState>({ status: "searching" });

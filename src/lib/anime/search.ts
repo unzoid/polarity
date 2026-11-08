@@ -258,7 +258,13 @@ export async function findImdbId(
     });
     if (!results) continue;
     answered = true;
-    const named = results[type].filter((m) => m.id.startsWith("tt") && names.has(norm(m.name)));
+    // Several titles of one name (an anime and a live-action series of it): the animated one first, then the
+    // nearest year (#394).
+    const named = results[type]
+      .filter((m) => m.id.startsWith("tt") && names.has(norm(m.name)))
+      .map((m, i) => ({ m, i, rank: sameNameRank(m, year) }))
+      .sort((x, y) => x.rank - y.rank || x.i - y.i)
+      .map(({ m }) => m);
     for (const m of named) {
       if (tried.has(m.id)) continue;
       tried.add(m.id);
@@ -273,6 +279,14 @@ export async function findImdbId(
   }
   if (!answered && failed !== undefined) throw failed;
   return null;
+}
+
+/** Orders same-named results (#394): animated ones (genre Animation or Anime) before the rest, each by how far its year is off. */
+function sameNameRank(m: { genres?: string[]; releaseInfo?: string }, year: number | undefined): number {
+  const animated = m.genres?.some((g) => /^(animation|anime)$/i.test(g)) ?? false;
+  const y = Number(m.releaseInfo?.match(/\d{4}/)?.[0]);
+  const off = year && y ? Math.min(Math.abs(y - year), 99) : 50;
+  return (animated ? 0 : 100) + off;
 }
 
 /** AniList formats that are the show itself, for a Cinemeta series or movie. */
