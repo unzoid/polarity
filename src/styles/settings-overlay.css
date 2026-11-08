@@ -101,6 +101,28 @@
   }
 }
 
+/* The page set into the window: the sidebar's material runs all the way round it, and its corners follow
+   the window's at the same distance. Not on a phone, where the sheet shows one or the other. */
+:root:not([data-form="phone"]) .t3s {
+  --t3-inset: 8px;
+  border-radius: var(--r-panel);
+  background: rgb(17 17 17 / 0.82);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+:root:not([data-form="phone"]) .t3s-sidebar {
+  border-right: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root:not([data-form="phone"]) .t3s-main {
+  margin: var(--t3-inset) var(--t3-inset) var(--t3-inset) 0;
+  border: 1px solid var(--t3-border);
+  border-radius: calc(var(--r-panel) - var(--t3-inset));
+  overflow: hidden;
+}
+
 /* --- Sidebar ----------------------------------------------------------- */
 .t3s-sidebar {
   display: flex;

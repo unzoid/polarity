@@ -214,6 +214,18 @@
   display: flex;
   gap: 0.5rem;
 }
+/* With a mouse they wait for it: the dots already say there's more, so at rest the card shows only the
+   title and its actions. Keyboard focus brings them back; touch screens keep them. */
+@media (hover: hover) and (pointer: fine) {
+  .hero-steps {
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-std);
+  }
+  .hero-card:hover .hero-steps,
+  .hero-steps:focus-within {
+    opacity: 1;
+  }
+}
 .hero-pager {
   position: absolute;
   z-index: 2;

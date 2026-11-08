@@ -2522,8 +2522,92 @@
 .tv-downloads .downloads {
   padding: 0;
 }
+/* The desktop page sizes its controls in px; TV sizes by its rem (a larger root), so here the boxes grow
+   with the type, the way every other TV screen's do. Otherwise the labels outgrow their pills. */
+.tv-downloads .downloads-toolbar {
+  gap: 0.75rem 1rem;
+  margin-bottom: 2rem;
+}
+/* The filter and the sort at the buttons' height, their labels at the buttons' size. */
+.tv-downloads .downloads-toolbar .segmented {
+  height: 2.6rem;
+  padding: 0.2rem;
+}
+.tv-downloads .downloads-toolbar .segmented-item {
+  height: 100%;
+  padding: 0 1.1rem;
+  font-size: 1rem;
+}
+.tv-downloads .downloads-toolbar .select-trigger {
+  height: 2.6rem;
+  padding: 0 1rem 0 1.3rem;
+  font-size: 1rem;
+}
+.tv-downloads .downloads-toolbar .btn,
+.tv-downloads .downloads-selectbar .btn {
+  height: 2.6rem;
+  padding: 0 1.3rem;
+  gap: 0.5rem;
+  font-size: 1rem;
+}
+.tv-downloads .btn.downloads-bulk-sm {
+  height: 2.25rem;
+  padding: 0 1rem;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+.tv-downloads .btn svg {
+  width: 1em;
+  height: 1em;
+}
+.tv-downloads .downloads-search.search-field-pill {
+  width: 18rem;
+  height: 2.6rem;
+}
+.tv-downloads .downloads-panel {
+  padding: 0.25rem 1.5rem;
+  border-radius: calc(var(--tv-radius) * 1.6);
+}
+.tv-downloads .download-title-head {
+  padding: 0.75rem 0;
+}
+.tv-downloads .download-title-poster {
+  width: 3.5rem;
+}
+.tv-downloads .download-title-actions {
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+}
+.tv-downloads .downloads .download-row-still {
+  width: 9rem;
+}
+.tv-downloads .downloads .download-row-inner {
+  padding: 0.75rem 0;
+}
+.tv-downloads .download-row-action {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.tv-downloads .download-row-action svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.tv-downloads .download-season-toggle {
+  min-height: 2.6rem;
+}
+/* Selecting: the bar floats at the bottom, sized for the couch. (It's fixed to the window: it must not be
+   given a top as well, or it stretches the whole height into a tall oval.) */
+.tv-downloads .downloads[data-selecting] {
+  padding-bottom: 8rem;
+}
 .tv-downloads .downloads-selectbar {
-  top: 0;
+  bottom: 2.5rem;
+  gap: 1rem;
+  width: min(44rem, calc(100vw - 2 * var(--tv-gutter)));
+  padding: 0.5rem;
+}
+.tv-downloads .downloads-selectbar-count {
+  font-size: 1rem;
 }
 .tv-card-more .tv-card-fallback {
   font-weight: 650;
