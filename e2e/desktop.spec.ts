@@ -981,9 +981,8 @@ test("an anime season tab downloads its released episodes; a film's tab shows th
 
 test("the season toolbar stays where it is whichever tab is chosen, and nothing in it is cut off at the least window width (#426)", async ({ app }) => {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    const media = sagaMedia(variables?.id ?? 0);
-    await route.fulfill({ json: { data: media ? { Media: media } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), sagaMedia);
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const zip = sagaZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
