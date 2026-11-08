@@ -326,9 +326,9 @@ export function Player({
   });
 
   // --- Chrome visibility --------------------------------------------------
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter);
+  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused);
   const ready = source.state.status === "ready" && !error;
-  const chromeVisible = chrome.visible || paused || !!options || nativeMenu || !ready;
+  const chromeVisible = chrome.visible || !!options || nativeMenu || !ready;
   // Whether the controls showed when the press on the picture began: the
   // player's own pointerdown shows them before the click, so a tap that should
   // bring them back would otherwise hide them again at once.
