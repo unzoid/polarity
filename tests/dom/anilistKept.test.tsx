@@ -3,6 +3,7 @@ import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { animeQuery, fetchAnime, seasonsQuery, useAiringSchedule, type Anime } from "../../src/lib/anime/anilist";
 import { readLinked } from "../../src/lib/anime/responses";
+import { anilistLimiter } from "../../src/lib/net/limiter";
 import { render } from "./render";
 
 // #430: AniList's answers are kept on the device, each kind for its own age. An invented franchise of four
@@ -62,9 +63,13 @@ async function answer(_url: string, init?: RequestInit) {
 // Only while this file's tests run: the suite shares one process.
 let clock: Mock<typeof Date.now>;
 let fetches: Mock<typeof fetch>;
+let turns: Mock<typeof anilistLimiter.take>;
 beforeAll(() => {
   clock = spyOn(Date, "now").mockImplementation(() => now);
   fetches = spyOn(globalThis, "fetch").mockImplementation(answer as unknown as typeof fetch);
+  // Every request goes at once. AniList's budget is shared with the suite's other files, and with this
+  // file's clock days back it would never refill: what they spent would hold these requests for good.
+  turns = spyOn(anilistLimiter, "take").mockImplementation(() => Promise.resolve());
 });
 
 afterEach(() => {
@@ -152,4 +157,5 @@ test("the airing schedule is kept an hour", async () => {
 afterAll(() => {
   clock.mockRestore();
   fetches.mockRestore();
+  turns.mockRestore();
 });
