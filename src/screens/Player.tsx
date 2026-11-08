@@ -110,8 +110,10 @@ import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
 import { LinkForm, PartyBadge, PartyHold, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
-import { Pin, WatchParty } from "../components/icons";
-import { Button, IconButton } from "../components/ui/Button";
+import { More, Pin, WatchParty } from "../components/icons";
+import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
+import { MenuCheckItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
+import { useBarFit } from "../components/player/useBarFit";
 import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
 import { PlayerStatus } from "../components/player/PlayerStatus";
@@ -173,7 +175,7 @@ export function Player({
   const art = useLoadingArt(meta, metaPending && !isLinkId(metaId) && !local, videoId);
   // Its languages are Settings → Anime's for an anime (#235).
   const { settings, anime, original } = useTitleSettings(type, videoId);
-  const { touch } = useFormFactor();
+  const { touch, form, compact } = useFormFactor();
   // Engine: embedded mpv when installed (plays every codec, AC3/DTS audio, every
   // subtitle format), else the WebView's own <video>.
   const engineQuery = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
@@ -334,7 +336,9 @@ export function Player({
   const frameSteps = useStepping(paused, buffering);
   const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping);
   const ready = source.state.status === "ready" && !error;
-  const chromeVisible = chrome.visible || !!options || nativeMenu || !ready;
+  // The top bar's "More" menu (#396) keeps the controls up while it's open.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready;
   // Whether the controls showed when the press on the picture began: the
   // player's own pointerdown shows them before the click, so a tap that should
   // bring them back would otherwise hide them again at once.
@@ -1072,6 +1076,26 @@ export function Player({
 
   const VolumeIcon = muted || volume === 0 ? VolumeMuted : Volume;
 
+  // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
+  const topBar = useRef<HTMLDivElement>(null);
+  const actionRow = useRef<HTMLDivElement>(null);
+  const showPin = canPin && !fullscreen;
+  const showFill = !tv && isDesktop;
+  const barFit = useBarFit(
+    topBar,
+    actionRow,
+    Number(showPin) + Number(showFill),
+    !tv && form !== "phone" && !compact,
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local].join("|"),
+  );
+  const more = barFit.more;
+  // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
+  const [volumeOpen, setVolumeOpen] = useState(false);
+  const sliderFolded = !barFit.slider && !systemVolume;
+  useEffect(() => {
+    if (!chromeVisible || !sliderFolded) setVolumeOpen(false);
+  }, [chromeVisible, sliderFolded]);
+
   return (
     <div
       className="player"
@@ -1215,75 +1239,105 @@ export function Player({
 
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
       {/* Pinned (#266), nothing moves the window. */}
-      <div className="player-top" data-tauri-drag-region={pinned ? undefined : true}>
+      <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true}>
         <IconButton variant="player" onClick={() => void exit()} label="Back" title="Back (Esc)">
           <ArrowLeft size={26} />
         </IconButton>
+        {/* Between Back and the controls: centred while it fits, off-centre when it would meet them, then cut short (#396). */}
         <div className="player-heading" data-tauri-drag-region={pinned ? undefined : true}>
           <span className="player-heading-title">{heading}</span>
           {current && <span className="player-heading-show">{title}</span>}
         </div>
-        <div className="player-top-actions">
-          {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
-          <div className="player-volume">
-            <IconButton variant="player" onClick={() => setMuted((m) => !m)} label={muted ? "Unmute" : "Mute"} title={withShortcut("Mute", "mute")}>
-              <VolumeIcon size={22} />
-            </IconButton>
-            {!systemVolume && (
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={muted ? 0 : volume}
-                onChange={(e) => {
-                  setVolume(Number(e.target.value));
-                  setMuted(false);
-                }}
-                aria-label="Volume"
-                style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
-              />
+        <div className="player-top-end">
+          <div className="player-top-actions">
+            {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
+            <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
+              <IconButton
+                variant="player"
+                onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
+                label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
+                aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
+                title={withShortcut("Mute", "mute")}
+              >
+                <VolumeIcon size={22} />
+              </IconButton>
+              {!systemVolume && (
+                <span className="player-volume-slider">
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={muted ? 0 : volume}
+                    onChange={(e) => {
+                      setVolume(Number(e.target.value));
+                      setMuted(false);
+                    }}
+                    aria-label="Volume"
+                    style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
+                  />
+                </span>
+              )}
+            </div>
+            {airplay.available && (
+              <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
+                <Cast size={22} />
+              </IconButton>
+            )}
+            {showPin && !more && (
+              <IconButton
+                variant="player"
+                onClick={togglePin}
+                label="Pin window"
+                aria-pressed={pinned}
+                title={withShortcut(pinned ? "Unpin window" : "Pin window on top", "pinWindow")}
+              >
+                <Pin size={22} />
+              </IconButton>
+            )}
+            {showFill && !more && (
+              <IconButton
+                variant="player"
+                onClick={toggleFill}
+                label="Fill window"
+                aria-pressed={fill}
+                title={withShortcut(fill ? "Fit to window" : "Fill window", "fill")}
+              >
+                <FillWindow size={22} />
+              </IconButton>
+            )}
+            {more && (
+              <MenuRoot modal={false} onOpenChange={setMoreOpen}>
+                <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More">
+                  <More size={22} />
+                </MenuTrigger>
+                <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="More">
+                  {showPin && (
+                    <MenuCheckItem checked={pinned} onCheckedChange={togglePin} meta={shortcutText("pinWindow")}>
+                      Pin window on top
+                    </MenuCheckItem>
+                  )}
+                  {showFill && (
+                    <MenuCheckItem checked={fill} onCheckedChange={toggleFill} meta={shortcutText("fill")}>
+                      Fill window
+                    </MenuCheckItem>
+                  )}
+                </MenuPopup>
+              </MenuRoot>
+            )}
+            {!tv && isDesktop && (
+              <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
+                {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
+              </IconButton>
+            )}
+            {!tv && !isDesktop && (
+              <IconButton variant="player" onClick={toggleFill} label={fill ? "Fit to screen" : "Fill screen"} aria-pressed={fill}>
+                {fill ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
+              </IconButton>
             )}
           </div>
-          {airplay.available && (
-            <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
-              <Cast size={22} />
-            </IconButton>
-          )}
-          {canPin && !fullscreen && (
-            <IconButton
-              variant="player"
-              onClick={togglePin}
-              label="Pin window"
-              aria-pressed={pinned}
-              title={withShortcut(pinned ? "Unpin window" : "Pin window on top", "pinWindow")}
-            >
-              <Pin size={22} />
-            </IconButton>
-          )}
-          {!tv && isDesktop && (
-            <IconButton
-              variant="player"
-              onClick={toggleFill}
-              label="Fill window"
-              aria-pressed={fill}
-              title={withShortcut(fill ? "Fit to window" : "Fill window", "fill")}
-            >
-              <FillWindow size={22} />
-            </IconButton>
-          )}
-          {!tv && isDesktop && (
-            <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
-              {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
-            </IconButton>
-          )}
-          {!tv && !isDesktop && (
-            <IconButton variant="player" onClick={toggleFill} label={fill ? "Fit to screen" : "Fill screen"} aria-pressed={fill}>
-              {fill ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
-            </IconButton>
-          )}
+          {!fullscreen && !tv && <WindowControls pinned={pinned} />}
         </div>
-        {!fullscreen && !tv && <WindowControls pinned={pinned} />}
       </div>
 
       {/* Centre transport, Netflix-style: bare glyphs, no button chrome. */}
@@ -1330,7 +1384,7 @@ export function Player({
           <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} onSeek={seekTo} />
           <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
-        <div className="player-actions">
+        <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (
             <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
           )}

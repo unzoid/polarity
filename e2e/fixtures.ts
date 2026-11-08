@@ -97,3 +97,33 @@ export const labelShowsWhole = (label: Locator, text: string) =>
     const top = box.top + clip.clientTop;
     return glyphs.top >= top - 0.5 && glyphs.bottom <= top + clip.clientHeight + 0.5;
   }, text);
+
+/**
+ * Every pair of things in the player's top or bottom bar whose boxes meet (#396): the controls, and the title and show
+ * lines as drawn (cut short to their box). Hidden controls (a folded slider, words of an icon-only action) don't count;
+ * neither does a control sticking out of the window. Empty when nothing overlaps.
+ */
+export const barOverlaps = (page: Page) =>
+  page.locator(".player").evaluate((player) => {
+    const shown = (el: Element) => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return s.visibility !== "hidden" && s.opacity !== "0" && r.width > 0 && r.height > 0;
+    };
+    const problems: string[] = [];
+    for (const bar of player.querySelectorAll(".player-top, .player-bottom")) {
+      const parts = [...bar.querySelectorAll("button, input, .player-heading > *")]
+        .filter((el) => shown(el) && !el.closest(".player-volume[data-folded] .player-volume-slider"))
+        .map((el) => ({ name: el.getAttribute("aria-label") ?? el.textContent?.slice(0, 24) ?? el.tagName, box: el.getBoundingClientRect() }));
+      for (const { name, box } of parts) {
+        if (box.left < -0.5 || box.right > innerWidth + 0.5) problems.push(`${name} leaves the window`);
+      }
+      for (let i = 0; i < parts.length; i++)
+        for (let j = i + 1; j < parts.length; j++) {
+          const [a, b] = [parts[i].box, parts[j].box];
+          if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5)
+            problems.push(`${parts[i].name} overlaps ${parts[j].name}`);
+        }
+    }
+    return problems;
+  });

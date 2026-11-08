@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { barOverlaps, card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 
 // Phone width (Pixel 7: 412×915, touch). The same components as desktop in the phone layout (docs/ARCHITECTURE.md §4).
 
@@ -202,11 +202,14 @@ test("the player's controls keep clear of the notch and the home indicator, upri
   await insets(app, upright);
   await openPlayer(app);
   await controlsClearOf(app, upright);
+  // Nor do they overlap each other or the title (#396).
+  expect(await barOverlaps(app)).toEqual([]);
 
   await app.setViewportSize({ width: 915, height: 412 });
   const sideways = { top: 0, right: 59, bottom: 21, left: 59 };
   await insets(app, sideways);
   await controlsClearOf(app, sideways);
+  expect(await barOverlaps(app)).toEqual([]);
 });
 
 test("the trailer fits the screen at every phone width, upright and sideways, its controls inside the insets (#289)", async ({ app }) => {

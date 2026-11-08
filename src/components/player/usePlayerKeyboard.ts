@@ -24,6 +24,8 @@ export function usePlayerKeyboard(enabled: boolean, onAction: (action: Action | 
       if (e.target instanceof HTMLInputElement) return;
       // A dropdown has the keyboard while it's focused or open (arrows, Space, Esc are its own).
       if ((e.target as HTMLElement).closest?.("[aria-haspopup=listbox], [role=listbox], .srcf-popover")) return;
+      // So does an open menu (the top bar's "More", #396).
+      if ((e.target as HTMLElement).closest?.("[role=menu]")) return;
       // A watch party's link question (PartyHost) is over the player and holds focus: its keys are its own.
       if ((e.target as HTMLElement).closest?.(".party-link-confirm")) return;
       // A source's info panel (#229) and a TV source row's menu hold focus over the player the same way.
