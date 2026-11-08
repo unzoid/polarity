@@ -182,11 +182,11 @@ export function askedLine(asked: string[], ids: string[]) {
 /**
  * Why the add-ons' answer leaves nothing to try. No add-on asked (or an older backend that doesn't say): install
  * one. Asked but none answered, asked and nothing found, or everything found left out by the source filters, each
- * says so; the filters' links to Settings → Sources.
+ * says so; the filters' links to Settings → Sources, no add-on to Settings → Add-ons (#375).
  */
-export function noSources(r: { asked?: number; answered?: number; found: number; filtered: number }): { reason: string; settings?: "sources" } {
+export function noSources(r: { asked?: number; answered?: number; found: number; filtered: number }): { reason: string; settings?: "sources" | "addons" } {
   if (r.found && r.filtered >= r.found) return { reason: "Your source filters left out every source.", settings: "sources" };
-  if (!r.asked) return { reason: NO_ADDONS };
+  if (!r.asked) return { reason: NO_ADDONS, settings: "addons" };
   if (!r.answered) return { reason: "None of your add-ons answered. Try again in a moment." };
   return { reason: "Your add-ons found no sources for this." };
 }
