@@ -1435,13 +1435,14 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .main {
   }
 }
 
-/* --- Skip Intro / Recap (Netflix pattern). Bottom-right above the timeline;
-       rises a little higher when the controls are up so it never overlaps them.
-       Shown when the segment starts, then only with the chrome (#17). */
+/* --- Skip Intro / Recap (Netflix pattern). Bottom-right, above the timeline and
+       action row whether the controls are up or not, so it never moves out from
+       under the pointer as they appear (#331). Shown when the segment starts,
+       then only with the chrome (#17). */
 .skip-button {
   position: absolute;
   right: max(2.5rem, var(--safe-right));
-  bottom: calc(3rem + var(--safe-bottom));
+  bottom: calc(10.5rem + var(--safe-bottom));
   z-index: 4;
   display: inline-flex;
   align-items: center;
@@ -1456,17 +1457,11 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .main {
   /* Same dark as the Up Next card, no blur over the video. */
   background: var(--surface-float);
   box-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
-  /* The lift moves in step with the chrome's fade (same duration), so the
-     button never trails behind the controls it's making room for. */
   transition:
     opacity 200ms var(--ease-out),
     transform 200ms var(--ease-out),
-    translate var(--dur-base) var(--ease-out),
     background-color var(--dur-fast) var(--ease-std),
     color var(--dur-fast) var(--ease-std);
-}
-.skip-button[data-chrome="true"] {
-  translate: 0 -7.5rem; /* clear the timeline and action row */
 }
 .skip-button[data-visible="false"] {
   opacity: 0;
@@ -1475,11 +1470,7 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .main {
 }
 .skip-button:active {
   transform: scale(0.97);
-  transition-duration: 200ms, var(--dur-press), var(--dur-base), var(--dur-fast), var(--dur-fast);
-}
-/* Chrome shown from the keyboard appears instantly; the button jumps with it. */
-.player[data-instant="true"] .skip-button {
-  transition-property: opacity, transform, background-color, color;
+  transition-duration: 200ms, var(--dur-press), var(--dur-fast), var(--dur-fast);
 }
 @media (hover: hover) and (pointer: fine) {
   .skip-button:hover {

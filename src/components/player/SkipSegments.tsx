@@ -242,7 +242,6 @@ export function SkipButton({
       className="skip-button"
       data-visible={visible}
       data-segment={!!active}
-      data-chrome={chromeVisible}
       tabIndex={visible ? 0 : -1}
       inert={!visible}
       onClick={(e) => {
