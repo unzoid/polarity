@@ -9,6 +9,8 @@ import { osName } from "../../lib/platform";
 import { appVersion } from "../../lib/updater";
 import { failedStage, formatReport, STAGE_LABEL, type StartStage, type StartStep } from "../../lib/playback";
 import type { useSource } from "./useSource";
+import { watchLog } from "../../lib/playback/watchLog";
+import { watchLogText } from "./useWatchLog";
 
 /** How far the logo has filled in for each loading stage (0–100). */
 const FILL = { searching: 34, resolving: 66, starting: 92, done: 100 } as const;
@@ -150,6 +152,7 @@ export function PlayerStatus({
               </Button>
             )}
             <CopyDetails steps={steps} backend={backend} outcome={message} stage={stageAt} />
+            {watchLog && <CopyWatchLog backend={backend} />}
           </div>
         )}
       </div>
@@ -195,6 +198,25 @@ function CopyDetails({ steps, backend, outcome, stage }: { steps: StartStep[]; b
   return (
     <Button variant="glass" onClick={() => void copy()}>
       {copied === "yes" ? "Copied" : copied === "no" ? "Couldn't copy" : "Copy Details"}
+    </Button>
+  );
+}
+
+/** The watch log (#424), in builds that keep one: what the player did while the video played. */
+function CopyWatchLog({ backend }: { backend: string }) {
+  const [copied, setCopied] = useState<"yes" | "no" | null>(null);
+  const copy = () => {
+    void watchLogText(backend)
+      .then((text) => navigator.clipboard.writeText(text))
+      .then(
+        () => setCopied("yes"),
+        () => setCopied("no"),
+      );
+    window.setTimeout(() => setCopied(null), 2500);
+  };
+  return (
+    <Button variant="glass" onClick={copy}>
+      {copied === "yes" ? "Copied" : copied === "no" ? "Couldn't copy" : "Copy Watch Log"}
     </Button>
   );
 }
