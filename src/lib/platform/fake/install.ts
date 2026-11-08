@@ -30,6 +30,7 @@ const params = new URLSearchParams(location.search);
 params.delete("worst"); // fixtures.ts's worst-case switch, not a setting
 params.delete("films"); // and its README-screenshot switch
 params.delete("downloads"); // and #15's many-downloads switch
+params.delete("logos"); // and #437's every-title-has-a-logo switch
 const secretsPlace = params.get("secretsPlace") ?? "keychain"; // Settings → Account's "On this device"
 params.delete("secretsPlace");
 // `fake.html?account=1`: signed in, with watch parties in this page (account.ts); read by lib/account in dev builds only.

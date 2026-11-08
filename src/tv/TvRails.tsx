@@ -4,7 +4,7 @@ import { Img } from "../components/Img";
 import { LogoOrName, ProgressBar, useCardArt } from "../components/title/Card";
 import { useEntryShown, type EntryAt } from "../lib/anime";
 import { episodeCode, formatRemaining } from "../lib/format";
-import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useRecommend } from "../lib/net";
+import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
 import { useRouter } from "../lib/router";
 import { useArtGate, useCardIntent } from "../lib/ui";
 import { useListable, type Shape, type Shelf } from "../lib/catalog";
@@ -241,14 +241,24 @@ export function TvContinueRail() {
   );
 }
 
-/** With seasons as separate shows, an anime's episode goes by its number in its entry (#22). */
+/**
+ * With seasons as separate shows, an anime's episode goes by its number in its entry (#22). The title's logo over the
+ * art, as desktop's Continue Watching (#437): the title page's logos, checked by `TitleLogo`; nothing in its place while
+ * the title loads (#343), the name where there's none. An entry of a show goes by its own name.
+ */
 function TvContinueCard({ p }: { p: Progress }) {
   const { navigate } = useRouter();
-  const stored = useMemo(() => continueItem(p), [p]);
-  const { entry } = useEntryShown(stored, p.videoId);
+  const plain = useMemo(() => continueItem(p), [p]);
+  const { entry } = useEntryShown(plain, p.videoId);
+  const meta = useMeta(p.type, p.metaId, !entry);
+  const stored = useMemo(
+    () => (entry || !meta.data ? plain : { ...plain, logo: meta.data.logo ?? undefined, logos: meta.data.logos }),
+    [plain, entry, meta.data],
+  );
   return (
     <TvCard
       item={stored}
+      logoPending={!entry && meta.isLoading}
       shape="landscape"
       progress={p.duration ? p.position / p.duration : 0}
       kicker={continueKicker(p, entry)}
