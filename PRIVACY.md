@@ -40,6 +40,10 @@ France). When you sign in, it keeps:
 - **Anime links:** which anime entries count as the same show for each profile (AniList, MyAnimeList and Kitsu
   ids).
 - **Playlists:** their names and the titles in them.
+- **Friends** (see [Friends](#friends)), for each profile with Friends on: its friend code and what its friends may
+  see; who it asked, who asked it, its friends and who it blocked; and that Friends was turned on or off for it once,
+  so a profile that turned it off keeps it off. Friend codes tried that nobody has, and invites sent, are counted per
+  account for an hour, to stop guessing and flooding.
 - **Settings**, including **API keys and add-on links** you entered. These are readable by the server, so by its
   operators, **unless you set a passphrase in Settings → Account**: then they're encrypted on your device before
   they're sent, and only a device with the passphrase can read them.
@@ -156,6 +160,24 @@ store them. The other members see:
   exception is a link you paste with "Watch a link": that link is sent to the members so their players can open it.
 
 Anyone with the party code can join until the host locks the party.
+
+## Friends
+
+Friends is on for a new profile until you turn it off in Settings → Account → Friends (profiles made before it became
+the default keep what they had). A profile with Friends on has a friend code; someone who has the code can send it a
+friend request, which you accept or decline. You can remove or block a friend at any time.
+
+Your friends (only those you accepted) see your profile name and avatar and, while the app is open:
+
+- **that you're online**, while "Who sees you're online" is Friends (the default). With Nobody you look offline to
+  them and nothing below is shown;
+- **the watch party you're in**, so they can join it from their list, while "Friends can join your watch party" is on
+  (the default);
+- **what you're watching** (the title and episode), only while "Who sees what you watch" is Friends. It starts at
+  Nobody.
+
+This travels over the account server's live connection and isn't stored. A friend can invite you into their watch
+party; an invite carries the party code, never what plays or a stream link.
 
 ## Your rights
 

@@ -162,6 +162,14 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
         if (!settings) throw new AccountError("unknown", "Friends didn't turn on. Try again.");
         return settings;
       },
+      async defaultOn(p) {
+        const { data, error } = await db.rpc("friend_default_on", { p });
+        if (error && isMissingFunction(error)) return null;
+        if (error) throw dbError(error);
+        if (typeof data !== "string") return null;
+        const rows = await call<unknown[]>("friend_settings", { p });
+        return listOf(rows, toFriendSettings)[0] ?? null;
+      },
       off: (p) => call<void>("friend_off", { p }),
       resetCode: (p) => call<string>("friend_code_reset", { p }),
       setPrivacy: (p, v) => call<void>("friend_privacy", { p, show_online: v.online, show_watching: v.watching, joinable: v.join }),

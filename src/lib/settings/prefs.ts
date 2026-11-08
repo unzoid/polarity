@@ -170,7 +170,7 @@ const DEFAULTS: Prefs = {
   pauseOnMinimize: false,
   discordPresence: "app",
   discordJoin: "ask",
-  stremioLinks: false,
+  stremioLinks: true,
   shareAddonsAndKeys: false,
   dialogueBoost: false,
   volumeLeveling: false,

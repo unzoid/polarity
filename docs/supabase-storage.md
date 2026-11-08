@@ -327,6 +327,7 @@ the project's 500 MB. The caps leave room for a real household: the heavy test p
 | `profile_settings` | 16 KB, a JSON object | 1 a profile | 5 × 16 KiB = 0.1 MiB |
 | `friend_settings` (#135) | a code and three switches | 1 a profile with Friends on | 5 × ~0.2 KiB |
 | `friendships` (#135) | two profile ids and a state | 100 a profile (50 friends, 20 requests waiting) | 500 × ~0.2 KiB = 0.1 MiB |
+| `friend_chosen` (#428) | a profile id | 1 a profile | 5 × ~0.1 KiB |
 | **Total** | | | **about 29 MiB** |
 
 Sizes are `pg_total_relation_size` (rows, TOAST and indexes) measured in PGlite with every row at
@@ -354,6 +355,10 @@ How the caps work:
   to 20 friend codes nobody has in an hour (`friend_request` answers `unknown` for one, then
   refuses with `friend_tries_limit`) and sends up to 30 invites in 10 minutes
   (`friend_invite_limit`); the tries are kept in `friend_tries` for an hour.
+  `supabase/migrations/20261112000000_friends_on_by_default.sql` (#428): `friend_default_on`
+  turns Friends on for a profile that never had it turned on or off (listed in `friend_chosen`,
+  which every profile from before the migration is), and new rows start with what the profile
+  watches hidden (`show_watching` false).
 - Inserts arriving at the same moment are counted one after the other: the profile limit and the
   row caps take a lock per account first, and friend requests and answers one per pair of profiles.
 - In the app (`sync.ts`, `AccountFullToast`): a kind that's full stays on the device and is tried
