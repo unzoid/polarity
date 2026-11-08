@@ -31,6 +31,8 @@ pub const ALLOWED_PROPERTIES: &[&str] = &[
     "sub-shadow-offset",
     "sub-back-color",
     "sub-delay",
+    // Fill window (#183, #330): the picture covers the window; the autocrop loop reads it too.
+    "panscan",
 ];
 
 /// Properties the UI only reads (`get_property`): what the subtitle preview
@@ -110,6 +112,13 @@ pub fn check_readable(name: &str) -> Result<(), String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn fill_reaches_mpv() {
+        // The player's Fill window sets panscan (#330: refused before, so the button did nothing).
+        assert!(check_property("panscan").is_ok());
+        assert!(check_command(&[json!("set"), json!("panscan"), json!(1)]).is_ok());
+    }
 
     #[test]
     fn only_player_commands_pass() {

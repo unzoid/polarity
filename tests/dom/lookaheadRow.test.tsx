@@ -11,7 +11,7 @@ import { click, render } from "./render";
 // it answers what the reader says (nothing yet while it starts).
 let reader: "reading" | null = null;
 (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
-  invoke: async (cmd: string) => (cmd === "mpv_lookahead" && getPrefs().autocrop && getPrefs().autocropLookahead ? reader : null),
+  invoke: async (cmd: string) => (cmd === "mpv_lookahead" && getPrefs().cropMode !== "fit" && getPrefs().autocropLookahead ? reader : null),
 };
 afterAll(() => {
   delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
@@ -21,7 +21,7 @@ const wait = (ms: number) => act(async () => new Promise((r) => setTimeout(r, ms
 const READING = "Reading ahead in the video playing now.";
 
 test("Look ahead for bar changes: the caption stays the same text on and off, the status on a line of its own (#345)", async () => {
-  setPrefs({ autocrop: true, autocropLookahead: false });
+  setPrefs({ cropMode: "bars", autocropLookahead: false });
   reader = "reading";
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { container, unmount } = await render(
@@ -50,7 +50,7 @@ test("Look ahead for bar changes: the caption stays the same text on and off, th
 });
 
 test("Look ahead for bar changes: the status follows the setting at once, every time, never an old answer (#345)", async () => {
-  setPrefs({ autocrop: true, autocropLookahead: true });
+  setPrefs({ cropMode: "bars", autocropLookahead: true });
   reader = "reading";
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { container, unmount } = await render(

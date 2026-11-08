@@ -2,6 +2,7 @@ import { storeLocal } from "../errors";
 import { useSyncExternalStore } from "react";
 import { isRecord, likeTemplate, storedJson } from "../parse";
 import { settingsChanged } from "./changes";
+import { earlierCropMode, type CropMode } from "./cropMode";
 
 /** TV mode's interface sound packs (tv/sounds.ts renders them). */
 export type SoundPack = "ambient" | "soft" | "wood" | "glass" | "pluck" | "classic";
@@ -64,14 +65,12 @@ export interface Prefs {
   hwdec: boolean;
   /** mpv: smooth colour banding. */
   deband: boolean;
-  /** mpv: crop black bars burnt into the picture, so it fills wide screens. */
-  autocrop: boolean;
+  /** Fit, Crop black bars (mpv's autocrop) or Fill window (#330, cropMode.ts). */
+  cropMode: CropMode;
   /** mpv, with autocrop: read ahead so a change of bars lands on the cut. */
   autocropLookahead: boolean;
   /** mpv, with autocrop, Windows, Linux and Android: our detector reads every frame (macOS and iOS always do). */
   autocropEveryFrame: boolean;
-  /** Phones and tablets: the picture fills the screen, its edges cropped, instead of fitting inside it (#149). */
-  videoFill: boolean;
   /** mpv read-ahead. */
   buffer: "small" | "normal" | "large";
   /** Torrent sources: most GB their cache on this device may hold; 0 = no limit. */
@@ -177,10 +176,9 @@ const DEFAULTS: Prefs = {
   volumeLeveling: false,
   hwdec: true,
   deband: false,
-  autocrop: false,
+  cropMode: "fit",
   autocropLookahead: true,
   autocropEveryFrame: false,
-  videoFill: false,
   buffer: "normal",
   torrentCacheGb: 20,
   torrentSpeedMbps: 0,
@@ -221,7 +219,7 @@ const STORAGE = "polar.prefs";
 const stored = storedJson(localStorage, STORAGE);
 /** Installs from before #80 (prefs or an account's settings stored already) keep sharing add-ons and keys. */
 const earlier = (stored !== undefined || localStorage.getItem("polar.settingsOwner") !== null) && !(isRecord(stored) && "shareAddonsAndKeys" in stored);
-let prefs: Prefs = { ...DEFAULTS, ...(earlier ? { shareAddonsAndKeys: true } : {}), ...earlierUpload(stored), ...readPrefs(stored) };
+let prefs: Prefs = { ...DEFAULTS, ...(earlier ? { shareAddonsAndKeys: true } : {}), ...earlierUpload(stored), ...readPrefs(stored), ...earlierCrop(stored) };
 const listeners = new Set<() => void>();
 
 export const getPrefs = () => prefs;
@@ -231,6 +229,12 @@ function earlierUpload(stored: unknown): Partial<Prefs> {
   if (!isRecord(stored) || "torrentUploadMbps" in stored) return {};
   const speed = stored.torrentSpeedMbps;
   return typeof speed === "number" && speed > 0 ? { torrentUploadMbps: Math.min(speed, TORRENT_UPLOAD_MBPS) } : {};
+}
+
+/** The crop mode from prefs stored before #330 (autocrop and Fill), or one stored that isn't a mode. */
+function earlierCrop(stored: unknown): Partial<Prefs> {
+  if (!isRecord(stored)) return {};
+  return { cropMode: earlierCropMode(stored) ?? DEFAULTS.cropMode };
 }
 
 /** Stored or synced prefs: the known ones, each of the kind its default is (critique M9). */

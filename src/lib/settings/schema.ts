@@ -1,5 +1,6 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
 import { isMac } from "../platform/device";
+import { CROP_MODES, cropModeLabel } from "./cropMode";
 import type { Prefs } from "./prefs";
 import type { Settings } from "../types";
 import type { PageId } from "./pages";
@@ -1162,15 +1163,15 @@ export const SETTINGS: SettingDef[] = [
     control: toggle,
   },
   {
-    id: "autocrop",
+    id: "cropMode",
     page: "advanced",
-    title: "Crop black bars",
+    title: "Crop",
     caption:
-      "Some files carry black bars inside the picture. This finds and trims them so the film fills a wide or ultrawide screen. Uses a little more CPU.",
-    keywords: "autocrop crop letterbox black bars ultrawide 21:9 aspect",
-    bind: p("autocrop"),
-    control: toggle,
-    tv: "Crop Black Bars",
+      "Fit shows the whole picture. Crop black bars trims bars that are part of the video, so a film fills a wide or ultrawide screen (uses a little more CPU). Fill window trims them too, then crops the picture's edges so it covers the window. The player's crop button switches between them.",
+    keywords: "autocrop crop letterbox black bars ultrawide 21:9 aspect fit fill window zoom pan scan",
+    bind: p("cropMode"),
+    control: choice(CROP_MODES.map((value) => ({ value, label: cropModeLabel(value) }))),
+    tv: "Crop",
   },
   {
     id: "autocropLookahead",

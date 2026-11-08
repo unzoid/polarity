@@ -1231,6 +1231,25 @@ the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
    app, the same link with `polarity-dev://` the dev build; starting either a second time brings its
    own window forward. Uninstalling the dev build leaves the released app as it was.
 
+## Crop modes (#330)
+
+The player's crop button cycles Fit, Crop black bars, Fill window; checked here only in the
+browser build (no mpv: Fit and Fill window) and by tests. Fill window did nothing on Windows
+because mpv's `panscan` wasn't on the list of properties the player may set
+(`crates/player/src/allow.rs`); it is now. To check on Windows, macOS and Linux with mpv:
+
+1. Play a film with black bars inside the picture (an open film encoded letterboxed in 16:9 works).
+   Press the crop button (bottom right, or Z) three times: each press changes the picture (bars
+   trimmed; then edges cropped to cover the window; then the whole frame again), and a notice
+   names the new mode. The button's tooltip names the current mode and the next one.
+2. With a 16:9 video in a narrow or tall window, Fill window crops the sides or top to cover it.
+3. Settings → Advanced → Crop shows the mode the button chose; changing it there changes the
+   playing video straight away. Look ahead and Check every frame are greyed out on Fit.
+4. Updating from a build before #330 with Crop black bars on starts on Crop black bars (with
+   Fill on too: Fill window).
+5. Phone or tablet: the full-screen button cycles the same way; pinch out fills, pinch in fits.
+   TV mode: the controller's crop binding cycles and says the mode.
+
 ## Screens in headless Chromium (T-051)
 
 - How: `bun run dev`, then open `http://localhost:1420/fake.html` in any browser. The
@@ -1324,7 +1343,7 @@ the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
 - Settings from one schema (T-019 step 5, `lib/settings/schema.ts`): about 35 rows on desktop and every
   row in TV settings are now drawn from it. Desktop should look and behave as before; check the Playback,
   Sources, Browsing, Anime, Controls & TV and Controller pages (titles, captions, dropdown choices, the
-  Countdown and Sound volume sliders, Crop black bars greyed out without mpv, a click when Interface sounds
+  Countdown and Sound volume sliders, (since #330: Crop leaves out Crop black bars without mpv), a click when Interface sounds
   turns on). Changed on purpose: Highest quality also offers 1440p; desktop and TV share choices. On TV,
   check: Mature Anime has Show / Blur posters / Hide; Highest Quality adds 480p; Seek Step goes 1, 5, 10 ...
   120 (and keeps a value like 7 set on desktop); Sound Volume 5%, 10%, 20% ... 100%; choice names now read as

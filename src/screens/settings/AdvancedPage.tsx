@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Reset } from "../../components/icons";
 import { api } from "../../lib/api";
 import { keys } from "../../lib/net";
-import { resetPrefs, usePrefs } from "../../lib/settings";
+import { cropsBars, resetPrefs, usePrefs } from "../../lib/settings";
 import { lookaheadStatus } from "../../lib/playback";
 import { Button } from "../../components/ui/Button";
 import { errorMessage } from "../../lib/errors";
@@ -16,18 +16,19 @@ import { StremioImport } from "../../components/settings/StremioImport";
 
 export function AdvancedPage() {
   const expand = useExpanded();
-  const { autocrop } = usePrefs();
+  const autocrop = cropsBars(usePrefs().cropMode);
   const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   const account = useAccount();
   return (
     <>
       <Card
         title="Video"
-        footer={hasMpv === false ? "These need mpv." : "Saved on this device. Changes apply straight away, even mid-video."}
+        footer={hasMpv === false ? "Most of these need mpv." : "Saved on this device. Changes apply straight away, even mid-video."}
       >
         <SettingRow id="hwdec" disabled={hasMpv === false} />
         <SettingRow id="deband" disabled={hasMpv === false} />
-        <SettingRow id="autocrop" disabled={hasMpv === false} />
+        {/* Without mpv there's no autocrop: Fit or Fill window. */}
+        <SettingRow id="cropMode" omit={hasMpv === false ? ["bars"] : undefined} />
         <LookaheadRow hasMpv={hasMpv} />
         {/* macOS and iOS read every frame anyway, in memory. */}
         {os !== "macos" && os !== "ios" && <SettingRow id="autocropEveryFrame" disabled={hasMpv === false || !autocrop} />}
@@ -46,7 +47,8 @@ export function AdvancedPage() {
 
 /** "Look ahead for bar changes", with what the lookahead does in the video playing now, kept current while it's shown. */
 export function LookaheadRow({ hasMpv }: { hasMpv: boolean | undefined }) {
-  const { autocrop, autocropLookahead } = usePrefs();
+  const { cropMode, autocropLookahead } = usePrefs();
+  const autocrop = cropsBars(cropMode);
   const on = hasMpv === true && autocrop && autocropLookahead;
   // Each time the setting turns on or off, what the player said before is forgotten: the status
   // shows once the player answers for the new state, never an old answer meanwhile.
