@@ -1,5 +1,6 @@
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { inventedAnime, LONG_ANIME, longAnimeMedia, longAnimeZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // Scrolling long pages (#134). Chromium only: these read Chromium's trace and layer tree (WebView2 is Chromium).
 // Each budget sits well above what the page needs now and well below what it needed before the fix, so a
@@ -125,4 +126,146 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
   const unit = await layoutUnit(app);
   const budget = Math.max(5 * unit, 15);
   expect.soft(scrolling.medianFrame, `median frame ${scrolling.medianFrame} ms, layout unit ${unit} ms, budget ${budget} ms`).toBeLessThan(budget);
+});
+
+/** The invented shows' AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has their series. */
+async function answerInventedAnime(app: Page) {
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
+    const show = inventedAnime(variables?.id ?? 0);
+    await route.fulfill({ json: { data: show ? { Media: longAnimeMedia(show) } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) => {
+    const show = inventedAnime(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
+    return show ? route.fulfill({ json: longAnimeZip(show) }) : route.fulfill({ status: 404, json: {} });
+  });
+}
+
+/**
+ * Opens an anime's page through a polarity:// link: how long until its top (art, name, facts, buttons) is on
+ * screen, then its first episode card, and until the main thread was last held up by a long task, all from the
+ * link (ms); with the longest such task and how many episode cards the page holds.
+ */
+async function openAnime(app: Page, id: number) {
+  return app.evaluate(
+    (id) =>
+      new Promise<{ top: number; episodes: number; settled: number; longest: number; cards: number }>((resolve) => {
+        const tasks: { start: number; end: number }[] = [];
+        const watch = new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) tasks.push({ start: e.startTime, end: e.startTime + e.duration });
+        });
+        watch.observe({ type: "longtask" });
+        const start = performance.now();
+        // Pages opened before stay in the stack: this open's is the one more than there were.
+        const pages = () => document.querySelectorAll(`.anime-detail[data-anime="${id}"]`);
+        const before = pages().length;
+        const page = () => (pages().length > before ? [...pages()].at(-1) : undefined);
+        let top = 0;
+        let episodes = 0;
+        // Read in each frame before it's drawn: what's there is on screen once it is.
+        const look = () => {
+          const now = performance.now() - start;
+          if (!top && page()?.querySelector(".anime-hero h1")) top = now;
+          if (!episodes && page()?.querySelector(".seasons .episode-card")) episodes = now;
+          if (!top || !episodes) return void requestAnimationFrame(look);
+          // A second more for whatever the open set going.
+          setTimeout(() => {
+            watch.disconnect();
+            const own = tasks.filter((t) => t.end > start).map((t) => ({ start: t.start - start, end: t.end - start }));
+            resolve({
+              top,
+              episodes,
+              settled: Math.max(episodes, ...own.map((t) => t.end)),
+              longest: Math.max(0, ...own.map((t) => t.end - t.start)),
+              cards: page()?.querySelectorAll(".episode-card").length ?? 0,
+            });
+          }, 1000);
+        };
+        requestAnimationFrame(look);
+        (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`);
+      }),
+    id,
+  );
+}
+
+test("an anime with 1,200 episodes opens as quickly as a short one (#397)", async ({ app }) => {
+  test.setTimeout(120_000);
+  await app.setViewportSize({ width: 1440, height: 900 });
+  await answerInventedAnime(app);
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.waitForTimeout(1000);
+
+  // Each once first, so the page's code and the answers are loaded as they'd be after the first visit.
+  await openAnime(app, SHORT_ANIME.anilist);
+  await openAnime(app, LONG_ANIME.anilist);
+  const short = await openAnime(app, SHORT_ANIME.anilist);
+  const long = await openAnime(app, LONG_ANIME.anilist);
+  const unit = await layoutUnit(app);
+  const report = JSON.stringify({ short, long, unit });
+  expect(short.cards, report).toBe(SHORT_ANIME.episodes);
+  // Of the page of 100 episodes, only the cards on and near the screen are drawn.
+  expect(long.cards, report).toBeGreaterThan(0);
+  expect(long.cards, report).toBeLessThanOrEqual(40);
+  // Its top, its episodes and a free main thread come about as soon as the short show's: here (the dev
+  // server's React) 0.27 s against 0.25 s, where before #397 the long one took 9.7 s. The leeway is in units
+  // of this machine's speed (layoutUnit), so a slower runner doesn't trip it.
+  const leeway = Math.max(150, 40 * unit);
+  expect(long.top, report).toBeLessThan(short.top + leeway);
+  expect(long.episodes, report).toBeLessThan(short.episodes + leeway);
+  expect(long.settled, report).toBeLessThan(short.settled + leeway);
+  expect(long.top, report).toBeLessThan(2000);
+
+  // The cards come as the row scrolls, up to the page's last one, and focus walks on past the first ones drawn.
+  const page = app.locator(`.anime-detail[data-anime="${LONG_ANIME.anilist}"]`).last();
+  const row = page.locator(".seasons .row-scroller");
+  const last = page.locator(`.episode-card[data-video="${LONG_ANIME.imdb}:2:50"]`);
+  for (let i = 0; i < 40 && !(await last.count()); i++) {
+    await row.evaluate((el) => el.scrollBy({ left: el.clientWidth, behavior: "instant" }));
+    await app.waitForTimeout(50);
+  }
+  await expect(last).toBeVisible();
+  await row.evaluate((el) => el.scrollTo({ left: 0, behavior: "instant" }));
+  await page.locator(".episode-card-main").first().focus();
+  for (let i = 0; i < 30; i++) await app.keyboard.press("Tab");
+  await expect(page.locator(".seasons .row-scroller :focus")).toHaveCount(1);
+
+  // As a list, every card of the page comes as the page scrolls down to it.
+  await page.getByRole("radio", { name: "List" }).click();
+  await page.getByRole("button", { name: "Show all 100 episodes" }).click();
+  expect(await page.locator(".episode-list .episode-card").count()).toBeLessThanOrEqual(40);
+  const scroller = page.locator(".detail-scroll");
+  for (let i = 0; i < 60 && !(await last.count()); i++) {
+    await scroller.evaluate((el) => el.scrollBy({ top: el.clientHeight, behavior: "instant" }));
+    await app.waitForTimeout(50);
+  }
+  await expect(last).toBeVisible();
+  await page.getByRole("radio", { name: "Row" }).click();
+});
+
+test("a long show's page opens at the episode you're up to and stays there while its cards come (#397)", async ({ app }) => {
+  await answerInventedAnime(app);
+  // Halfway through episode 160: the second page of 100, its 60th card.
+  await app.evaluate(
+    (imdb) =>
+      (window as unknown as { __TAURI_INTERNALS__: { invoke: (c: string, a: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("progress_save", {
+        progress: { metaId: imdb, videoId: `${imdb}:4:10`, type: "series", name: "Lanternfield Chronicle", position: 600, duration: 1440, updatedAt: Date.now() },
+      }),
+    LONG_ANIME.imdb,
+  );
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), LONG_ANIME.anilist);
+  const page = app.locator(".anime-detail").last();
+  const upNext = page.locator(`.episode-card[data-video="${LONG_ANIME.imdb}:4:10"]`);
+  await expect(upNext).toBeVisible();
+  await expect(page.getByRole("radio", { name: "101–200" }).or(page.getByRole("combobox", { name: "Episodes" }))).toBeVisible();
+  // The cards around it are drawn in the meantime; the row stays on it.
+  const inRow = () =>
+    upNext.evaluate((card: HTMLElement) => {
+      const row = card.closest<HTMLElement>(".row-scroller")!;
+      return row.scrollLeft > 0 && card.offsetLeft >= row.scrollLeft && card.offsetLeft + card.offsetWidth <= row.scrollLeft + row.clientWidth + 1;
+    });
+  expect(await inRow()).toBe(true);
+  await app.waitForTimeout(1000);
+  expect(await inRow()).toBe(true);
+  expect(await page.locator(".seasons .episode-card").count()).toBeLessThanOrEqual(40);
 });

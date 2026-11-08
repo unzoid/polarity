@@ -644,6 +644,11 @@
 .episode-card[data-layout="list"]:last-child {
   border-bottom: none;
 }
+/* A long season's cards not drawn yet (#397): a row's take their column, a list's about a card's height
+   (the still's, 16:9, and the padding). */
+.episode-slot[data-layout="list"] {
+  height: calc(clamp(10rem, 14vw, 15rem) * 9 / 16 + 1.5rem + 1px);
+}
 .episode-card[data-layout="list"] .episode-card-main {
   display: grid;
   /* The still grows with the window, like the shelf cards do. */

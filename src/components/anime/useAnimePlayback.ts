@@ -5,19 +5,24 @@ import {
   type AnimeCard,
   type LinedEpisode,
   animeEntries,
-  animeEpisodes,
   linkAnime,
   listedKitsuQuery,
   playContext,
   progressByVideo,
   rememberStill,
+  sharedAnimeEpisodes,
   upNext,
   useAnimeImdb,
   usePlayedZip,
 } from "../../lib/anime";
+import type { Video } from "../../lib/types";
 import { usePrefs } from "../../lib/settings";
 import { useLibrary, useMeta, useProgress } from "../../lib/net";
 import { watchedFraction } from "../../lib/library";
+
+const NO_VIDEOS: Video[] = [];
+/** The episodes each list was last left for (the link it was left under), so the same is left once. */
+const remembered = new WeakMap<object, string>();
 
 /**
  * Everything the anime page needs to play: the episodes, matched to the
@@ -43,7 +48,9 @@ export function useAnimePlayback(anime: AnimeCard | Anime) {
   const malId = anime.idMal ?? zip?.mappings.mal_id;
   const { animeTitles } = usePrefs();
 
-  const episodes = useMemo(() => animeEpisodes({ anime, zip, videos: meta?.videos ?? [], imdb, titles: animeTitles }), [zip, meta, anime, animeTitles, imdb]);
+  // The same answers give the same array wherever on the page it's asked (#397).
+  const videos = meta?.videos ?? NO_VIDEOS;
+  const episodes = useMemo(() => sharedAnimeEpisodes({ anime, zip, videos, imdb, titles: animeTitles }), [zip, videos, anime, animeTitles, imdb]);
 
   // The id this entry plays from, for the backend: library and progress kept under its other ids move onto it.
   // Only once the IMDb lookup has answered, so a failed lookup doesn't link the entry to its Kitsu id. A link
@@ -59,6 +66,10 @@ export function useAnimePlayback(anime: AnimeCard | Anime) {
   // AniSkip needs MyAnimeList's numbering, and stream addons know an IMDb-matched episode by its Kitsu id
   // too; the player can't know either. Leave them (kept across restarts) for every episode.
   useEffect(() => {
+    // Asked by the page's top and its list alike: once is enough for the same episodes and link.
+    const said = `${metaId}|${imdbKnown}|${malId}|${kitsu}|${isMovie}`;
+    if (remembered.get(episodes) === said) return;
+    remembered.set(episodes, said);
     for (const e of episodes) if (e.video && e.image) rememberStill(e.video.id, e.image);
     if (!metaId || !imdbKnown) return;
     const lined = episodes.flatMap((e): [string, number][] => (e.video ? [[e.video.id, e.number]] : []));

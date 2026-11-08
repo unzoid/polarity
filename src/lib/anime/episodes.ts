@@ -93,6 +93,25 @@ export function animeEpisodes({
 }
 
 /**
+ * {@link animeEpisodes}, worked out once for the same answers: the page's top and its episode list each ask
+ * for the same entry's episodes (the top two times, for Play and what follows), and a show with a thousand of
+ * them took a while each time (#397). What's kept is the same array, so effects keyed on it run once. Answers
+ * older than a minute are worked out again, for what has aired since.
+ */
+export function sharedAnimeEpisodes(args: Parameters<typeof animeEpisodes>[0]): AnimeEpisode[] {
+  const { anime, zip, videos, imdb, titles, now = Date.now() } = args;
+  let byEntry = shared.get(videos);
+  if (!byEntry) shared.set(videos, (byEntry = new Map()));
+  const key = `${anime.id}|${imdb ?? ""}|${titles}`;
+  const kept = byEntry.get(key);
+  if (kept && kept.anime === anime && kept.zip === zip && now - kept.at < 60_000) return kept.episodes;
+  const episodes = animeEpisodes({ ...args, now });
+  byEntry.set(key, { anime, zip, at: now, episodes });
+  return episodes;
+}
+const shared = new WeakMap<Video[], Map<string, { anime: AnimeCard | Anime; zip: AniZip | null | undefined; at: number; episodes: AnimeEpisode[] }>>();
+
+/**
  * Progress by video id. Episodes played under the show's Kitsu id before it
  * was linked to its IMDb page are the same episodes: the newer record wins.
  */

@@ -161,6 +161,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   return (
     <div
       className="detail anime-detail"
+      data-anime={id}
       ref={root}
       data-trailer={trailer.visible}
       style={{ "--cover": shown.coverImage.color ?? undefined } as React.CSSProperties}

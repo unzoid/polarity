@@ -1,5 +1,6 @@
 import type { InstalledAddon, LibraryItem, Meta, MetaPreview, Progress, Settings, StreamsResult, Video } from "../../types";
 import type { Download } from "../../library/downloads";
+import { longAnimeMeta } from "./longAnime";
 
 /**
  * Made-up titles for the fake shell (fake.html): enough of every kind of data
@@ -196,6 +197,8 @@ function episodes(p: MetaPreview, i: number): Video[] {
 }
 
 export function meta(id: string): Meta | null {
+  const invented = longAnimeMeta(id);
+  if (invented) return invented;
   const m = baseMeta(id);
   if (!m || !WORST) return m;
   const long = m.name.length > 60;
