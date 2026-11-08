@@ -6,6 +6,7 @@ import {
   getParty,
   leaveParty,
   openPartySurface,
+  partyRoute,
   setJoinPartyOpen,
   setPartyMenuOpen,
   useJoinPartyOpen,
@@ -46,13 +47,7 @@ export function PartyHost() {
 
   const go = (m: PartyMedia) => {
     if (current.name === "player" && current.videoId === m.videoId) return;
-    const route = {
-      name: "player",
-      type: m.type,
-      metaId: m.metaId,
-      videoId: m.videoId,
-      ...(m.url ? { stream: { url: m.url, name: m.label } } : {}),
-    } as const;
+    const route = partyRoute(m);
     if (current.name === "player") replace(route);
     else navigate(route);
   };

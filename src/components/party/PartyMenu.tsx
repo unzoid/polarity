@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { endParty, expectedPosition, leaveParty, partyLog, setQuiet, setRules, syncNow, type PartyState } from "../../lib/party";
+import { endParty, expectedPosition, leaveParty, partyLog, partyRoute, setQuiet, setRules, syncNow, type PartyState } from "../../lib/party";
 import { formatTime } from "../../lib/format";
 import { useMeta } from "../../lib/net";
 import { osName } from "../../lib/platform";
@@ -159,7 +159,7 @@ export function PartyStreamButtons({ party, onGo }: { party: PartyState; onGo?: 
   if (!media) return null;
   const onRoomVideo = current.name === "player" && current.videoId === media.videoId;
   const go = () => {
-    const route = { name: "player", type: media.type, metaId: media.metaId, videoId: media.videoId } as const;
+    const route = partyRoute(media);
     if (current.name === "player") replace(route);
     else navigate(route);
     onGo?.();

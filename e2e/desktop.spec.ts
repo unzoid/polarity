@@ -328,6 +328,34 @@ test("the player steps one frame at a time with , and ., and the frame number st
   await expect(label).toHaveCount(0);
 });
 
+test("the Skip Intro button sits in the same place with the controls hidden and shown, and skips on the first click (#331)", async ({ app }) => {
+  await app.addInitScript(() => localStorage.setItem("polar.fakeIntro", "1"));
+  await app.reload();
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  const skip = app.locator(".skip-button");
+  await expect(skip).toHaveAttribute("data-visible", "true");
+  // The controls hide; the new segment's button stays up on its own for a while.
+  await expect(player).toHaveAttribute("data-chrome", "false", { timeout: 6000 });
+  await expect(skip).toHaveAttribute("data-visible", "true");
+  await expect(skip).toHaveCSS("opacity", "1");
+  const alone = await skip.boundingBox();
+  // Moving toward it brings the controls up; it doesn't move.
+  await app.mouse.move(alone!.x - 200, alone!.y - 100);
+  await expect(player).toHaveAttribute("data-chrome", "true");
+  await expect.poll(async () => (await skip.boundingBox())?.y).toBe(alone!.y);
+  expect(await skip.boundingBox()).toEqual(alone);
+  // It clears the timeline and the action row.
+  const timeline = await app.locator(".player-timeline").boundingBox();
+  expect(alone!.y + alone!.height).toBeLessThanOrEqual(timeline!.y);
+  // Straight to where it was before the controls came up: one click skips the intro.
+  await app.mouse.click(alone!.x + alone!.width / 2, alone!.y + alone!.height / 2);
+  await expect(skip).toHaveAttribute("data-segment", "false");
+});
+
 test("with an AirPlay receiver around, the player sends the video to it and back (#19)", async ({ app }) => {
   // WebKit's AirPlay surface, as WKWebView on macOS has it: a receiver is there, and the picker toggles to it and back.
   await app.addInitScript(() => {
@@ -1175,6 +1203,61 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(partySurfaces(app)).toHaveCount(1);
   });
 
+  // Out of the player while the party watches: the party badge's Go to the Current Stream opens it again (#387).
+  const backToParty = async (app: Page) => {
+    await expect(app.locator(".player")).toHaveCount(0);
+    await app.locator(".party-badge").click();
+    await app.locator(".party-popover").getByRole("button", { name: "Go to the Current Stream" }).click();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  };
+  const videoTime = (app: Page) => app.locator(".player video").evaluate((v: HTMLVideoElement) => v.currentTime);
+
+  test("out of the player in a party on an episode, Go to the Current Stream opens it where the party is (#387)", async ({ app }) => {
+    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
+    await card(app, "Fieldwork").click();
+    await app.locator(".episode-card-main:not([disabled])").first().click();
+    const player = app.locator(".player");
+    await expect(player).toHaveAttribute("data-started", "true");
+    await app.getByRole("button", { name: "Watch Party", exact: true }).click();
+    await app.getByRole("button", { name: "Start a Watch Party" }).click();
+    await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
+    await app.keyboard.press("Escape");
+    await expect(partySurfaces(app)).toHaveCount(0);
+    await app.keyboard.press("Escape");
+    await expect(player).toHaveCount(0);
+    // The party plays on while this member browses.
+    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+    await app.waitForTimeout(3000);
+    await backToParty(app);
+    await expect(app.locator(".player-heading")).toContainText("Fieldwork");
+    await expect.poll(() => videoTime(app)).toBeGreaterThan(2.5);
+    await expect(app.getByRole("button", { name: "Pause" })).toBeVisible();
+    // Paused, the party waits where it is: back again, it's paused there.
+    await app.keyboard.press(" ");
+    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    const pausedAt = await videoTime(app);
+    await app.keyboard.press("Escape");
+    await app.waitForTimeout(2000);
+    await backToParty(app);
+    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    await expect.poll(() => videoTime(app)).toBeCloseTo(pausedAt, 0);
+  });
+
+  test("out of the player in a party on a link, Go to the Current Stream plays the link again (#387)", async ({ app }) => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.getByRole("textbox", { name: "Video link" }).fill("https://media.example/film.mp4");
+    await app.getByRole("button", { name: "Watch", exact: true }).click();
+    const player = app.locator(".player");
+    await expect(player).toHaveAttribute("data-started", "true");
+    await app.keyboard.press("Escape");
+    await expect(player).toHaveCount(0);
+    await app.waitForTimeout(3000);
+    await backToParty(app);
+    await expect(app.locator(".player video")).toHaveAttribute("src", "https://media.example/film.mp4");
+    await expect.poll(() => videoTime(app)).toBeGreaterThan(2.5);
+  });
+
   test("a YouTube link plays in YouTube's embedded player with its own controls, nothing of ours over it (#201, #384)", async ({ app }) => {
     // A stand-in for YouTube's embed that speaks its IFrame Player API messages: no request leaves the machine.
     const commands: string[] = [];
@@ -1257,6 +1340,10 @@ test.describe("signed in, on a fresh profile", () => {
     // The keyboard still drives YouTube's player.
     await app.keyboard.press("Space");
     await expect.poll(() => commands).toContain("pauseVideo");
+    // Out of the player and back from the party badge: the same YouTube video (#387).
+    await app.keyboard.press("Escape");
+    await backToParty(app);
+    await expect(frame).toHaveAttribute("src", /\/embed\/abc-DEF_123\?/);
   });
 
   test("a YouTube player whose start stops paused (autoplay refused, or a buffer that ends paused) is ready, not buffering (#383)", async ({ app }) => {
