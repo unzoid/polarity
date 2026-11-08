@@ -155,3 +155,53 @@ export function franchiseZip(id: number) {
     episodes: {},
   };
 }
+
+/**
+ * An invented franchise of two series for the season toolbar (#426): a 12-episode one (the short show's IMDb series), then a
+ * 1,200-episode one (the long show's), whose tab has episode ranges and a search. AniList's entries and ani.zip's records.
+ */
+export const SAGA = {
+  first: { ...SHORT_ANIME, anilist: 990_006, name: "Lanternfield Watch" },
+  second: { ...LONG_ANIME, anilist: 990_007, name: "Lanternfield Watch: The Long Road" },
+};
+
+const sagaEntry = (id: number) => (id === SAGA.first.anilist ? SAGA.first : id === SAGA.second.anilist ? SAGA.second : undefined);
+const sagaNode = (id: number) => {
+  const entry = sagaEntry(id)!;
+  const year = entry === SAGA.first ? 2002 : 2003;
+  return {
+    id,
+    type: "ANIME",
+    format: "TV",
+    status: "FINISHED",
+    episodes: entry.episodes,
+    title: { romaji: entry === SAGA.first ? "Tourou Mamori" : "Tourou Mamori Nagaki Michi", english: entry.name, native: null },
+    coverImage: { extraLarge: null, large: null, color: "#4a6fa5" },
+    startDate: { year, month: 4, day: 4 },
+    season: "SPRING",
+    seasonYear: year,
+  };
+};
+
+/** AniList's answer for either entry of the invented two-series franchise, or undefined for another id. */
+export function sagaMedia(id: number) {
+  const entry = sagaEntry(id);
+  if (!entry) return undefined;
+  const first = entry === SAGA.first;
+  return {
+    ...longAnimeMedia(entry),
+    ...sagaNode(id),
+    relations: { edges: [{ relationType: first ? "SEQUEL" : "PREQUEL", node: sagaNode(first ? SAGA.second.anilist : SAGA.first.anilist) }] },
+  };
+}
+
+/** The long series' MyAnimeList id, and its filler episodes (the fake shell's answer for them). */
+export const SAGA_FILLER = { mal: 990_017, filler: [40, 41, 42] };
+
+/** ani.zip's record for either entry of the invented two-series franchise, or undefined for another id. */
+export function sagaZip(id: number) {
+  const entry = sagaEntry(id);
+  if (!entry) return undefined;
+  const zip = longAnimeZip(entry);
+  return { ...zip, mappings: { ...zip.mappings, anilist_id: id, ...(entry === SAGA.second && { mal_id: SAGA_FILLER.mal }) } };
+}
