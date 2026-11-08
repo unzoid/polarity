@@ -39,6 +39,10 @@ if (params.get("account")) (globalThis as { __polarFakeAccount?: unknown }).__po
 if (params.get("account") === "signed-out") startSignedOut();
 params.delete("account");
 params.delete("friends"); // `&friends=1`: the profile starts with Friends on (account.ts)
+// `?sources=filtered`: Settings → Sources' filters left out every source the add-ons found; `?sources=none`: no
+// add-on was asked (#435).
+const sourcesCase = params.get("sources");
+params.delete("sources");
 let settings: Settings = { ...fx.settings, ...Object.fromEntries(params) };
 
 type Args = Record<string, unknown>;
@@ -71,7 +75,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   meta: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   // TMDB title N is the fixtures' Nth movie or show here (tt9100000 + N, tt9200000 + N); from 900000 on there's no IMDb id (#208).
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
-  streams: () => fx.streams(),
+  streams: () =>
+    sourcesCase === "filtered" ? { streams: [], failed: [], hidden: 5 } : sourcesCase === "none" ? { streams: [], failed: [], asked: [] } : fx.streams(),
   subtitles: () => [],
   // `polar.fakeIntro` in localStorage: every video opens with an 80-second intro to skip (#331).
   skip_segments: () => (localStorage.getItem("polar.fakeIntro") ? { intro: { start: 0, end: 80 } } : {}),

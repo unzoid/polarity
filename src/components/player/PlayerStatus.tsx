@@ -54,7 +54,7 @@ export function PlayerStatus({
   backend: string;
   /** Left out where there's nothing else to choose (a pasted link). */
   onSources?: () => void;
-  /** Opens the Settings page the reason names (Sources for its filters, Add-ons when there's none). Left out in TV mode. */
+  /** Opens the Settings page the reason names (Sources for its filters, Add-ons when there's none; in TV mode, desktop mode's, #435). */
   onSettings?: (page: "sources" | "addons") => void;
   /** Asks the add-ons again after finding no source or none that played (#375). */
   onRetry?: () => void;
