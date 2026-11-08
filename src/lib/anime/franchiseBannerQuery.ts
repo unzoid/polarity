@@ -1,9 +1,9 @@
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { metaQuery } from "../net/queries";
-import { PRIORITY } from "../net/limiter";
+import { PRIORITY, type Priority } from "../net/limiter";
 import { usePrefs } from "../settings/prefs";
-import { animeQuery, seasonsQuery, type AnimeCard } from "./anilist";
+import { animeQuery, pageWhenOpened, seasonsQuery, type AnimeCard } from "./anilist";
 import { animeArt, aniZipQuery, franchiseArt } from "./anizip";
 import { artTitle } from "./pageArt";
 import { animeImdbQuery } from "./search";
@@ -27,14 +27,14 @@ export interface BannerArt {
  * {@link bannerBase} for each of `cards` with its art, the same as the page each opens (#325): undefined
  * until every one is known, so nothing swaps once drawn. An entry whose franchise couldn't be asked
  * (AniList failing) is null: it keeps its own art. All null with seasons as separate shows, where each
- * entry's page is its own.
+ * entry's page is its own. `priority` places the AniList requests in its queue (a wide card's, #336).
  */
-export function useFranchiseBanners(cards: AnimeCard[] | undefined): (BannerArt | null)[] | undefined {
+export function useFranchiseBanners(cards: AnimeCard[] | undefined, priority: Priority = PRIORITY.visible): (BannerArt | null)[] | undefined {
   const client = useQueryClient();
   const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const list = separate ? [] : (cards ?? []);
-  const media = useQueries({ queries: list.map((c) => animeQuery(c.id, PRIORITY.visible)) });
-  const walks = useQueries({ queries: list.map((_, i) => seasonsQuery(client, media[i]?.data)) });
+  const media = useQueries({ queries: list.map((c) => animeQuery(c.id, pageWhenOpened(c.id, priority))) });
+  const walks = useQueries({ queries: list.map((c, i) => seasonsQuery(client, media[i]?.data, pageWhenOpened(c.id, priority))) });
   const ids = [...new Set([...list.map((c) => c.id), ...walks.flatMap((w) => w.data?.seasons.map((s) => s.card.id) ?? [])])];
   const linked = useLinkedImdbs(ids);
   const title = (t: Parameters<typeof pickTitle>[0]) => pickTitle(t, animeTitles);

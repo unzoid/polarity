@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   type AnimeCard as Media,
   aniZipQuery,
@@ -8,10 +9,13 @@ import {
   type EntryAction,
   prefetchAnime,
   FORMAT_LABEL,
+  reprioritiseAniList,
+  rowPriority,
   isMature,
   landscapeArt,
   posterArt,
   untilAiring,
+  useAnimePageArt,
   useAnimeScore,
   useAnimeTitle,
   useLinkedImdb,
@@ -20,7 +24,7 @@ import { usePrefs } from "../../lib/settings";
 import { useRouter } from "../../lib/router";
 import { menuPoint, openCardMenu } from "../CardMenu";
 import { api } from "../../lib/api";
-import { useCardIntent } from "../../lib/ui";
+import { useCardIntent, useViewportPlace } from "../../lib/ui";
 import { ArtTitle, Card } from "../title/Card";
 import { Star, Warning } from "../icons";
 import { openTrailer } from "../Trailer";
@@ -150,19 +154,34 @@ export function AnimeCard({
   );
 }
 
-/** The widescreen card, for the shelves Home draws that way: the banner with the title over it. */
+/**
+ * The widescreen card, for the shelves the Anime tab draws that way: the backdrop and logo of the page it opens
+ * (#336), the franchise's with seasons grouped, else the entry's own page's, with the name where there's no logo.
+ */
 export function AnimeLandscapeCard({ item, label }: { item: Media; label?: string }) {
   const title = useAnimeTitle()(item.title);
   const open = useOpenAnime(item);
   const { matureContent, animeSeparateEntries: separate } = usePrefs();
-  // Wide art first (re-test N5), the entry's own with seasons as separate shows (#194); nothing until the links
-  // answer, so the picture doesn't change once drawn.
-  const imdb = useLinkedImdb(item.id);
+  // Worked out once the card comes near the screen (a page's worth of AniList requests per card), the ones on
+  // screen first; nothing until it's known, so the picture doesn't change once drawn.
+  const [ref, near, place] = useViewportPlace<HTMLElement>(reprioritiseAniList);
+  const priority = useCallback(() => rowPriority(place.current), [place]);
+  const page = useAnimePageArt(item, near, priority);
+  // Where AniList couldn't be asked: the card's own wide art (re-test N5, #194), once the links answer.
+  const imdb = useLinkedImdb(page === null ? item.id : 0);
+  const own = [item.bannerImage, item.coverImage.extraLarge];
   const [art, ...artFallbacks] =
-    imdb === undefined ? [] : landscapeArt({ imdb, bannerImage: item.bannerImage, cover: item.coverImage.extraLarge, separate });
+    page === null
+      ? imdb === undefined
+        ? []
+        : landscapeArt({ imdb, bannerImage: item.bannerImage, cover: item.coverImage.extraLarge, separate })
+      : page
+        ? [page.background, ...own].filter((u, i, all): u is string => !!u && all.indexOf(u) === i)
+        : [];
   if (matureContent === "hide" && isMature(item)) return null;
   return (
     <Card
+      ref={ref}
       shape="landscape"
       className="anime-card"
       frameClass="anime-card-frame"
@@ -173,7 +192,7 @@ export function AnimeLandscapeCard({ item, label }: { item: Media; label?: strin
       {...open}
       style={{ "--cover": item.coverImage.color ?? undefined } as React.CSSProperties}
     >
-      <ArtTitle name={title} />
+      {page !== undefined && <ArtTitle name={title} logo={page?.logo} logos={page?.logos} />}
       {matureContent === "blur" && isMature(item) && <MatureCover />}
     </Card>
   );

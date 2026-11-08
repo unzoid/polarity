@@ -29,6 +29,14 @@ export function isSeason(card: Pick<AnimeCard, "format" | "episodes">): boolean 
   return true;
 }
 
+/**
+ * Whether no season comes before `anime` (its relations): with seasons as separate shows, only such an entry's
+ * page takes its art from the title it plays from; a later one's is its own (AnimeDetail.tsx, pageArt.ts).
+ */
+export function noSeasonBefore(anime: Pick<ChainLink, "relations">): boolean {
+  return !anime.relations.edges.some((e) => e.relationType === "PREQUEL" && e.node.type !== "MANGA" && isSeason(e.node));
+}
+
 export interface SeasonWalk {
   seasons: AnimeSeason[];
   /** Every entry along the prequel/sequel links in watch order, the OVAs and specials between seasons too (#193). */

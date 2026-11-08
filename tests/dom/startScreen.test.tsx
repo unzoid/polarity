@@ -112,3 +112,30 @@ test("a logo that doesn't load leaves the name, not a broken image (#360)", asyn
   const again = await render(<PlayerStatus state={{ status: "searching" }} error={null} logo={logo} name="Sintel" steps={[]} backend="mpv" />);
   expect(again.container.querySelector(".load-mark img")).toBeNull();
 });
+
+test("no add-ons: Try Again asks again and Open Add-ons goes to the Add-ons page; a playback error offers no Try Again (#375)", async () => {
+  let retried = 0;
+  const pages: string[] = [];
+  const { container, unmount } = await render(
+    <PlayerStatus
+      state={{ status: "failed", reason: "No sources found. Install a stream add-on in Settings.", settings: "addons" }}
+      error={null}
+      name="Sintel"
+      steps={steps}
+      backend="mpv"
+      onSources={noop}
+      onSettings={(page) => pages.push(page)}
+      onRetry={() => retried++}
+    />,
+  );
+  await click(byText(container, "button", "Try Again"));
+  await click(byText(container, "button", "Open Add-ons"));
+  expect([retried, pages]).toEqual([1, ["addons"]]);
+  await unmount();
+
+  const player = await render(
+    <PlayerStatus state={{ status: "ready", url: "https://media.example.com/film.mkv", stream: { url: "https://media.example.com/film.mkv" } }} error="The file couldn't be decoded." steps={steps} backend="mpv" onRetry={noop} />,
+  );
+  expect([...player.container.querySelectorAll("button")].map((b) => b.textContent)).not.toContain("Try Again");
+  await player.unmount();
+});
