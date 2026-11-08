@@ -4074,6 +4074,7 @@ dependencies = [
  "getrandom 0.3.4",
  "librqbit",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]

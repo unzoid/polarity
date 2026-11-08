@@ -3,7 +3,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Sources, Trailer as TrailerIcon } from "../icons";
 import { Img } from "../Img";
 import { Button } from "../ui/Button";
-import { ease, imageBroken, markImageBroken } from "../../lib/ui";
+import { ease, imageBroken, markImageBroken, useNameWait } from "../../lib/ui";
+import { useLogoChoice } from "../TitleLogo";
 import { osName } from "../../lib/platform";
 import { appVersion } from "../../lib/updater";
 import { failedStage, formatReport, STAGE_LABEL, type StartStage, type StartStep } from "../../lib/playback";
@@ -29,6 +30,8 @@ export function PlayerStatus({
   state,
   error,
   logo,
+  logos,
+  artPending = false,
   name,
   background,
   steps,
@@ -40,7 +43,11 @@ export function PlayerStatus({
 }: {
   state: ReturnType<typeof useSource>["state"];
   error: string | null;
+  /** The title page's logo (#391), and all of its logos to choose from (`TitleLogo`). */
   logo?: string;
+  logos?: string[];
+  /** The page's art isn't known yet: nothing shows in the logo's place, for at most `NAME_WAIT`. */
+  artPending?: boolean;
   name?: string;
   background?: string;
   steps: StartStep[];
@@ -56,7 +63,15 @@ export function PlayerStatus({
 }) {
   // A logo that doesn't load leaves the name, never a broken-image icon (#360).
   const [, setBroken] = useState(0);
-  const mark = logo && !imageBroken(logo) ? logo : undefined;
+  const candidate = logo && !imageBroken(logo) ? logo : undefined;
+  // The page's checks (#371, #354): a picture not shaped like a logo is never shown, the name is.
+  const choice = useLogoChoice(candidate, logos);
+  const shown = typeof choice === "object" ? choice : undefined;
+  const mark = shown && !imageBroken(shown.src) ? shown.src : undefined;
+  const look = shown?.look === "as-is" ? undefined : shown?.look;
+  // While the art or the logo's shape isn't known, the name keeps its place unseen (#343).
+  const waiting = useNameWait(artPending && !logo, name ?? "");
+  const hidden = !mark && (waiting || (!!candidate && choice === undefined));
   const failed = state.status === "failed" || !!error;
   const stageAt = failed ? failedStage(steps) : undefined;
 
@@ -80,6 +95,7 @@ export function PlayerStatus({
         <div
           className="load-mark"
           data-long={!mark && (name?.length ?? 0) > LONG_NAME}
+          data-name-wait={hidden ? "" : undefined}
           style={{ "--fill": `${failed ? 0 : FILL[stage]}%` } as React.CSSProperties}
         >
           {mark ? (
@@ -88,12 +104,13 @@ export function PlayerStatus({
                 src={mark}
                 alt={name ?? ""}
                 className="load-mark-base"
+                data-logo-look={look}
                 onError={() => {
                   markImageBroken(mark);
                   setBroken((n) => n + 1);
                 }}
               />
-              <img src={mark} alt="" aria-hidden className="load-mark-fill" />
+              <img src={mark} alt="" aria-hidden className="load-mark-fill" data-logo-look={look} />
             </>
           ) : (
             <>

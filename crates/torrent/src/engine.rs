@@ -63,7 +63,7 @@ pub struct Request {
 /// A step of opening a stream, for the player's loading screen. Says nothing
 /// about what the torrent is (no names, no hash).
 #[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "kind")]
 pub enum Step {
     /// Asking the DHT (and this many trackers) for peers.
     Searching { trackers: usize, dht: bool },
@@ -457,6 +457,15 @@ fn empty_dir(dir: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steps_reach_the_app_in_camel_case() {
+        let step = Step::Peers { connected: 0, connecting: 2, down_bps: 0, have: 0, size: 619_000_000 };
+        let json = serde_json::to_value(step).unwrap();
+        assert_eq!(json["kind"], "peers");
+        assert_eq!(json["downBps"], 0);
+        assert!(json.get("down_bps").is_none());
+    }
 
     #[test]
     fn picks_the_largest_video() {

@@ -115,6 +115,7 @@ import { Button, IconButton } from "../components/ui/Button";
 import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
 import { PlayerStatus } from "../components/player/PlayerStatus";
+import { useLoadingArt } from "../components/player/useLoadingArt";
 import { TorrentNotice } from "../components/player/TorrentNotice";
 import { FrameLabel, PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
 import { useMediaTime } from "../components/player/useMediaTime";
@@ -167,7 +168,9 @@ export function Player({
   // A video file on this device (#204): its title is the file or its folder (lib/localFiles), its
   // source the file itself, and where it stopped is kept on this device; nothing is looked up online.
   const local = isFileId(metaId);
-  const { data: meta } = useMeta(type, metaId, !isLinkId(metaId) && !local);
+  const { data: meta, isPending: metaPending } = useMeta(type, metaId, !isLinkId(metaId) && !local);
+  // The loading screen draws the title page's logo and backdrop (#391).
+  const art = useLoadingArt(meta, metaPending && !isLinkId(metaId) && !local, videoId);
   // Its languages are Settings → Anime's for an anime (#235).
   const { settings, anime, original } = useTitleSettings(type, videoId);
   const { touch } = useFormFactor();
@@ -1152,9 +1155,11 @@ export function Player({
             key="status"
             state={source.state}
             error={ytOutside ? "On Android, YouTube videos play in YouTube." : error}
-            logo={meta?.logo}
+            logo={art.logo}
+            logos={art.logos}
+            artPending={art.pending}
             name={link ? title : meta?.name}
-            background={meta?.background}
+            background={art.background}
             steps={steps}
             backend={engine === "html" ? "built-in" : engine === "youtube" ? "YouTube's embedded player" : (engine ?? "not chosen yet")}
             onSources={link || local ? undefined : () => setOptions("sources")}
