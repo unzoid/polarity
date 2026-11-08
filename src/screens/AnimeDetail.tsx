@@ -22,6 +22,7 @@ import {
   baseTitle,
   franchiseArt,
   isSeason,
+  nothingKnownYet,
   useAnime,
   useAnimeSeasons,
   useAnimeTitle,
@@ -59,7 +60,9 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const linked = !!opened?.relations.edges.some((e) => (e.relationType === "PREQUEL" || e.relationType === "SEQUEL") && e.node.type !== "MANGA");
   const seasonsLoading = !separate && linked && (walking || walk?.complete === false);
   const title = useAnimeTitle();
-  const seasons = found ?? (seasonsLoading && opened ? [{ card: opened, label: title(opened.title) }] : undefined);
+  // An entry that's no season of its own (an OVA, a part nothing is known of) opens on its own page, never as a tab (#351).
+  const ownTab = !!opened && isSeason(opened) && !nothingKnownYet(opened);
+  const seasons = found ?? (seasonsLoading && opened && ownTab ? [{ card: opened, label: title(opened.title) }] : undefined);
   // While a season loads, the last one stays on screen (dimmed) so the page keeps its height and place.
   const { data: loaded, isError } = useAnime(activeId, { keepPrevious: true });
   const anime = loaded?.id === activeId ? loaded : undefined;

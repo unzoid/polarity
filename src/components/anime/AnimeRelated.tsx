@@ -21,8 +21,7 @@ import type { Franchise } from "./AnimeEpisodes";
 
 /**
  * Watch Order and the rest of the franchise not already in the season tabs
- * (lib/anime/relatedRows.ts), then AniList's recommendations. A Watch Order
- * card for one of the page's tabs switches to it, back at the top of the page.
+ * (lib/anime/relatedRows.ts), then AniList's recommendations.
  * Also in This Franchise's manga, novels and entries Polarity can't play open
  * elsewhere (lib/anime/franchiseEntry.ts), or stay out with Settings → Anime.
  */
@@ -36,16 +35,7 @@ export function AnimeRelated({ anime, franchise }: { anime: Anime; franchise?: F
       key={`${c.card.id}/${c.label}`}
       item={c.card}
       label={actions.get(c.card.id)?.kind === "youtube" ? `${c.label} · YouTube` : c.label}
-      current={c.current}
       action={actions.get(c.card.id)}
-      onOpen={
-        franchise && c.tab
-          ? (e) => {
-              franchise.select(c.card.id);
-              e.currentTarget.closest(".detail-scroll")?.scrollTo({ top: 0 });
-            }
-          : undefined
-      }
     />
   );
   const watchOrderRow = watchOrder.length > 0 && <Row title="Watch Order">{watchOrder.map(card)}</Row>;
