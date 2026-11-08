@@ -406,24 +406,28 @@ export function PartyBadge({ party, onOpen }: { party: PartyState; onOpen: () =>
  * Appears only if it lasts (CSS delay), so a blip never flashes it.
  */
 export function PartyHold({ party, videoId }: { party: PartyState; videoId: string }) {
-  const pb = party.playback;
-  // Stalled, if the room pauses for that (#238): as presence says, or sooner as its position report says.
-  const stalled = (m: Member) => party.rules.stall && (m.buffering || party.positions[m.id]?.stalled);
-  const waiters = party.members.filter((m) => (m.waiting || stalled(m)) && !m.away && m.id !== party.me);
-  const text =
-    party.error
-      ? "Watch party unavailable"
-      : party.status === "error"
-      ? "Reconnecting to the party…"
-      : pb?.held && pb.media.videoId === videoId && waiters.length
-        ? `Waiting for ${waiters.length === 1 ? waiters[0].name : `${waiters.length} people`}…`
-        : null;
+  const text = partyHoldText(party, videoId);
   return (
     <div className="party-hold t-callout" data-shown={!!text} role="status" aria-live="polite">
       <Spinner size={16} />
       <span>{text}</span>
     </div>
   );
+}
+
+/** What PartyHold says, if anything: the room waiting on someone, or the connection dropping. */
+export function partyHoldText(party: PartyState, videoId: string): string | null {
+  const pb = party.playback;
+  // Stalled, if the room pauses for that (#238): as presence says, or sooner as its position report says.
+  const stalled = (m: Member) => party.rules.stall && (m.buffering || party.positions[m.id]?.stalled);
+  const waiters = party.members.filter((m) => (m.waiting || stalled(m)) && !m.away && m.id !== party.me);
+  return party.error
+    ? "Watch party unavailable"
+    : party.status === "error"
+    ? "Reconnecting to the party…"
+    : pb?.held && pb.media.videoId === videoId && waiters.length
+      ? `Waiting for ${waiters.length === 1 ? waiters[0].name : `${waiters.length} people`}…`
+      : null;
 }
 
 /** "Sam paused", "Alex joined": brief, bottom-left, newest at the bottom. */

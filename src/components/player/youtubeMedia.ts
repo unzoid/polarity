@@ -31,8 +31,9 @@ const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "obj
  * It talks to the embed (youtube-nocookie.com, `enablejsapi=1`) with the IFrame Player API's messages,
  * without loading YouTube's script into the app: commands go in as `{event: "command", func, args}`,
  * and the player's `infoDelivery`, `onStateChange` and `onError` come back as the DOM events a <video>
- * fires (play, pause, waiting, playing, loadedmetadata, timeupdate, ended, error). So the controls and
- * the watch party's sync drive it like any other player.
+ * fires (play, pause, waiting, playing, loadedmetadata, timeupdate, ended, error), and "playerready" once
+ * the embed answers. So the keyboard and the watch party's sync drive it like any other player, next to
+ * YouTube's own controls (#384).
  *
  * Time comes from the player a few times a second; between reports `currentTime` runs on from the rate.
  */
@@ -108,6 +109,7 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
         this.ready = true;
         for (const name of ["onStateChange", "onError"]) this.command("addEventListener", name);
         this.begin();
+        this.emit("playerready");
         break;
       case "initialDelivery":
       case "infoDelivery":
@@ -190,6 +192,11 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
     // Stopped with the picture there (paused, cued, a buffer that ended paused): no longer loading. YouTube
     // only ever says so by its state, and a buffer that ended paused left the player buffering for good (#383).
     if (this.loaded && (s === PAUSED || s === CUED || (was === BUFFERING && s === ENDED))) this.emit("canplay");
+  }
+
+  /** YouTube's player is up, its own controls with it ("playerready" says when): nothing may cover it from then on (#384). */
+  get playerReady() {
+    return this.ready;
   }
 
   get currentTime() {

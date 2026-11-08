@@ -818,10 +818,15 @@ on two devices, check:
   video; a link that answers 403 or 404 says so.
 - The profile menu's Join Watch Party dialog: "or watch a link together" starts a party on a link.
 - A YouTube link (#201): paste a `youtube.com/watch?v=`, a `youtu.be/`, a Shorts and an embed link of the same
-  video on one device each time. YouTube's own player opens in the player, without its controls; the title shows
-  once it loads; Play/Pause, the scrubber, ±10 s and volume drive it; the other device follows pause and seeks. A
-  video whose owner doesn't allow embedding says so. Checked here only against a stand-in for YouTube's embed
-  (e2e), not YouTube itself, and not on macOS (`tauri://` origin), Windows, Linux, Android or iOS web views.
+  video on one device each time. YouTube's own player opens in the player with its own controls (#384), and
+  nothing of Polarity's covers any part of it: a slim bar above it (Back; in a party, the faces that open the
+  Watch Party panel) collapses to a strip once it plays and comes back with the pointer on the top edge or a key;
+  the party panel opens beside the video (below it in a window standing upright), which shrinks to make room;
+  C and R say captions and speed are in YouTube's player; Space and the arrow keys still drive it while the
+  frame doesn't have the focus; the other device follows pause and seeks. A video whose owner doesn't allow
+  embedding says so. Checked here only against a stand-in for YouTube's embed (e2e), not YouTube itself, and not
+  on macOS (`tauri://` origin), Windows, Linux, Android or iOS web views: there, check that YouTube's CC,
+  settings and fullscreen buttons work, and what its title and logo links do (the frame allows no popups).
 - TV mode: the question shows and works with a remote (Play focused, Back is Not Now). There's no
   link field in TV mode.
 

@@ -1258,7 +1258,7 @@ test.describe("signed in, on a fresh profile", () => {
     await expect.poll(() => videoTime(app)).toBeGreaterThan(2.5);
   });
 
-  test("a YouTube link plays in YouTube's embedded player, driven by the player's controls (#201)", async ({ app }) => {
+  test("a YouTube link plays in YouTube's embedded player with its own controls, nothing of ours over it (#201, #384)", async ({ app }) => {
     // A stand-in for YouTube's embed that speaks its IFrame Player API messages: no request leaves the machine.
     const commands: string[] = [];
     await app.exposeFunction("ytCommand", (f: string) => void commands.push(f));
@@ -1283,22 +1283,67 @@ test.describe("signed in, on a fresh profile", () => {
     await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
     await app.getByRole("textbox", { name: "Video link" }).fill("https://youtu.be/abc-DEF_123?si=xxx");
     await app.getByRole("button", { name: "Watch", exact: true }).click();
+    const player = app.locator(".player");
     const frame = app.locator("iframe.player-youtube");
+    const bar = app.locator(".player-yt-bar");
     await expect(frame).toHaveAttribute("src", /^https:\/\/www\.youtube-nocookie\.com\/embed\/abc-DEF_123\?.*enablejsapi=1/);
-    await expect(frame).toHaveAttribute("src", /controls=0/);
+    // YouTube's own controls, which nothing covers: no controls, title, click target or loading screen of ours over the frame.
+    await expect(frame).not.toHaveAttribute("src", /controls=0/);
     await expect(app.locator(".player video")).toHaveCount(0);
-    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-    await expect(app.locator(".player")).toHaveAttribute("data-engine", "youtube");
-    await expect(app.locator(".player")).toContainText("An Open Film");
-    await app.locator(".player").hover();
-    await app.getByRole("button", { name: "Pause", exact: true }).click();
-    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
-    expect(commands).toContain("pauseVideo");
-    // Out of the player and back from the party badge: the same YouTube video, still paused (#387).
+    await expect(player).toHaveAttribute("data-started", "true");
+    await expect(player).toHaveAttribute("data-engine", "youtube");
+    await expect(app.locator(".player-status")).toHaveCount(0);
+    await expect(app.locator(".player-top, .player-center, .player-bottom, .player-surface, .player-heading")).toHaveCount(0);
+    await expect(player).not.toContainText("An Open Film");
+    const overlaps = () =>
+      app.evaluate(() => {
+        const frame = document.querySelector("iframe.player-youtube")!;
+        const f = frame.getBoundingClientRect();
+        // Everything drawn in the player but the frame and what holds it.
+        return [...document.querySelectorAll(".player *")]
+          .filter((el) => !el.contains(frame) && getComputedStyle(el).visibility !== "hidden")
+          .map((el) => [el, el.getBoundingClientRect()] as const)
+          .filter(([, r]) => r.width > 0 && r.height > 0 && r.left < f.right - 0.5 && r.right > f.left + 0.5 && r.top < f.bottom - 0.5 && r.bottom > f.top + 0.5)
+          .map(([el]) => el.className || el.tagName);
+      });
+    expect(await overlaps()).toEqual([]);
+
+    // Playing, the bar above the frame collapses to a strip; a key or the pointer on the top edge brings it back.
+    const box = (await frame.boundingBox())!;
+    await app.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 10_000 });
+    expect((await frame.boundingBox())!.height).toBeGreaterThan(box.height);
+    // A key brings it back too, a seek included.
+    await app.keyboard.press("ArrowRight");
+    await expect(bar).toHaveAttribute("data-shown", "true");
+    await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 10_000 });
+    await app.mouse.move(box.x + box.width / 2, 2);
+    await expect(bar).toHaveAttribute("data-shown", "true");
+    await expect(bar.getByRole("button", { name: "Back" })).toBeVisible();
+
+    // The party panel opens beside the frame, which narrows to make room.
+    await bar.locator(".party-badge").click();
+    const panel = app.locator('.options-overlay[data-place="beside"]');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole("heading", { name: "Watch Party" })).toBeVisible();
+    const narrowed = (await frame.boundingBox())!;
+    expect(narrowed.width).toBeLessThan(box.width - 100);
+    expect((await panel.boundingBox())!.x).toBeGreaterThanOrEqual(narrowed.x + narrowed.width - 0.5);
+    expect(await overlaps()).toEqual([]);
+    await app.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+
+    // Captions and speed are YouTube's: the keys say where they are, and open nothing over the frame.
+    await app.keyboard.press("c");
+    await expect(bar).toContainText("CC button");
+    await expect(app.locator(".options-overlay")).toHaveCount(0);
+    // The keyboard still drives YouTube's player.
+    await app.keyboard.press("Space");
+    await expect.poll(() => commands).toContain("pauseVideo");
+    // Out of the player and back from the party badge: the same YouTube video (#387).
     await app.keyboard.press("Escape");
     await backToParty(app);
     await expect(frame).toHaveAttribute("src", /\/embed\/abc-DEF_123\?/);
-    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
   });
 
   test("a YouTube player whose start stops paused (autoplay refused, or a buffer that ends paused) is ready, not buffering (#383)", async ({ app }) => {
@@ -1327,9 +1372,7 @@ test.describe("signed in, on a fresh profile", () => {
     await app.getByRole("button", { name: "Watch", exact: true }).click();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
     await expect(app.locator(".player")).toHaveAttribute("data-buffering", "false");
-    await app.locator(".player").hover();
-    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
-    await expect(app.locator(".player-transport-main .player-spinner")).toHaveCount(0);
+    await expect(app.locator(".player-status")).toHaveCount(0);
   });
 });
 
