@@ -197,7 +197,7 @@ const DAY = 86_400_000;
  * middle. Otherwise an episode Cinemeta dates 10 October and ani.zip at
  * 14:00 UTC on the 11th (late evening in Japan) are 38 hours apart.
  */
-const time = (iso?: string) => {
+export const time = (iso?: string) => {
   if (!iso) return NaN;
   const day = iso.length === 10 || /T00:00(?::00(?:\.0+)?)?Z$/.test(iso);
   return new Date(day ? `${iso.slice(0, 10)}T12:00:00Z` : iso).getTime();

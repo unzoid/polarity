@@ -8,10 +8,15 @@ import type { Meta, Video } from "../../types";
 export const LONG_ANIME = { anilist: 990_001, imdb: "tt9901200", episodes: 1200, name: "Lanternfield Chronicle" };
 /** The same show cut to one cour, to compare with: what a short show's page takes. */
 export const SHORT_ANIME = { anilist: 990_002, imdb: "tt9900012", episodes: 12, name: "Lanternfield Prelude" };
-export type InventedAnime = typeof LONG_ANIME;
+export type InventedAnime = typeof LONG_ANIME & { kitsu?: number; missing?: number[] };
+/**
+ * A show of 150 whose series IMDb lists without episodes 100 and 101 (#427): its page still lists them, asked for
+ * by the entry's Kitsu id.
+ */
+export const GAP_ANIME: InventedAnime = { anilist: 990_005, imdb: "tt9901150", episodes: 150, name: "Lanternfield Ferry", kitsu: 4243, missing: [100, 101] };
 /** A show whose one season has 1,200 episodes, as some long-running ones are listed, for TV's episode list (#436). */
 export const ONE_SEASON = { imdb: "tt9901201", episodes: 1200, name: "Lanternfield Ledger" };
-export const inventedAnime = (anilist: number) => [LONG_ANIME, SHORT_ANIME].find((a) => a.anilist === anilist);
+export const inventedAnime = (anilist: number): InventedAnime | undefined => [LONG_ANIME, SHORT_ANIME, GAP_ANIME].find((a) => a.anilist === anilist);
 
 const WEEK = 7 * 86_400_000;
 const START = Date.UTC(2001, 3, 4, 14);
@@ -20,17 +25,16 @@ const inSeason = (n: number) => ((n - 1) % 50) + 1;
 const airs = (n: number) => START + (n - 1) * WEEK;
 
 export function longAnimeVideos(show: InventedAnime = LONG_ANIME): Video[] {
-  return Array.from({ length: show.episodes }, (_, i) => {
-    const n = i + 1;
-    return {
+  return Array.from({ length: show.episodes }, (_, i) => i + 1)
+    .filter((n) => !show.missing?.includes(n))
+    .map((n) => ({
       id: `${show.imdb}:${seasonOf(n)}:${inSeason(n)}`,
       title: `Episode #${seasonOf(n)}.${inSeason(n)}`,
       season: seasonOf(n),
       episode: inSeason(n),
       // Cinemeta's way: the day, at midnight UTC.
       released: `${new Date(airs(n)).toISOString().slice(0, 10)}T00:00:00.000Z`,
-    };
-  });
+    }));
 }
 
 export function longAnimeMeta(imdb: string): Meta | null {
@@ -38,7 +42,7 @@ export function longAnimeMeta(imdb: string): Meta | null {
     const videos = longAnimeVideos({ ...LONG_ANIME, ...ONE_SEASON }).map((v, i) => ({ ...v, id: `${imdb}:1:${i + 1}`, title: `Ledger ${i + 1}`, season: 1, episode: i + 1 }));
     return { id: imdb, type: "series", name: ONE_SEASON.name, videos };
   }
-  const show = [LONG_ANIME, SHORT_ANIME].find((a) => a.imdb === imdb);
+  const show = [LONG_ANIME, SHORT_ANIME, GAP_ANIME].find((a) => a.imdb === imdb);
   return show ? { id: show.imdb, type: "series", name: show.name, videos: longAnimeVideos(show) } : null;
 }
 
@@ -63,7 +67,7 @@ export function longAnimeZip(show: InventedAnime = LONG_ANIME) {
     episodeCount: show.episodes,
     specialCount: 0,
     images: [],
-    mappings: { anilist_id: show.anilist, imdb_id: show.imdb, type: "TV" },
+    mappings: { anilist_id: show.anilist, imdb_id: show.imdb, ...(show.kitsu && { kitsu_id: show.kitsu }), type: "TV" },
     episodes,
   };
 }

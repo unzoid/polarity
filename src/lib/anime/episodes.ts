@@ -1,5 +1,5 @@
 import type { Anime, AnimeCard } from "./anilist";
-import { episodeMatcher, episodeTitle, regularEpisodes, type AniZip, type AniZipEpisode } from "./anizip";
+import { episodeMatcher, episodeTitle, regularEpisodes, time, type AniZip, type AniZipEpisode } from "./anizip";
 import { formatTime } from "../format";
 import type { Progress, Video } from "../types";
 
@@ -29,6 +29,11 @@ export interface AnimeEpisode {
  * Every regular episode of the entry, from ani.zip (or numbered from AniList
  * when ani.zip has none), plus the ones AniList has scheduled that ani.zip
  * doesn't list yet, each with its video when there's one to play.
+ *
+ * Every number is listed (#427): one ani.zip skips sits between its neighbours, each video goes to one
+ * episode only (a double episode the catalog lists as one video, or a gap in the catalog, would otherwise
+ * give the episodes after it a video already taken), and an episode that has aired with no video of its own
+ * is asked for by the entry's Kitsu id (`kitsu:<id>:<n>`, as anime add-ons list it), when it has one.
  */
 export function animeEpisodes({
   anime,
@@ -37,6 +42,7 @@ export function animeEpisodes({
   imdb,
   titles,
   now = Date.now(),
+  kitsu = zip?.mappings.kitsu_id,
 }: {
   anime: AnimeCard | Anime;
   zip: AniZip | null | undefined;
@@ -45,6 +51,8 @@ export function animeEpisodes({
   imdb?: string;
   titles: "romaji" | "english" | "native";
   now?: number;
+  /** The entry's Kitsu id, for episodes the catalog doesn't have; ani.zip's when not given. */
+  kitsu?: number;
 }): AnimeEpisode[] {
   if (anime.format === "MOVIE") return [];
   // A Kitsu show's videos are numbered like the anime's; an IMDb one's are matched by air date.
@@ -65,6 +73,9 @@ export function animeEpisodes({
       upcoming: !!airDate && new Date(airDate).getTime() > now,
     };
   });
+  // A number ani.zip skips, between two it has: listed, with nothing more than its number.
+  for (let i = fromZip.length - 1; i > 0; i--)
+    for (let n = fromZip[i].number - 1; n > fromZip[i - 1].number; n--) fromZip.splice(i, 0, { number: n, upcoming: false, video: undefined });
   const list = fromZip.length
     ? fromZip
     : Array.from({ length: anime.episodes ?? Math.max(0, (anime.nextAiringEpisode?.episode ?? 1) - 1) }, (_, i): AnimeEpisode => ({
@@ -89,7 +100,54 @@ export function animeEpisodes({
       e.video ??= video;
     }
   }
-  return list.sort((a, b) => a.number - b.number);
+  list.sort((a, b) => a.number - b.number);
+  if (videos.length) oneVideoEach(list, videos);
+  // Only once the catalog has answered: before that, nothing has a video yet.
+  if (kitsu !== undefined && videos.length) {
+    for (const e of list)
+      if (!e.video && !e.upcoming)
+        e.video = { id: `kitsu:${kitsu}:${e.number}`, title: e.title ?? `Episode ${e.number}`, season: 1, episode: e.number, released: e.airDate };
+  }
+  return list;
+}
+
+/**
+ * Each video to one episode (#427): where several were given the same one, the episode that aired closest
+ * to it keeps it (then the one its number lines up with, then the first). Then an episode left without a
+ * video, between two that have one with exactly room for it in the catalog's order, takes the one there.
+ */
+function oneVideoEach(list: AnimeEpisode[], videos: Video[]) {
+  const gap = (e: AnimeEpisode) => {
+    const d = Math.abs(time(e.airDate) - time(e.video!.released));
+    return Number.isFinite(d) ? d : Infinity;
+  };
+  const holder = new Map<string, AnimeEpisode>();
+  for (const e of list) {
+    if (!e.video) continue;
+    const was = holder.get(e.video.id);
+    if (!was) {
+      holder.set(e.video.id, e);
+      continue;
+    }
+    const better = gap(e) < gap(was) || (gap(e) === gap(was) && e.video.episode === e.number && was.video!.episode !== was.number);
+    const loser = better ? was : e;
+    if (better) holder.set(e.video.id, e);
+    loser.video = undefined;
+  }
+  const ordered = videos.filter((v) => v.season > 0).sort((a, b) => a.season - b.season || a.episode - b.episode);
+  const at = new Map(ordered.map((v, i) => [v.id, i]));
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].video || list[i].upcoming) continue;
+    let j = i;
+    while (j < list.length && !list[j].video && !list[j].upcoming) j++;
+    const before = i > 0 ? list[i - 1].video : undefined;
+    const after = j < list.length ? list[j].video : undefined;
+    const from = before ? at.get(before.id) : undefined;
+    const to = after ? at.get(after.id) : undefined;
+    if (from !== undefined && to !== undefined && to - from - 1 === j - i)
+      for (let k = i; k < j; k++) if (!holder.has(ordered[from + 1 + k - i].id)) list[k].video = ordered[from + 1 + k - i];
+    i = j;
+  }
 }
 
 /**
@@ -102,7 +160,7 @@ export function sharedAnimeEpisodes(args: Parameters<typeof animeEpisodes>[0]): 
   const { anime, zip, videos, imdb, titles, now = Date.now() } = args;
   let byEntry = shared.get(videos);
   if (!byEntry) shared.set(videos, (byEntry = new Map()));
-  const key = `${anime.id}|${imdb ?? ""}|${titles}`;
+  const key = `${anime.id}|${imdb ?? ""}|${titles}|${args.kitsu ?? ""}`;
   const kept = byEntry.get(key);
   if (kept && kept.anime === anime && kept.zip === zip && now - kept.at < 60_000) return kept.episodes;
   const episodes = animeEpisodes({ ...args, now });

@@ -11,11 +11,13 @@ export const PENDING_EPISODE = "anime-pending:";
 /**
  * What an anime entry's episode list shows (components/anime/AnimeEpisodes.tsx), as episode cards'
  * videos numbered in the entry: the episodes you can play and the ones still to air, recaps left out
- * when `hideRecaps`.
+ * when `hideRecaps`. Once the catalog has answered (some episode has a video), an aired one with nothing
+ * to play is listed too, so no number is missing (#427).
  */
 export function shelfEpisodes(episodes: AnimeEpisode[], flags: Map<number, EpisodeFlags> | undefined, hideRecaps: boolean): Video[] {
+  const answered = episodes.some((e) => e.video);
   return episodes
-    .filter((e) => (e.video || e.upcoming) && !(hideRecaps && flags?.get(e.number)?.recap))
+    .filter((e) => (e.video || e.upcoming || answered) && !(hideRecaps && flags?.get(e.number)?.recap))
     .map((e) => {
       const f = flags?.get(e.number);
       return {
