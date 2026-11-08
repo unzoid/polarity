@@ -4,7 +4,8 @@ import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer"
 import { useTrailerOpen } from "../components/Trailer";
 import { AnimeCharacters } from "../components/anime/AnimeCharacters";
 import { AnimeDetails } from "../components/anime/AnimeDetails";
-import { AnimeEpisodes, FilmPick, SeasonTabs, type Franchise } from "../components/anime/AnimeEpisodes";
+import { AnimeEpisodes, SeasonTabs, type Franchise } from "../components/anime/AnimeEpisodes";
+import { FilmCard } from "../components/anime/FilmCard";
 import { AnimeHero, type HeroFranchise } from "../components/anime/AnimeHero";
 import { AnimeListPanels } from "../components/anime/AnimeListPanel";
 import { AnimeRelated } from "../components/anime/AnimeRelated";
@@ -207,11 +208,11 @@ function Body({ anime, franchise, switching }: { anime: Anime; franchise?: Franc
   return (
     <div className="anime-body" data-switching={switching || undefined}>
       {!isMovie && <AnimeEpisodes key={anime.id} anime={anime} franchise={franchise} />}
-      {/* A film in a franchise: the season tabs alone, to get back to the series. */}
+      {/* A film in a franchise: the season tabs, then the film as one card to play, in place of the episodes (#352). */}
       {isMovie && franchise && (
         <section className="seasons">
           <SeasonTabs franchise={franchise} />
-          <FilmPick key={anime.id} anime={anime} />
+          <FilmCard key={anime.id} anime={anime} />
         </section>
       )}
       <AnimeListPanels key={`list-${anime.id}`} anime={anime} />

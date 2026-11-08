@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type Anime,
   aniZipQuery,
@@ -7,17 +7,19 @@ import {
   distinctLabels,
   episodeMatcher,
   type FranchiseTabs,
+  partDownloads,
+  PENDING_EPISODE,
   playContext,
   regularEpisodes,
   rememberStill,
-  stillFor,
+  shelfEpisodes,
   useAnimeTitle,
   useEpisodeFlags,
 } from "../../lib/anime";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../../lib/settings";
 import type { PlayRequest } from "../../lib/playback";
-import { ownEpisodeName } from "../../lib/format";
 import type { Video } from "../../lib/types";
+import { BatchDownload } from "../BatchDownload";
 import { Dropdown } from "../Dropdown";
 import { LayoutList, LayoutRow } from "../icons";
 import { Segmented } from "../Segmented";
@@ -66,23 +68,8 @@ export function AnimeEpisodes({
 
   const hasFiller = !!flags && [...flags.values()].some((f) => f.filler);
   // What the shelf can show: episodes you can play, and the ones still to air.
-  const list: Video[] = pb.episodes
-    .filter((e) => (e.video || e.upcoming) && !(prefs.animeHideRecaps && flags?.get(e.number)?.recap))
-    .map((e) => {
-      const f = flags?.get(e.number);
-      return {
-        id: e.video?.id ?? `${PENDING}${e.number}`,
-        // The video's name only when it's a real one: "Episode 9" or "Episode #1.9" may be another number than this entry's (#360).
-        title: e.title ?? ownEpisodeName(e.video?.title) ?? `Episode ${e.number}`,
-        season: 1,
-        episode: e.number,
-        released: e.airDate ?? e.video?.released,
-        // Another source's still when this one has none: the addon's, then one another entry's ani.zip record lined up (#192).
-        thumbnail: e.image ?? e.video?.thumbnail ?? (e.video && stillFor(e.video.id)),
-        overview: e.overview ?? e.video?.overview,
-        tag: f?.filler ? "Filler" : f?.recap ? "Recap" : undefined,
-      };
-    });
+  const list = useMemo(() => shelfEpisodes(pb.episodes, flags, prefs.animeHideRecaps), [pb.episodes, flags, prefs.animeHideRecaps]);
+  const downloads = useMemo(() => partDownloads(list), [list]);
 
   useEffect(() => {
     if (flags && pb.metaId)
@@ -120,7 +107,7 @@ export function AnimeEpisodes({
 
   // Nothing to play yet for a scheduled episode, nor before the entry is linked to an IMDb or Kitsu id.
   const request = (v: Video): PlayRequest | undefined =>
-    v.id.startsWith(PENDING) || !pb.metaId
+    v.id.startsWith(PENDING_EPISODE) || !pb.metaId
       ? undefined
       : {
           type: "series",
@@ -189,6 +176,8 @@ export function AnimeEpisodes({
           Skip filler
         </label>
       )}
+      {/* Downloads keyed like progress: under the id the anime plays from, as each episode's own. */}
+      {pb.meta && <BatchDownload item={pb.meta} videos={downloads} part={anime.id} />}
       <Segmented
         label="Episode layout"
         value={layout}
@@ -265,14 +254,6 @@ export function PartPick({ anime, pb }: { anime: Anime; pb: Pick<ReturnType<type
     </p>
   );
 }
-
-/** {@link PartPick} for a film's tab, which has no episode list to share its playback with. */
-export function FilmPick({ anime }: { anime: Anime }) {
-  return <PartPick anime={anime} pb={useAnimePlayback(anime)} />;
-}
-
-/** Id prefix for an episode that's scheduled but has nothing to play yet. */
-const PENDING = "anime-pending:";
 
 /**
  * The franchise's seasons (and films) as tabs, like a show's, on a row of
