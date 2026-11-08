@@ -58,6 +58,7 @@ import { EpisodeRail } from "../components/player/EpisodeRail";
 import { Dropdown } from "../components/Dropdown";
 import { SkipTransport } from "../components/player/SkipTransport";
 import { useTracks } from "../components/player/useTracks";
+import { useKeyboardFocus } from "../components/player/useKeyboardFocus";
 import { usePinch } from "../components/player/usePinch";
 import { pickedSpeed, pickedTrack, speedLabel, speedMenu, tracksMenu } from "../components/player/nativeMenus";
 import {
@@ -344,6 +345,8 @@ export function Player({
   const frameSteps = useStepping(paused, buffering);
   // YouTube's bar stays out of the way while paused too: showing it moves the picture (#384).
   const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping && !ytFramed);
+  // The focus ring shows only for focus moved by the keyboard, never after a click (#329).
+  const keyFocus = useKeyboardFocus();
   const ready = source.state.status === "ready" && !error;
   // The top bar's "More" menu (#396) keeps the controls up while it's open.
   const [moreOpen, setMoreOpen] = useState(false);
@@ -1056,6 +1059,8 @@ export function Player({
       if (!chromeVisible && !ytFramed && (action === "seekBack" || action === "seekForward")) return;
       poke(true);
     },
+    // Any other key brings the controls back too, with the focus ring where the keyboard left it (#329).
+    () => poke(true),
   );
 
   // Warm the next episode's sources well before the credits.
@@ -1189,6 +1194,7 @@ export function Player({
         className="player player-yt"
         data-engine="youtube"
         data-chrome={barShown}
+        data-key-focus={keyFocus || undefined}
         data-options={options === "party"}
         data-started={started}
         data-buffering={frameSteps.spinner && ready}
@@ -1259,6 +1265,7 @@ export function Player({
       data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
       data-instant={chrome.instant}
+      data-key-focus={keyFocus || undefined}
       data-options={!!options}
       data-options-instant={optionsByKey}
       data-started={started}

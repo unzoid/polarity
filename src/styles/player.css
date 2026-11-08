@@ -43,6 +43,28 @@
   transition: none;
 }
 
+/* The focus ring only for focus moved by the keyboard (#329, useKeyboardFocus): never after a click,
+   nor for a shortcut pressed while a clicked button keeps the focus. It fades in quickly and fades
+   out with the controls that hold it; the next key brings both back. */
+.player:not([data-key-focus]) :is(:focus-visible, :focus-visible .card-frame, .srcf-slider-thumb:has(:focus-visible)) {
+  outline-color: transparent;
+}
+.player[data-key-focus] :is(button, a[href], input, [role="slider"]):focus-visible,
+.player[data-key-focus] :focus-visible .card-frame {
+  animation: focus-ring-in var(--dur-fast) var(--ease-out);
+}
+@keyframes focus-ring-in {
+  from {
+    outline-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player[data-key-focus] :is(button, a[href], input, [role="slider"]):focus-visible,
+  .player[data-key-focus] :focus-visible .card-frame {
+    animation: none;
+  }
+}
+
 /* Shared: bare glyphs on video need a soft shadow to read on bright frames. */
 .player-icon,
 .player-action,

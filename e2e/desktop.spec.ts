@@ -287,7 +287,44 @@ test("the player fits or fills the window, by its button or Z, and remembers it 
   await expect(fill).toHaveAttribute("aria-pressed", "false");
 });
 
-test("the player steps one frame at a time with , and ., and the frame number stays once the controls hide (#243, #273, #346)", async ({ app }) => {
+test("the player's focus ring shows for Tab, never for a click or the clicked button's shortcut, and hides with the controls (#329)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  const fill = player.getByRole("button", { name: "Fill window" });
+  // Drawn: an outline that isn't none or see-through.
+  const ring = (el: Locator) =>
+    expect.poll(() => el.evaluate((e) => getComputedStyle(e).outlineStyle !== "none" && getComputedStyle(e).outlineColor !== "rgba(0, 0, 0, 0)"));
+  await player.hover();
+  await fill.click();
+  await expect(fill).toBeFocused();
+  await ring(fill).toBe(false);
+  // Its shortcut keeps the focus where the click left it, still without a ring.
+  await app.keyboard.press("z");
+  await expect(fill).toHaveAttribute("aria-pressed", "false");
+  await expect(fill).toBeFocused();
+  await ring(fill).toBe(false);
+  // Tab moves the focus: the control it reaches shows the ring.
+  await app.keyboard.press("Tab");
+  const reached = player.locator(":focus");
+  await ring(reached).toBe(true);
+  // The ring goes with the controls; the next key brings both back on the same control.
+  await app.mouse.move(300, 300);
+  await expect(player).toHaveAttribute("data-chrome", "false", { timeout: 6000 });
+  await expect(player.locator(".player-bottom")).toHaveCSS("opacity", "0");
+  await app.keyboard.press("Shift");
+  await expect(player).toHaveAttribute("data-chrome", "true");
+  await expect(reached).toBeFocused();
+  await ring(reached).toBe(true);
+  // A click after the keyboard: no ring again.
+  await fill.click();
+  await expect(fill).toBeFocused();
+  await ring(fill).toBe(false);
+});
+
+test("the player steps one frame at a time with , and .,and the frame number stays once the controls hide (#243, #273, #346)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
   await app.getByRole("button", { name: "Play", exact: true }).click();
