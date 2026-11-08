@@ -61,7 +61,7 @@ export function AccountPage() {
 
       <Card title="Sync">
         {account.profile && <SecretsRow profileId={account.profile.id} {...expand("secrets")} />}
-        <SettingRow id="shareAddonsAndKeys" />
+        <SettingRow id="shareSetup" />
         {settingsProblem === "too_large" && (
           <p className="settings-error">This profile's settings are too large to sync. Add-on links take the most room: remove some to sync again.</p>
         )}

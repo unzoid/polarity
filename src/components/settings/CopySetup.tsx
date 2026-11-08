@@ -12,11 +12,11 @@ const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 /**
  * Settings → Account (#80): a profile that started on this device without anyone else's add-ons and
  * keys can copy a set from here: the guest's, or one of the account's other profiles'. Shown only while
- * it has none of its own (the app's own add-ons aside) and add-ons and keys aren't shared on this device.
+ * it has none of its own (the app's own add-ons aside) and add-ons and keys aren't shared with every account on this device (#429).
  */
 export function CopySetup() {
   const account = useAccount();
-  const { shareAddonsAndKeys } = usePrefs();
+  const { shareSetup } = usePrefs();
   const { data: settings } = useSettings();
   const { data: addons } = useAddons();
   const { data: bundled } = useQuery({ queryKey: ["addons", "bundled"], queryFn: () => api.bundledAddons().catch(() => [] as string[]), staleTime: Infinity });
@@ -32,7 +32,7 @@ export function CopySetup() {
     staleTime: Infinity,
   });
 
-  if (!profile || shareAddonsAndKeys || !settings || !addons || !bundled || !readable) return null;
+  if (!profile || shareSetup === "device" || !settings || !addons || !bundled || !readable) return null;
   const own = settings as unknown as Record<string, unknown>;
   const empty = !SECRET_KEYS.some((k) => own[k]) && addons.every((a) => bundled.includes(a.manifestUrl));
   const sources = setupSources(profile.id, others);

@@ -1479,15 +1479,14 @@ because mpv's `panscan` wasn't on the list of properties the player may set
   data folder has `polarity.json` and `polar.json.moved` and no `polar.json`; change a setting, quit, start
   again: still changed. An earlier version started after this one finds no `polar.json` and starts empty
   (rename `polar.json.moved` back to go back).
-- Add-ons and API keys per profile on a device (#80; `startProfile`, `setupSources`, `copySetup` in
-  `lib/account/settingsSync.ts`, tested with the mocked store). Settings → Account → Sync → "Share add-ons and keys
-  between profiles on this device": on for installs from before this version (prefs or an account's settings
-  already stored), off for new ones. Off, a profile this device has never synced starts without the add-ons and
-  keys in the store (only the app's own subtitles add-on stays), takes its account's own on the first sync round,
-  and sends nobody else's up; while it has none, Settings → Account offers "From Guest on this device" and the
-  account's other profiles synced here. Not run signed in. To check, with sharing off: as a guest add a TMDB key
-  and an add-on; sign in to a new account: no key, no add-on, and the offer lists Guest; copy: both there; sign
-  out: the guest's set as it was; sign in to a second account: it never sees the first account's set.
+- Add-ons and API keys per profile on a device (#80, #429; `startProfile`, `setupSources`, `copySetup` in
+  `lib/account/settingsSync.ts`, tested with the mocked store). Settings → Account → "Share add-ons and keys":
+  Not shared, Between this account's profiles (the default; the old On and installs from before #80), With every
+  account on this device. Not run signed in. To check: as a guest add a TMDB key and an add-on; sign in to account
+  1 and make profile A: no key, no add-on (the guest isn't a profile of the account), and the offer lists Guest; add
+  a key of A's own. Make profile B of account 1: it starts with A's key. Sign out, sign in to account 2: none of
+  account 1's. Back to account 1 with a new profile C after account 2: A's (or B's) set, none of account 2's. With
+  Not shared, a new profile starts empty; with every account, it starts with whatever was here.
 - AniList requests by priority, rows kept on the device (#109; `lib/net/limiter.ts`, `lib/net/deviceCache.ts`,
   tested with a fake clock and a fake AniList). Not run against AniList. To check, with devtools' Network filtered to
   `anilist`: scroll the Anime page to the genre rows; rows on screen fill within a few seconds even while AniList
