@@ -64,6 +64,7 @@ fn report(app: &AppHandle, reader: u64, load: u64, state: Option<Lookahead>) {
     }
     if let Some(s) = state.filter(|s| slot.is_none_or(|(l, was)| l != load || was != *s)) {
         tracing::info!("autocrop lookahead: {}", s.describe());
+        super::watch(app, format!("autocrop lookahead: {}", s.describe()));
     }
     *slot = state.map(|s| (load, s));
 }

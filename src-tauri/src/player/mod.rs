@@ -82,8 +82,17 @@ const OBSERVED: &[&str] = &[
     "mute",
     "speed",
 ];
+/// Frames mpv dropped or showed late, for the watch log (#424) only.
+const WATCHED: &[&str] = &["frame-drop-count", "decoder-frame-drop-count", "vo-delayed-frame-count"];
 /// Properties that change every frame; the UI interpolates between updates.
-const THROTTLED: &[(&str, u64)] = &[("time-pos", 250), ("demuxer-cache-time", 1000), ("cache-buffering-state", 250)];
+const THROTTLED: &[(&str, u64)] = &[
+    ("time-pos", 250),
+    ("demuxer-cache-time", 1000),
+    ("cache-buffering-state", 250),
+    ("frame-drop-count", 1000),
+    ("decoder-frame-drop-count", 1000),
+    ("vo-delayed-frame-count", 1000),
+];
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long an idle mpv is kept around after playback stops. Re-using it saves
 /// ~150 ms of startup; past this it's not worth the GPU/RAM it holds.
@@ -204,6 +213,20 @@ pub struct Mpv {
     playhead: AtomicU64,
     /// The running mpv process, also held by its `Conn`; see [`Mpv::kill`].
     process: StdMutex<Option<Process>>,
+    /// Autocrop paused playback until a screenshot is read (#424): the
+    /// reader marks `pause` changes as held until mpv plays on, so the
+    /// player doesn't take them for the viewer's pause.
+    held: AtomicBool,
+}
+
+/// Whether this build keeps a watch log (#424): a dev build, or one made with `bun tauri dev`.
+const WATCH_LOG: bool = crate::dev_channel::DEV || cfg!(debug_assertions);
+
+/// A line for the watch log; other builds send nothing.
+pub(super) fn watch(app: &AppHandle, text: impl Into<String>) {
+    if WATCH_LOG {
+        let _ = app.emit("mpv://watch", json!({ "text": text.into() }));
+    }
 }
 
 fn kill_process(child: &Process) {
@@ -418,7 +441,8 @@ impl Mpv {
         *self.tuned.locked() = Tune::default();
         drop(guard);
 
-        for (i, name) in OBSERVED.iter().enumerate() {
+        let watched = if WATCH_LOG { WATCHED } else { &[] };
+        for (i, name) in OBSERVED.iter().chain(watched).enumerate() {
             self.request(json!(["observe_property", i + 1, name])).await?;
         }
         Ok(())
@@ -709,7 +733,16 @@ async fn read_loop(
                     }
                     last_emit.insert(name.clone(), now);
                 }
-                let _ = app.emit("mpv://property", json!({ "name": name, "data": msg.get("data") }));
+                let data = msg.get("data");
+                if name == "pause" && app.state::<AppState>().mpv.held.load(Ordering::SeqCst) {
+                    // Playing on ends the hold; the user's pause would come as a change to true, after it.
+                    if data.and_then(Value::as_bool) != Some(true) {
+                        app.state::<AppState>().mpv.held.store(false, Ordering::SeqCst);
+                    }
+                    let _ = app.emit("mpv://property", json!({ "name": name, "data": data, "held": true }));
+                    continue;
+                }
+                let _ = app.emit("mpv://property", json!({ "name": name, "data": data }));
             }
             Some(_) => {
                 let _ = app.emit("mpv://event", &msg);

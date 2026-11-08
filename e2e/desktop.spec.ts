@@ -348,6 +348,36 @@ test("the player's crop button and Z switch Fit and Fill window, say which, and 
   await expect(player.getByText("Fit", { exact: true })).toBeVisible();
 });
 
+test("a dev build's player copies its watch log: what played, sought and showed the controls, with hosts and no links (#424)", async ({ app }) => {
+  await app.evaluate(() => {
+    const w = window as unknown as { __copied: string };
+    w.__copied = "";
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t: string) => void (w.__copied = t) } });
+  });
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  await app.keyboard.press("ArrowRight");
+  await expect(player).toHaveAttribute("data-chrome", "false", { timeout: 6000 });
+  await app.mouse.move(300, 300);
+  await app.mouse.move(310, 310);
+  await expect(player).toHaveAttribute("data-chrome", "true");
+  await player.getByRole("button", { name: "More" }).click();
+  await app.getByRole("menuitem", { name: "Copy Watch Log" }).click();
+  await expect(player.getByText("Watch log copied")).toBeVisible();
+  const log = await app.evaluate(() => (window as unknown as { __copied: string }).__copied);
+  const lines = log.split("\n");
+  expect(lines[0]).toBe("Polarity watch log");
+  expect(lines[1]).toMatch(/· player: html$/);
+  for (const line of [/ player opened$/, / source: direct file \(\.mp4\) on media\.example, html$/, / play$/, / seek by the viewer: \+10 s$/, / seeking to /, / controls hidden: time$/, / controls shown: pointer$/])
+    expect(lines.some((l) => line.test(l)), `${line} in\n${log}`).toBe(true);
+  // Each line: seconds since the player opened, then the position in the video.
+  expect(log).toMatch(/\n\+ +\d+\.\d{3} +0:00:\d\d\.\d  seek by the viewer/);
+  expect(log).not.toMatch(/https?:\/\//);
+});
+
 test("the player's focus ring shows for Tab, never for a click or the clicked button's shortcut, and hides with the controls (#329)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();

@@ -33,6 +33,7 @@ import {
   airedAt,
   autoplayStreak,
   countAutoplay,
+  describeStream,
   requestHeaders,
   videoFile,
   READY_CHECKS,
@@ -128,7 +129,9 @@ import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart 
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
 import { More, Pin, Pinned, WatchParty } from "../components/icons";
 import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
-import { MenuCheckItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
+import { MenuCheckItem, MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
+import { watch, watchLog } from "../lib/playback/watchLog";
+import { useWatchLog, watchLogText } from "../components/player/useWatchLog";
 import { useBarFit } from "../components/player/useBarFit";
 import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
@@ -260,6 +263,8 @@ export function Player({
     enabled: !party && engine !== "youtube",
   });
   const media: MediaLike | null = airplay.media ?? baseMedia;
+  // What the player did while it played, for "Copy Watch Log" (dev builds only, #424).
+  useWatchLog(media, videoId);
   videoRef.current = media;
   /** Why the link check turned the built-in player's source down (mpv reports its own). */
   const linkError = useRef<string | null>(null);
@@ -468,6 +473,7 @@ export function Player({
     resumed.current = false;
     setError(null);
     setBuffering(true);
+    watch(`source: ${describeStream(source.state.stream, source.state.url)}, ${engine}`);
     v.volume = sliderAmplitude(volume);
     if (v instanceof MpvMedia) {
       // Start at the resume point (or where the watch party is) directly: no
@@ -603,7 +609,7 @@ export function Player({
       setPaused(false);
       setEnded(false);
       // YouTube's bar collapses once it plays, wherever the play came from (#384).
-      if (!ytFramed) poke();
+      if (!ytFramed) poke(false, "play");
     },
     pause: () => {
       setPaused(true);
@@ -699,6 +705,7 @@ export function Player({
   const seekBy = useCallback(
     (delta: number) => {
       const v = videoRef.current;
+      watch(`seek by the viewer: ${delta > 0 ? "+" : ""}${delta} s`);
       if (v?.duration) v.currentTime = Math.min(v.duration - 1, Math.max(0, v.currentTime + delta));
       leaveStep();
     },
@@ -706,7 +713,8 @@ export function Player({
   );
 
   const seekTo = useCallback(
-    (t: number) => {
+    (t: number, by = "the viewer") => {
+      watch(`seek by ${by}: to ${formatTime(t)}`);
       if (videoRef.current) videoRef.current.currentTime = t;
       leaveStep();
     },
@@ -745,6 +753,7 @@ export function Player({
     [beginStep, endStep],
   );
 
+  const skipTo = useCallback((t: number) => seekTo(t, "a skip (intro, recap or credits)"), [seekTo]);
   const onAutoSkipped = useCallback((label: string) => flashNotice(label, 2500), [flashNotice]);
   const { preferFileChapters, autoSkipDelay } = usePrefs();
   const skip = useSkipSegments({
@@ -754,7 +763,7 @@ export function Player({
     autoSkipDelay,
     media,
     preferFile: preferFileChapters,
-    seekTo,
+    seekTo: skipTo,
     onAutoSkipped,
     online: !link && !local,
   });
@@ -1099,10 +1108,10 @@ export function Player({
       if (tv && !ytFramed && (action === "volumeUp" || action === "volumeDown" || action === "mute")) return;
       // A seek with the controls hidden shows just its skip button and the "+10" (SkipTransport), not the controls.
       if (!chromeVisible && !ytFramed && (action === "seekBack" || action === "seekForward")) return;
-      poke(true);
+      poke(true, `key (${action})`);
     },
     // Any other key brings the controls back too, with the focus ring where the keyboard left it (#329).
-    () => poke(true),
+    () => poke(true, "key"),
   );
 
   // Warm the next episode's sources well before the credits.
@@ -1164,6 +1173,7 @@ export function Player({
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact,
     [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local].join("|"),
+    !!watchLog,
   );
   const more = barFit.more;
   // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
@@ -1323,8 +1333,8 @@ export function Player({
         }}
         onClick={() => {
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
-          if (chromeAtPress.current) hideChrome();
-          else poke();
+          if (chromeAtPress.current) hideChrome("tap");
+          else poke(false, "tap");
         }}
         // A finger double-taps the left or right third to skip back or ahead, as phone players do;
         // the middle (and a mouse anywhere) toggles fullscreen.
@@ -1334,7 +1344,7 @@ export function Player({
           if (touch && (x < third || x > third * 2)) {
             seekBy((x < third ? -1 : 1) * seekStep);
             kick(x < third ? "back" : "forward");
-            return poke(true);
+            return poke(true, "double tap");
           }
           if (!isDesktop) return cycleCrop();
           // Pinned, the window stays as it is (#266).
@@ -1349,7 +1359,7 @@ export function Player({
             setVolume((v) => Math.min(1, Math.max(0, +(v - Math.sign(e.deltaY) * 0.05).toFixed(2))));
             setMuted(false);
           }
-          poke(true);
+          poke(true, "wheel");
         }}
       />
 
@@ -1478,21 +1488,35 @@ export function Player({
                 <FillWindow size={22} />
               </IconButton>
             )}
-            {more && (
+            {(more || watchLog) && (
               <MenuRoot modal={false} onOpenChange={setMoreOpen}>
                 <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More">
                   <More size={22} />
                 </MenuTrigger>
                 <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="More">
-                  {showPin && (
+                  {more && showPin && (
                     <MenuCheckItem checked={pinned} onCheckedChange={togglePin} meta={shortcutText("pinWindow")}>
                       Pin window on top
                     </MenuCheckItem>
                   )}
-                  {showFill && (
+                  {more && showFill && (
                     <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
                       {`Crop: ${cropModeLabel(crop)}`}
                     </MenuCheckItem>
+                  )}
+                  {watchLog && (
+                    <MenuItem
+                      onClick={() =>
+                        void watchLogText(engine ?? "not chosen yet")
+                          .then((text) => navigator.clipboard.writeText(text))
+                          .then(
+                            () => flashNotice("Watch log copied", 2000),
+                            () => flashNotice("Couldn't copy the watch log", 2500),
+                          )
+                      }
+                    >
+                      Copy Watch Log
+                    </MenuItem>
                   )}
                 </MenuPopup>
               </MenuRoot>
