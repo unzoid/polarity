@@ -62,12 +62,15 @@
 .player-top {
   position: absolute;
   inset: 0 0 auto 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
+  /* Back, the title, the controls (#396). The two sides share what the title leaves, so it stays centred
+     until one side needs more than half; then it moves off-centre, and only then is it cut short. */
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+  align-items: start;
+  column-gap: 1rem;
   /* The safe-area insets are 0 on a desktop; on a phone or tablet the bars keep clear of the notch,
      the camera cutout and the home indicator (tokens.css). */
-  padding: calc(1rem + var(--safe-top)) var(--safe-right) 4rem max(1.25rem, var(--safe-left));
+  padding: calc(1rem + var(--safe-top)) var(--safe-right) 4rem var(--safe-left);
   background: linear-gradient(to bottom, rgb(0 0 0 / 0.6), transparent);
   z-index: 2;
 }
@@ -81,14 +84,15 @@
     transform var(--dur-press) var(--ease-out),
     opacity var(--dur-fast) var(--ease-std);
 }
+.player-top > .player-icon {
+  justify-self: start;
+  /* Back's inset is its own margin, not the bar's padding: the bar's sides stay alike, so its middle is the window's. */
+  margin-left: max(0px, 1.25rem - var(--safe-left));
+}
 /* Centred heading: S2:E3 “Title”, show name underneath. */
 .player-heading {
-  position: absolute;
-  left: 50%;
-  top: calc(1.125rem + var(--safe-top));
-  translate: -50% 0;
-  /* Clear of the volume, fullscreen and window buttons on the right. */
-  max-width: min(56%, calc(100% - 44rem));
+  min-width: 0;
+  padding-top: 0.125rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -112,8 +116,12 @@
   color: var(--text-2);
   font-weight: 500;
 }
+.player-top-end {
+  justify-self: end;
+  display: flex;
+  align-items: flex-start;
+}
 .player-top-actions {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -319,14 +327,17 @@
 /* Labelled actions spread across the width — text, not boxes. */
 .player-actions {
   display: flex;
+  min-width: 0;
   justify-content: space-around;
   align-items: center;
   margin-top: 0.875rem;
 }
 .player-action {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.625rem;
+  white-space: nowrap;
   height: 44px;
   padding: 0 0.75rem;
   border-radius: var(--r-md);
@@ -354,19 +365,34 @@
   }
 }
 
+/* Too narrow for the words (#396, useBarFit): the glyphs alone, spread across the width; each keeps its label
+   as its name and tooltip. The words leave the flow without losing their width, which is how the bar knows
+   when they fit again. */
+.player-actions[data-labels="false"] {
+  justify-content: space-between;
+}
+.player-actions[data-labels="false"] .player-action {
+  position: relative;
+}
+.player-actions[data-labels="false"] .player-action > span {
+  position: absolute;
+  max-width: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
 /* Phone, and a tablet's compact window (data-compact: an iPad's Slide Over or narrow Split View):
    the title sits beside Back instead of over the middle; on a phone the volume is the phone's own
    buttons (mute stays), and each action puts its label under its icon. */
 :root:is([data-form="phone"], [data-compact="true"]) .player-top {
-  gap: 0.5rem;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 0.5rem;
   padding: calc(0.5rem + var(--safe-top)) var(--safe-right) 3rem calc(0.5rem + var(--safe-left));
 }
+:root:is([data-form="phone"], [data-compact="true"]) .player-top > .player-icon {
+  margin-left: 0;
+}
 :root:is([data-form="phone"], [data-compact="true"]) .player-heading {
-  position: static;
-  translate: none;
-  flex: 1;
-  min-width: 0;
-  max-width: none;
   align-items: flex-start;
   padding-top: 0.5rem;
   text-align: left;
@@ -374,17 +400,9 @@
 :root:is([data-form="phone"], [data-compact="true"]) .player-heading-title {
   font-size: var(--fs-lg);
 }
-:root:is([data-form="phone"], [data-compact="true"]) .player-top-actions {
-  margin-left: 0;
-}
-/* A tablet has no window buttons on the right, only the volume and Fit/Fill: the centred title
-   gets the room they left. */
-:root[data-form="tablet"]:not([data-compact="true"]) .player-heading {
-  max-width: min(56%, calc(100% - 26rem));
-}
 /* A compact window (a phone held upright) has no room beside the title for the volume slider
    (a phone's own buttons still set it); sideways there is. */
-:root[data-compact="true"] .player-volume input[type="range"] {
+:root[data-compact="true"] .player-volume-slider {
   display: none;
 }
 /* Compact, the actions are their glyphs alone, spread across the width: their words ran off
@@ -412,9 +430,38 @@
 /* Volume: slider fill painted from a per-element custom property (one element,
    no descendants, so no inherited-variable recalculation cost). */
 .player-volume {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+.player-volume-slider {
+  display: flex;
+  align-items: center;
+  height: 44px;
+}
+/* Folded (#396): the slider opens below its icon, on a pill that reads over any picture, while the pointer
+   is over either, the keyboard is in it, or (a touch screen) the icon was tapped. Hidden, it keeps its size
+   so the bar can tell what unfolding it would take. */
+.player-volume[data-folded] .player-volume-slider {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50% 0;
+  height: auto;
+  padding: 0.875rem 0.5rem 0.875rem 1rem;
+  border-radius: var(--r-pill);
+  background: rgb(0 0 0 / 0.62);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    visibility 0s linear var(--dur-fast);
+}
+.player-volume[data-folded]:is(:hover, :focus-within, [data-open]) .player-volume-slider {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity var(--dur-fast) var(--ease-std);
 }
 .player-volume input[type="range"] {
   -webkit-appearance: none;

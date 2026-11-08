@@ -1,5 +1,5 @@
 import { deflateRawSync } from "node:zlib";
-import { card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
 
@@ -1901,4 +1901,83 @@ test("Settings → Services: a linked Simkl profile imports its Plan to Watch an
   await expect(settings.getByText(/signing in to Simkl needs Polarity registered/)).toBeVisible();
   expect(asked.some((a) => a.path === "/oauth2/revoke")).toBe(true);
   expect(await app.evaluate(() => localStorage.getItem("polar.link.simkl.local"))).toBeNull();
+});
+
+test("in a narrow window nothing in the player's bars overlaps, the title is cut short and the bars give way in steps (#396)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
+  await card(app, "Fieldwork").click();
+  await app.locator(".episode-card-main:not([disabled])").first().click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  // A title and show name far wider than any window.
+  const long = "An Invented Episode Title That Goes On and On Well Past the Width of Any Window Someone Might Use";
+  await app.locator(".player-heading-title").evaluate((el, t) => (el.textContent = `S1:E1 · ${t}`), long);
+  await app.locator(".player-heading-show").evaluate((el, t) => (el.textContent = t), long);
+  const actions = app.locator(".player-actions");
+  const showControls = async () => {
+    await app.mouse.move(300, 300);
+    await app.mouse.move(310, 310);
+    await expect(player).toHaveAttribute("data-chrome", "true");
+  };
+
+  // The window's least width (tauri.conf.json), every 100 px above it, and 1400.
+  for (const width of [960, 1060, 1160, 1260, 1360, 1400]) {
+    await app.setViewportSize({ width, height: 800 });
+    await showControls();
+    await expect.poll(() => barOverlaps(app), `at ${width} px`).toEqual([]);
+    const cut = await app.locator(".player-heading-title").evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow);
+    expect(cut, `the title is cut short at ${width} px`).toBe("ellipsis");
+  }
+  // A short title and name sit in the middle of the window.
+  await app.locator(".player-heading-title").evaluate((el) => (el.textContent = "S1:E1 · Pilot"));
+  await app.locator(".player-heading-show").evaluate((el) => (el.textContent = "Fieldwork"));
+  await app.setViewportSize({ width: 1200, height: 800 });
+  await showControls();
+  for (const line of [".player-heading-title", ".player-heading-show"]) {
+    const { centre, width } = await app.locator(line).evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const r = range.getBoundingClientRect();
+      return { centre: r.left + r.width / 2, width: r.width };
+    });
+    expect(width).toBeGreaterThan(20);
+    expect(Math.abs(centre - 600), `${line} centred`).toBeLessThan(2);
+  }
+  await app.locator(".player-heading-title").evaluate((el, t) => (el.textContent = `S1:E1 · ${t}`), long);
+  await app.locator(".player-heading-show").evaluate((el, t) => (el.textContent = t), long);
+  // Too narrow for their words, the actions are glyphs, named by their labels; wider, the words come back.
+  await app.setViewportSize({ width: 760, height: 800 });
+  await showControls();
+  await expect(actions).toHaveAttribute("data-labels", "false");
+  await expect.poll(() => barOverlaps(app)).toEqual([]);
+  await expect(actions.getByRole("button", { name: "Subtitles & Audio" })).toBeVisible();
+  await app.setViewportSize({ width: 1600, height: 800 });
+  await showControls();
+  await expect(actions).toHaveAttribute("data-labels", "true");
+
+  // Narrower than a desktop window gets (the browser build), the slider folds, then pin and fill go into More.
+  const top = app.locator(".player-top");
+  const slider = app.getByRole("slider", { name: "Volume" });
+  await app.setViewportSize({ width: 860, height: 800 });
+  await showControls();
+  await expect(app.locator(".player-volume")).toHaveAttribute("data-folded", "true");
+  await expect(slider).toBeHidden();
+  await top.getByRole("button", { name: "Mute" }).hover();
+  await expect(slider).toBeVisible();
+  await expect.poll(() => barOverlaps(app)).toEqual([]);
+
+  await app.setViewportSize({ width: 700, height: 800 });
+  await showControls();
+  await expect(top.getByRole("button", { name: "Fill window" })).toHaveCount(0);
+  await expect.poll(() => barOverlaps(app)).toEqual([]);
+  await top.getByRole("button", { name: "More" }).click();
+  const fillItem = app.getByRole("menuitemcheckbox", { name: /Fill window/ });
+  await expect(fillItem).toHaveAttribute("aria-checked", "false");
+  await fillItem.click();
+  await expect(player).toHaveAttribute("data-fill", "true");
+  await expect(fillItem).toHaveAttribute("aria-checked", "true");
+  // The menu holds the controls up and its keys are its own.
+  await app.keyboard.press("Escape");
+  await expect(app.getByRole("menu")).toHaveCount(0);
+  await expect(player).toHaveCount(1);
 });
