@@ -91,3 +91,61 @@ export function longAnimeMedia(show: InventedAnime = LONG_ANIME) {
     nextAiringEpisode: null,
   };
 }
+
+/**
+ * An invented franchise for a grouped page's season tabs (#352): a 12-episode series (the short show's IMDb series), then a film
+ * after it (one of the fake shell's films). AniList's entries for both, with the relation between them, and ani.zip's records.
+ */
+export const FRANCHISE = {
+  show: { ...SHORT_ANIME, anilist: 990_003, name: "Lanternfield Crossing" },
+  film: { anilist: 990_004, imdb: "tt9100003", name: "Lanternfield: The Last Ford", duration: 104 },
+};
+
+const franchiseNode = (id: number) => {
+  const film = id === FRANCHISE.film.anilist;
+  const entry = film ? FRANCHISE.film : FRANCHISE.show;
+  return {
+    id,
+    type: "ANIME",
+    format: film ? "MOVIE" : "TV",
+    status: "FINISHED",
+    episodes: film ? 1 : FRANCHISE.show.episodes,
+    title: { romaji: film ? "Tourou Senki Gekijouban" : "Tourou Watari", english: entry.name, native: null },
+    coverImage: { extraLarge: null, large: null, color: "#4a6fa5" },
+    startDate: { year: film ? 2003 : 2002, month: 4, day: 4 },
+    season: "SPRING",
+    seasonYear: film ? 2003 : 2002,
+  };
+};
+
+/** AniList's answer for either entry of the invented franchise, or undefined for another id. */
+export function franchiseMedia(id: number) {
+  if (id !== FRANCHISE.show.anilist && id !== FRANCHISE.film.anilist) return undefined;
+  const film = id === FRANCHISE.film.anilist;
+  return {
+    ...longAnimeMedia(FRANCHISE.show),
+    ...franchiseNode(id),
+    duration: film ? FRANCHISE.film.duration : 24,
+    description: film ? "The lantern-keepers' last crossing, at the ford where the road ends." : "Lantern-keepers learn the crossings.",
+    relations: {
+      edges: [{ relationType: film ? "PREQUEL" : "SEQUEL", node: franchiseNode(film ? FRANCHISE.show.anilist : FRANCHISE.film.anilist) }],
+    },
+  };
+}
+
+/** ani.zip's record for either entry of the invented franchise, or undefined for another id. */
+export function franchiseZip(id: number) {
+  if (id === FRANCHISE.show.anilist) {
+    const zip = longAnimeZip(FRANCHISE.show);
+    return { ...zip, mappings: { ...zip.mappings, anilist_id: id } };
+  }
+  if (id !== FRANCHISE.film.anilist) return undefined;
+  return {
+    titles: { en: FRANCHISE.film.name },
+    episodeCount: 1,
+    specialCount: 0,
+    images: [],
+    mappings: { anilist_id: id, imdb_id: FRANCHISE.film.imdb, type: "MOVIE" },
+    episodes: {},
+  };
+}

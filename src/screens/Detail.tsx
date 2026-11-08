@@ -7,7 +7,7 @@ import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer"
 import { cardMenu } from "../components/CardMenu";
 import { FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
-import { episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
+import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
@@ -16,7 +16,7 @@ import { TitleHeading } from "../components/title/TitleHeading";
 import { RatingRing } from "../components/RatingRing";
 import { Segmented } from "../components/Segmented";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
-import { episodeCode, formatRuntime, isReleased, joinFacts, seasonLabel } from "../lib/format";
+import { episodeCode, formatRuntime, joinFacts, seasonLabel } from "../lib/format";
 import { type PlayRequest, trailerFor, useFileTrailer, usePlayTarget } from "../lib/playback";
 import { prefetchStreams, useMeta, useProgress, useRatings, useStreams } from "../lib/net";
 import type { ContentType, Meta, MetaPreview, Video } from "../lib/types";
@@ -271,7 +271,3 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
     </section>
   );
 }
-
-/** The episodes a season or show download takes (#24): released ones, specials aside, in order. */
-const downloadableEpisodes = (videos: Video[]) =>
-  videos.filter((v) => v.season > 0 && isReleased(v)).sort((a, b) => a.season - b.season || a.episode - b.episode);

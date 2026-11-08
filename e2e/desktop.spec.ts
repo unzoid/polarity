@@ -2,6 +2,7 @@ import { deflateRawSync } from "node:zlib";
 import { barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
+import { FRANCHISE, franchiseMedia, franchiseZip } from "../src/lib/platform/fake/longAnime";
 
 // The desktop layout (also run in WebKit on CI). Titles come from src/lib/platform/fake/fixtures.ts.
 
@@ -789,6 +790,56 @@ test("Download Season downloads every released episode of the season, then says 
   const count = await released.count();
   expect(count).toBeGreaterThan(1);
   await expect(released.getByRole("button", { name: "Delete Downloaded Episode" })).toHaveCount(count);
+});
+
+/** The invented franchise's AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has its series and film. */
+async function answerFranchise(app: Page) {
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
+    const media = franchiseMedia(variables?.id ?? 0);
+    await route.fulfill({ json: { data: media ? { Media: media } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) => {
+    const zip = franchiseZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
+    return zip ? route.fulfill({ json: zip }) : route.fulfill({ status: 404, json: {} });
+  });
+}
+
+test("an anime season tab downloads its released episodes; a film's tab shows the film as a card to play (#352)", async ({ app }) => {
+  await answerFranchise(app);
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.evaluate(
+    (id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`),
+    FRANCHISE.show.anilist,
+  );
+  const page = app.locator(`.anime-detail[data-anime="${FRANCHISE.show.anilist}"]`).last();
+  const seasons = page.locator(".seasons");
+  await expect(seasons.locator(".seasons-tabs")).toBeVisible({ timeout: 15_000 });
+  await expect(seasons.locator(".episode-card")).toHaveCount(FRANCHISE.show.episodes, { timeout: 15_000 });
+
+  // The series' tab: Download Season, as a show's season bar has, takes its episodes.
+  const season = seasons.getByRole("button", { name: /^Download Season/ });
+  await expect(season).toBeEnabled();
+  await season.click();
+  await expect(seasons.getByRole("button", { name: "Season Downloaded" })).toBeDisabled({ timeout: 15_000 });
+  await expect(seasons.getByRole("button", { name: "Delete Downloaded Episode" })).toHaveCount(FRANCHISE.show.episodes);
+
+  // The film's tab: no episodes, the film's card with its details, Sources and Download.
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: /The Last Ford$/ }).click();
+  const film = seasons.locator(`.film-card[data-film="${FRANCHISE.film.anilist}"]`);
+  await expect(film).toBeVisible({ timeout: 15_000 });
+  await expect(seasons.locator(".episode-card")).toHaveCount(0);
+  await expect(seasons.getByRole("button", { name: /^Download Season/ })).toHaveCount(0);
+  await expect(film.locator(".film-card-title")).toHaveText(FRANCHISE.film.name);
+  await expect(film.locator(".film-card-facts")).toContainText("2003");
+  await expect(film.locator(".film-card-facts")).toContainText("1h 44m");
+  await expect(film.locator(".film-card-overview")).toContainText("last crossing");
+  await expect(film.getByRole("button", { name: "Sources" })).toBeEnabled();
+  await expect(film.getByRole("button", { name: "Download Movie", exact: true })).toBeVisible();
+
+  // Pressing it plays the film.
+  await film.getByRole("button", { name: `Play ${FRANCHISE.film.name}` }).click();
+  await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
 });
 
 test("a movie's page has a Download button that names what it downloads; a show's action row has none (#26)", async ({ app }) => {

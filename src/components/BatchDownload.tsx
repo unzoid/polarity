@@ -13,14 +13,15 @@ import { Close, Download, Pause, Play } from "./icons";
 import { Button, IconButton } from "./ui/Button";
 
 /**
- * Download a whole season, or a whole show, as one batch (#24; lib/library/batchDownloads.ts):
+ * Download a whole season (an anime season tab's episodes, #352), or a whole show, as one batch (#24; lib/library/batchDownloads.ts):
  * one button to start, then the batch's progress with Pause / Resume and Cancel.
  */
-export function BatchDownload({ item, videos, season }: { item: MetaPreview; videos: Video[]; season?: number }) {
-  const key = batchKey(item.id, season);
+export function BatchDownload({ item, videos, season, part }: { item: MetaPreview; videos: Video[]; season?: number; part?: number }) {
+  // An anime season tab (#352) is a season of its own, though its episodes may share a season number with another tab's.
+  const key = batchKey(item.id, part === undefined ? season : `anilist-${part}`);
   const batch = useBatch(key);
   const { data: downloads } = useDownloads();
-  const what = season === undefined ? "Show" : "Season";
+  const what = season === undefined && part === undefined ? "Show" : "Season";
   const have = videos.filter((v) => downloads?.some((d) => d.id === v.id && d.state === "done")).length;
 
   if (batch && (batch.state === "running" || batch.state === "paused")) {
@@ -58,7 +59,7 @@ export function BatchDownload({ item, videos, season }: { item: MetaPreview; vid
   return (
     <Button
       variant="glass"
-      size={season === undefined ? undefined : "sm"}
+      size={what === "Show" ? undefined : "sm"}
       className="batch-download-start"
       disabled={all || !videos.length}
       onClick={() => void downloadBatch(key, item, videos)}
