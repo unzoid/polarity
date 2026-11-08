@@ -322,6 +322,8 @@ test("Continue Watching cards show the title's logo where it has one, as desktop
 test("Continue Watching cards show the name where a title has no logo (#437)", async ({ app }) => {
   const rail = app.locator(".tv-rail").filter({ has: app.locator(".tv-rail-title", { hasText: "Continue Watching" }) });
   await expect(rail.locator(".tv-card").first().locator(".tv-card-name")).toBeVisible();
+});
+
 test("the Anime stage shows a later entry's franchise art and logo, as desktop does, never its own banner or name (#431)", async ({ app }) => {
   // The invented franchise's film (after its series) is the only card; its own banner differs from the series' art.
   const own = "https://art.example/banner/film.png";
