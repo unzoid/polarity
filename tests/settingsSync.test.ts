@@ -262,17 +262,58 @@ describe("add-ons and keys per profile on this device (#80)", () => {
     expect(await s.startProfile("Q")).toBe(false);
   });
 
-  test("shared between profiles on this device: a new profile starts with what's here, as before #80", async () => {
+  test("with every account on this device: a new profile starts with what's here, as before #80 (#429)", async () => {
     const { setPrefs } = await import("../src/lib/settings/prefs");
     const h = device({ tmdbKey: "shared-key" }, [guestAddon]);
     on(h);
-    setPrefs({ shareAddonsAndKeys: true });
+    setPrefs({ shareSetup: "device" });
     try {
-      expect(await s.startProfile("R")).toBe(false);
+      expect(await s.startProfile("R", "someone-else", ["R"])).toBe(false);
       expect(h.settings.tmdbKey).toBe("shared-key");
       expect(h.addons).toEqual([guestAddon]);
     } finally {
-      setPrefs({ shareAddonsAndKeys: false });
+      setPrefs({ shareSetup: "account" });
+    }
+  });
+
+  test("between this account's profiles (the default): another of its profiles' set, never another account's (#429)", async () => {
+    const { getPrefs, setPrefs } = await import("../src/lib/settings/prefs");
+    expect(getPrefs().shareSetup).toBe("account");
+    const addonA = "https://addon.example.com/a.json";
+    const addonX = "https://addon.example.com/x.json";
+    const d = device({}, [subtitles]);
+    on(d);
+    d.storage.set("polar.settingsOwner", "local");
+    const enter = async (id: string, siblings: string[]) => s.startProfile(id, await s.keepDeviceSettings(id), siblings);
+    const synced = async (id: string, key: string, addon: string) => {
+      d.settings.tmdbKey = key;
+      d.addons.push(addon);
+      stored = null;
+      await s.syncSettings(id, server, () => true);
+    };
+    // Account 1's first profile here starts empty, then adds its own.
+    expect(await enter("A1", ["A1", "B1", "C1"])).toBe(false);
+    await synced("A1", "a-key", addonA);
+    // Another account's profile gets none of them.
+    expect(await enter("X2", ["X2"])).toBe(true);
+    expect(d.settings.tmdbKey).toBeNull();
+    expect(d.addons).toEqual([subtitles]);
+    await synced("X2", "x-key", addonX);
+    // Account 1's next profile, after the other account's: account 1's set, none of the other's.
+    expect(await enter("B1", ["A1", "B1", "C1"])).toBe(true);
+    expect(d.settings.tmdbKey).toBe("a-key");
+    expect(d.addons.sort()).toEqual([addonA, subtitles]);
+    // Straight after one of its own profiles: what's here stays.
+    expect(await enter("C1", ["A1", "B1", "C1"])).toBe(false);
+    expect(d.settings.tmdbKey).toBe("a-key");
+    // Not shared: nothing of the profile before, even of the same account.
+    setPrefs({ shareSetup: "none" });
+    try {
+      expect(await enter("D1", ["A1", "B1", "C1", "D1"])).toBe(true);
+      expect(d.settings.tmdbKey).toBeNull();
+      expect(d.addons).toEqual([subtitles]);
+    } finally {
+      setPrefs({ shareSetup: "account" });
     }
   });
 
