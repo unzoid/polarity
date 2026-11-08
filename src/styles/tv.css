@@ -8,6 +8,9 @@
    ========================================================================== */
 :root[data-tv="true"] {
   font-size: clamp(15px, min(1.15vw, 2.05vh), 34px);
+  /* The player's Back (#348, #431) lines up with TV's nav row and rails: at the gutter, the nav buttons' size. */
+  --nav-start: 4.5vw;
+  --back-size: 2.7rem;
 }
 
 .tv {
