@@ -76,8 +76,9 @@ export function useFranchiseBanners(
         out.push(undefined);
         continue;
       }
-      const art = franchiseArt({ imdb, meta: metas[i]?.data, metaLoading: false, first: animeArt(b.base, zips[i]?.data) });
-      out.push({ ...art, name: title(b.base.title), label: b.label });
+      // Everything it waits for has answered here, so the art is never pending.
+      const { background, logo, logos } = franchiseArt({ imdb, meta: metas[i]?.data, metaLoading: false, first: animeArt(b.base, zips[i]?.data) });
+      out.push({ background, logo, logos, name: title(b.base.title), label: b.label });
     }
     return out;
   })();

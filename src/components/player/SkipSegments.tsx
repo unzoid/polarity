@@ -209,7 +209,7 @@ export function SkipButton({
   chromeVisible: boolean;
   /** Seconds until it skips on its own: the button fills left to right meanwhile (0 = no countdown). */
   countdown?: number;
-  /** Playback paused: the countdown holds where it is. */
+  /** Playback paused: the countdown holds where it is, and the button hides with the controls. */
   paused?: boolean;
   onCountdownEnd?: () => void;
   /** The controller button that skips (TV mode), shown in place of the icon. */
@@ -230,7 +230,8 @@ export function SkipButton({
     return () => clearTimeout(t);
   }, [segment]);
   // A running countdown keeps it up: the skip it announces mustn't happen unseen.
-  const visible = !!active && (chromeVisible || alone === segment || countdown > 0);
+  // Paused, the countdown holds and the button goes with the controls (#334).
+  const visible = !!active && (chromeVisible || alone === segment || (countdown > 0 && !paused));
   // Skipped, ended or hidden with focus on it: focus goes back to the player, its keys keep working.
   const button = useRef<HTMLButtonElement>(null);
   useHandFocus(button, !visible);

@@ -156,7 +156,8 @@ export function animeArt(
  * Until it, its title and the base title's ani.zip (`firstLoading` while it's asked) have answered there's
  * no art and no logo (the name shows), so nothing changes once drawn (#339). `logos` are every logo to
  * choose from, the general title's first, then ani.zip's: the heading draws the first that's shaped like a
- * logo and reads on the backdrop (TitleLogo), as a source may hand over a cover as its logo (#371).
+ * logo and reads on the backdrop (TitleLogo), as a source may hand over a cover as its logo (#371). `pending` while
+ * that isn't known yet: the heading then shows neither logo nor name (#343).
  */
 export function franchiseArt({
   imdb,
@@ -171,13 +172,13 @@ export function franchiseArt({
   /** `animeArt` of the franchise's base title, with its own ani.zip. */
   first: { background?: string; logo?: string };
   firstLoading?: boolean;
-}): { background: string | undefined; logo: string | undefined; logos: string[] } {
+}): { background: string | undefined; logo: string | undefined; logos: string[]; pending: boolean } {
   const linked = imdb?.startsWith("tt");
-  if (imdb === undefined || (linked && metaLoading) || firstLoading) return { background: undefined, logo: undefined, logos: [] };
+  if (imdb === undefined || (linked && metaLoading) || firstLoading) return { background: undefined, logo: undefined, logos: [], pending: true };
   const general = linked ? meta : undefined;
   const all = [general?.logo, ...(general?.logos ?? []), first.logo].filter((l): l is string => !!l);
   const logos = all.filter((l, i) => all.indexOf(l) === i);
-  return { background: general?.background ?? first.background, logo: logos[0], logos };
+  return { background: general?.background ?? first.background, logo: logos[0], logos, pending: false };
 }
 
 /** The regular episodes (not specials), in order. */
