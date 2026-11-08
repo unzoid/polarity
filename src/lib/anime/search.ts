@@ -12,7 +12,8 @@ import { keys } from "../net/queryKeys";
 const browse = (search: string, genre = "", tag = ""): BrowseFilters => ({ search, genre, tag, season: "", year: 0, format: "", status: "", sort: "POPULARITY_DESC" });
 
 /**
- * AniList's answer to a search: a genre or kind of show if it names one, otherwise a title search.
+ * AniList's answer to a search: a genre or kind of show if it names one (its most popular entries,
+ * "Popular <genre> Anime"; `genre` says which), otherwise a title search.
  * AniList's search is strict where Cinemeta's forgives a typo: when it finds nothing, `retry` (the
  * title of an animated show Cinemeta found for the same words) is searched for instead, so the
  * anime still comes up as itself (test report 1, items 1 and 28). `retryTitle` picks it.
@@ -30,7 +31,9 @@ export function useAnimeResults(query: string, retry?: string) {
   const searched = again ? retry! : query;
   const shown = useCardsShown();
   return {
-    title: genre || tag ? `${genre ?? tag} Anime` : "Anime",
+    title: genre || tag ? `Popular ${genre ?? tag} Anime` : "Anime",
+    /** The genre or kind of show the search names, asked for by popularity (#338). */
+    genre: genre ?? tag,
     items: items && shown(genre || tag ? items : byRelevance(items, searched)),
     /** Every entry found, before one per franchise: what hides the same shows' Cinemeta results (a later part listed on its own, test report 1, item 10). */
     all: items,

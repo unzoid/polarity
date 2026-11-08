@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimeCard } from "../components/anime/AnimeCard";
 import { PosterCard } from "../components/PosterCard";
 import { Shelf } from "../components/title/Shelf";
@@ -7,7 +7,6 @@ import { type AnimeCard as Card, retryTitle, useAnimeAliases, useAnimeGenreArt, 
 import { api } from "../lib/api";
 import {
   addRecentSearch,
-  BROWSE_GENRES,
   catalogKey,
   catalogTitle,
   clearRecentSearches,
@@ -16,6 +15,8 @@ import {
   SEARCH_ANIME,
   SEARCH_GENRES,
   searchMinLength,
+  searchRows,
+  type SearchRow,
   setSearchText,
   useAddonSearches,
   useRecentSearches,
@@ -32,7 +33,8 @@ import { Search as SearchIcon } from "../components/icons";
 
 /**
  * Results for whatever is typed, one row per kind so movies, series and anime all show without scrolling. A
- * search that names a genre ("horror") leads with that genre's titles. Add-ons whose catalogs take a search
+ * search that names a genre ("horror") leads with that genre's titles; one that names an anime genre alone
+ * ("isekai") leads with its anime (`searchRows`). Add-ons whose catalogs take a search
  * follow, a row each (#206).
  *
  * On a desktop or tablet the field is the navbar's. On a phone this is a page of its own, as in phone apps: a
@@ -229,17 +231,22 @@ function Results({ text }: { text: string }) {
   const waiting = !hasQuery || !data;
   const addonsBusy = fromAddons.some((r) => !r.items && !r.failed);
   const addonsFound = fromAddons.some((r) => r.items?.length);
+  const rows: Record<SearchRow, ReactNode> = {
+    movieGenre: genre && <GenreRow key="movieGenre" type="movie" genre={genre} />,
+    seriesGenre: genre && <GenreRow key="seriesGenre" type="series" genre={genre} />,
+    movies: <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
+    series: <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
+    anime: animeEnabled && (
+      <AnimeRow key="anime" title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />
+    ),
+  };
   const nothing = !waiting && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
 
   return (
     <>
       {/* Opening a result counts as running the search (Recent, in the search field). */}
       <div className="rows search-rows" onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}>
-        {genre && BROWSE_GENRES.movie.includes(genre) && <GenreRow type="movie" genre={genre} />}
-        {genre && BROWSE_GENRES.series.includes(genre) && <GenreRow type="series" genre={genre} />}
-        <ResultRow title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />
-        <ResultRow title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />
-        {animeEnabled && <AnimeRow title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />}
+        {searchRows(genre, !!anime.genre).map((row) => rows[row])}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
         {fromAddons.map((r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} />)}
       </div>

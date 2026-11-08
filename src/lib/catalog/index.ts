@@ -9,4 +9,5 @@ export * from "./marketplace";
 export * from "./personPhoto";
 export * from "./recentSearches";
 export * from "./searchQuery";
+export * from "./searchRows";
 export * from "./shelves";

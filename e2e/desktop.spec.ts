@@ -2,7 +2,7 @@ import { deflateRawSync } from "node:zlib";
 import { barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
-import { FRANCHISE, franchiseMedia, franchiseZip } from "../src/lib/platform/fake/longAnime";
+import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // The desktop layout (also run in WebKit on CI). Titles come from src/lib/platform/fake/fixtures.ts.
 
@@ -75,6 +75,34 @@ test("search finds movies and series", async ({ app }) => {
   await expect(card(app, "Northbound")).toHaveCount(0);
   await app.getByRole("button", { name: "Clear search" }).click();
   await expect(app.getByRole("textbox", { name: "Search" })).toHaveValue("");
+});
+
+test("an anime genre leads with its anime; a shared genre's anime sits with the genre rows; a title search is unchanged (#338)", async ({ app }) => {
+  // AniList answers a genre or kind of show with an invented show, a title search with nothing.
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { genre?: string; tag?: string } };
+    const media = variables?.genre || variables?.tag ? [longAnimeMedia(SHORT_ANIME)] : [];
+    await route.fulfill({ json: { data: { Page: { media, pageInfo: { hasNextPage: false } } } } });
+  });
+  const titles = app.locator(".search-rows .row-title");
+  await app.getByRole("button", { name: "Search", exact: true }).click();
+  await app.locator(".search-suggest").getByRole("button", { name: "Slice of Life", exact: true }).click();
+  await expect(titles.first()).toHaveText("Popular Slice of Life Anime");
+
+  await app.getByRole("textbox", { name: "Search" }).fill("Action");
+  await expect(titles.filter({ hasText: "Popular Action Anime" })).toBeVisible();
+  await expect(titles.filter({ hasText: "Popular Action Series" })).toBeVisible();
+  const shown = await titles.allTextContents();
+  const at = (t: string) => shown.indexOf(t);
+  expect(at("Popular Action Movies")).toBe(0);
+  expect(at("Popular Action Series")).toBe(1);
+  expect(at("Popular Action Anime")).toBe(2);
+  for (const t of shown.slice(3)) expect(t).not.toMatch(/^Popular /);
+
+  await app.getByRole("textbox", { name: "Search" }).fill("orchard");
+  await expect(card(app, "The Glass Orchard")).toBeVisible();
+  await expect(titles.nth(0)).toHaveText("Movies");
+  await expect(titles.nth(1)).toHaveText("Series");
 });
 
 test("a title page adds to and removes from the Library", async ({ app }) => {
