@@ -13,9 +13,12 @@ import { closeSettings, type PageId, prefsCustomized, resetPrefs, searchSettings
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
 
-/** Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. */
+/**
+ * Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. Account isn't listed: the profile
+ * button at the foot of the sidebar opens it (#340), and search still reaches its rows.
+ */
 const GROUPS: { heading?: string; pages: PageId[] }[] = [
-  { pages: ["account", "playback", "subtitles", "appearance", "browsing", "anime", "notifications"] },
+  { pages: ["playback", "subtitles", "appearance", "browsing", "anime", "notifications"] },
   { heading: "Input", pages: ["controls", "controller"] },
   { heading: "Sources", pages: ["sources", "marketplace", "addons", "services"] },
   { heading: "System", pages: ["advanced", "about"] },
@@ -64,11 +67,12 @@ export function SettingsOverlay() {
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
   const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers === 0, ["Settings"], () => setView("list"));
 
-  // Each opening lands on the requested page (or where it was left), search cleared.
+  // Each opening lands on the requested page (or where it was left, unless that was Account), search cleared.
   useEffect(() => {
     if (!open) return;
     const asked = !!requested && pages.some((p) => p.id === requested);
     if (asked) setPage(requested);
+    else if (page === "account") setPage(fallback);
     setView(asked ? "page" : "list");
     setQuery("");
   }, [open, requested]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -242,7 +246,12 @@ export function SettingsOverlay() {
                     <span>Sign in to sync</span>
                   </button>
                 ) : account.profile ? (
-                  <button className="t3s-nav-item" onClick={() => go("account")}>
+                  <button
+                    className="t3s-nav-item"
+                    data-active={!phone && page === "account"}
+                    aria-current={!phone && page === "account" ? "page" : undefined}
+                    onClick={() => go("account")}
+                  >
                     <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
                     <span>{account.profile.name}</span>
                   </button>

@@ -1844,7 +1844,10 @@ test.describe("signing in with another device (#133)", () => {
     await app.getByRole("button", { name: /^Profile/ }).click();
     await app.getByRole("menuitem", { name: "Settings" }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
-    await settings.getByRole("button", { name: "Account", exact: true }).click();
+    // Account isn't a sidebar section: the profile button at the foot of the sidebar opens it (#340).
+    await expect(settings.getByRole("button", { name: "Account", exact: true })).toHaveCount(0);
+    await settings.locator(".t3s-sidebar-foot").getByRole("button").click();
+    await expect(settings.locator(".t3s-sidebar-foot").getByRole("button")).toHaveAttribute("aria-current", "page");
     await settings.getByRole("button", { name: /^Sign in a TV/ }).click();
     const field = settings.getByRole("textbox", { name: "Code from the TV" });
     await field.fill("hjkm npq0");
