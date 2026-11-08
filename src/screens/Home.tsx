@@ -168,11 +168,11 @@ export function HeroCarousel({
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colours: a heavily
-          blurred copy of each backdrop, cross-fading with it. */}
+      {/* The page around the card takes on the art's main colour: one dimmed
+          tint per backdrop, fading down from the top and cross-fading with it. */}
       <div className="hero-ambient" aria-hidden>
         {items.map((it, i) => (
-          <AmbientWash key={it.id} src={it.background} current={i === index} />
+          <AmbientWash key={it.id} src={it.background} current={i === index} flat />
         ))}
       </div>
       <div className="hero-stage">

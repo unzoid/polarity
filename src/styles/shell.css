@@ -821,8 +821,11 @@ html[data-os="mac"] {
   align-items: center;
   gap: 0.75rem;
 }
-/* The genre picker in the catalog switch's shape: same pill, height and glass. */
-.discover-controls .select-trigger {
+/* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
+.discover-controls .select-trigger,
+.library-toolbar .select-trigger,
+.downloads-toolbar .select-trigger,
+.seasons-picker .select-trigger:not([data-size="large"]) {
   width: auto;
   min-width: 9.5rem;
   min-height: 38px;

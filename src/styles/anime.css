@@ -483,11 +483,39 @@
 .anime-no-episodes {
   padding: 0 var(--gutter) 3rem var(--content-start);
 }
+/* The actions are 38px glass pills (the search's circle, Skip Filler, Download
+   Season); the layout switch beside them is a view option, so it stays bare. */
 .anime-episodes-tools {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.625rem;
   flex: none;
+}
+.anime-episodes-tools .btn {
+  min-width: 0;
+  height: 38px;
+  padding: 0 1rem 0 0.875rem;
+  gap: 0.4375rem;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
+  font-size: var(--fs-md);
+}
+@media (hover: hover) and (pointer: fine) {
+  .anime-episodes-tools .btn:not(:disabled):hover {
+    background: var(--glass-control-hover);
+  }
+}
+.anime-episodes-tools .segmented {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.anime-episodes-tools .segmented-active {
+  background: rgb(255 255 255 / 0.08);
+}
+.anime-episodes-tools .segmented-active .segmented-item {
+  color: var(--text);
 }
 /* Season tabs sharing the bar with the tools (Download Season among them, #352): the tabs keep their
    width, and the tools go under them, to the right, once both don't fit on one row. */
@@ -501,17 +529,6 @@
 }
 .seasons-bar > .seasons-tabs ~ .anime-episodes-tools {
   margin-left: auto;
-}
-.anime-episodes-tools .segmented {
-  background: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
-}
-.anime-episodes-tools .segmented-active {
-  background: rgb(255 255 255 / 0.08);
-}
-.anime-episodes-tools .segmented-active .segmented-item {
-  color: var(--text);
 }
 .anime-ranges {
   display: flex;
@@ -533,12 +550,44 @@
   background: var(--pill-light);
   color: var(--text-on-light);
 }
-.anime-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  color: var(--text-2);
-  cursor: pointer;
+/* Skip Filler: a toggle chip at the toolbar's height, moving as ToggleChip does
+   (chip.css): the light pill grows in under the label from a ::before while the
+   check's track opens and the label slides over; the tick lands 40ms after.
+   Off is quicker than on. The glass stays underneath in both states, so only
+   the fill changes. */
+.genre-chip.anime-filler-chip {
+  position: relative;
+  isolation: isolate;
+  gap: 0;
+  height: 38px;
+  padding: 0 1rem;
+  border: 0;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
+  color: var(--text);
+  font-size: var(--fs-md);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.genre-chip.anime-filler-chip[aria-pressed="true"] {
+  background: var(--glass);
+  color: var(--text-on-light);
+  transition-duration: var(--dur-press), var(--dur-base);
+}
+.genre-chip.anime-filler-chip:active {
+  transform: scale(0.97);
+}
+.anime-filler-chip.toggle-chip::before {
+  background: var(--text);
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .genre-chip.anime-filler-chip:not([aria-pressed="true"]):hover {
+    background: var(--glass-control-hover);
+    color: var(--text);
+  }
 }
 
 /* Characters: the character on the left, their voice on the right, like AniList. */
@@ -681,10 +730,7 @@
   }
 }
 
-/* Long shows: find an episode, and the capped list's way to the rest. */
-.anime-episode-search {
-  width: 12rem;
-}
+/* Long shows: the capped list's way to the rest. */
 .anime-show-all {
   display: flex;
   margin: 1.25rem auto 0;

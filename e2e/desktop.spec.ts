@@ -1775,8 +1775,10 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await app.getByRole("button", { name: "Select", exact: true }).click();
   await app.getByRole("checkbox", { name: "Select Northbound" }).check();
   await titles.filter({ hasText: "Fieldwork" }).getByRole("checkbox", { name: "Select every episode of Season 2" }).check();
-  await app.getByRole("button", { name: /^Delete Selected \(4\)$/ }).click();
-  await app.getByRole("button", { name: /^Click again: Delete Selected/ }).click();
+  const selectionBar = app.getByRole("region", { name: "Selection" });
+  await expect(selectionBar).toContainText("4 selected");
+  await selectionBar.getByRole("button", { name: "Delete", exact: true }).click();
+  await selectionBar.getByRole("button", { name: "Click again: Delete", exact: true }).click();
   await expect(app.locator(".downloads-summary")).toContainText("62 downloads");
   await expect(titles.filter({ hasText: "Northbound" })).toHaveCount(0);
 });
