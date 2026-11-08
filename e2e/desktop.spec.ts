@@ -1532,6 +1532,21 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(toast).toHaveCount(0);
   });
 
+  test("Settings → Account → Share add-ons and keys: three choices, between this account's profiles by default (#429)", async ({ app }) => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Account" }).click();
+    const row = app.locator('[data-setting="shareSetup"]');
+    await expect(row).toContainText("Share add-ons and keys");
+    await expect(row).toContainText("sync to their accounts");
+    const pick = row.getByRole("combobox");
+    await expect(pick).toContainText("Between this account's profiles");
+    await pick.click();
+    await expect(app.getByRole("option")).toHaveText(["Not shared", "Between this account's profiles", "With every account on this device"]);
+    await app.getByRole("option", { name: "Not shared" }).click();
+    await expect(pick).toContainText("Not shared");
+    expect(await app.evaluate(() => JSON.parse(localStorage.getItem("polar.prefs") ?? "{}").shareSetup)).toBe("none");
+  });
+
   test("Settings → Account → Friends: on and off for this profile, and what friends see (#135)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
     await app.getByRole("menuitem", { name: "Account" }).click();
