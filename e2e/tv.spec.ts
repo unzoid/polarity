@@ -10,6 +10,12 @@ async function press(page: Page, ...keys: string[]) {
   for (const key of keys) await page.keyboard.press(key);
 }
 
+/** Home's second row, third card: Quiet Machines' page. Waits for Home's first card to take the focus, or the keys walk the tabs. */
+async function openQuietMachines(page: Page) {
+  await expect(focused(page)).toHaveAccessibleName("The Understudies");
+  await press(page, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+}
+
 test("arrows move between cards and Back returns to the same card", async ({ app }) => {
   await expect(focused(app)).toHaveAccessibleName("The Understudies");
   await press(app, "ArrowDown");
@@ -52,7 +58,7 @@ test("the section tabs are reached from the top row", async ({ app }) => {
 });
 
 test("a title plays from the remote and Back leaves the player", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -62,7 +68,7 @@ test("a title plays from the remote and Back leaves the player", async ({ app })
 });
 
 test("in a title's Sources, up and down move between the rows of filter chips (re-test 7)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await app.getByRole("button", { name: "Choose Source" }).focus();
   await press(app, "Enter");
@@ -77,7 +83,7 @@ test("in a title's Sources, up and down move between the rows of filter chips (r
 });
 
 test("in the player's Sources, up and down move between the rows of filter chips (re-test 7)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -92,7 +98,7 @@ test("in the player's Sources, up and down move between the rows of filter chips
 });
 
 test("in TV mode's larger type, the player's season dropdown shows a name's descenders and accents whole (#353)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -103,7 +109,7 @@ test("in TV mode's larger type, the player's season dropdown shows a name's desc
 });
 
 test("in the player, the remote walks the episode rail to the season's last episode (#226)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -134,7 +140,7 @@ test("in the player, the remote walks the episode rail to the season's last epis
 });
 
 test("in a title's Sources, holding OK on a row opens its menu; Info shows the source, the remote scrolls it, Back returns to the row (#229)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await app.getByRole("button", { name: "Choose Source" }).focus();
   await press(app, "Enter");
@@ -177,7 +183,7 @@ test("in a title's Sources, holding OK on a row opens its menu; Info shows the s
 });
 
 test("in the player's Sources, holding OK on a row opens its menu, Info opens the panel and Back returns to the row (#229)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -210,8 +216,7 @@ test("in the player's Sources, OK on a torrent row tries it, after one failed an
   });
   await app.reload();
   const opens = () => app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0);
-  await expect(focused(app)).toHaveAccessibleName("The Understudies");
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   // The fake shell has no engine: each torrent fails.
@@ -233,7 +238,7 @@ test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
   test("starting a watch party from the remote leaves one party panel up, with the focus in it (#247)", async ({ app }) => {
-    await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+    await openQuietMachines(app);
     await expect(focused(app)).toHaveAccessibleName("Play First Episode");
     await press(app, "Enter");
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
