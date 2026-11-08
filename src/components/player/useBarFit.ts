@@ -69,6 +69,8 @@ const innerWidth = (el: HTMLElement) => {
  * is how many top controls "More" would take. `signature` changes whenever what's in the bars does (labels,
  * title, which controls show), so the bars are measured again; resizing the window measures them too.
  * Off (`enabled` false: a phone, a compact window, TV), everything shows and the layout's own rules apply.
+ * `moreStays`: "More" shows whatever fits (a build with the watch log, #424), so moving pin and fill saves their
+ * whole width.
  */
 export function useBarFit(
   top: RefObject<HTMLElement | null>,
@@ -76,6 +78,7 @@ export function useBarFit(
   movable: number,
   enabled: boolean,
   signature: string,
+  moreStays = false,
 ): BarFit {
   const [fit, setFit] = useState(FULL_FIT);
   const latest = useRef({ fit, movable });
@@ -103,7 +106,7 @@ export function useBarFit(
         const slider = bar.querySelector<HTMLElement>(".player-volume-slider");
         if (slider && now.slider) sliderWidth.current = slider.offsetWidth + gap;
         const sliderW = slider ? sliderWidth.current : 0;
-        const moreButton = now.more ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
+        const moreButton = now.more && !moreStays ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
         // Back stands at the navbar's spot (#348): its inset is part of what it takes.
         const backW = back.offsetWidth + px(getComputedStyle(back).marginLeft);
         const icon = cluster.querySelector<HTMLElement>(".player-icon")?.offsetWidth ?? ICON_W;
@@ -119,7 +122,7 @@ export function useBarFit(
             title,
             end: end.offsetWidth + (now.slider ? 0 : sliderW) + (now.more ? movableW - moreButton : 0),
             slider: sliderW,
-            movable: movable ? movableW - (icon + gap) : 0,
+            movable: movable ? movableW - (moreStays ? 0 : icon + gap) : 0,
           }),
         );
       }
@@ -142,7 +145,7 @@ export function useBarFit(
     // The interface font arriving changes every width.
     void document.fonts?.ready.then(measure);
     return () => observer.disconnect();
-  }, [top, actions, enabled, signature, fit]);
+  }, [top, actions, enabled, signature, fit, moreStays]);
 
   return enabled ? fit : FULL_FIT;
 }

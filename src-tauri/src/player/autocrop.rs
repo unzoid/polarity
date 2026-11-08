@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use polar_player::bars::{levels_for, Levels, Measured};
 use polar_player::crop::{cropdetect_for, cropdetect_reading, zoom_for, CropZoom, Rect, CROPDETECT};
-use polar_player::frames::{Ask, Frames};
+use polar_player::frames::{Ask, Frames, Jumps};
 use polar_player::sampler::Sampler;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
@@ -215,6 +215,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
     let meta_id = CROP_OBSERVE_BASE + run * 4;
     let frame_id = meta_id + 1;
     let pause_id = meta_id + 2;
+    let seeking_id = meta_id + 3;
     let (tx, mut rx) = mpsc::unbounded_channel();
     {
         let state = app.state::<AppState>();
@@ -222,10 +223,13 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
         let _ = state.mpv.request(json!(["observe_property", meta_id, "vf-metadata/autocrop"])).await;
         let _ = state.mpv.request(json!(["observe_property", frame_id, "time-pos"])).await;
         let _ = state.mpv.request(json!(["observe_property", pause_id, "pause"])).await;
+        let _ = state.mpv.request(json!(["observe_property", seeking_id, "seeking"])).await;
     }
     let mut frames = Frames::new(app.state::<AppState>().mpv.tuned.locked().sampling());
     let mut reading: Option<Rect> = None;
     let mut paused = false;
+    // Which jumps may hold playback: those mpv sought to (#424).
+    let mut jumps = Jumps::default();
     let mut geometry: Option<(CropGeometry, Instant)> = None;
     let mut zoom = CropZoom::default();
     // Fit and Fill switch at once (panscan does): the zoom follows at once too.
@@ -294,6 +298,10 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
                 paused = data.as_bool().unwrap_or(false);
                 continue;
             }
+            Ok(Some((id, data))) if id == seeking_id => {
+                jumps.seeking(data.as_bool() == Some(true));
+                continue;
+            }
             Ok(Some((id, data))) if id == frame_id => data.as_f64(),
             Ok(Some(_)) => continue,
             Err(_) => None, // nothing for 500 ms: paused
@@ -337,6 +345,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
                 }
             }
             opened = load;
+            jumps.reset();
             frames.reset();
             reading_ahead = None;
         }
@@ -362,21 +371,38 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
         }
         if let Some(t) = frame {
             let live = reading.filter(|_| tune.cropdetect());
+            let (may_hold, before) = jumps.frame(t);
             let ask = {
                 let mut ahead = mpv.ahead.locked();
-                frames.frame(load, (g.size, g.display), t, paused, g.frame, live, ahead.as_mut(), tune.lookahead)
+                frames.frame(
+                    load,
+                    (g.size, g.display),
+                    t,
+                    paused,
+                    g.frame,
+                    live,
+                    ahead.as_mut(),
+                    tune.lookahead && may_hold,
+                )
             };
             if let Some(why) = frames.tracker.changed() {
                 let (v, h) = frames.tracker.bars(load);
                 let on = if paused { t } else { t + g.frame };
                 tracing::info!("autocrop: bars {v}/{h} px from {on:.3} s, {}", why.describe());
+                super::watch(&app, format!("autocrop: bars {v}/{h} px from {on:.3} s, {}", why.describe()));
             }
             let still = match ask {
                 Ask::Nothing => None,
                 Ask::Still(n) => Some(n),
                 Ask::Hold(n) => {
-                    // Paused first, so the frame after this one waits for its crop.
+                    // Paused first, so the frame after this one waits for its crop. Not the viewer's pause (mod.rs, `held`).
                     paused = true;
+                    let from = before.map_or("the start".to_owned(), |b| format!("{b:.3} s"));
+                    super::watch(
+                        &app,
+                        format!("autocrop: held playback at {t:.3} s (from {from}) until a screenshot is read"),
+                    );
+                    mpv.held.store(true, Ordering::SeqCst);
                     let _ = mpv.request(json!(["set_property", "pause", true])).await;
                     Some(n)
                 }
@@ -407,6 +433,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
     let _ = state.mpv.request(json!(["unobserve_property", meta_id])).await;
     let _ = state.mpv.request(json!(["unobserve_property", frame_id])).await;
     let _ = state.mpv.request(json!(["unobserve_property", pause_id])).await;
+    let _ = state.mpv.request(json!(["unobserve_property", seeking_id])).await;
 }
 
 /// Send the zoom for the tracker's bars, if it differs from what mpv has.
