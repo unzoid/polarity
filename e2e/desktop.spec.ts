@@ -3,7 +3,7 @@ import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurf
 import { mediaAnswer } from "./anilistMock";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
-import { FRANCHISE, franchiseMedia, franchiseZip, GAP_ANIME, longAnimeMedia, longAnimeZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
+import { FRANCHISE, franchiseMedia, franchiseZip, GAP_ANIME, longAnimeMedia, longAnimeZip, SAGA, sagaMedia, sagaZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // The desktop layout (also run in WebKit on CI). Titles come from src/lib/platform/fake/fixtures.ts.
 
@@ -977,6 +977,67 @@ test("an anime season tab downloads its released episodes; a film's tab shows th
   // Pressing it plays the film.
   await film.getByRole("button", { name: `Play ${FRANCHISE.film.name}` }).click();
   await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
+});
+
+test("the season toolbar stays where it is whichever tab is chosen, and nothing in it is cut off at the least window width (#426)", async ({ app }) => {
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
+    const media = sagaMedia(variables?.id ?? 0);
+    await route.fulfill({ json: { data: media ? { Media: media } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) => {
+    const zip = sagaZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
+    return zip ? route.fulfill({ json: zip }) : route.fulfill({ status: 404, json: {} });
+  });
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), SAGA.first.anilist);
+  const page = app.locator(`.anime-detail[data-anime="${SAGA.first.anilist}"]`).last();
+  const seasons = page.locator(".seasons");
+  const tools = seasons.locator(".anime-episodes-tools");
+  const download = seasons.getByRole("button", { name: /^Download Season/ });
+  const layout = seasons.getByRole("radiogroup", { name: "Episode layout" });
+  // Where Download Season and the layout switch are, from the season tabs' top left (the page may scroll).
+  const place = async () => {
+    const [t, d, l] = [await seasons.locator(".seasons-tabs").boundingBox(), await download.boundingBox(), await layout.boundingBox()];
+    return { download: [d!.x - t!.x, d!.y - t!.y, d!.height], layout: [l!.x - t!.x, l!.y - t!.y, l!.height] };
+  };
+  await expect(seasons.locator(".episode-card")).toHaveCount(SAGA.first.episodes, { timeout: 15_000 });
+  await expect(download).toBeVisible();
+  const first = await place();
+  // The long series' tab adds the episode ranges, the search and Skip filler.
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
+  await expect(tools.locator(".anime-episode-search")).toBeVisible({ timeout: 15_000 });
+  await expect(tools.getByText("Skip filler")).toBeVisible();
+  await expect(download).toBeVisible();
+  expect((await place()).download[1]).toBe(first.download[1]);
+  expect((await place()).layout[1]).toBe(first.layout[1]);
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: "Season 1" }).click();
+  await expect(tools.locator(".anime-episode-search")).toHaveCount(0, { timeout: 15_000 });
+  expect(await place()).toEqual(first);
+
+  // The least window width (tauri.conf.json), less a Windows scrollbar (17 px), on the long series' last range, the longest label.
+  await app.setViewportSize({ width: 943, height: 800 });
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
+  const ranges = seasons.getByRole("combobox", { name: "Episodes" });
+  await expect(ranges).toBeVisible({ timeout: 15_000 });
+  await ranges.click();
+  await app.getByRole("option", { name: "Episodes 1101–1200" }).click();
+  await expect(ranges).toContainText("Episodes 1101–1200");
+  // Each control whole: inside the window, and not clipped by anything around it.
+  const controls = [ranges, tools.locator(".anime-episode-search"), tools.locator(".anime-toggle"), download, layout];
+  for (const control of controls) {
+    const cut = await control.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.left < 0 || r.right > innerWidth || r.width === 0) return `outside the window: ${r.left}–${r.right}`;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        if (getComputedStyle(p).overflowX === "visible") continue;
+        const b = p.getBoundingClientRect();
+        if (r.left < b.left - 0.5 || r.right > b.right + 0.5) return `cut by .${p.className}: ${r.left}–${r.right} in ${b.left}–${b.right}`;
+      }
+      return null;
+    });
+    expect(cut, await control.evaluate((el) => el.className || el.tagName)).toBeNull();
+  }
 });
 
 test("a long anime lists the episodes its series' catalog skips, between their neighbours, and plays them by the entry's Kitsu id (#427)", async ({ app }) => {

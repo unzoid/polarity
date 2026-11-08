@@ -2,6 +2,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 
 import * as fx from "./fixtures";
+import { SAGA_FILLER } from "./longAnime";
 import { fakeAccount, startSignedOut } from "./account";
 import type { Download } from "../../library/downloads";
 import type { AnimeLink } from "../../library/identity";
@@ -133,7 +134,8 @@ const commands: Record<string, (a: Args) => unknown> = {
     return true;
   },
   anime_ids: () => null,
-  anime_episode_flags: () => ({ filler: [], recap: [] }),
+  // The invented two-series franchise's long series has filler (its tab's toolbar has Skip filler, #426).
+  anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),
   downloads_list: () => downloads,
   // Files on this device (#204): none opened, and the file dialog is cancelled.
