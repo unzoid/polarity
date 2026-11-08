@@ -16,6 +16,7 @@ export function TitleHeading({
   logos,
   backdrop,
   look,
+  onLogoFail,
 }: {
   name: string;
   logo?: string;
@@ -23,6 +24,8 @@ export function TitleHeading({
   logos?: string[];
   backdrop?: string;
   look: HeadingLook;
+  /** The logo won't show (it didn't load, isn't shaped like one or can't be read): the name shows instead. */
+  onLogoFail?: () => void;
 }) {
   // The panel's heading is a side heading (h2) and its logo isn't in the first screenful.
   const panel = look === "tv-panel";
@@ -38,7 +41,10 @@ export function TitleHeading({
         alt={name}
         className={`${look}-logo art-after`}
         loading={panel ? undefined : "eager"}
-        onFail={() => setFailed(logo)}
+        onFail={() => {
+          setFailed(logo);
+          onLogoFail?.();
+        }}
       />
     );
   if (panel) return <h2 className={`${look}-title art-after`}>{name}</h2>;

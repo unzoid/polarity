@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Img, type ImgProps } from "./Img";
-import { backdropLuminance, chooseLogo, DARK_PAGE, measureInk, type Ink, type LogoLook, type LogoSpot } from "../lib/ui";
+import { backdropLuminance, chooseLogo, clearShare, DARK_PAGE, measureInk, type Ink, type LogoLook, type LogoShape, type LogoSpot } from "../lib/ui";
 
 type TitleLogoProps = ImgProps & {
   src?: string;
@@ -15,8 +15,10 @@ type TitleLogoProps = ImgProps & {
  * A title treatment (logo) that stays readable on the picture behind it (#215). The logo's ink and the backdrop
  * where it sits (after the page's gradient) are measured off separate CORS requests, so the visible <img> never
  * waits for them; then the first of the title's logos that reads there is shown, or, when none does, the first
- * drawn as a white silhouette (one dark ink) or with a halo (`lib/ui/logoContrast.ts`). When neither the logos
- * nor the backdrop can be measured (the hosts refuse), `onFail` is called so the caller shows the name.
+ * drawn as a white silhouette (one dark ink) or with a halo (`lib/ui/logoContrast.ts`). A picture that isn't
+ * shaped like a logo (a cover handed over as one, #371) is never shown: the next is tried. Until that's measured
+ * the logo keeps its place unseen. When no logo is left, or neither the logos nor the backdrop can be measured
+ * (the hosts refuse), `onFail` is called so the caller shows the name.
  */
 export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
   const { src, onFail } = props;
@@ -31,8 +33,16 @@ export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
     if (!candidates.length || choices.has(id)) return;
     let live = true;
     const behind = backdrop && spot ? measureBackdrop(backdrop, spot) : Promise.resolve(DARK_PAGE);
-    Promise.all([behind, Promise.all(candidates.map(measureLogo))]).then(([lum, inks]) => {
-      choices.set(id, chooseLogo(candidates, inks, lum));
+    Promise.all([behind, Promise.all(candidates.map(measureLogo))]).then(([lum, measured]) => {
+      choices.set(
+        id,
+        chooseLogo(
+          candidates,
+          measured.map((m) => m.ink),
+          lum,
+          measured.map((m) => m.shape),
+        ),
+      );
       if (live) setMeasured((n) => n + 1);
     });
     return () => {
@@ -41,34 +51,48 @@ export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
     // `candidates` and `spot` are new each render; `id` says when they change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+  const named = choice === "unsure" || choice === "none";
   useEffect(() => {
-    if (choice === "unsure") onFail?.();
+    if (named) onFail?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [choice]);
-  if (choice === "unsure") return null;
+  }, [named]);
+  if (named) return null;
   const look = choice?.look ?? "as-is";
-  return <Img {...props} src={choice?.src ?? src} data-logo-look={look === "as-is" ? undefined : look} />;
+  return <Img {...props} src={choice?.src ?? src} data-logo-look={look === "as-is" ? undefined : look} data-logo-pending={choice ? undefined : ""} />;
 }
 
-/** The logo to show and how, or "unsure" when nothing could be measured. */
-type Choice = { src: string; look: LogoLook } | "unsure";
+/** The logo to show and how, "none" when no candidate is shaped like a logo, or "unsure" when nothing could be measured. */
+type Choice = { src: string; look: LogoLook } | "unsure" | "none";
 
 /** More logos than this aren't measured (each is a request). */
 const MAX_CANDIDATES = 6;
 
 const choices = new Map<string, Choice>();
-const inks = new Map<string, Promise<Ink | null>>();
+const logos = new Map<string, Promise<MeasuredLogo>>();
 const behinds = new Map<string, Promise<number | null>>();
 
-/** Loads a picture for measuring; null when the host refuses it (no CORS) or it doesn't load. */
-function load(src: string): Promise<HTMLImageElement | null> {
+/** How long a picture may take to load for measuring before it counts as not loading. */
+const LOAD_TIMEOUT = 8000;
+
+/**
+ * Loads a picture for measuring; null when the host refuses it (no CORS) or it doesn't load. `plain` loads
+ * the visible picture without CORS: its pixels can't be read, but its size can.
+ */
+function load(src: string, plain = false): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    const timer = setTimeout(() => resolve(null), LOAD_TIMEOUT);
+    if (!plain) img.crossOrigin = "anonymous";
     img.decoding = "async";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = toneUrl(src);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+    img.src = plain ? src : toneUrl(src);
   });
 }
 
@@ -92,18 +116,29 @@ function pixelsOf(img: HTMLImageElement, w: number, spot?: LogoSpot) {
   }
 }
 
-/** A logo's ink, measured once per picture; null when it can't be. A host that refuses answers the same every time. */
+/** A logo's ink and shape; each null when it can't be measured. */
+interface MeasuredLogo {
+  ink: Ink | null;
+  shape: LogoShape | null;
+}
+
+/**
+ * A logo's ink and shape, measured once per picture. A host that refuses answers the same every time; its
+ * picture is then loaded as shown, for its size alone.
+ */
 function measureLogo(src: string) {
-  let ink = inks.get(src);
+  let measured = logos.get(src);
   // Wide enough that thin bright detail (a ring, small letters, an outline) survives the downscale (#11).
-  if (!ink) {
-    ink = load(src).then((img) => {
+  if (!measured) {
+    measured = load(src).then(async (img) => {
       const px = img && pixelsOf(img, 128);
-      return px ? measureInk(px) : null;
+      const sized = img ?? (await load(src, true));
+      const shape = sized && sized.naturalWidth ? { width: sized.naturalWidth, height: sized.naturalHeight, clear: px ? clearShare(px) : null } : null;
+      return { ink: px ? measureInk(px) : null, shape };
     });
-    inks.set(src, ink);
+    logos.set(src, measured);
   }
-  return ink;
+  return measured;
 }
 
 /** The luminance behind the logo, measured once per backdrop and spot; null when it can't be. */

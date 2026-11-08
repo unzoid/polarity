@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { useTrailerOpen } from "../components/Trailer";
@@ -15,6 +15,7 @@ import {
   type Anime,
   animeArt,
   animeEntries,
+  animeImdbQuery,
   animeQuery,
   continuePart,
   distinctLabels,
@@ -29,6 +30,7 @@ import {
   type HeroImdb,
   pageArtSource,
   useLinkedImdbs,
+  usePlayedZip,
 } from "../lib/anime";
 import { useMeta, useProgressOf } from "../lib/net";
 import { usePrefs } from "../lib/settings";
@@ -75,23 +77,25 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
 
   // The franchise's base title (#246): the series most of its TV entries play from, else its earliest TV
   // entry, not the chain's first entry (a prequel film would cover the whole series with its art). The page's
-  // art comes from its linked title, else the one its hero plays from, worked out once everything has
-  // answered, so it's drawn once and the same wherever the page was opened from (#339).
+  // art comes from its linked title, else the one it plays from (the lookup its hero and the Anime tab's
+  // banner share, #371), worked out once everything has answered, so it's drawn once and the same wherever
+  // the page was opened from (#339).
   const linkedOf = useLinkedImdbs(found ? found.map((s) => s.card.id) : shown ? [shown.id] : []);
   const [heroImdb, setHeroImdb] = useState<HeroImdb>();
   const separateFirst = separate && opened
     ? !opened.relations.edges.some((e) => e.relationType === "PREQUEL" && e.node.type !== "MANGA" && isSeason(e.node))
     : undefined;
-  const source = pageArtSource({
-    separate,
-    seasonsLoading,
-    found: found?.map((s) => s.card),
-    shown,
-    active: activeId,
-    separateFirst,
-    linked: linkedOf,
-    hero: heroImdb,
-  });
+  const sourceOf = (played: HeroImdb | undefined) =>
+    pageArtSource({ separate, seasonsLoading, found: found?.map((s) => s.card), shown, active: activeId, separateFirst, linked: linkedOf, played });
+  const artEntry = sourceOf(undefined).first;
+  // Asked only with the entry's relations (not a preview's card), so a split part borrows its prequel's record as its hero does.
+  const asked = artEntry && "relations" in artEntry ? artEntry : undefined;
+  const qc = useQueryClient();
+  const { zip: artZip } = usePlayedZip(asked);
+  const { data: plays, isError: noPlays } = useQuery(animeImdbQuery(qc, asked, artZip));
+  // A lookup that failed counts as none, so the art still comes.
+  const artPlays = artEntry && (noPlays || plays !== undefined) ? { of: artEntry.id, id: noPlays ? null : (plays?.id ?? null) } : undefined;
+  const source = sourceOf(artPlays);
   const { base, first, firstEntry, known: firstKnown } = source;
 
   // A grouped page's top is the whole franchise's (#327): the base title's name, story and facts, the parts'
@@ -174,6 +178,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
             item={base.card}
             anime={baseAnime}
             logo={art.logo}
+            logos={art.logos}
             background={art.background}
             name={title(base.card.title)}
             onImdb={onImdb}
@@ -181,7 +186,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
             franchise={heroFranchise}
           />
         ) : (
-          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
         )}
         {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} />}
       </div>

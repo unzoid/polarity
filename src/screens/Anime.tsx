@@ -221,7 +221,7 @@ function useAnimeHero(trending?: Card[]) {
     const items = picks.map(({ card, zip }, i) => {
       const own = animePreview(card, zip, animeTitles);
       const b = banners[i];
-      return b ? { ...own, name: b.name, background: b.background ?? own.background, logo: b.logo } : own;
+      return b ? { ...own, name: b.name, background: b.background ?? own.background, logo: b.logo, logos: b.logos } : own;
     });
     return { items, cards: picks.map((p) => p.card), parts: banners.map((b) => b?.label) };
   }, [picks, banners, animeTitles]);
@@ -233,7 +233,7 @@ function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview;
   const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
   return (
     <div className="hero-content">
-      <TitleHeading name={item.name} logo={item.logo} backdrop={item.background} look="hero" />
+      <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
       {/* The franchise's logo above: which of its parts is trending (#325). */}
       {part && <p className="hero-part t-caption">{part}</p>}
       <p className="hero-kind t-callout tabular">

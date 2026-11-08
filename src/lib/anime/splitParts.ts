@@ -80,6 +80,19 @@ export function entryZip(anime: AnimeCard | Anime, own: AniZip | null | undefine
 /** An ani.zip answer with nothing to go on: no record, or one without ids or episodes. */
 export const knowsNothing = (z: AniZip | null) => !z || (!z.mappings.imdb_id && !z.mappings.kitsu_id && !Object.keys(z.episodes).length);
 
+/** The prequel whose record an entry borrows (`entryZip`), asked once its own record knows nothing; undefined otherwise. */
+export const borrowsFrom = (anime: AnimeCard | Anime, own: AniZip | null | undefined) =>
+  own !== undefined && knowsNothing(own) ? prequelOf(anime) : undefined;
+
+/**
+ * The record an entry plays from ({@link entryZip}) once what it needs has answered: its own, and when it
+ * borrows ({@link borrowsFrom}) its prequel's (`failed` when that couldn't be asked). Undefined until then.
+ */
+export function playedZip(anime: AnimeCard | Anime, own: AniZip | null | undefined, prequel: { data: AniZip | null | undefined; failed: boolean }) {
+  if (borrowsFrom(anime, own) !== undefined && prequel.data === undefined && !prequel.failed) return undefined;
+  return entryZip(anime, own, prequel.data);
+}
+
 /** The direct prequel whose ani.zip record an entry may borrow episodes from (`entryZip`). */
 export function prequelOf(anime: AnimeCard | Anime): number | undefined {
   if (!("relations" in anime)) return undefined;

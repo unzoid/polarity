@@ -24,25 +24,25 @@ const seasons = [
 const linked = links({ 1: null, 2: "tt0000002", 3: "tt0000002" });
 
 test("a later season's banner takes the base title and its linked series, named by its season tab (#325)", () => {
-  expect(bannerBase(s2, seasons, linked, title)).toEqual({ base: s1, imdb: "tt0000002", label: "Second Tide" });
+  expect(bannerBase(s2, seasons, linked, title)).toEqual({ base: s1, linked: "tt0000002", label: "Second Tide" });
 });
 
 test("the base title itself has no label, even after a prequel film in the chain", () => {
-  expect(bannerBase(s1, seasons, linked, title)).toEqual({ base: s1, imdb: "tt0000002" });
+  expect(bannerBase(s1, seasons, linked, title)).toEqual({ base: s1, linked: "tt0000002" });
 });
 
 test("a prequel film trending is named as its tab is, Movie, and shows the series it belongs to", () => {
-  expect(bannerBase(film, seasons, linked, title)).toEqual({ base: s1, imdb: "tt0000002", label: "Movie" });
+  expect(bannerBase(film, seasons, linked, title)).toEqual({ base: s1, linked: "tt0000002", label: "Movie" });
 });
 
 test("an entry on its own is its own base; nothing until its link is known", () => {
   const solo = entry(9, "TV", 2020, "Mossgate");
-  expect(bannerBase(solo, [{ card: solo, label: "Season 1" }], links({ 9: "tt0000009" }), title)).toEqual({ base: solo, imdb: "tt0000009" });
+  expect(bannerBase(solo, [{ card: solo, label: "Season 1" }], links({ 9: "tt0000009" }), title)).toEqual({ base: solo, linked: "tt0000009" });
   expect(bannerBase(solo, [{ card: solo, label: "Season 1" }], links({}), title)).toBeUndefined();
   expect(bannerBase(s2, seasons, links({ 1: null, 2: "tt0000002" }), title)).toBeUndefined();
 });
 
-test("a base with no linked series: its ani.zip art (null), the later season's own link standing in as the page does", () => {
+test("a base with no linked series: null, its art then coming from what the base plays from, as on its page (#371)", () => {
   const none = links({ 1: null, 2: null, 3: null });
-  expect(bannerBase(s2, seasons, none, title)).toEqual({ base: s1, imdb: null, label: "Second Tide" });
+  expect(bannerBase(s2, seasons, none, title)).toEqual({ base: s1, linked: null, label: "Second Tide" });
 });

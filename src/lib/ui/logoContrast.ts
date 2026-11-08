@@ -148,13 +148,51 @@ export function pickLogo(inks: (Ink | null)[], behind: number): { index: number;
   return { index: first, look: logoLook(inks[first]!, behind) };
 }
 
+/** A logo picture's size, and the share of its pixels that are see-through (null when they can't be read). */
+export interface LogoShape {
+  width: number;
+  height: number;
+  clear: number | null;
+}
+
+/** A logo is clearly wider than tall: at least this many times (a stacked two-line logo still is). */
+export const LOGO_ASPECT = 1.2;
+/** And mostly see-through around its lettering: at least this share of its pixels (a cover has none). */
+export const LOGO_CLEAR = 0.25;
+
 /**
- * What a heading shows once measuring has answered: the logo to show and how, or "unsure" (the name in text)
- * when neither the logos nor the backdrop could be measured. `behind` is null when the backdrop couldn't be;
+ * Whether a picture handed over as a title's logo is shaped like one (#371): a cover or poster passed off as a
+ * logo is square or upright, or has nothing see-through. Transparency counts only when the pixels could be read.
+ */
+export function logoShaped(shape: LogoShape): boolean {
+  return shape.width >= LOGO_ASPECT * shape.height && (shape.clear === null || shape.clear >= LOGO_CLEAR);
+}
+
+/** The share of RGBA pixels that are mostly see-through. */
+export function clearShare(px: ArrayLike<number>): number {
+  let clear = 0;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 128) clear++;
+  return px.length ? clear / (px.length / 4) : 0;
+}
+
+/**
+ * What a heading shows once measuring has answered: the logo to show and how, "none" when no candidate is shaped
+ * like a logo (`shapes`, null where a picture couldn't be loaded at all), or "unsure" when neither the logos nor
+ * the backdrop could be measured; for both the name shows in text. `behind` is null when the backdrop couldn't be;
  * with no backdrop to measure the caller passes `DARK_PAGE`, and an unmeasured logo is then left as it is.
  */
-export function chooseLogo(candidates: string[], inks: (Ink | null)[], behind: number | null): { src: string; look: LogoLook } | "unsure" {
-  const picked = pickLogo(inks, behind ?? DARK_PAGE);
-  if (picked) return { src: candidates[picked.index], look: picked.look };
-  return behind === null ? "unsure" : { src: candidates[0], look: "as-is" };
+export function chooseLogo(
+  candidates: string[],
+  inks: (Ink | null)[],
+  behind: number | null,
+  shapes: (LogoShape | null)[] = [],
+): { src: string; look: LogoLook } | "unsure" | "none" {
+  const kept = candidates.map((_, i) => i).filter((i) => !shapes[i] || logoShaped(shapes[i]));
+  if (!kept.length) return "none";
+  const picked = pickLogo(
+    kept.map((i) => inks[i] ?? null),
+    behind ?? DARK_PAGE,
+  );
+  if (picked) return { src: candidates[kept[picked.index]], look: picked.look };
+  return behind === null ? "unsure" : { src: candidates[kept[0]], look: "as-is" };
 }

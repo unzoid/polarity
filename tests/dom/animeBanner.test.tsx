@@ -45,14 +45,14 @@ function client() {
   return qc;
 }
 
-async function banners(cards: Media[]) {
+async function banners(cards: Media[], qc = client()) {
   let out: (BannerArt | null)[] | undefined;
   function Probe() {
     out = useFranchiseBanners(cards);
     return null;
   }
   const { unmount } = await render(
-    <QueryClientProvider client={client()}>
+    <QueryClientProvider client={qc}>
       <Probe />
     </QueryClientProvider>,
   );
@@ -65,15 +65,39 @@ afterEach(() => setPrefs({ animeSeparateEntries: false }));
 
 test("with seasons grouped, a trending base title shows its franchise's art and logo and no label (#325)", async () => {
   setPrefs({ animeSeparateEntries: false });
-  expect(await banners([s1])).toEqual([{ name: "Lantern Coast", ...general, label: undefined }]);
+  expect(await banners([s1])).toEqual([{ name: "Lantern Coast", ...general, logos: [general.logo], label: undefined }]);
 });
 
 test("a later season trending shows the base title's art and logo, the same as its page, and its season tab's label", async () => {
   setPrefs({ animeSeparateEntries: false });
-  expect(await banners([s2])).toEqual([{ name: "Lantern Coast", ...general, label: "Season 2" }]);
+  expect(await banners([s2])).toEqual([{ name: "Lantern Coast", ...general, logos: [general.logo], label: "Season 2" }]);
 });
 
 test("with seasons as separate shows, every entry keeps its own art", async () => {
   setPrefs({ animeSeparateEntries: true });
   expect(await banners([s1, s2])).toEqual([null, null]);
+});
+
+test("an airing show nothing links yet takes its art from the title it plays from, as its page does (#371)", async () => {
+  setPrefs({ animeSeparateEntries: false });
+  const airing = entry(920003, "Harbor Lights", 2026);
+  const plays = "tt0000930";
+  const qc = client();
+  qc.setQueryData(keys.anime.media(airing.id), { ...airing, relations: { edges: [] } } as unknown as Anime);
+  qc.setQueryData(keys.anime.seasons(airing.id), { seasons: [{ card: airing, label: "Season 1" }], order: [airing], complete: true });
+  qc.setQueryData(keys.anime.listedImdb(airing.id), null);
+  const zipLogo = "https://art.example/anizip/920003/logo.png";
+  qc.setQueryData(keys.aniZip(airing.id), {
+    mappings: { imdb_id: plays },
+    episodes: {},
+    images: [
+      { coverType: "Fanart", url: "https://art.example/anizip/920003/fanart.jpg" },
+      { coverType: "Clearlogo", url: zipLogo },
+    ],
+  });
+  // The same answer the page's lookup has: ani.zip's IMDb link.
+  qc.setQueryData(keys.anime.imdb(airing.id), { id: plays, by: "mapping" });
+  const art = { background: "https://art.example/background/tt0000930.jpg", logo: "https://art.example/cover/tt0000930.jpg" };
+  qc.setQueryData(keys.meta("series", plays), { id: plays, type: "series", name: "Harbor Lights", ...art });
+  expect(await banners([airing], qc)).toEqual([{ name: "Harbor Lights", ...art, logos: [art.logo, zipLogo], label: undefined }]);
 });
