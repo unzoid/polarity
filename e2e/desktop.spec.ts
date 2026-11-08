@@ -981,8 +981,8 @@ test("an anime season tab downloads its released episodes; a film's tab shows th
 
 test("a long anime lists the episodes its series' catalog skips, between their neighbours, and plays them by the entry's Kitsu id (#427)", async ({ app }) => {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    await route.fulfill({ json: { data: variables?.id === GAP_ANIME.anilist ? { Media: longAnimeMedia(GAP_ANIME) } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), (id) => (id === GAP_ANIME.anilist ? longAnimeMedia(GAP_ANIME) : undefined));
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) =>
     Number(new URL(route.request().url()).searchParams.get("anilist_id")) === GAP_ANIME.anilist ? route.fulfill({ json: longAnimeZip(GAP_ANIME) }) : route.fulfill({ status: 404, json: {} }),
