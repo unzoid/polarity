@@ -35,11 +35,27 @@ function revealSetting(root: HTMLElement, entry: SettingEntry) {
   if (!label) return;
   const box = marked ?? label.closest<HTMLElement>(ROW_BOXES) ?? label;
   box.scrollIntoView({ block: "center" });
+  clearTimeout(hitTimers.get(box));
   box.removeAttribute("data-search-hit");
   void box.offsetWidth; // restart the highlight if it's already running
   box.setAttribute("data-search-hit", "");
-  box.addEventListener("animationend", () => box.removeAttribute("data-search-hit"), { once: true });
+  // The mark goes once the highlight has played, however it ends: an interrupted animation (page left,
+  // Settings closed, window hidden) fires animationcancel or nothing, and a mark left behind would
+  // play the highlight again each time the row is shown.
+  const unmark = () => {
+    clearTimeout(hitTimers.get(box));
+    box.removeEventListener("animationend", unmark);
+    box.removeEventListener("animationcancel", unmark);
+    box.removeAttribute("data-search-hit");
+  };
+  box.addEventListener("animationend", unmark);
+  box.addEventListener("animationcancel", unmark);
+  hitTimers.set(box, setTimeout(unmark, SEARCH_HIT_MS));
 }
+
+/** How long the highlight plays (`t3s-search-hit` in settings-overlay.css). */
+const SEARCH_HIT_MS = 1400;
+const hitTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 /**
  * Settings as a window over the app (T3 Code, Discord, Obsidian): sidebar of
@@ -71,6 +87,7 @@ export function SettingsOverlay() {
     if (asked) setPage(requested);
     setView(asked ? "page" : "list");
     setQuery("");
+    setTarget(null);
   }, [open, requested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -101,7 +118,11 @@ export function SettingsOverlay() {
   useEffect(() => {
     if (!target || !scroller.current) return;
     const root = scroller.current;
-    const frame = requestAnimationFrame(() => revealSetting(root, target.entry));
+    // Revealed once: coming back to the page later shows it as it is, without the highlight.
+    const frame = requestAnimationFrame(() => {
+      revealSetting(root, target.entry);
+      setTarget(null);
+    });
     return () => cancelAnimationFrame(frame);
   }, [target, page]);
 

@@ -61,7 +61,7 @@ const commands: Record<string, (a: Args) => unknown> = {
     const q = String(a.query).toLowerCase();
     const hit = (m: MetaPreview) => m.name.toLowerCase().includes(q);
     if (fx.WORST === "empty") return { movies: [], series: [] };
-    return { movies: fx.movies.filter(hit), series: fx.series.filter(hit) };
+    return { movies: [...fx.movies, ...fx.searchStubs.movies].filter(hit), series: [...fx.series, ...fx.searchStubs.series].filter(hit) };
   },
   search_movies: (a) => {
     const q = String(a.query).toLowerCase();

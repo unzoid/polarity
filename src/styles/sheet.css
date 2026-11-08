@@ -289,7 +289,7 @@
   flex-direction: column;
   gap: 0.875rem;
   width: min(40rem, 100%);
-  /* The grid's row grows with its content: the card is held to the window itself, Done always in reach. */
+  /* The grid's row grows with its content: the card is held to the window itself, Close always in reach. */
   max-height: min(44rem, calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
   padding: 1.5rem;
   border-radius: var(--r-panel);
@@ -300,6 +300,18 @@
 .source-info-card h2,
 .source-info-card p {
   margin: 0;
+}
+/* Copy and Close as icons in the top right corner, level with the title. */
+.source-info-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.source-info-tools {
+  display: flex;
+  gap: 0.25rem;
+  margin: -0.375rem -0.5rem 0 0;
 }
 .source-info-card .source-info-body {
   flex: 1;

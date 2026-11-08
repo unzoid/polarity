@@ -77,6 +77,17 @@ test("search finds movies and series", async ({ app }) => {
   await expect(app.getByRole("textbox", { name: "Search" })).toHaveValue("");
 });
 
+test("search leaves out titles that can't play and have nothing to show; an artless film and an announced series stay (#337)", async ({ app }) => {
+  await app.route("https://media.example.com/**", (route) => route.fulfill({ status: 404, body: "" }));
+  await app.getByRole("button", { name: "Search", exact: true }).click();
+  await app.keyboard.type("quillmoor");
+  await expect(card(app, "Quillmoor Crossing")).toBeVisible();
+  await expect(card(app, "Quillmoor Announced")).toBeVisible();
+  await expect(card(app, "Quillmoor Bare")).toHaveCount(0);
+  // Drawn while its poster loads, gone once the poster and then the backdrop fail.
+  await expect(card(app, "Quillmoor Blank")).toHaveCount(0);
+});
+
 test("a title page adds to and removes from the Library", async ({ app }) => {
   const nav = app.getByRole("navigation", { name: "Primary" });
   await nav.getByRole("button", { name: "Movies", exact: true }).click();
@@ -481,6 +492,53 @@ test("settings change and stay changed", async ({ app }) => {
   await expect(settings.getByRole("heading", { level: 2, name: /Appearance/ }).first()).toBeVisible();
   await app.keyboard.press("Escape");
   await expect(settings).toHaveCount(0);
+});
+
+test("a settings search result is highlighted once, not again when its page or Settings comes back (#341)", async ({ app }) => {
+  const open = async () => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Settings" }).click();
+    return app.getByRole("dialog", { name: /^Settings/ });
+  };
+  // Counts every time a row is marked, so a highlight played again can't hide by ending before a check.
+  await app.evaluate(() => {
+    const w = window as unknown as { searchHits: number };
+    w.searchHits = 0;
+    new MutationObserver((records) => {
+      for (const r of records) if ((r.target as Element).hasAttribute("data-search-hit")) w.searchHits++;
+    }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-search-hit"] });
+  });
+  const marks = () => app.evaluate(() => (window as unknown as { searchHits: number }).searchHits);
+  const settings = await open();
+  const hits = settings.locator("[data-search-hit]");
+  const skip = settings.getByRole("switch", { name: /^Skip intros/ });
+  const find = async () => {
+    await settings.getByRole("combobox", { name: "Search settings" }).fill("Skip intros");
+    await app.keyboard.press("Enter");
+    await expect(hits).toHaveCount(1);
+    return marks();
+  };
+  // Shown again: a few frames for a reveal to run, then no new mark.
+  const noNewMark = async (before: number) => {
+    await expect(skip).toBeVisible();
+    await app.waitForTimeout(300);
+    expect(await marks()).toBe(before);
+  };
+
+  // Left before the highlight ends, then back.
+  let before = await find();
+  await settings.getByRole("button", { name: "Appearance", exact: true }).click();
+  await settings.getByRole("button", { name: "Playback", exact: true }).click();
+  await noNewMark(before);
+  // Closed before it ends, then opened again.
+  before = await find();
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(settings).toHaveCount(0);
+  await open();
+  await noNewMark(before);
+  // Played through: the mark goes with it.
+  await find();
+  await expect(hits).toHaveCount(0, { timeout: 3000 });
 });
 
 test("Settings → Sources has the torrent limits, kept on this device (#47)", async ({ app }) => {
@@ -1148,7 +1206,7 @@ test("a source's i button shows what the source carries with every key masked, o
   await expect(list).toBeVisible();
 });
 
-test("the player's episode rail pages with Home's shelf paddles: blurred edge, shown on hover or keyboard focus, gone at the ends (#250)", async ({ app, browserName }) => {
+test("the player's episode rail pages with Home's shelf paddles: blurred edge, shown on hover but not for keyboard focus, gone at the ends (#250)", async ({ app, browserName }) => {
   // What makes a paddle look and act as it does, read from the next one in `viewport` while `shown` or not.
   const look = (viewport: Locator) =>
     viewport.locator(".row-paddle[data-dir=next]").evaluate((b) => {
@@ -1193,10 +1251,11 @@ test("the player's episode rail pages with Home's shelf paddles: blurred edge, s
   await expect.poll(async () => (await look(rail)).shown).toBe("0");
   await expect.poll(async () => (await look(rail)).blur.every((b) => b === "none")).toBe(true);
 
-  // A card reached by the keys shows them.
+  // A card reached by the keys doesn't: the keys move the rail along as on TV, the ring on the card's still.
   await app.locator(".episode-rail-card").first().locator(".episode-rail-main").focus();
   await app.keyboard.press("ArrowRight");
-  await expect.poll(async () => (await look(rail)).shown).toBe("1");
+  await expect(app.locator(".episode-rail-main:focus-visible .episode-rail-still")).toHaveCSS("outline-style", "solid");
+  expect((await look(rail)).shown).toBe("0");
 
   // At the start, the left one is gone and can't be clicked; it never takes the focus.
   await rail.locator(".episode-rail").evaluate((el) => (el.scrollLeft = 0));
@@ -1248,17 +1307,17 @@ test("the player's episode rail shows the playing and focused cards' whole ring 
   await expect(rail.locator('[aria-current="true"] > .episode-rail-main')).toBeFocused();
   await app.keyboard.press("ArrowLeft");
   await app.keyboard.press("ArrowRight");
-  await whole(".episode-rail-main:focus-visible");
+  await whole(".episode-rail-main:focus-visible .episode-rail-still");
 
   // Stepped by the keys to either end, the focused card's outline stays whole each step.
   for (let i = 0; i < 6; i++) {
     await app.keyboard.press("ArrowLeft");
-    await whole(".episode-rail-main:focus-visible");
+    await whole(".episode-rail-main:focus-visible .episode-rail-still");
   }
   expect(await rail.evaluate((el) => el.scrollLeft)).toBeLessThanOrEqual(1);
   for (let i = 0; i < 9; i++) {
     await app.keyboard.press("ArrowRight");
-    await whole(".episode-rail-main:focus-visible");
+    await whole(".episode-rail-main:focus-visible .episode-rail-still");
   }
   await expect(rail.locator(".episode-rail-card").last().locator(".episode-rail-main")).toBeFocused();
 
@@ -2157,4 +2216,25 @@ test("in a narrow window nothing in the player's bars overlaps, the title is cut
   await app.keyboard.press("Escape");
   await expect(app.getByRole("menu")).toHaveCount(0);
   await expect(player).toHaveCount(1);
+});
+
+test("subtitle Font starts at From the subtitles; a picked font is kept (#347)", async ({ app }) => {
+  const open = async () => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Settings" }).click();
+    const settings = app.getByRole("dialog", { name: /^Settings/ });
+    await settings.getByRole("button", { name: "Subtitles & Audio", exact: true }).click();
+    return settings;
+  };
+  let settings = await open();
+  const font = () => settings.getByRole("combobox", { name: "Subtitle font" });
+  await expect(font()).toHaveText(/From the subtitles/);
+  await expect(settings.getByText("Styled subtitles keep their own font")).toBeVisible();
+  await font().click();
+  await app.getByRole("option", { name: "Segoe UI", exact: true }).click();
+  await expect(font()).toHaveText(/^Segoe UI/);
+  await expect(settings.getByText("Styled subtitles keep their own font")).toHaveCount(0);
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  settings = await open();
+  await expect(font()).toHaveText(/^Segoe UI/);
 });

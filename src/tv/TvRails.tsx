@@ -7,7 +7,7 @@ import { episodeCode, formatRemaining } from "../lib/format";
 import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useRecommend } from "../lib/net";
 import { useRouter } from "../lib/router";
 import { useArtGate, useCardIntent } from "../lib/ui";
-import type { Shape, Shelf } from "../lib/catalog";
+import { useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
 import { StageProvider, TvStage, useStage, useStageSeed } from "./TvStage";
 import { isMenuKey, openCardMenu } from "./TvCardMenu";
@@ -175,7 +175,22 @@ export function TvSkeletonRail({ title, shape, count = 8, note }: { title?: stri
 }
 
 /** `watching`: title id → the episode last watched, for saved anime shown by their entry (#22). */
-export function TvItemsRail({ title, items, shape, watching }: { title: string; items?: MetaPreview[]; shape: Shape; watching?: ReadonlyMap<string, string> }) {
+export function TvItemsRail({
+  title,
+  items: given,
+  shape,
+  watching,
+  saved,
+}: {
+  title: string;
+  items?: MetaPreview[];
+  shape: Shape;
+  watching?: ReadonlyMap<string, string>;
+  /** The user's own titles: all of them, even ones a catalog's list would leave out (#337). */
+  saved?: boolean;
+}) {
+  const listed = useListable(given);
+  const items = saved ? given : listed;
   if (!items) return <TvSkeletonRail title={title} shape={shape} />;
   if (!items.length) return null;
   return (
