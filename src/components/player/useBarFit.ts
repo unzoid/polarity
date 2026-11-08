@@ -57,6 +57,8 @@ export function fitLabels(widths: number[], room: number): boolean {
 }
 
 const px = (v: string) => parseFloat(v) || 0;
+/** A top-bar glyph button's width (`.player-icon`), when none is in the bar to measure. */
+const ICON_W = 44;
 const innerWidth = (el: HTMLElement) => {
   const s = getComputedStyle(el);
   return el.clientWidth - px(s.paddingLeft) - px(s.paddingRight);
@@ -93,7 +95,7 @@ export function useBarFit(
       const { fit: now, movable } = latest.current;
       const next = { ...now };
 
-      const back = bar.querySelector<HTMLElement>(":scope > .player-icon");
+      const back = bar.querySelector<HTMLElement>(":scope > .player-back");
       const end = bar.querySelector<HTMLElement>(".player-top-end");
       const cluster = bar.querySelector<HTMLElement>(".player-top-actions");
       if (back && end && cluster) {
@@ -102,7 +104,10 @@ export function useBarFit(
         if (slider && now.slider) sliderWidth.current = slider.offsetWidth + gap;
         const sliderW = slider ? sliderWidth.current : 0;
         const moreButton = now.more ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
-        const movableW = movable * (back.offsetWidth + gap);
+        // Back stands at the navbar's spot (#348): its inset is part of what it takes.
+        const backW = back.offsetWidth + px(getComputedStyle(back).marginLeft);
+        const icon = cluster.querySelector<HTMLElement>(".player-icon")?.offsetWidth ?? ICON_W;
+        const movableW = movable * (icon + gap);
         const title = Math.max(0, ...Array.from(bar.querySelectorAll<HTMLElement>(".player-heading > *"), (el) => el.scrollWidth));
         const s = getComputedStyle(bar);
         Object.assign(
@@ -110,11 +115,11 @@ export function useBarFit(
           fitTop({
             room: innerWidth(bar),
             gaps: 2 * px(s.columnGap),
-            back: back.offsetWidth,
+            back: backW,
             title,
             end: end.offsetWidth + (now.slider ? 0 : sliderW) + (now.more ? movableW - moreButton : 0),
             slider: sliderW,
-            movable: movable ? movableW - (back.offsetWidth + gap) : 0,
+            movable: movable ? movableW - (icon + gap) : 0,
           }),
         );
       }

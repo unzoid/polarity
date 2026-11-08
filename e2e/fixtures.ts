@@ -99,6 +99,21 @@ export const labelShowsWhole = (label: Locator, text: string) =>
   }, text);
 
 /**
+ * Where the shown Back button is (#348): the navbar's on a page (`.navbar-back`), the player's in the player (`.player-back`),
+ * rounded to the pixel, once it has stopped moving. Each must be the shared BackButton (`.back-button`).
+ */
+export const backPlace = async (page: Page, which: "navbar" | "player") => {
+  const back = page.locator(which === "navbar" ? ".navbar-back.back-button" : ".player-top > .player-back.back-button");
+  await expect(back).toBeVisible();
+  const box = () => back.evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+  const round = (r: DOMRect) => [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+  // The navbar's slides in: read it until two frames agree.
+  let last = "";
+  await expect.poll(async () => (last === (last = round(await box())) ? last : "moving")).not.toBe("moving");
+  return last;
+};
+
+/**
  * Every pair of things in the player's top or bottom bar whose boxes meet (#396): the controls, and the title and show
  * lines as drawn (cut short to their box). Hidden controls (a folded slider, words of an icon-only action) don't count;
  * neither does a control sticking out of the window. Empty when nothing overlaps.

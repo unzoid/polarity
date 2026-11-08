@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { barOverlaps, card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { backPlace, barOverlaps, card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 
 // Phone width (Pixel 7: 412×915, touch). The same components as desktop in the phone layout (docs/ARCHITECTURE.md §4).
 
@@ -30,6 +30,7 @@ test("tabs, a title page and the player by touch", async ({ app }) => {
   await expect(app.getByRole("heading", { level: 1, name: "The Glass Orchard" })).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
 
+  const backOnPage = await backPlace(app, "navbar");
   await app.getByRole("button", { name: "Play", exact: true }).tap();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
@@ -43,6 +44,8 @@ test("tabs, a title page and the player by touch", async ({ app }) => {
   // An Android phone's volume buttons set the volume: no slider, Mute still there (#179).
   await expect(player.getByRole("slider", { name: "Volume" })).toHaveCount(0);
   await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
+  // Back is the title page's, in the same spot (#348).
+  expect(await backPlace(app, "player")).toBe(backOnPage);
   await player.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(player).toHaveCount(0);
 });
@@ -210,6 +213,30 @@ test("the player's controls keep clear of the notch and the home indicator, upri
   await insets(app, sideways);
   await controlsClearOf(app, sideways);
   expect(await barOverlaps(app)).toEqual([]);
+});
+
+test("Back stays in the title page's spot in the player around the notch, upright and sideways (#348)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  const player = app.locator(".player");
+  for (const [size, i] of [
+    [{ width: 412, height: 915 }, { top: 59, right: 0, bottom: 34, left: 0 }],
+    [{ width: 915, height: 412 }, { top: 0, right: 59, bottom: 21, left: 59 }],
+  ] as const) {
+    await app.setViewportSize(size);
+    await insets(app, i);
+    const onPage = await backPlace(app, "navbar");
+    expect(Number(onPage.split(",")[0]), "clear of the cutout").toBeGreaterThanOrEqual(i.left);
+    await app.getByRole("button", { name: "Play", exact: true }).tap();
+    await expect(player).toHaveAttribute("data-started", "true");
+    // The controls hide on their own first: a tap while they show would hide them.
+    await expect(player).toHaveAttribute("data-chrome", "false");
+    await player.tap({ position: { x: 200, y: 200 } });
+    await expect(player).toHaveAttribute("data-chrome", "true");
+    expect(await backPlace(app, "player"), `${size.width}×${size.height}`).toBe(onPage);
+    await player.getByRole("button", { name: "Back", exact: true }).tap();
+    await expect(player).toHaveCount(0);
+  }
 });
 
 test("the trailer fits the screen at every phone width, upright and sideways, its controls inside the insets (#289)", async ({ app }) => {

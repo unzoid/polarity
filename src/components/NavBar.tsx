@@ -1,5 +1,5 @@
 import logo from "../assets/polarity-white.png";
-import { ChevronDown, ChevronLeft, Close, Search, Speed, Tv } from "./icons";
+import { ChevronDown, Close, Search, Speed, Tv } from "./icons";
 import {
   addRecentSearch,
   clearRecentSearches,
@@ -30,6 +30,7 @@ import { Chip } from "./ui/Chip";
 import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "./ui/Menu";
 import { useNativeTabs } from "./NativeTabs";
 import { useNativeBack } from "./NativeBack";
+import { BackButton } from "./BackButton";
 import { backHistory, type NavLink } from "../lib/navTabs";
 
 const LINKS: NavLink[] = [
@@ -87,20 +88,16 @@ export function NavBar() {
         <i />
       </div>
       {/* Always takes its place, so the brand and tabs never shift when it appears. */}
-      <button
+      <BackButton
         ref={backButton}
-        className="navbar-icon navbar-back pressable"
+        className="navbar-back"
         data-shown={canGoBack}
         data-native-back={nativeBack || undefined}
         onClick={back}
-        aria-label="Back"
-        title="Back (Esc)"
         inert={!canGoBack}
         tabIndex={canGoBack ? 0 : -1}
         disabled={!canGoBack}
-      >
-        <ChevronLeft size={22} strokeWidth={2.25} />
-      </button>
+      />
       <button className="navbar-brand" onClick={() => tab({ name: "home" })} aria-label="Polarity home">
         <img className="brand-logo" src={logo} alt="Polarity" draggable={false} />
       </button>
