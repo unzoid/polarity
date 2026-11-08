@@ -519,6 +519,71 @@ test("the player's Sources panel marks the same links (#21)", async ({ app }) =>
   await expect(sources.locator('[data-ready="yes"]').nth(1)).toContainText("Ready · starts in 0.4 s");
 });
 
+test("a source picked in the player's Sources panel plays, while playing and while another is starting (#393)", async ({ app }) => {
+  // The second add-on's files never answer, so the player stays starting on them.
+  await app.route((url) => url.host === "media.example" && /\/[34]\.mp4$/.test(url.pathname), () => {});
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  const video = app.locator(".player video");
+  await expect(player).toHaveAttribute("data-started", "true");
+  const sources = app.getByRole("radiogroup", { name: "Sources" });
+  // A source of the first add-on that isn't playing.
+  const quick = () => sources.locator('[role="radio"][aria-checked="false"]').filter({ hasNotText: "Open Mirror" }).first();
+
+  // While playing: the click switches to the source.
+  const playing = await video.getAttribute("src");
+  await app.getByRole("button", { name: "Sources", exact: true }).click();
+  await quick().click();
+  await expect(video).not.toHaveAttribute("src", playing!);
+  await expect(player).toHaveAttribute("data-started", "true");
+
+  // A source that stays starting, then another picked while it starts (the Sources shortcut opens the panel).
+  await app.getByRole("button", { name: "Sources", exact: true }).click();
+  await sources.getByRole("radio", { name: /Open Mirror/ }).first().click();
+  await expect(video).toHaveAttribute("src", /\/[34]\.mp4/);
+  await expect(player).not.toHaveAttribute("data-started", "true");
+  await app.keyboard.press("o");
+  await expect(sources).toBeVisible();
+  await quick().click();
+  await expect(video).not.toHaveAttribute("src", /\/[34]\.mp4/);
+  await expect(player).toHaveAttribute("data-started", "true");
+});
+
+test("a torrent source picked after one failed is tried, and so is the failed one picked again (#393)", async ({ app }) => {
+  await app.addInitScript(() => {
+    localStorage.setItem("polar.fakeTorrents", "1");
+    localStorage.setItem("polar.prefs", JSON.stringify({ ...JSON.parse(localStorage.getItem("polar.prefs") ?? "{}"), torrentNotice: false }));
+  });
+  await app.reload();
+  const opens = () => app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0);
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  // The fake shell has no engine: each torrent fails, and every one ranked is tried in turn.
+  const choose = app.getByRole("button", { name: "Choose Another Source" });
+  await expect(choose).toBeVisible();
+  const tried = await opens();
+  expect(tried).toBeGreaterThan(0);
+  const sources = app.getByRole("radiogroup", { name: "Sources" });
+  for (const n of [1, 0, 0]) {
+    const before = await opens();
+    await choose.click();
+    await expect(sources).toBeVisible();
+    await sources.getByRole("radio").nth(n).click();
+    await expect.poll(opens).toBe(before + 1);
+    await expect(choose).toBeVisible();
+  }
+  // With the keyboard too.
+  const before = await opens();
+  await choose.click();
+  await expect(sources).toBeVisible();
+  await sources.getByRole("radio").nth(1).focus();
+  await app.keyboard.press("Enter");
+  await expect.poll(opens).toBe(before + 1);
+});
+
 test("while a downloaded episode plays, its copy is the first source and picking it goes back to the file (#23)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
   await card(app, "Fieldwork").click();
