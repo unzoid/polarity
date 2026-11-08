@@ -267,14 +267,14 @@ export function setup<H extends SimServer = Hub>(makeHub: (sim: Sim) => H = (sim
  * A stall of `ms` mid-video on `m`'s player, told to the room as usePartySync
  * tells it: after a second, that it stalled where it stopped; cleared when it plays.
  */
-export function stall(sim: Sim, m: Member, ms: number) {
+export function stall(sim: Sim, m: Member, ms: number, shownAfter = 1000) {
   m.media!.stall(ms);
   let shown = false;
   const show = sim.after(() => {
     shown = true;
     m.room.reportPosition(MEDIA.videoId, m.media!.currentTime, true, true);
     m.room.setPartyBuffering(true);
-  }, 1000);
+  }, shownAfter);
   sim.after(() => {
     show();
     if (shown) m.room.reportPosition(MEDIA.videoId, m.media!.currentTime, m.media!.paused, false);

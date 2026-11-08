@@ -10,6 +10,7 @@ const ENDED = 0;
 const PLAYING = 1;
 const PAUSED = 2;
 const BUFFERING = 3;
+const CUED = 5;
 
 /** What YouTube's player error codes mean for the viewer. */
 export function youtubeError(code: number): string {
@@ -139,6 +140,7 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
       if (!this.loaded) {
         this.loaded = true;
         this.emit("loadedmetadata");
+        if (this.state === PAUSED || this.state === CUED) this.emit("canplay");
       } else this.emit("durationchange");
     }
     if (finite(info.videoLoadedFraction)) this.loadedFraction = info.videoLoadedFraction;
@@ -170,15 +172,24 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
     this.time = this.currentTime;
     this.stamp = performance.now();
     this.state = s;
+    // Leaving a stop says "play", as a video element does, whether it plays at once or buffers first: YouTube
+    // starts (and resumes) through buffering, and without it a play pressed here never reached the party (#383).
+    const resumed = was !== PLAYING && was !== BUFFERING;
     if (s === PLAYING) {
-      if (was !== BUFFERING) this.emit("play");
+      if (resumed) this.emit("play");
       this.emit("playing");
     } else if (s === PAUSED) this.emit("pause");
-    else if (s === BUFFERING) this.emit("waiting");
+    else if (s === BUFFERING) {
+      if (resumed) this.emit("play");
+      this.emit("waiting");
+    }
     else if (s === ENDED) {
       if (was === PLAYING || was === BUFFERING) this.emit("pause");
       this.emit("ended");
     }
+    // Stopped with the picture there (paused, cued, a buffer that ended paused): no longer loading. YouTube
+    // only ever says so by its state, and a buffer that ended paused left the player buffering for good (#383).
+    if (this.loaded && (s === PAUSED || s === CUED || (was === BUFFERING && s === ENDED))) this.emit("canplay");
   }
 
   get currentTime() {

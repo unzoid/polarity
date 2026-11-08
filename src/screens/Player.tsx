@@ -560,7 +560,15 @@ export function Player({
       if (!startedRef.current) logStep("Playing", "ok", "player");
       setStarted(true);
     },
-    canplay: () => setBuffering(false),
+    canplay: () => {
+      setBuffering(false);
+      // YouTube's player stopped with the video loaded (held by the party, or its autoplay refused) has its
+      // picture up: the loading screen goes and the party can count it in. Its first frame may never "play" (#383).
+      if (videoRef.current instanceof YouTubeMedia && videoRef.current.paused) {
+        if (!startedRef.current) logStep("Ready, paused", "ok", "player");
+        setStarted(true);
+      }
+    },
     loadedmetadata: () => {
       const v = videoRef.current!;
       const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
