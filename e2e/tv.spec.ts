@@ -307,6 +307,23 @@ test("signed out, the TV offers the phone first; denied, it says so and gets a n
   expect(await code.textContent()).not.toBe(first);
 });
 
+test("Continue Watching cards show the title's logo where it has one, as desktop's do (#437)", async ({ app }) => {
+  // A wide logo of white letters on clear ground, for every title (fake.html?logos=1).
+  const letters = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100">${Array.from({ length: 10 }, (_, i) => `<rect x="${i * 40}" y="25" width="28" height="50" fill="#fff"/>`).join("")}</svg>`;
+  await app.route("https://art.example/logo/**", (route) => route.fulfill({ body: letters, contentType: "image/svg+xml", headers: { "access-control-allow-origin": "*" } }));
+  await app.goto("/fake.html?logos=1");
+  const rail = app.locator(".tv-rail").filter({ has: app.locator(".tv-rail-title", { hasText: "Continue Watching" }) });
+  const first = rail.locator(".tv-card").first();
+  await expect(first.locator("img.tv-card-logo")).toBeVisible();
+  await expect(first.locator("img.tv-card-logo")).toHaveAttribute("src", /^https:\/\/art\.example\/logo\/.+\.svg$/);
+  await expect(first.locator(".tv-card-name")).toHaveCount(0);
+});
+
+test("Continue Watching cards show the name where a title has no logo (#437)", async ({ app }) => {
+  const rail = app.locator(".tv-rail").filter({ has: app.locator(".tv-rail-title", { hasText: "Continue Watching" }) });
+  await expect(rail.locator(".tv-card").first().locator(".tv-card-name")).toBeVisible();
+});
+
 test("the Anime stage shows a later entry's franchise art and logo, as desktop does, never its own banner or name (#431)", async ({ app }) => {
   // The invented franchise's film (after its series) is the only card; its own banner differs from the series' art.
   const own = "https://art.example/banner/film.png";
