@@ -1212,6 +1212,37 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
     expect(commands).toContain("pauseVideo");
   });
+
+  test("a YouTube player whose start stops paused (autoplay refused, or a buffer that ends paused) is ready, not buffering (#383)", async ({ app }) => {
+    // The stand-in buffers on play, then stops paused, as YouTube's player does when it may not start by itself.
+    await app.route("https://www.youtube-nocookie.com/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><body style="background:#123"><script>
+          let host = null;
+          const say = (event, info) => host.postMessage(JSON.stringify({ event, info, id: 1 }), "*");
+          addEventListener("message", (e) => {
+            const m = JSON.parse(e.data);
+            if (m.event === "listening" && !host) { host = e.source; say("onReady"); }
+            if (m.event !== "command") return;
+            if (m.func === "playVideo") {
+              say("infoDelivery", { playerState: 3, currentTime: 0, duration: 120, videoData: { title: "An Open Film" } });
+              setTimeout(() => say("onStateChange", 2), 300);
+            }
+          });
+        </script></body>`,
+      }),
+    );
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.getByRole("textbox", { name: "Video link" }).fill("https://youtu.be/abc-DEF_123");
+    await app.getByRole("button", { name: "Watch", exact: true }).click();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    await expect(app.locator(".player")).toHaveAttribute("data-buffering", "false");
+    await app.locator(".player").hover();
+    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    await expect(app.locator(".player-transport-main .player-spinner")).toHaveCount(0);
+  });
 });
 
 test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action deletes, remembered groups (#15)", async ({ app }) => {

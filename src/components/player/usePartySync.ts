@@ -12,10 +12,8 @@ import {
   type StreamHint,
 } from "../../lib/party";
 import type { MediaLike } from "./mpvMedia";
-import { createPartyFollower, FOLLOW_MS, FRAME_STEP_EVENT } from "./partyFollower";
+import { createPartyFollower, FOLLOW_MS, FRAME_STEP_EVENT, stallShownAfter } from "./partyFollower";
 
-/** A stall shorter than this (a catch-up seek loading) isn't worth showing the room. */
-const BUFFERING_SHOWN_MS = 1000;
 /** How often this player tells the room where it is, for "4 s behind". */
 const REPORT_MS = 5000;
 
@@ -87,6 +85,17 @@ export function usePartySync({
   // room's rules say so (#238). The room hears of it (and where it stopped, so it
   // holds there) at once from a position report: presence updates are rationed.
   const stalled = useRef(false);
+  const startedAt = useRef(-Infinity);
+  useEffect(() => {
+    if (!media) return;
+    const mark = () => (startedAt.current = performance.now());
+    media.addEventListener("play", mark);
+    media.addEventListener("seeking", mark);
+    return () => {
+      media.removeEventListener("play", mark);
+      media.removeEventListener("seeking", mark);
+    };
+  }, [media]);
   useEffect(() => {
     if (!inParty || leaving) return;
     const tell = (on: boolean) => {
@@ -95,7 +104,8 @@ export function usePartySync({
       setPartyBuffering(on);
     };
     if (!buffering || !started) return tell(false);
-    const t = window.setTimeout(() => tell(true), BUFFERING_SHOWN_MS);
+    // Paused, a stall holds nobody back: not one to show.
+    const t = window.setTimeout(() => tell(!media?.paused), stallShownAfter(performance.now() - startedAt.current));
     return () => window.clearTimeout(t);
   }, [inParty, buffering, started, leaving, media, onRoomVideo, videoId]);
 

@@ -59,7 +59,7 @@ test("the player's reports become a video element's events", () => {
   say("onStateChange", 1);
   say("onStateChange", 0);
   expect(media.ended).toBe(true);
-  expect(events).toEqual(["loadedmetadata", "titlechange", "waiting", "timeupdate", "playing", "timeupdate", "pause", "play", "playing", "pause", "ended"]);
+  expect(events).toEqual(["loadedmetadata", "titlechange", "play", "waiting", "timeupdate", "playing", "timeupdate", "pause", "play", "playing", "pause", "ended"]);
 });
 
 test("controls become commands", () => {
@@ -108,4 +108,65 @@ test("errors say why, and junk messages are dropped", () => {
   expect(media.error).toEqual({ code: 150, message: youtubeError(150) });
   expect(youtubeError(100)).toContain("private");
   expect(youtubeError(999)).toContain("999");
+});
+
+test("#383: a buffer that ends paused, or a player that stops loaded (held, or its autoplay refused), says it can play", () => {
+  const { media, say } = setup();
+  const ready: number[] = [];
+  media.addEventListener("canplay", () => ready.push(media.currentTime));
+  say("onReady");
+  // Autoplay refused: unstarted, then paused, before the duration is known.
+  say("onStateChange", 2);
+  expect(ready).toHaveLength(0);
+  say("infoDelivery", { duration: 600, currentTime: 0 });
+  expect(ready).toHaveLength(1);
+  // Played, paused mid-buffer (a seek, or the party's hold): no longer loading.
+  say("onStateChange", 1);
+  say("onStateChange", 3);
+  say("onStateChange", 2);
+  expect(ready).toHaveLength(2);
+  expect(media.paused).toBe(true);
+  // Cued counts as stopped too.
+  say("onStateChange", 5);
+  expect(ready).toHaveLength(3);
+});
+
+test("#383: a play that buffers first says play once, as a video element does; a stall mid-play doesn't", () => {
+  const { say, events } = setup();
+  say("onReady");
+  say("infoDelivery", { duration: 600, currentTime: 0, playerState: 2 });
+  events.length = 0;
+  say("onStateChange", 3);
+  say("onStateChange", 1);
+  say("onStateChange", 3);
+  say("onStateChange", 1);
+  expect(events).toEqual(["play", "waiting", "playing", "waiting", "playing"]);
+});
+
+test("#383: in a party, a play pressed on a YouTube video that buffers first reaches the room", async () => {
+  const { createPartyFollower } = await import("../src/components/player/partyFollower");
+  const { media, say } = setup();
+  say("onReady");
+  say("infoDelivery", { duration: 600, currentTime: 12, playerState: 2 });
+  let t = 0;
+  const room = { v: 1, by: "a", media: { videoId: "yt:abc", type: "movie" }, paused: true, held: false, position: 12, lag: 0 } as never;
+  const acts: { paused?: boolean }[] = [];
+  const f = createPartyFollower({
+    media,
+    videoId: "yt:abc",
+    room: () => room,
+    act: (p) => void acts.push(p),
+    expected: () => 12,
+    now: () => t,
+    started: () => true,
+    buffering: () => false,
+  });
+  media.addEventListener("play", f.onPlayPause);
+  media.addEventListener("pause", f.onPlayPause);
+  f.tick(); // matched the room (paused): from here on what happens here is the viewer's
+  t = 5000;
+  media.play();
+  say("onStateChange", 3);
+  say("onStateChange", 1);
+  expect(acts).toContainEqual(expect.objectContaining({ paused: false }));
 });

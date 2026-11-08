@@ -252,6 +252,11 @@ export function createPartyRoom(deps: PartyDeps) {
   let cancelEntry: (() => void) | null = null;
   /** My entry sent this many times since the server's copy was last up to date. */
   let unconfirmed = 0;
+  /**
+   * The number of my entry as last sent: what my pings say (#383). A change still held back by the budget
+   * isn't one the others can be missing, or they'd ask for it, and asking can't get it out any sooner.
+   */
+  let sentSeq = 0;
   /** The newest of my timelines the host refused: my next change numbers past it, so a late refusal can't hit that one. */
   let refusedV = 0;
   /** Joiners the host was heard letting in: in, even while my copy of their entry still says knocking. */
@@ -321,6 +326,7 @@ export function createPartyRoom(deps: PartyDeps) {
       entrySent.push(clock.now());
       unconfirmed++;
       if (staleSince != null) staleSince = clock.now();
+      sentSeq = self.seq ?? 0;
       link.track(self);
     }, at - clock.now());
   }
@@ -363,6 +369,7 @@ export function createPartyRoom(deps: PartyDeps) {
     const code = newCode();
     // The opener is always first in line to host, whatever the clocks say.
     self = { id: deps.newId(), name: me.name, avatar: me.avatar, joinedAt: 0, waiting: false, seq: 1 };
+    sentSeq = 0;
     state = fresh(code, self, {
       hostId: self.id,
       playback: { v: 1, by: self.id, media, paused, held: false, position, lag: 0, at: clock.now() },
@@ -387,6 +394,7 @@ export function createPartyRoom(deps: PartyDeps) {
     leaveParty();
     // Waiting from the start: the room holds until this player is up.
     self = { id: deps.newId(), name: me.name, avatar: me.avatar, joinedAt: clock.wall(), waiting: true, knock: true, seq: 1 };
+    sentSeq = 0;
     state = fresh(code, self, { knocking: true });
     log.reset(clock.wall(), clock.now());
     say(`joining as ${tag(self.id)}`);
@@ -672,7 +680,7 @@ export function createPartyRoom(deps: PartyDeps) {
     if (!self || !link || !state) return;
     // My pings stopped coming back: the connection died without a word. Open a new one.
     if (state.status === "live" && unanswered >= ECHO_MISSES) return reopen(`my last ${unanswered} pings haven't come back: reconnecting`);
-    link.send({ t: "ping", from: self.id, sent: clock.now(), seq: self.seq ?? 0 });
+    link.send({ t: "ping", from: self.id, sent: clock.now(), seq: sentSeq });
     unanswered++;
   }
 
@@ -862,12 +870,15 @@ export function createPartyRoom(deps: PartyDeps) {
     }
   }
 
-  /** Send my entry again (someone's copy of it is missing or stale), at most once per HEAL_MS. */
+  /**
+   * Send my entry again (someone's copy of it is missing or stale), at most once per HEAL_MS. The same entry,
+   * under the same number: a new number for each re-send left the asker's copy one behind for good (#383).
+   */
   function renew(why: string) {
     if (!self || clock.now() - lastRenew < HEAL_MS) return;
     lastRenew = clock.now();
     say(`sending my entry again: ${why}`);
-    track({}, 0);
+    sendEntry(0);
   }
 
   /** Ask a member to send its presence entry again, at most once per HEAL_MS each. */
@@ -1086,7 +1097,8 @@ export function createPartyRoom(deps: PartyDeps) {
     }
     for (const id of waitingSince.keys()) if (!state.members.some((m) => m.id === id)) waitingSince.delete(id);
     const loading = state.members.some((m) => waitingSince.has(m.id) && now - waitingSince.get(m.id)! < HOLD_MAX_MS);
-    const stalled = stallsHeld(state.members, state.rules.stall);
+    // A stall while the room is paused holds nothing back: nobody runs ahead of it (#383).
+    const stalled = stallsHeld(state.members, state.rules.stall && !p.paused);
     const hold = loading || stalled.length > 0;
     if (hold === p.held) return;
     partyAct(hold && !loading ? { held: true, position: stallPosition(stalled, p) } : { held: hold });

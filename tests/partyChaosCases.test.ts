@@ -3,6 +3,7 @@
 // fix that comes undone fails here by name, whatever the random runs do.
 import { expect, test } from "bun:test";
 import { ECHO_MISSES, GHOST_MS, GONE_MS, HEAL_MS, PING_MS, PRESENCE_WINDOW_MS, STALL_HOLD_MAX_MS, STALL_WINDOW_MS } from "../src/lib/party/room";
+import { stallShownAfter } from "../src/components/player/partyFollower";
 import { ChaosHub, rng } from "./partyChaos";
 import { MEDIA, setup, stall, statusOf, type Member } from "./partySim";
 
@@ -471,4 +472,68 @@ test("with the room not pausing for stalls (the default), a stall is shown and t
   watch();
   expect(seen).toBe(false);
   expect(a.media!.paused).toBe(false);
+});
+
+// A watch party on a YouTube link (#383).
+
+test("#383: with the room pausing for stalls, a stall while the room is paused holds nothing, and play plays", () => {
+  const { sim, ms } = stallParty(true);
+  const [a, b] = ms;
+  a.media!.pause();
+  sim.run(3000);
+  let seen = false;
+  const watch = sim.every(() => (seen ||= held(a)), 100);
+  stall(sim, b, 8000);
+  sim.run(10_000);
+  watch();
+  expect(seen).toBe(false);
+  expect(a.room.partyLog()).not.toContain(`holding for ${id(1)}`);
+  a.media!.play();
+  sim.run(3000);
+  expect(ms.every((m) => !m.media!.paused)).toBe(true);
+});
+
+test("#383: changes held back by the presence budget aren't asked for, and an entry asked for comes back under its number", () => {
+  const { sim, hub, ms } = party(2);
+  const [a, b] = ms;
+  const asks = () => a.room.partyLog().split("\n").filter((l) => l.includes(`asked ${id(1)} for its entry`)).length;
+  const seqOf = (m: Member) => m.room.getParty()!.members.find((x) => x.id === id(1))!.seq;
+  sim.run(PRESENCE_WINDOW_MS);
+  // B's state changes faster than its budget lets its entry go out (a player buffering on and off).
+  const before = asks();
+  for (let i = 0; i < 8; i++) {
+    b.room.setPartyBuffering(i % 2 === 0);
+    sim.run(1500);
+  }
+  const changed = seqOf(b);
+  // Its pings speak of the entries it has sent: A doesn't ask for one still waiting for the budget.
+  sim.run(8000);
+  expect(asks()).toBe(before);
+  // Asked for anyway, B sends the same entry again, under the same number.
+  hub.inject(id(1), { t: "presence", from: id(0), to: id(1) });
+  sim.run(100);
+  expect(seqOf(b)).toBe(changed);
+  // Once the budget allows, A's copy is B's entry as B has it, and nobody asks any more.
+  sim.run(PRESENCE_WINDOW_MS * 2);
+  expect(seqOf(a)).toBe(seqOf(b));
+  const settled = asks();
+  sim.run(PRESENCE_WINDOW_MS);
+  expect(asks()).toBe(settled);
+});
+
+test("#383: with the room pausing for stalls, the buffering of a start or a seek doesn't hold the party; the same mid-video does", () => {
+  const { sim, ms } = stallParty(true);
+  const [a, b] = ms;
+  let seen = false;
+  const watch = sim.every(() => (seen ||= held(a)), 50);
+  // YouTube's player buffering for 2.5 s right after a play or a seek.
+  stall(sim, b, 2500, stallShownAfter(0));
+  sim.run(8000);
+  expect(seen).toBe(false);
+  // The same 2.5 s long after one: a stall, held for.
+  stall(sim, b, 2500, stallShownAfter(60_000));
+  sim.run(8000);
+  watch();
+  expect(seen).toBe(true);
+  expect(ms.every((m) => !m.media!.paused)).toBe(true);
 });
