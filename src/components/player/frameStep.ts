@@ -13,8 +13,6 @@ export type StepDirection = 1 | -1;
 export const DEFAULT_FPS = 24;
 /** A step that never reports where it landed is given up on after this. */
 export const STEP_TIMEOUT_MS = 1500;
-/** How long the clock shows the frame number after a step. */
-export const FRAME_SHOWN_MS = 3000;
 
 /**
  * Runs one step at a time. A step back makes mpv decode from the previous keyframe, which can take a

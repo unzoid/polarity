@@ -69,7 +69,8 @@ import {
   subtitleCueVars,
 } from "../components/player/SubtitleSettings";
 import { isMpv, MpvMedia, type MediaLike, type StepDetail } from "../components/player/mpvMedia";
-import { createFrameStepper, DEFAULT_FPS, FRAME_SHOWN_MS, measureFps, stepFrame } from "../components/player/frameStep";
+import { createFrameStepper, DEFAULT_FPS, measureFps, stepFrame } from "../components/player/frameStep";
+import { useStepping } from "../components/player/useStepping";
 import { createWindowPin } from "../components/player/windowPin";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
@@ -115,7 +116,7 @@ import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
 import { PlayerStatus } from "../components/player/PlayerStatus";
 import { TorrentNotice } from "../components/player/TorrentNotice";
-import { PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
+import { FrameLabel, PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
 import { useMediaTime } from "../components/player/useMediaTime";
 import { usePlayerChrome } from "../components/player/usePlayerChrome";
 import { usePlayerKeyboard } from "../components/player/usePlayerKeyboard";
@@ -326,7 +327,9 @@ export function Player({
   });
 
   // --- Chrome visibility --------------------------------------------------
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused);
+  // Paused on a stepped frame, the controls hide after the set time, not the paused wait (#346).
+  const frameSteps = useStepping(paused, buffering);
+  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping);
   const ready = source.state.status === "ready" && !error;
   const chromeVisible = chrome.visible || !!options || nativeMenu || !ready;
   // Whether the controls showed when the press on the picture began: the
@@ -628,14 +631,24 @@ export function Player({
     else v.pause();
   }, []);
 
-  const seekBy = useCallback((delta: number) => {
-    const v = videoRef.current;
-    if (v?.duration) v.currentTime = Math.min(v.duration - 1, Math.max(0, v.currentTime + delta));
-  }, []);
+  // A seek leaves the stepped frame: the frame number goes with it.
+  const { leave: leaveStep } = frameSteps;
+  const seekBy = useCallback(
+    (delta: number) => {
+      const v = videoRef.current;
+      if (v?.duration) v.currentTime = Math.min(v.duration - 1, Math.max(0, v.currentTime + delta));
+      leaveStep();
+    },
+    [leaveStep],
+  );
 
-  const seekTo = useCallback((t: number) => {
-    if (videoRef.current) videoRef.current.currentTime = t;
-  }, []);
+  const seekTo = useCallback(
+    (t: number) => {
+      if (videoRef.current) videoRef.current.currentTime = t;
+      leaveStep();
+    },
+    [leaveStep],
+  );
 
   // --- Frame stepping (#243, #273): desktop only, with the keys -----------------
   // The rate frames are counted in: what mpv reads in the file, or what the built-in player measures as it plays.
@@ -652,27 +665,21 @@ export function Player({
   }, [media, started, videoEl]);
   const fpsRef = useRef(DEFAULT_FPS);
   fpsRef.current = fps ?? DEFAULT_FPS;
-  /** Stepped a moment ago: the clock shows the frame for a few seconds after each step, or until playback resumes. */
-  const [stepping, setStepping] = useState(false);
-  const steppingTimer = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (paused) return;
-    window.clearTimeout(steppingTimer.current);
-    setStepping(false);
-  }, [paused]);
-  useEffect(() => () => window.clearTimeout(steppingTimer.current), []);
+  const { begin: beginStep, end: endStep } = frameSteps;
   const stepper = useMemo(
     () =>
       createFrameStepper(async (direction) => {
         const v = videoRef.current;
         // YouTube's player seeks to whole moments, not frames.
         if (!v?.duration || !startedRef.current || v instanceof YouTubeMedia) return;
-        window.clearTimeout(steppingTimer.current);
-        setStepping(true);
-        await stepFrame(v, direction, fpsRef.current);
-        steppingTimer.current = window.setTimeout(() => setStepping(false), FRAME_SHOWN_MS);
+        beginStep();
+        try {
+          await stepFrame(v, direction, fpsRef.current);
+        } finally {
+          endStep();
+        }
       }),
-    [],
+    [beginStep, endStep],
   );
 
   const onAutoSkipped = useCallback((label: string) => flashNotice(label, 2500), [flashNotice]);
@@ -1059,7 +1066,7 @@ export function Player({
       className="player"
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
-      data-buffering={buffering && ready}
+      data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
       data-instant={chrome.instant}
       data-options={!!options}
@@ -1278,7 +1285,7 @@ export function Player({
             title={withShortcut(`Back ${seekStep}s`, "seekBack")}
           />
           <IconButton variant="transport" className="player-transport-main" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut("Play/Pause", "playPause")}>
-            {buffering ? (
+            {frameSteps.spinner ? (
               <Spinner className="player-spinner" size={52} label="Buffering" />
             ) : paused ? (
               <Play size={64} fill="currentColor" strokeWidth={0} />
@@ -1297,6 +1304,9 @@ export function Player({
         </div>
       )}
 
+      {/* Paused on a stepped frame: once the controls hide, its number stays where the clock was (#346). */}
+      {frameSteps.stepping && <FrameLabel media={media} fps={fps ?? DEFAULT_FPS} />}
+
       {/* Bottom: timeline with time left, then labelled text actions. */}
       <div
         className="player-bottom"
@@ -1305,7 +1315,7 @@ export function Player({
       >
         <div className="player-timeline">
           <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} onSeek={seekTo} />
-          <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={stepping ? (fps ?? DEFAULT_FPS) : null} />
+          <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
         <div className="player-actions">
           {!party && (

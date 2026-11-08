@@ -287,7 +287,7 @@ test("the player fits or fills the window, by its button or Z, and remembers it 
   await expect(fill).toHaveAttribute("aria-pressed", "false");
 });
 
-test("the player steps one frame at a time with , and ., and the clock shows the frame for a moment after (#243, #273)", async ({ app }) => {
+test("the player steps one frame at a time with , and ., and the frame number stays once the controls hide (#243, #273, #346)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
   await app.getByRole("button", { name: "Play", exact: true }).click();
@@ -309,14 +309,23 @@ test("the player steps one frame at a time with , and ., and the clock shows the
   await expect.poll(frame).toBe(start);
   await app.keyboard.press(",");
   await expect.poll(frame).toBe(start - 1);
-  // Still paused, a few seconds on: the clock is the clock again.
-  await expect.poll(() => clock(app), { timeout: 6000 }).not.toContain("Frame");
+  // Still paused, the controls hide after the set time; the frame number stays on its own (#346).
+  const label = app.locator(".player-frame-label");
+  await expect(app.locator(".player")).toHaveAttribute("data-chrome", "false", { timeout: 6000 });
+  await expect(label).toHaveText(`Frame ${start - 1}`);
+  await expect(label).toHaveCSS("opacity", "1");
+  // The controls back: the clock shows it again, the label goes.
+  await app.mouse.move(300, 300);
+  await expect(app.locator(".player")).toHaveAttribute("data-chrome", "true");
+  await expect(label).toHaveCSS("opacity", "0");
+  await expect.poll(frame).toBe(start - 1);
   await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
   // Playing again after a step drops the frame at once.
   await app.keyboard.press(".");
   await expect.poll(frame).toBe(start);
   await app.keyboard.press(" ");
   await expect.poll(() => clock(app)).not.toContain("Frame");
+  await expect(label).toHaveCount(0);
 });
 
 test("with an AirPlay receiver around, the player sends the video to it and back (#19)", async ({ app }) => {

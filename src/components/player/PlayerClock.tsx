@@ -11,7 +11,7 @@ const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-d
 /**
  * The timeline clock (Settings → Playback; clicking it cycles). Its own
  * component: it is the one part of the controls that changes every second.
- * For a few seconds after a frame step (`fps` set) it shows the time and the frame number instead.
+ * Paused on a stepped frame (`fps` set) it shows the time and the frame number instead.
  */
 export function PlayerClock({
   media,
@@ -42,5 +42,18 @@ export function PlayerClock({
     <button className="player-remaining tabular" onClick={onCycle} title="Change what the clock shows" aria-label={`${text}. Change what the clock shows`}>
       {text}
     </button>
+  );
+}
+
+/**
+ * The frame number on its own over the picture (#346): shown while paused on a stepped frame once the rest of
+ * the controls have hidden (CSS, by the player's data-chrome), with the subtitles' shadow to read on any frame.
+ */
+export function FrameLabel({ media, fps }: { media: MediaLike | null; fps: number }) {
+  const frame = useMediaTime(media, (t) => frameAt(t.current, fps));
+  return (
+    <div className="player-frame-label tabular" aria-hidden="true">
+      Frame {frame}
+    </div>
   );
 }
