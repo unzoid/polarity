@@ -465,6 +465,53 @@ test("settings change and stay changed", async ({ app }) => {
   await expect(settings).toHaveCount(0);
 });
 
+test("a settings search result is highlighted once, not again when its page or Settings comes back (#341)", async ({ app }) => {
+  const open = async () => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Settings" }).click();
+    return app.getByRole("dialog", { name: /^Settings/ });
+  };
+  // Counts every time a row is marked, so a highlight played again can't hide by ending before a check.
+  await app.evaluate(() => {
+    const w = window as unknown as { searchHits: number };
+    w.searchHits = 0;
+    new MutationObserver((records) => {
+      for (const r of records) if ((r.target as Element).hasAttribute("data-search-hit")) w.searchHits++;
+    }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-search-hit"] });
+  });
+  const marks = () => app.evaluate(() => (window as unknown as { searchHits: number }).searchHits);
+  const settings = await open();
+  const hits = settings.locator("[data-search-hit]");
+  const skip = settings.getByRole("switch", { name: /^Skip intros/ });
+  const find = async () => {
+    await settings.getByRole("combobox", { name: "Search settings" }).fill("Skip intros");
+    await app.keyboard.press("Enter");
+    await expect(hits).toHaveCount(1);
+    return marks();
+  };
+  // Shown again: a few frames for a reveal to run, then no new mark.
+  const noNewMark = async (before: number) => {
+    await expect(skip).toBeVisible();
+    await app.waitForTimeout(300);
+    expect(await marks()).toBe(before);
+  };
+
+  // Left before the highlight ends, then back.
+  let before = await find();
+  await settings.getByRole("button", { name: "Appearance", exact: true }).click();
+  await settings.getByRole("button", { name: "Playback", exact: true }).click();
+  await noNewMark(before);
+  // Closed before it ends, then opened again.
+  before = await find();
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(settings).toHaveCount(0);
+  await open();
+  await noNewMark(before);
+  // Played through: the mark goes with it.
+  await find();
+  await expect(hits).toHaveCount(0, { timeout: 3000 });
+});
+
 test("Settings → Sources has the torrent limits, kept on this device (#47)", async ({ app }) => {
   const open = async () => {
     await app.getByRole("button", { name: /^Profile/ }).click();
