@@ -1,5 +1,5 @@
 import { deflateRawSync } from "node:zlib";
-import { barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
 import { FRANCHISE, franchiseMedia, franchiseZip } from "../src/lib/platform/fake/longAnime";
@@ -260,6 +260,24 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   await app.keyboard.press("Escape");
   await app.keyboard.press("Escape");
   await expect(player).toHaveCount(0);
+});
+
+test("Back is the same button in the same spot on a title page and in the player, at every width (#348)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  const player = app.locator(".player");
+  for (const width of [1600, 1100, 800]) {
+    await app.setViewportSize({ width, height: 900 });
+    const onPage = await backPlace(app, "navbar");
+    await app.getByRole("button", { name: "Play", exact: true }).click();
+    await expect(player).toHaveAttribute("data-started", "true");
+    await player.hover();
+    expect(await backPlace(app, "player"), `at ${width}px`).toBe(onPage);
+    await expect(player.getByRole("button", { name: "Back", exact: true })).toHaveAttribute("title", "Back (Esc)");
+    await app.keyboard.press("Escape");
+    await expect(player).toHaveCount(0);
+    expect(await backPlace(app, "navbar"), `back on the page at ${width}px`).toBe(onPage);
+  }
 });
 
 test("the player's crop button and Z switch Fit and Fill window, say which, and remember it (#183, #330)", async ({ app }) => {

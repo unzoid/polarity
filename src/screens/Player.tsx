@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   Captions,
   Cast,
   Close,
@@ -23,6 +22,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ease, useFormFactor } from "../lib/ui";
 import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
 import { streamKey } from "../components/StreamList";
@@ -1226,9 +1226,7 @@ export function Player({
             onPointerEnter={() => (overControls.current = true)}
             onPointerLeave={() => (overControls.current = false)}
           >
-            <IconButton variant="player" onClick={() => void exit()} label="Back" title="Back (Esc)">
-              <ArrowLeft size={22} />
-            </IconButton>
+            <BackButton className="player-back" onClick={() => void exit()} />
             <p className="player-yt-message t-callout" role="status" aria-live="polite" data-tauri-drag-region={pinned ? undefined : true}>
               {message}
             </p>
@@ -1406,9 +1404,7 @@ export function Player({
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
       {/* Pinned (#266), nothing moves the window. */}
       <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true}>
-        <IconButton variant="player" onClick={() => void exit()} label="Back" title="Back (Esc)">
-          <ArrowLeft size={26} />
-        </IconButton>
+        <BackButton className="player-back" onClick={() => void exit()} />
         {/* Between Back and the controls: centred while it fits, off-centre when it would meet them, then cut short (#396). */}
         <div className="player-heading" data-tauri-drag-region={pinned ? undefined : true}>
           <span className="player-heading-title">{heading}</span>

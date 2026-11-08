@@ -91,8 +91,10 @@
   align-items: start;
   column-gap: 1rem;
   /* The safe-area insets are 0 on a desktop; on a phone or tablet the bars keep clear of the notch,
-     the camera cutout and the home indicator (tokens.css). */
-  padding: calc(1rem + var(--safe-top)) var(--safe-right) 4rem var(--safe-left);
+     the camera cutout and the home indicator (tokens.css). Back places itself from these. */
+  --bar-top: calc(1rem + var(--safe-top));
+  --bar-left: var(--safe-left);
+  padding: var(--bar-top) var(--safe-right) 4rem var(--bar-left);
   background: linear-gradient(to bottom, rgb(0 0 0 / 0.6), transparent);
   z-index: 2;
 }
@@ -106,10 +108,16 @@
     transform var(--dur-press) var(--ease-out),
     opacity var(--dur-fast) var(--ease-std);
 }
-.player-top > .player-icon {
+/* Back stands exactly where the navbar's does on the pages (#348, shell.css). Its inset is its own margin, not the
+   bar's padding: the bar's sides stay alike, so its middle is the window's. */
+.player-top > .player-back {
   justify-self: start;
-  /* Back's inset is its own margin, not the bar's padding: the bar's sides stay alike, so its middle is the window's. */
-  margin-left: max(0px, 1.25rem - var(--safe-left));
+  margin-left: calc(var(--nav-start) - var(--bar-left));
+  margin-top: calc(var(--back-top) - var(--bar-top));
+}
+/* A bare glyph on the video: a soft shadow keeps it readable on bright frames, like the bars' other controls. */
+.player-back {
+  filter: drop-shadow(0 1px 8px rgb(0 0 0 / 0.45));
 }
 /* Centred heading: S2:E3 “Title”, show name underneath. */
 .player-heading {
@@ -409,10 +417,9 @@
 :root:is([data-form="phone"], [data-compact="true"]) .player-top {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   column-gap: 0.5rem;
-  padding: calc(0.5rem + var(--safe-top)) var(--safe-right) 3rem calc(0.5rem + var(--safe-left));
-}
-:root:is([data-form="phone"], [data-compact="true"]) .player-top > .player-icon {
-  margin-left: 0;
+  --bar-top: calc(0.5rem + var(--safe-top));
+  --bar-left: calc(0.5rem + var(--safe-left));
+  padding-bottom: 3rem;
 }
 :root:is([data-form="phone"], [data-compact="true"]) .player-heading {
   align-items: flex-start;
