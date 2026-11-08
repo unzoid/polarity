@@ -109,7 +109,7 @@ writeFileSync(
   join(out, "licenses", "BUNDLED.txt"),
   `Polarity plays video with mpv (https://mpv.io, GPLv2+), built by Homebrew with the libraries below.\n` +
     `The exact source code of each, with Homebrew's build recipes, is attached to every release of Polarity for macOS\n` +
-    `on GitHub (Polarity_<version>_aarch64_mpv-sources.tar), and linked from its Homebrew formula page.\n\n${list.join("\n")}\n`,
+    `on GitHub (Sources-Polarity-<version>-macOS-arm64-mpv.tar), and linked from its Homebrew formula page.\n\n${list.join("\n")}\n`,
 );
 writeFileSync(join(out, "formulae.json"), JSON.stringify(kegsOf([...libs.keys()]), null, 2));
 

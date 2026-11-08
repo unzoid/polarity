@@ -1,8 +1,9 @@
 //! Going back to a kept dev build (docs/dev-channel.md). Dev builds update from the "Dev build"
 //! pre-release like any update; Settings → About can also install one of the kept builds there,
 //! older ones included, which the updater plugin's own check never offers. Each kept build has a
-//! feed of its own (`latest-dev.<N>.json`, scripts/devChannel.ts) signed with the same dev key the
-//! running build trusts, so nothing else can be installed this way.
+//! feed of its own (`Updates-Dev-<NNNN>.json`, or `latest-dev.<N>.json` for builds made before the
+//! files were named platform first; scripts/devChannel.ts) signed with the same dev key the running
+//! build trusts, so nothing else can be installed this way.
 //!
 //! A dev build is also an app of its own next to the released one, "Polarity Dev": its own
 //! identifier (so its own install folder, app data, keychain entries and single-instance lock),
@@ -33,12 +34,15 @@ pub const TITLE: &str = if DEV { "Polarity Dev" } else { "Polarity" };
 #[cfg_attr(mobile, allow(dead_code))]
 const RELEASE_FILES: &str = "https://github.com/unzoid/polarity/releases/download/dev/";
 
-/// The channel's feed (every kept build listed in it), or build `n`'s own.
+/// The channel's feed (every kept build listed in it), or build `n`'s own: its name now, then the
+/// one builds had before their files were named platform first. The plugin tries them in order.
 #[cfg_attr(mobile, allow(dead_code))]
-fn feed_url(build: Option<u32>) -> String {
+fn feed_urls(build: Option<u32>) -> Vec<String> {
     match build {
-        Some(n) => format!("{RELEASE_FILES}latest-dev.{n}.json"),
-        None => format!("{RELEASE_FILES}latest.json"),
+        Some(n) => {
+            vec![format!("{RELEASE_FILES}Updates-Dev-{n:04}.json"), format!("{RELEASE_FILES}latest-dev.{n}.json")]
+        }
+        None => vec![format!("{RELEASE_FILES}latest.json")],
     }
 }
 
@@ -65,10 +69,14 @@ pub async fn dev_build_feed<R: tauri::Runtime>(webview: tauri::Webview<R>, build
     {
         use tauri::Manager;
         use tauri_plugin_updater::UpdaterExt;
-        let url = tauri::Url::parse(&feed_url(build)).map_err(|e| CmdError::Other(e.to_string()))?;
+        let urls = feed_urls(build)
+            .iter()
+            .map(|u| tauri::Url::parse(u))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| CmdError::Other(e.to_string()))?;
         let update = webview
             .updater_builder()
-            .endpoints(vec![url])
+            .endpoints(urls)
             .map_err(|e| CmdError::Other(e.to_string()))?
             .version_comparator(|_, _| true)
             .build()
@@ -99,7 +107,17 @@ mod tests {
 
     #[test]
     fn feeds_are_the_dev_release_files() {
-        assert_eq!(feed_url(None), "https://github.com/unzoid/polarity/releases/download/dev/latest.json");
-        assert_eq!(feed_url(Some(57)), "https://github.com/unzoid/polarity/releases/download/dev/latest-dev.57.json");
+        assert_eq!(feed_urls(None), ["https://github.com/unzoid/polarity/releases/download/dev/latest.json"]);
+        assert_eq!(
+            feed_urls(Some(57)),
+            [
+                "https://github.com/unzoid/polarity/releases/download/dev/Updates-Dev-0057.json",
+                "https://github.com/unzoid/polarity/releases/download/dev/latest-dev.57.json",
+            ]
+        );
+        assert_eq!(
+            feed_urls(Some(12345))[0],
+            "https://github.com/unzoid/polarity/releases/download/dev/Updates-Dev-12345.json"
+        );
     }
 }

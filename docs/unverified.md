@@ -1210,8 +1210,9 @@ web view (`tests/devChannel.test.ts`, `tests/deepLink.test.ts`), and `src-tauri`
 the new command. Nothing here ran on GitHub or in a built app. Once
 the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
 1. Merge a pull request into `dev`: the "Dev build" workflow ends green and Releases has one "Dev
-   build" pre-release (not "Latest") named by the merge's hash, with the installers, their `.sig`
-   files, the mpv sources, `latest-dev.<N>.json` and `latest.json`.
+   build" pre-release (not "Latest") named by the merge's hash, with the installers, the mpv
+   sources, the build's feed and `latest.json` (names in docs/dev-channel.md, "File names"; build 5,
+   made before them, was checked on GitHub this way under its old names).
 2. Install that build on Windows, macOS and Linux (AppImage): Settings → About says "Dev build <hash>
    (<version>)". Merge another pull request: the build offers the new one and updates to it.
 3. About → Earlier builds lists both; Install this build on the older one downloads it; Restart to
@@ -1230,6 +1231,14 @@ the owner has added the dev key (docs/dev-channel.md, "What the owner sets up"):
    Each updates only from its own line. A `polarity://title/movie/tt0000000` link opens the released
    app, the same link with `polarity-dev://` the dev build; starting either a second time brings its
    own window forward. Uninstalling the dev build leaves the released app as it was.
+9. Platform-first names (the first dev build after #356 reaches `dev`, build 5 still kept): the
+   entry's files run `latest.json`, then each platform's installers by build, then `Sources-…`,
+   `Updates-Dev-<NNNN>.json` and `latest-dev.<N>.json`; build 5's `.sig` files are gone. The notes
+   show Downloads for the new build by platform and build 5 in the Earlier builds table, its links
+   working. Build 5 offers the new build and updates to it; in build 5, Earlier builds → Install this
+   build works on the new build. In the new build, Install this build on build 5 works (its old feed
+   name). Checked here: names, order, what's uploaded and removed, notes and feeds
+   (`tests/devChannel.test.ts`, and a publish run against build 5's asset list with a stand-in `gh`).
 
 ## Crop modes (#330)
 
