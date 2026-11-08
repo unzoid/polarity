@@ -37,10 +37,13 @@ import {
   READY_CHECKS,
   readinessNote,
   recordFail,
+  recallTracks,
   rememberLanguage,
+  rememberTracks,
   resetAutoplay,
   sliderAmplitude,
   sourceRow,
+  trackMemoryKey,
   useReadiness,
   useResetAutoplayOnInput,
   useSourceFilters,
@@ -300,13 +303,20 @@ export function Player({
   const countdown = Math.max(3, settings?.autoplayCountdown ?? 8);
   const timeDisplay = settings?.timeDisplay ?? "remaining";
   useMpvTune(engine === "mpv" ? mpv : null);
-  // Subtitle look (saved) and timing offset (this video only).
+  // Subtitle look (saved) and timing offset (this source of this episode, remembered on this device, #418).
   const subStyle = settings?.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE;
+  const playingStream = source.state.status === "ready" ? source.state.stream : undefined;
+  const memoryKey = trackMemoryKey(videoId, playingStream);
   const [subDelay, setSubDelay] = useState(0);
+  useEffect(() => setSubDelay(recallTracks(memoryKey)?.delay ?? 0), [memoryKey]);
+  const changeSubDelay = (delay: number) => {
+    setSubDelay(delay);
+    rememberTracks(memoryKey, videoId, { delay });
+  };
   const [subSettingsOpen, setSubSettingsOpen] = useState(false);
 
   // Subtitle add-ons match on the file's size and name (React Query compares keys by value).
-  const playingFile = videoFile(source.state.status === "ready" ? source.state.stream : undefined);
+  const playingFile = videoFile(playingStream);
   const tracks = useTracks(
     media,
     type,
@@ -320,6 +330,7 @@ export function Player({
     playingFile,
     // Subtitles beside a file on this device load with it (mpv's sub-auto); add-ons aren't asked.
     !local,
+    memoryKey,
   );
   useEffect(() => {
     if (engine !== "mpv") return;
@@ -403,7 +414,6 @@ export function Player({
   const heading = local ? (current?.title ?? title) : current ? `${episodeCode(current.season, current.episode)} · ${current.title}` : title;
 
   // --- Watch party ------------------------------------------------------------
-  const playingStream = source.state.status === "ready" ? source.state.stream : undefined;
   // A link is its own file: no release name for others to look for.
   const hint = useMemo(() => (link ? undefined : streamHint(playingStream)), [link, playingStream]);
   const partyMedia = link ? linkMedia(link) : { type, metaId, videoId, label: heading || undefined };
@@ -1647,7 +1657,7 @@ export function Player({
                 style={subStyle}
                 onChange={(patch) => updateSettings.mutate({ subtitleStyle: { ...subStyle, ...patch } })}
                 delay={subDelay}
-                onDelay={setSubDelay}
+                onDelay={changeSubDelay}
                 canPosition={engine === "mpv"}
               />
             ) : undefined,

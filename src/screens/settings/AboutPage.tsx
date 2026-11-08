@@ -23,6 +23,7 @@ import { SettingRow } from "../../components/settings/SettingRow";
 import { cachedBytes, clearCached, keys } from "../../lib/net";
 import { appName, appUpdates, buildChannel, buildCommit, buildLabel } from "../../lib/platform";
 import { errorMessage } from "../../lib/errors";
+import { forgetTracks, rememberedSources } from "../../lib/playback";
 
 /** Where this build's updates come from (lib/platform/build.ts, docs/dev-channel.md). */
 const FOOTER = {
@@ -229,7 +230,7 @@ function CacheCard() {
   const bytes = data && data.bytes + kept;
   const size = bytes === undefined ? "…" : !bytes ? "empty" : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`;
   return (
-    <Card title="Cache" footer={data ? <>Kept in {data.path}</> : undefined}>
+    <Card title="Cache" footer={data ? <>Anime data is kept in {data.path}</> : undefined}>
       <ActionRow
         title="Anime data"
         caption={`AniList's shelves and pages, kept up to a day; filler and recap episodes, kept a day; the anime id list used when ani.zip is down, kept a week · ${size}`}
@@ -239,6 +240,27 @@ function CacheCard() {
         pending={clear.isPending}
         onClick={() => clear.mutate()}
       />
+      <TracksRow />
     </Card>
+  );
+}
+
+/** The audio, subtitles and subtitle delay picked for each source (#418), kept on this device. */
+function TracksRow() {
+  const [sources, setSources] = useState(rememberedSources);
+  return (
+    <ActionRow
+      title="Picked tracks"
+      caption={`The audio, subtitles and subtitle delay you picked for each source, chosen again when it plays again; the 500 most recent · ${
+        sources === 1 ? "1 source" : sources ? `${sources} sources` : "empty"
+      }`}
+      label="Clear"
+      glyph={<Trash size={15} />}
+      disabled={!sources}
+      onClick={() => {
+        forgetTracks();
+        setSources(0);
+      }}
+    />
   );
 }

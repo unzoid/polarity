@@ -1263,6 +1263,7 @@ export const SETTINGS: SettingDef[] = [
   { id: "privacyPolicy", page: "about", title: "Privacy Policy", keywords: "privacy data gdpr personal delete export" },
   { id: "termsOfUse", page: "about", title: "Terms of Use", keywords: "terms conditions rules legal" },
   { id: "animeCache", page: "about", title: "Anime data", keywords: "cache clear filler recap anime-lists ids storage disk anilist shelves" },
+  { id: "pickedTracks", page: "about", title: "Picked tracks", keywords: "remembered audio subtitles subtitle delay per source clear forget" },
 ];
 
 const BY_ID = new Map(SETTINGS.map((d) => [d.id, d]));

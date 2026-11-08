@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import type { ContentType, SubtitleOption, VideoFile } from "../../lib/types";
-import { ISO3, langMatches, languageName } from "../../lib/playback";
+import { ISO3, hashed, langMatches, languageName, matchTrack, recallTracks, rememberTracks, type TrackTraits } from "../../lib/playback";
 import { isMpv, type MediaLike, type MpvTrack } from "./mpvMedia";
 import { OFF, mpvSelection } from "./trackChoice";
 import { keys } from "../../lib/net";
@@ -40,6 +40,9 @@ type AudioTrackListLike = ArrayLike<AudioTrackLike> & EventTarget;
  * With the mpv engine, tracks come from mpv's own track-list — so embedded
  * subtitles (SRT/ASS/PGS in MKV) and every audio track are real — and addon
  * subtitles are handed to mpv with `sub-add` (it fetches SRT itself).
+ *
+ * What the user picks is also remembered for the playing source (`memoryKey`, #418, lib/playback/trackMemory.ts):
+ * when that source of that episode plays again, the same tracks come back, before the preferred languages.
  */
 export interface TrackPrefs {
   audio: string;
@@ -58,6 +61,8 @@ export function useTracks(
   file: VideoFile = {},
   /** Ask subtitle add-ons; off for a file on this device. */
   online = true,
+  /** The playing source's key in the track memory (`trackMemoryKey`); none = nothing remembered. */
+  memoryKey?: string,
 ) {
   const video = media instanceof HTMLVideoElement ? media : null;
   const mpv = isMpv(media) ? media : null;
@@ -74,6 +79,14 @@ export function useTracks(
   prefsRef.current = prefs;
   const onPrefRef = useRef(onPrefChange);
   onPrefRef.current = onPrefChange;
+  // What was picked for this source before; read once per source, so picks made now don't move it.
+  const recalled = useMemo(() => recallTracks(memoryKey), [memoryKey]);
+  const memoryRef = useRef({ memoryKey, videoId });
+  memoryRef.current = { memoryKey, videoId };
+  const keep = useCallback((patch: Parameters<typeof rememberTracks>[2]) => {
+    const { memoryKey, videoId } = memoryRef.current;
+    rememberTracks(memoryKey, videoId, patch);
+  }, []);
 
   const external = useQuery({
     queryKey: keys.subtitles(type, videoId, file),
@@ -84,12 +97,15 @@ export function useTracks(
     placeholderData: (previous, query) => (query?.queryKey[2] === videoId ? previous : undefined),
   });
 
-  /** One entry per language, in a stable, readable order. */
+  /** One entry per language, in a stable, readable order; the remembered one stands for its language. */
+  const rememberedAddon = recalled?.subtitle && "addon" in recalled.subtitle ? recalled.subtitle.addon : undefined;
   const externalByLang = useMemo(() => {
     const seen = new Map<string, SubtitleOption>();
+    const mine = rememberedAddon && external.data?.find((s) => s.lang === rememberedAddon.lang && subtitleId(s) === rememberedAddon.id);
+    if (mine) seen.set(mine.lang, mine);
     for (const s of external.data ?? []) if (!seen.has(s.lang)) seen.set(s.lang, s);
     return [...seen.values()].sort((a, b) => (languageName(a.lang) ?? a.lang).localeCompare(languageName(b.lang) ?? b.lang));
-  }, [external.data]);
+  }, [external.data, rememberedAddon]);
   const externalByLangRef = useRef(externalByLang);
   externalByLangRef.current = externalByLang;
 
@@ -165,8 +181,10 @@ export function useTracks(
         if (id === "default") return;
         audioChose.current = true;
         void mpv.set("aid", Number(id));
-        const lang = mpv.tracks.find((t) => t.id === Number(id) && t.type === "audio")?.lang;
+        const track = mpv.tracks.find((t) => t.id === Number(id) && t.type === "audio");
+        const lang = track?.lang;
         if (lang && remember) onPrefRef.current({ audioLanguage: norm(lang) });
+        if (track && remember) keep({ audio: mpvTraits(track) });
         setAudioId(id);
         return;
       }
@@ -176,10 +194,19 @@ export function useTracks(
         const tid = t.id || String(i);
         t.enabled = tid === id;
         if (tid === id && t.language && remember) onPrefRef.current({ audioLanguage: norm(t.language) });
+        if (tid === id && remember) keep({ audio: htmlTraits(tid, t.language, t.label) });
       });
       setAudioId(id);
     },
-    [video, mpv],
+    [video, mpv, keep],
+  );
+
+  const rememberAddon = useCallback(
+    (id: string) => {
+      const sub = externalByLang.find((x) => `ext:${x.lang}` === id);
+      if (sub) keep({ subtitle: { addon: { lang: sub.lang, id: subtitleId(sub) } } });
+    },
+    [externalByLang, keep],
   );
 
   const selectSubtitle = useCallback(
@@ -204,6 +231,11 @@ export function useTracks(
                 ? norm(mpv.tracks.find((t) => t.type === "sub" && t.id === Number(id.slice(4)))?.lang)
                 : norm(id.slice(4));
           onPrefRef.current({ subtitleLanguage: lang });
+          if (id === OFF) keep({ subtitle: { off: true } });
+          else if (id.startsWith("emb:")) {
+            const track = mpv.tracks.find((t) => t.type === "sub" && t.id === Number(id.slice(4)));
+            if (track) keep({ subtitle: { embedded: mpvTraits(track) } });
+          } else rememberAddon(id);
         }
         return;
       }
@@ -234,33 +266,70 @@ export function useTracks(
       for (const t of Array.from(video.textTracks)) t.mode = t === target ? "showing" : "disabled";
       if (remember) {
         onPrefRef.current({ subtitleLanguage: id === OFF ? "" : norm(target?.language || id.slice(4)) });
+        if (id === OFF) keep({ subtitle: { off: true } });
+        else if (id.startsWith("emb:") && target) keep({ subtitle: { embedded: htmlTraits(id.slice(4), target.language, target.label) } });
+        else if (id.startsWith("ext:")) rememberAddon(id);
       }
     },
-    [video, mpv, externalByLang],
+    [video, mpv, externalByLang, keep, rememberAddon],
   );
 
-  // Apply the preferred audio language once, as soon as the file's tracks are known
-  // (unless the user already picked one for this video).
+  // Apply the track remembered for this source, else the preferred audio language, once, as soon as the
+  // file's tracks are known (unless the user already picked one for this video).
   useEffect(() => {
-    if (appliedAudio.current || audioChose.current || !prefs.audio) return;
+    if (appliedAudio.current || audioChose.current || !(recalled?.audio || prefs.audio)) return;
     if (!(video || (mpv && mpvLoaded))) return;
-    const tracks: { id: string; lang?: string }[] = mpv
-      ? mpv.tracks.filter((t) => t.type === "audio").map((t) => ({ id: String(t.id), lang: t.lang }))
-      : Array.from(((video as unknown as { audioTracks?: AudioTrackListLike })?.audioTracks ?? []) as ArrayLike<AudioTrackLike>).map((t, i) => ({
-          id: t.id || String(i),
-          lang: t.language,
-        }));
+    const tracks: (TrackTraits & { id: string })[] = mpv
+      ? mpv.tracks.filter((t) => t.type === "audio").map(mpvTraits)
+      : Array.from(((video as unknown as { audioTracks?: AudioTrackListLike })?.audioTracks ?? []) as ArrayLike<AudioTrackLike>).map((t, i) =>
+          htmlTraits(t.id || String(i), t.language, t.label),
+        );
     if (!tracks.length) return;
     appliedAudio.current = true;
-    const match = tracks.find((t) => langMatches(t.lang, prefs.audio));
+    const match = (recalled?.audio && matchTrack(recalled.audio, tracks)) || (prefs.audio ? tracks.find((t) => langMatches(t.lang, prefs.audio)) : undefined);
     if (match && match.id !== audioId) selectAudio(match.id, false);
-  }, [prefs.audio, video, mpv, mpvLoaded, audio, audioId, selectAudio]);
+  }, [recalled, prefs.audio, video, mpv, mpvLoaded, audio, audioId, selectAudio]);
 
   // Same for subtitles: a track inside the file wins (it's timed to this exact
   // release); otherwise an addon's subtitles in that language. Empty = off.
+  // The subtitle remembered for this source comes first, Off included.
   useEffect(() => {
-    if (appliedSub.current || userChose.current || !prefs.subtitle) return;
+    if (appliedSub.current || userChose.current) return;
+    const want = recalled?.subtitle;
+    if (!want && !prefs.subtitle) return;
     if (!(video || (mpv && mpvLoaded))) return;
+    if (want && "off" in want) {
+      appliedSub.current = true;
+      void selectSubtitle(OFF, false);
+      return;
+    }
+    if (want && "embedded" in want) {
+      const list = mpv
+        ? mpv.tracks.filter((t) => t.type === "sub" && !t.external).map(mpvTraits)
+        : Array.from(video!.textTracks)
+            .filter((t) => !t.id.startsWith("ext:"))
+            .map((t, i) => htmlTraits(String(i), t.language, t.label));
+      const match = matchTrack(want.embedded, list);
+      if (match) {
+        appliedSub.current = true;
+        void selectSubtitle(`emb:${match.id}`, false);
+        return;
+      }
+    }
+    if (want && "addon" in want) {
+      // Found again only when an add-on offers that same subtitle again.
+      if (external.isLoading) return;
+      const ext = externalByLang.find((x) => x.lang === want.addon.lang && subtitleId(x) === want.addon.id);
+      if (ext) {
+        appliedSub.current = true;
+        void selectSubtitle(`ext:${ext.lang}`, false);
+        return;
+      }
+    }
+    if (!prefs.subtitle) {
+      appliedSub.current = true;
+      return;
+    }
     if (prefs.subtitleMode === "foreign") {
       // The language that will be playing: the preferred audio if the file
       // has it (applied above), else whatever track is on now.
@@ -293,7 +362,7 @@ export function useTracks(
     appliedSub.current = true;
     const ext = externalByLang.find((x) => langMatches(x.lang, prefs.subtitle));
     if (ext) void selectSubtitle(`ext:${ext.lang}`, false);
-  }, [prefs.subtitle, prefs.subtitleMode, prefs.audio, video, mpv, mpvLoaded, audio, embedded, externalByLang, external.isLoading, selectSubtitle]);
+  }, [recalled, prefs.subtitle, prefs.subtitleMode, prefs.audio, video, mpv, mpvLoaded, audio, embedded, externalByLang, external.isLoading, selectSubtitle]);
 
   // Blob URLs belong to this video only.
   useEffect(
@@ -331,3 +400,16 @@ function mpvLabel(t: MpvTrack) {
   const lang = t.title && t.lang ? languageName(t.lang) : undefined;
   return [name, lang && lang !== name ? lang : undefined, layout].filter(Boolean).join(" · ");
 }
+
+/** What tells an mpv track apart in the track memory. */
+function mpvTraits(t: MpvTrack): TrackTraits & { id: string } {
+  return { id: String(t.id), lang: t.lang, title: t.title, codec: t.codec, channels: t["demux-channel-count"] };
+}
+
+/** The same for the built-in player's tracks, which carry less. */
+function htmlTraits(id: string, lang: string, label: string): TrackTraits & { id: string } {
+  return { id, lang: lang || undefined, title: label || undefined };
+}
+
+/** An add-on subtitle's identity in the track memory: hashed, since its link can carry a token. */
+const subtitleId = (s: SubtitleOption) => hashed(`${s.addon}\n${s.id || s.url}`);
