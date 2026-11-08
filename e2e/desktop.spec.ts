@@ -1743,7 +1743,7 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await expect(app.locator(".downloads-summary")).toContainText("75 downloads · 77.5 GB");
   await expect(app.getByRole("region", { name: "In progress" }).locator(".download-row")).toHaveCount(3);
   // Collapsed: one row per title, no episode rows showing.
-  const titles = app.locator(".downloads-library > .download-title");
+  const titles = app.locator(".downloads-library .downloads-panel > .download-title");
   await expect(titles).toHaveCount(13);
   await expect(app.locator(".download-fold[data-open]")).toHaveCount(0);
 
@@ -1754,11 +1754,11 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await app.reload();
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Library", exact: true }).click();
   await app.getByRole("button", { name: /^Downloads/ }).first().click();
-  await expect(app.locator(".downloads-library > .download-title").filter({ hasText: "Fieldwork" }).getByRole("button", { name: /^Season 1/ })).toBeVisible();
+  await expect(app.locator(".downloads-library .downloads-panel > .download-title").filter({ hasText: "Fieldwork" }).getByRole("button", { name: /^Season 1/ })).toBeVisible();
 
   // Search finds a title; In Progress shows only what's coming down.
   await app.getByRole("searchbox", { name: "Search downloads" }).fill("blue h");
-  await expect(app.locator(".downloads-library > .download-title")).toHaveCount(1);
+  await expect(app.locator(".downloads-library .downloads-panel > .download-title")).toHaveCount(1);
   await app.getByRole("searchbox", { name: "Search downloads" }).fill("");
   await app.getByRole("radio", { name: "In Progress" }).click();
   await expect(app.locator(".downloads-library")).toHaveCount(0);
