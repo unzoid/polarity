@@ -111,6 +111,18 @@ export function fuzzyDate(d?: FuzzyDate | null) {
   });
 }
 
+/** When a part that isn't out yet comes out ("Comes out Jan 9, 2027", "Comes out Fall 2027"), for its season tab (#351). */
+export function comesOut(a: Pick<AnimeCard, "status" | "startDate" | "season" | "seasonYear" | "nextAiringEpisode">): string | undefined {
+  if (a.status !== "NOT_YET_RELEASED") return undefined;
+  const first = a.nextAiringEpisode ? new Date(a.nextAiringEpisode.airingAt * 1000) : undefined;
+  const when = first
+    ? fuzzyDate({ year: first.getFullYear(), month: first.getMonth() + 1, day: first.getDate() })
+    : a.startDate?.month || !a.season
+      ? fuzzyDate(a.startDate)
+      : a.seasonYear && `${SEASON_LABEL[a.season]} ${a.seasonYear}`;
+  return when ? `Comes out ${when}` : "Not out yet";
+}
+
 /** AniList descriptions carry a little HTML and a "(Source: …)" line; plain paragraphs out. */
 export function cleanDescription(html?: string | null) {
   if (!html) return [];
