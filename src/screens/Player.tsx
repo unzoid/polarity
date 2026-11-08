@@ -122,7 +122,7 @@ import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
 import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
-import { More, Pin, WatchParty } from "../components/icons";
+import { More, Pin, Pinned, WatchParty } from "../components/icons";
 import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
 import { MenuCheckItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
 import { useBarFit } from "../components/player/useBarFit";
@@ -1458,7 +1458,7 @@ export function Player({
                 aria-pressed={pinned}
                 title={withShortcut(pinned ? "Unpin window" : "Pin window on top", "pinWindow")}
               >
-                <Pin size={22} />
+                {pinned ? <Pinned size={22} /> : <Pin size={22} />}
               </IconButton>
             )}
             {showFill && !more && (
