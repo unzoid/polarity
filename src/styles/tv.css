@@ -1464,6 +1464,10 @@
 .tv .episode-rail-card[aria-current] .episode-rail-still {
   box-shadow: none;
 }
+/* The lift and its ring below, not desktop's outline. */
+.tv .episode-rail-main:focus-visible .episode-rail-still {
+  outline: none;
+}
 .tv .episode-rail-main:focus .episode-rail-still {
   transform: scale(var(--tv-lift));
   box-shadow:

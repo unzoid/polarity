@@ -5,6 +5,7 @@ name: Dev build
 # latest.json; the Android APK is kept as a workflow artifact (docs/dev-channel.md).
 #
 #   Version:  X.Y.(Z+1)-dev.N after the newest vX.Y.Z tag, N the run number (scripts/devChannel.ts).
+#   Files:    named platform first, then build number (Polarity-Dev-Windows-x64-0057-setup.exe).
 #   Updates:  dev builds check the "Dev build" entry only, with their own key; release builds
 #             never see it. The entry keeps this build and the previous 10 for going back.
 #   Database: none built in. A dev build connects to one from a pasted connection code.
@@ -139,7 +140,8 @@ jobs:
             librsvg2-dev libxdo-dev libssl-dev libudev-dev file
           bunx tauri build --bundles deb,appimage -c "$RUNNER_TEMP/dev.conf.json" -- --locked
 
-      # As built; the publish job gives them their build-numbered names.
+      # As built; the publish job gives them their platform-first, build-numbered names. The .sig
+      # files go into the feeds and aren't uploaded.
       - name: Collect the installers
         run: |
           mkdir out

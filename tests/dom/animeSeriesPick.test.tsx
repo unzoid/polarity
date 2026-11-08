@@ -18,7 +18,7 @@ const show = {
 
 const found = {
   series: [
-    { id: "tt0000901", type: "series", name: "Stardust Wanderers", releaseInfo: "2026-" },
+    { id: "tt0000901", type: "series", name: "Stardust Wanderers", releaseInfo: "2026-", description: "A crew drifts between stars." },
     { id: "kitsu:5", type: "series", name: "Hoshikuzu Ryokou-dan" },
   ],
   movies: [{ id: "tt0000902", type: "movie", name: "Stardust Wanderers: The Film", releaseInfo: "2027" }],

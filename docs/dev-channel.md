@@ -41,13 +41,36 @@ own feed, and each feed is signed with its own key.
 - **Published in one rolling pre-release**, "Dev build" (tag `dev`), so the Releases list has a
   single dev line that never sits between releases and never becomes "Latest". Each build:
   - moves the `dev` tag to its commit;
-  - uploads its files with the build number in the name (`polarity-dev.57-Windows-x64-setup.exe`,
-    `polarity-dev.57-macOS-arm64.dmg`, `polarity-dev.57-Linux-x64.AppImage`…, with the mpv source
-    archives for Windows and macOS, docs/licensing.md) and its own feed `latest-dev.57.json`;
+  - uploads its files, named platform first and then by the build number padded to four digits,
+    so GitHub's alphabetical list keeps each platform's builds together, oldest to newest (below);
   - replaces the channel's `latest.json`, which offers this build and lists every kept one;
   - removes the files of builds older than the newest 11 (this one and the previous 10);
-  - rewrites the entry's notes: hash, build number, date, the merged pull request's title, and
-    the kept builds.
+  - rewrites the entry's notes: hash, build number, date and the merged pull request's title; a
+    Downloads section for this build by platform; a table of the earlier kept builds (build,
+    commit, date, pull request) with a link per platform; the mpv sources of this build.
+
+### File names
+
+| File | For |
+|---|---|
+| `Polarity-Dev-Windows-x64-0057-setup.exe` | Windows installer |
+| `Polarity-Dev-macOS-arm64-0057.dmg` | macOS, Apple silicon |
+| `Polarity-Dev-macOS-arm64-0057.app.tar.gz` | the macOS app as the updater downloads it |
+| `Polarity-Dev-Linux-x64-0057.AppImage`, `Polarity-Dev-Linux-x64-0057.deb` | Linux |
+| `Sources-Polarity-Dev-<Platform>-<arch>-0057-mpv.tar` | the sources of the bundled mpv builds, Windows and macOS (docs/licensing.md) |
+| `Updates-Dev-0057.json` | build 57's own feed, for going back to it |
+| `latest.json` | the channel's feed every dev build checks |
+
+The `Sources-` and `Updates-` files sort after the installers. `latest.json` keeps its name, so it
+sorts first: every installed dev build asks for it by that name. Updater signatures aren't uploaded;
+the feeds carry them.
+
+Builds made before these names (build 5) are called `polarity-dev.5-…` with the feed
+`latest-dev.5.json`. They stay until they're older than the newest 11, and their `.sig` files are
+removed by the next build. Such a build asks for a kept build's feed as `latest-dev.<N>.json`, so
+while one is kept each new build's feed goes up under that name too; it updates through
+`latest.json` as before. Newer builds ask for `Updates-Dev-<NNNN>.json` and then `latest-dev.<N>.json`,
+so they can go back to an old-named build.
 
 ## Its own app
 
@@ -55,7 +78,7 @@ A dev build installs and runs as an app of its own next to the released Polarity
 (`devConf` in `scripts/devChannel.ts`, `src-tauri/src/dev_channel.rs`, `src/lib/platform/build.ts`):
 
 - **Name:** "Polarity Dev" in the Start menu, the Applications folder and the taskbar; its program
-  and package are `polarity-dev`, its release files `polarity-dev.N-…`.
+  and package are `polarity-dev`, its release files `Polarity-Dev-…` (above).
 - **Identifier:** `app.getpolar.desktop.dev`, so its own install folder, app data and settings,
   keychain entries and notifications. The released app's data is never touched; a dev build starts
   empty and signed out.

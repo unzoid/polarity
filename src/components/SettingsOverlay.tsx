@@ -13,9 +13,12 @@ import { closeSettings, type PageId, prefsCustomized, resetPrefs, searchSettings
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
 
-/** Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. */
+/**
+ * Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. Account isn't listed: the profile
+ * button at the foot of the sidebar opens it (#340), and search still reaches its rows.
+ */
 const GROUPS: { heading?: string; pages: PageId[] }[] = [
-  { pages: ["account", "playback", "subtitles", "appearance", "browsing", "anime", "notifications"] },
+  { pages: ["playback", "subtitles", "appearance", "browsing", "anime", "notifications"] },
   { heading: "Input", pages: ["controls", "controller"] },
   { heading: "Sources", pages: ["sources", "marketplace", "addons", "services"] },
   { heading: "System", pages: ["advanced", "about"] },
@@ -35,11 +38,27 @@ function revealSetting(root: HTMLElement, entry: SettingEntry) {
   if (!label) return;
   const box = marked ?? label.closest<HTMLElement>(ROW_BOXES) ?? label;
   box.scrollIntoView({ block: "center" });
+  clearTimeout(hitTimers.get(box));
   box.removeAttribute("data-search-hit");
   void box.offsetWidth; // restart the highlight if it's already running
   box.setAttribute("data-search-hit", "");
-  box.addEventListener("animationend", () => box.removeAttribute("data-search-hit"), { once: true });
+  // The mark goes once the highlight has played, however it ends: an interrupted animation (page left,
+  // Settings closed, window hidden) fires animationcancel or nothing, and a mark left behind would
+  // play the highlight again each time the row is shown.
+  const unmark = () => {
+    clearTimeout(hitTimers.get(box));
+    box.removeEventListener("animationend", unmark);
+    box.removeEventListener("animationcancel", unmark);
+    box.removeAttribute("data-search-hit");
+  };
+  box.addEventListener("animationend", unmark);
+  box.addEventListener("animationcancel", unmark);
+  hitTimers.set(box, setTimeout(unmark, SEARCH_HIT_MS));
 }
+
+/** How long the highlight plays (`t3s-search-hit` in settings-overlay.css). */
+const SEARCH_HIT_MS = 1400;
+const hitTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 /**
  * Settings as a window over the app (T3 Code, Discord, Obsidian): sidebar of
@@ -64,13 +83,15 @@ export function SettingsOverlay() {
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
   const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers === 0, ["Settings"], () => setView("list"));
 
-  // Each opening lands on the requested page (or where it was left), search cleared.
+  // Each opening lands on the requested page (or where it was left, unless that was Account), search cleared.
   useEffect(() => {
     if (!open) return;
     const asked = !!requested && pages.some((p) => p.id === requested);
     if (asked) setPage(requested);
+    else if (page === "account") setPage(fallback);
     setView(asked ? "page" : "list");
     setQuery("");
+    setTarget(null);
   }, [open, requested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -101,7 +122,11 @@ export function SettingsOverlay() {
   useEffect(() => {
     if (!target || !scroller.current) return;
     const root = scroller.current;
-    const frame = requestAnimationFrame(() => revealSetting(root, target.entry));
+    // Revealed once: coming back to the page later shows it as it is, without the highlight.
+    const frame = requestAnimationFrame(() => {
+      revealSetting(root, target.entry);
+      setTarget(null);
+    });
     return () => cancelAnimationFrame(frame);
   }, [target, page]);
 
@@ -242,7 +267,12 @@ export function SettingsOverlay() {
                     <span>Sign in to sync</span>
                   </button>
                 ) : account.profile ? (
-                  <button className="t3s-nav-item" onClick={() => go("account")}>
+                  <button
+                    className="t3s-nav-item"
+                    data-active={!phone && page === "account"}
+                    aria-current={!phone && page === "account" ? "page" : undefined}
+                    onClick={() => go("account")}
+                  >
                     <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
                     <span>{account.profile.name}</span>
                   </button>
