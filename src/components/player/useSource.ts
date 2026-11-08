@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { keys, useMeta, useProgress, useStreams } from "../../lib/net";
 import {
+  airedAt,
   askedLine,
   autoPickOrder,
   describeStream,
@@ -96,7 +97,7 @@ export function useSource(
   const { settings } = useTitleSettings(type, videoId);
   // Best Match for this device; the runtime gives the files' bitrates.
   const { data: meta } = useMeta(type, metaId, needsRanking);
-  const match = useMatchContext(settings, runtimeSeconds(meta?.runtime));
+  const match = useMatchContext(settings, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
   const matchRef = useRef(match);
   matchRef.current = match;
   useEffect(() => {

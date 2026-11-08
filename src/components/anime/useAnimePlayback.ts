@@ -75,11 +75,15 @@ export function useAnimePlayback(anime: AnimeCard | Anime) {
     const lined = episodes.flatMap((e): [string, number][] => (e.video ? [[e.video.id, e.number]] : []));
     // Kitsu and MAL ids are this entry's, so each episode keeps its number in it; one past the entry's end is dropped.
     const count = anime.episodes ?? undefined;
-    playContext.remember(metaId, { mal: malId, kitsu, anilist: anime.id, count }, episodes.flatMap((e): LinedEpisode[] => (e.video ? [[e.video.id, e.number, e.absolute]] : [])));
+    // A later season's own titles, for files named by one (#422); the show's own name would match the earlier seasons' files too.
+    const word = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const show = meta?.name ? word(meta.name) : undefined;
+    const names = [...new Set([anime.title.english, anime.title.romaji].filter((t): t is string => !!t))].filter((t) => word(t) !== show);
+    playContext.remember(metaId, { mal: malId, kitsu, anilist: anime.id, count, names }, episodes.flatMap((e): LinedEpisode[] => (e.video ? [[e.video.id, e.number, e.absolute]] : [])));
     // Which entry these episodes are, for cards with seasons as separate shows (#22).
     const shown = { title: anime.title, cover: anime.coverImage.extraLarge ?? anime.coverImage.large, banner: anime.bannerImage };
     if (!isMovie) animeEntries.remember(metaId, anime.id, shown, lined);
-  }, [episodes, malId, kitsu, metaId, imdbKnown, isMovie, anime.id, anime.title, anime.coverImage, anime.bannerImage, anime.episodes]);
+  }, [episodes, malId, kitsu, metaId, imdbKnown, isMovie, anime.id, anime.title, anime.coverImage, anime.bannerImage, anime.episodes, meta?.name]);
 
   const byVideo = useMemo(() => progressByVideo(progress ?? [], { episodes, imdb, kitsu, isMovie }), [progress, episodes, imdb, kitsu, isMovie]);
   const next = useMemo(() => upNext({ episodes, byVideo, isMovie, metaId, watched: watchedFraction() }), [episodes, byVideo, isMovie, metaId]);
