@@ -2,10 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { PartyMenu } from "../../src/components/party/PartyMenu";
 import { PartyHold } from "../../src/components/party/PartyUI";
-import { getParty, leaveParty, startParty, useParty, type PartyState } from "../../src/lib/party";
+import { getParty, leaveParty, startParty, useParty, type PartyMedia, type PartyState } from "../../src/lib/party";
 import { DEFAULT_RULES } from "../../src/lib/party/messages";
 import { queryClient } from "../../src/lib/net";
-import { RouterProvider, type Route } from "../../src/lib/router";
+import { RouterProvider, useRouter, type Route } from "../../src/lib/router";
+import { linkMedia } from "../../src/lib/party/links";
 import { byText, click, render } from "./render";
 
 // The party menu (#156) on the app's own room, opened by this member (so it hosts). No account backend
@@ -137,3 +138,50 @@ test("held for someone buffering, if the room pauses for that: the picture says 
   // Not pausing for stalls: a hold is someone loading, never Sam's buffering.
   expect((await hold({ ...held, rules: { ...DEFAULT_RULES, stall: false } })).textContent).not.toContain("Sam");
 });
+
+// Go to the Current Stream as a guest (#387): the player opens on the room's video, a link with its own URL to play.
+function Where() {
+  const { current } = useRouter();
+  return <output>{JSON.stringify(current)}</output>;
+}
+
+const guestOn = (media: PartyMedia): PartyState => ({
+  code: "K7MPQ4",
+  status: "live",
+  me: "m2",
+  hostId: "m1",
+  members: [
+    { id: "m1", name: "Ash", avatar: "", joinedAt: 1, waiting: false },
+    { id: "m2", name: "Bea", avatar: "", joinedAt: 2, waiting: false },
+  ],
+  playback: { v: 3, by: "m1", media, paused: false, held: false, position: 90, lag: 0, at: performance.now() },
+  notes: [],
+  rules: { ...DEFAULT_RULES, v: 2 },
+  knocking: false,
+  knockers: [],
+  positions: {},
+  quiet: false,
+  resync: 0,
+});
+
+for (const [kind, media, stream] of [
+  ["an episode", MEDIA, undefined],
+  ["a link", linkMedia("https://media.example.com/film.mkv"), "https://media.example.com/film.mkv"],
+  ["a YouTube link", linkMedia("https://www.youtube.com/watch?v=abcdefghijk"), "https://www.youtube.com/watch?v=abcdefghijk"],
+] as const)
+  test(`a guest out browsing goes back to the room's video, ${kind} (#387)`, async () => {
+    const party = guestOn(media);
+    const { container } = await render(
+      at(
+        { name: "home" },
+        <>
+          <PartyMenu party={party} />
+          <Where />
+        </>,
+      ),
+    );
+    await click(byText(container, "button", "Go to the Current Stream"));
+    const route = JSON.parse(container.querySelector("output")!.textContent!);
+    expect(route).toMatchObject({ name: "player", type: media.type, metaId: media.metaId, videoId: media.videoId });
+    expect(route.stream?.url).toBe(stream);
+  });
