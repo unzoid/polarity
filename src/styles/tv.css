@@ -1069,6 +1069,10 @@
   gap: 0.5rem;
   padding: 1.5rem var(--tv-gutter) 2rem 1rem;
 }
+/* The episodes of a long season that aren't drawn (#436): as tall as they would be, so the list keeps its length. */
+.tv-episode-gap {
+  flex: none;
+}
 .tv-episode {
   display: flex;
   align-items: center;

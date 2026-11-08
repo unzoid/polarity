@@ -9,6 +9,8 @@ export const LONG_ANIME = { anilist: 990_001, imdb: "tt9901200", episodes: 1200,
 /** The same show cut to one cour, to compare with: what a short show's page takes. */
 export const SHORT_ANIME = { anilist: 990_002, imdb: "tt9900012", episodes: 12, name: "Lanternfield Prelude" };
 export type InventedAnime = typeof LONG_ANIME;
+/** A show whose one season has 1,200 episodes, as some long-running ones are listed, for TV's episode list (#436). */
+export const ONE_SEASON = { imdb: "tt9901201", episodes: 1200, name: "Lanternfield Ledger" };
 export const inventedAnime = (anilist: number) => [LONG_ANIME, SHORT_ANIME].find((a) => a.anilist === anilist);
 
 const WEEK = 7 * 86_400_000;
@@ -32,6 +34,10 @@ export function longAnimeVideos(show: InventedAnime = LONG_ANIME): Video[] {
 }
 
 export function longAnimeMeta(imdb: string): Meta | null {
+  if (imdb === ONE_SEASON.imdb) {
+    const videos = longAnimeVideos({ ...LONG_ANIME, ...ONE_SEASON }).map((v, i) => ({ ...v, id: `${imdb}:1:${i + 1}`, title: `Ledger ${i + 1}`, season: 1, episode: i + 1 }));
+    return { id: imdb, type: "series", name: ONE_SEASON.name, videos };
+  }
   const show = [LONG_ANIME, SHORT_ANIME].find((a) => a.imdb === imdb);
   return show ? { id: show.imdb, type: "series", name: show.name, videos: longAnimeVideos(show) } : null;
 }
