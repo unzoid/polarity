@@ -7,6 +7,7 @@ export * from "./device";
 export * from "./discordPresence";
 export * from "./headers";
 export * from "./languages";
+export * from "./loadingArt";
 export * from "./lookahead";
 export * from "./playTarget";
 export * from "./readiness";

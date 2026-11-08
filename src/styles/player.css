@@ -1368,6 +1368,17 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .main {
     filter: blur(4px);
   }
 }
+/* While the page's art or the logo's shape isn't known, the name keeps its place unseen (#391). */
+.load-mark[data-name-wait] .load-mark-text {
+  color: transparent;
+}
+/* A logo drawn as a silhouette or with a halo (TitleLogo's looks) keeps that look greyed under the fill. */
+img.load-mark-base[data-logo-look="silhouette"] {
+  filter: brightness(0) invert(1) brightness(0.55);
+}
+img.load-mark-base[data-logo-look^="halo"] {
+  filter: grayscale(1) brightness(0.55);
+}
 .player-status[data-failed="true"] .load-mark-fill {
   display: none;
 }
