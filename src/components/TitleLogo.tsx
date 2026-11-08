@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Img, type ImgProps } from "./Img";
+import { api } from "../lib/api";
 import { backdropLuminance, chooseLogo, clearShare, DARK_PAGE, measureInk, type Ink, type LogoLook, type LogoShape, type LogoSpot } from "../lib/ui";
 
 type TitleLogoProps = ImgProps & {
@@ -14,11 +15,13 @@ type TitleLogoProps = ImgProps & {
 /**
  * A title treatment (logo) that stays readable on the picture behind it (#215). The logo's ink and the backdrop
  * where it sits (after the page's gradient) are measured off separate CORS requests, so the visible <img> never
- * waits for them; then the first of the title's logos that reads there is shown, or, when none does, the first
- * drawn as a white silhouette (one dark ink) or with a halo (`lib/ui/logoContrast.ts`). A picture that isn't
- * shaped like a logo (a cover handed over as one, #371) is never shown: the next is tried. Until that's measured
+ * waits for them; a host that sends no CORS headers is read through the app instead (#354). Then the first of
+ * the title's logos that reads there is shown, or, when none does, the first drawn as a white silhouette (one
+ * dark ink) or with a halo (`lib/ui/logoContrast.ts`). A picture that isn't shaped like a logo (a cover handed
+ * over as one, #371) is never shown: the next is tried. Until that's measured
  * the logo keeps its place unseen. When no logo is left, or neither the logos nor the backdrop can be measured
- * (the hosts refuse), `onFail` is called so the caller shows the name.
+ * (not even through the app), `onFail` is called so the caller shows the name. A picture that couldn't be
+ * measured is named in the console by its host.
  */
 export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
   const { src, onFail } = props;
@@ -75,8 +78,41 @@ const behinds = new Map<string, Promise<number | null>>();
 const LOAD_TIMEOUT = 8000;
 
 /**
- * Loads a picture for measuring; null when the host refuses it (no CORS) or it doesn't load. `plain` loads
- * the visible picture without CORS: its pixels can't be read, but its size can.
+ * Loads a picture for measuring, so its pixels can be read: by a CORS request, or when the host refuses that
+ * (no CORS headers), through the app (#354). Null when neither gets it.
+ */
+async function loadReadable(src: string): Promise<HTMLImageElement | null> {
+  return (await load(src)) ?? (await loadThroughApp(src));
+}
+
+/** The picture's bytes fetched by the app, which CORS doesn't apply to, and loaded from memory; null when that fails. */
+async function loadThroughApp(src: string): Promise<HTMLImageElement | null> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await api.pictureBytes(toneUrl(src));
+  } catch {
+    return null;
+  }
+  const url = URL.createObjectURL(new Blob([bytes]));
+  const img = await load(url, true);
+  URL.revokeObjectURL(url);
+  return img;
+}
+
+/** Says in the console that a picture couldn't be measured, by its host alone (the rest may name the title). */
+function noteUnmeasured(what: string, src: string) {
+  let host = "";
+  try {
+    host = new URL(src).hostname;
+  } catch {
+    // Not a link: no host to name.
+  }
+  console.warn(`TitleLogo: couldn't measure the ${what} from ${host || "an unknown host"}; it's drawn without the contrast check`);
+}
+
+/**
+ * Loads a picture; null when it doesn't load (with CORS, also when the host refuses it). `plain` loads it
+ * without CORS, as shown: a remote picture's pixels then can't be read, but its size can.
  */
 function load(src: string, plain = false): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -123,15 +159,16 @@ interface MeasuredLogo {
 }
 
 /**
- * A logo's ink and shape, measured once per picture. A host that refuses answers the same every time; its
- * picture is then loaded as shown, for its size alone.
+ * A logo's ink and shape, measured once per picture. A host that refuses answers the same every time; when
+ * even the app can't read it, the picture is loaded as shown, for its size alone.
  */
 function measureLogo(src: string) {
   let measured = logos.get(src);
   // Wide enough that thin bright detail (a ring, small letters, an outline) survives the downscale (#11).
   if (!measured) {
-    measured = load(src).then(async (img) => {
+    measured = loadReadable(src).then(async (img) => {
       const px = img && pixelsOf(img, 128);
+      if (!px) noteUnmeasured("logo", src);
       const sized = img ?? (await load(src, true));
       const shape = sized && sized.naturalWidth ? { width: sized.naturalWidth, height: sized.naturalHeight, clear: px ? clearShare(px) : null } : null;
       return { ink: px ? measureInk(px) : null, shape };
@@ -146,8 +183,9 @@ function measureBackdrop(src: string, spot: LogoSpot) {
   const key = `${src} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim}`;
   let lum = behinds.get(key);
   if (!lum) {
-    lum = load(src).then((img) => {
+    lum = loadReadable(src).then((img) => {
       const px = img && pixelsOf(img, 48, spot);
+      if (!px) noteUnmeasured("backdrop", src);
       return px ? backdropLuminance(px, spot.scrim) : null;
     });
     behinds.set(key, lum);
