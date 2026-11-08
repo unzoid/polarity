@@ -133,7 +133,8 @@
 }
 /* One entrance when the page opens: three groups, 40ms apart. Shorter than
    the other reveals: a title page opens many times a day. */
-.detail-hero-main > * {
+.detail-hero-main > *,
+.detail-hero-main > .title-heading > * {
   animation: rise 300ms var(--ease-reveal) both;
 }
 .detail-hero-main > :nth-child(n + 2):nth-child(-n + 4) {
@@ -152,7 +153,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .detail-hero-main > * {
+  .detail-hero-main > *,
+  .detail-hero-main > .title-heading > * {
     animation-name: fade-in;
   }
 }
@@ -1018,7 +1020,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .detail-hero-main > * {
+  .detail-hero-main > *,
+  .detail-hero-main > .title-heading > * {
     animation-name: fade-in;
   }
 }

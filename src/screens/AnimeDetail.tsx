@@ -179,6 +179,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
             anime={baseAnime}
             logo={art.logo}
             logos={art.logos}
+            logoPending={art.pending}
             background={art.background}
             name={title(base.card.title)}
             onImdb={onImdb}
@@ -186,7 +187,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
             franchise={heroFranchise}
           />
         ) : (
-          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} logoPending={art.pending} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
         )}
         {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} />}
       </div>

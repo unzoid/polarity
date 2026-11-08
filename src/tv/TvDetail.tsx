@@ -83,7 +83,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
         {trailer.node}
       </TvBackdrop>
       <div className="tv-detail-body" {...gate}>
-        <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" />
+        <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" pending={!meta && !isError} />
         <Facts facts={titleFacts(shown, [formatRuntime(meta?.runtime)])} />
         {shown.description && <p className="tv-detail-description">{shown.description}</p>}
         <Credits meta={meta} />
