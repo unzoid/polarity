@@ -65,6 +65,13 @@ A dev build installs and runs as an app of its own next to the released Polarity
 - **Window title:** "Polarity Dev", and Settings → About is headed "Polarity Dev". The icon is the
   released one.
 - **Updates:** its own line, from the "Dev build" entry only (above).
+- **Discord:** its own Discord application, "Polarity Dev" (#376), so a profile reads "Watching
+  Polarity Dev", Discord starts the dev build for a Join from a dev host (it registers
+  `discord-<dev id>` with `polarity-dev://discord-join`), and its join links open `polarity-dev://`.
+  The released app and a dev build never speak as the same application, so a party hosted on one
+  is never offered to the other (their databases differ). Without the application's id the dev
+  build doesn't connect to Discord at all, and Settings → Playback → Show on Discord says it isn't
+  set up for dev builds (`pick_client_id` in `src-tauri/src/discord.rs`).
 - **Android:** the APK keeps the released app's id for now (its Java classes are named by it), so it
   doesn't install next to a release build there.
 
@@ -134,6 +141,13 @@ Run by whoever owns the dev Supabase project, with the Supabase CLI:
    Without them the workflow stops at its first step and says which is missing.
 3. Create the `dev` branch from `master` if it isn't there yet.
 4. Optionally, Settings → General → Pull Requests → "Automatically delete head branches".
+5. Optionally, Discord for dev builds: in the Discord Developer Portal
+   (discord.com/developers/applications), create a second application named "Polarity Dev"
+   (the name is what profiles show), with the released app's icon (`src-tauri/icons/icon.png`). It
+   needs no uploaded art: the activity's picture is the title's poster link, or the application's
+   icon when there is none. Copy its Application ID (General Information) into the repository
+   variable `DEV_DISCORD_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables). The
+   next dev build uses it; until then dev builds stay off Discord.
 
 ## Checks on GitHub
 

@@ -2,7 +2,10 @@
 //! has it (by default only that Polarity is in use, #150; the title only when the user picks it). Talks to the Discord app on this machine over its local
 //! IPC socket (a named pipe on Windows): a handshake with the app's client id, then `SET_ACTIVITY`.
 //! The client id is Polarity's Discord application ([`APP_ID`]); a build can use another with
-//! `POLAR_DISCORD_CLIENT_ID`, or none by setting it empty. Without an id, or on a machine where
+//! `POLAR_DISCORD_CLIENT_ID`, or none by setting it empty. A dev build (#376) never falls back to
+//! [`APP_ID`]: it uses its own application, "Polarity Dev", which dev-build.yml sets from the
+//! repository variable `DEV_DISCORD_CLIENT_ID`, or none, so it never shows or joins as the released
+//! app (docs/dev-channel.md). Without an id, or on a machine where
 //! Discord isn't running, nothing is shown. One thread owns the connection, so a
 //! slow or missing Discord never holds up the player; it sends the latest activity only, at most
 //! once every few seconds (Discord's own limit), and logs no titles.
@@ -108,13 +111,14 @@ fn buttons(all: &[Button]) -> Vec<Button> {
 const APP_ID: &str = "1568225292877701221";
 
 /// The build's Discord application: `POLAR_DISCORD_CLIENT_ID` when the build sets it (empty for
-/// none), else [`APP_ID`].
+/// none), else [`APP_ID`], except in a dev build, which has none then.
 fn client_id() -> Option<&'static str> {
-    pick_client_id(option_env!("POLAR_DISCORD_CLIENT_ID"))
+    pick_client_id(option_env!("POLAR_DISCORD_CLIENT_ID"), crate::dev_channel::DEV)
 }
 
-fn pick_client_id(from_build: Option<&'static str>) -> Option<&'static str> {
-    Some(from_build.unwrap_or(APP_ID)).filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+fn pick_client_id(from_build: Option<&'static str>, dev: bool) -> Option<&'static str> {
+    let fallback = if dev { None } else { Some(APP_ID) };
+    from_build.or(fallback).filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Discord wants 2-128 characters on each line.
@@ -712,10 +716,19 @@ mod tests {
 
     #[test]
     fn the_build_uses_polaritys_application_unless_it_names_another_or_none() {
-        assert_eq!(pick_client_id(None), Some(APP_ID));
-        assert_eq!(pick_client_id(Some("123456789012345678")), Some("123456789012345678"));
-        assert_eq!(pick_client_id(Some("")), None);
-        assert_eq!(pick_client_id(Some("not-an-id")), None);
+        assert_eq!(pick_client_id(None, false), Some(APP_ID));
+        assert_eq!(pick_client_id(Some("123456789012345678"), false), Some("123456789012345678"));
+        assert_eq!(pick_client_id(Some(""), false), None);
+        assert_eq!(pick_client_id(Some("not-an-id"), false), None);
+    }
+
+    #[test]
+    fn a_dev_build_uses_its_own_application_or_none() {
+        assert_eq!(pick_client_id(Some("123456789012345678"), true), Some("123456789012345678"));
+        // Without the variable it stays off Discord rather than speaking as the released app.
+        assert_eq!(pick_client_id(None, true), None);
+        assert_eq!(pick_client_id(Some(""), true), None);
+        assert_eq!(pick_client_id(Some("not-an-id"), true), None);
     }
 
     fn activity() -> Activity {

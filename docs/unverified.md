@@ -813,7 +813,7 @@ on two devices, check:
 - TV mode: the question shows and works with a remote (Play focused, Back is Not Now). There's no
   link field in TV mode.
 
-## Discord buttons and joining from Discord (#153, #154, #357)
+## Discord buttons and joining from Discord (#153, #154, #357, #376)
 
 Checked here: the activity's button and its limits, the join secret and party that replace it in a
 joinable party, the join events over a stand-in for Discord's socket (a join passed on, a request to
@@ -852,8 +852,12 @@ Polarity signed in. Check:
    Nobody: neither, and Watch in Polarity is back with "What you're watching".
 7. Linux: the .deb/.rpm register polarity:// on install; an AppImage registers it when it first runs.
    Windows: the installer registers it. macOS: the app bundle does.
-8. A dev build and the released app share the Discord application: whichever started last is the one
-   Discord starts for a join.
+8. Dev builds (#376), with `DEV_DISCORD_CLIENT_ID` set and the released app installed on both
+   computers: A plays in a dev build, B sees "Watching Polarity Dev". A starts a party in the dev
+   build: B's Join opens B's dev build (`discord-<dev id>`, `polarity-dev://discord-join`), never
+   the released app, also with B's dev build closed. Both apps running on A: B sees two separate
+   activities. A dev build made without the variable: no activity on Discord, and Settings →
+   Playback reads "Not set up for dev builds" under Show on Discord.
 
 ## Browser extension: Open in Polarity, Watch together (#208)
 

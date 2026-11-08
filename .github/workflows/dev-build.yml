@@ -13,7 +13,8 @@ name: Dev build
 #
 # Needs the dev updater key (not the release one): repository secrets DEV_UPDATER_PRIVATE_KEY and
 # DEV_UPDATER_PRIVATE_KEY_PASSWORD, and its public key as the repository variable
-# DEV_UPDATER_PUBLIC_KEY (`bun tauri signer generate`, docs/dev-channel.md).
+# DEV_UPDATER_PUBLIC_KEY (`bun tauri signer generate`, docs/dev-channel.md). Discord: the
+# "Polarity Dev" application's id as the repository variable DEV_DISCORD_CLIENT_ID (optional).
 on:
   push:
     branches: [dev]
@@ -84,6 +85,9 @@ jobs:
       # src/lib/platform/build.ts and src-tauri/src/dev_channel.rs read it.
       VITE_POLAR_CHANNEL: dev
       VERSION: ${{ needs.meta.outputs.version }}
+      # The dev app's own Discord application, "Polarity Dev" (src-tauri/src/discord.rs). Unset, the
+      # dev build doesn't connect to Discord at all.
+      POLAR_DISCORD_CLIENT_ID: ${{ vars.DEV_DISCORD_CLIENT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
