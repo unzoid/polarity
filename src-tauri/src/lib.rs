@@ -59,6 +59,8 @@ pub struct AppState {
     pub fillers: polar_anime::Fillers,
     /// Anime id mappings for when ani.zip is down, in the same folder.
     pub anime_lists: polar_anime::AnimeLists,
+    /// Logos and backdrops fetched for measuring where CORS refuses them (#354).
+    pub pictures: polar_addon::pictures::Pictures,
 }
 
 impl AppState {
@@ -253,6 +255,7 @@ pub fn run() {
                 ratings: ratings::RatingsClient::default(),
                 fillers: polar_anime::Fillers::new(cache.clone()),
                 anime_lists: polar_anime::AnimeLists::new(cache.clone()),
+                pictures: polar_addon::pictures::Pictures::default(),
             });
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
@@ -284,6 +287,7 @@ pub fn run() {
             torrent::torrent_close,
             commands::subtitles,
             commands::subtitle_vtt,
+            commands::picture_bytes,
             commands::seek_previews,
             commands::seekr_validate,
             commands::skip_segments,

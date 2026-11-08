@@ -543,6 +543,18 @@ against a real project.
   none should be there.
 - The Linux path assumes Tauri's `app_log_dir` is `~/.local/share/<identifier>/logs`; check it once on Linux.
 
+## Title logos measured through the app (#354)
+
+A logo whose host sends no CORS headers is fetched by the app (`picture_bytes`, `crates/addon/src/pictures.rs`)
+so its contrast is still checked. The fetch is tested here against a local server; the command and the web view
+side (bytes to a blob picture) are only type-checked and tested with a stand-in. Which real image hosts refuse
+CORS couldn't be checked from this machine. To check on a desktop:
+1. Open the page of a show whose logo is dark ink on a dark backdrop: it shows as a white silhouette or with a
+   halo, on the page and on the Home banner when it's featured there.
+2. Open `polar.log`: no "logo: no picture from" lines for logos that showed. Turn off the network after the
+   pages load and open a new title: a line naming only the image host (no link, no title) may appear, and the
+   name or the logo as it is shows.
+
 ## Name and sign-in session in the keychain
 
 - The name is Polarity in the installer (`productName`), README, the log's first line, the User-Agent

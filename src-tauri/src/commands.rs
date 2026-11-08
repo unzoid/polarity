@@ -585,6 +585,21 @@ pub async fn subtitle_vtt(state: State<'_, AppState>, url: String) -> Result<Str
     Ok(polar_addon::subs::to_vtt(&bytes))
 }
 
+/// A logo's or backdrop's bytes for the app to measure (#354), for hosts whose
+/// pictures the web view can't read (no CORS headers). Public `https` pictures
+/// only (`polar_addon::pictures`); a failure is logged with the host alone.
+#[tauri::command]
+pub async fn picture_bytes(state: State<'_, AppState>, url: String) -> Result<tauri::ipc::Response> {
+    match state.pictures.fetch(&url).await {
+        Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        Err(reason) => {
+            let host = reqwest::Url::parse(&url).ok().and_then(|u| u.host_str().map(str::to_owned)).unwrap_or_default();
+            tracing::warn!(target: "polar", "logo: no picture from {host} to measure: {reason}");
+            Err(CmdError::Upstream(reason))
+        }
+    }
+}
+
 // --- Seek previews (Seekr) -------------------------------------------------
 
 /// Thumbnail track for the seek bar, or `None` when the feature is off, no key

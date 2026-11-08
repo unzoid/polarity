@@ -87,6 +87,8 @@ export const api = {
   subtitles: (type: ContentType, videoId: string, file: VideoFile = {}) =>
     call<SubtitleOption[]>("subtitles", { ty: type, videoId, videoSize: file.size ?? null, filename: file.name ?? null }),
   subtitleVtt: (url: string) => call<string>("subtitle_vtt", { url }),
+  /** A logo's or backdrop's bytes, for measuring a picture whose host sends no CORS headers (#354). */
+  pictureBytes: (url: string) => call<ArrayBuffer>("picture_bytes", { url }),
   seekPreviews: (videoId: string, durationMs: number) =>
     call<SeekTrack | null>("seek_previews", { videoId, durationMs }),
   skipSegments: (videoId: string) => call<SkipSegments>("skip_segments", { videoId }),

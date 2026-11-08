@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { act } from "react";
 import { TitleLogo } from "../../src/components/TitleLogo";
 import { LOGO_SPOTS } from "../../src/lib/ui";
@@ -132,4 +132,98 @@ test("TitleLogo: a host that refuses CORS still has its picture's shape checked"
   expect(failed).toBe(1);
   expect(container.querySelector("img")).toBeNull();
   await unmount();
+});
+
+const DARK = "https://media.example.com/no-cors-logo.png";
+
+/** The app's picture_bytes answers with a picture the canvas reads as `shade`; fetched URLs are kept in `asked`. */
+function appReads(shade: number | null, asked: string[]) {
+  const realCreate = URL.createObjectURL;
+  const realRevoke = URL.revokeObjectURL;
+  const w = window as { __TAURI_INTERNALS__?: unknown };
+  w.__TAURI_INTERNALS__ = {
+    invoke: async (cmd: string, args: { url: string }) => {
+      if (cmd !== "picture_bytes") throw { code: "unsupported", message: cmd };
+      asked.push(args.url);
+      if (shade === null) throw { code: "upstream", message: "HTTP 403" };
+      return new ArrayBuffer(8);
+    },
+  };
+  URL.createObjectURL = () => {
+    shades["blob:app-read"] = shade ?? 0;
+    return "blob:app-read";
+  };
+  URL.revokeObjectURL = () => {};
+  return () => {
+    delete w.__TAURI_INTERNALS__;
+    URL.createObjectURL = realCreate;
+    URL.revokeObjectURL = realRevoke;
+  };
+}
+
+test("TitleLogo: a dark logo from a host without CORS headers is measured through the app and drawn as the silhouette (#354)", async () => {
+  shades = { [DARK]: 0 };
+  plainOnly = new Set([DARK]);
+  const asked: string[] = [];
+  const restore = appReads(0, asked);
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const { container, unmount } = await render(<TitleLogo src={DARK} alt="A Show" />);
+    await settle();
+    expect(asked).toEqual([`${DARK}?tone=1`]);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(DARK);
+    expect(container.querySelector("img")?.dataset.logoLook).toBe("silhouette");
+    expect(warn).not.toHaveBeenCalled();
+    await unmount();
+  } finally {
+    warn.mockRestore();
+    restore();
+  }
+});
+
+test("TitleLogo: a logo even the app can't read is said in the console, by its host alone (#354)", async () => {
+  const logo = "https://pictures.example.org/tt0000000/logo.png";
+  shades = { [logo]: 0 };
+  plainOnly = new Set([logo]);
+  const restore = appReads(null, []);
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const { container, unmount } = await render(<TitleLogo src={logo} alt="A Show" />);
+    await settle();
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(logo);
+    const said = warn.mock.calls.map((c) => String(c[0]));
+    expect(said).toEqual(["TitleLogo: couldn't measure the logo from pictures.example.org; it's drawn without the contrast check"]);
+    expect(said.join(" ")).not.toContain("tt0000000");
+    await unmount();
+  } finally {
+    warn.mockRestore();
+    restore();
+  }
+});
+
+test("TitleLogo: an app answer that isn't a picture's bytes, or a blob URL that can't be made, counts as unmeasured, never an error (#354)", async () => {
+  const logo = "https://pictures.example.org/odd-answer.png";
+  const srcs = [`${logo}?null`, `${logo}?bytes`];
+  shades = { [srcs[0]!]: 0, [srcs[1]!]: 0 };
+  plainOnly = new Set(srcs);
+  const w = window as { __TAURI_INTERNALS__?: unknown };
+  const realCreate = URL.createObjectURL;
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const answer of [null, new ArrayBuffer(8)]) {
+      // A bridge that answers every command with null, as other tests' fakes do; then real bytes whose blob URL fails.
+      w.__TAURI_INTERNALS__ = { invoke: async () => answer };
+      URL.createObjectURL = () => {
+        throw new TypeError("createObjectURL expects a Blob object");
+      };
+      const { container, unmount } = await render(<TitleLogo src={`${logo}?${answer ? "bytes" : "null"}`} alt="A Show" />);
+      await settle();
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(`${logo}?${answer ? "bytes" : "null"}`);
+      await unmount();
+    }
+  } finally {
+    warn.mockRestore();
+    delete w.__TAURI_INTERNALS__;
+    URL.createObjectURL = realCreate;
+  }
 });
