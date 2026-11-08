@@ -229,6 +229,8 @@ test("Back stays in the title page's spot in the player around the notch, uprigh
     expect(Number(onPage.split(",")[0]), "clear of the cutout").toBeGreaterThanOrEqual(i.left);
     await app.getByRole("button", { name: "Play", exact: true }).tap();
     await expect(player).toHaveAttribute("data-started", "true");
+    // The controls hide on their own first: a tap while they show would hide them.
+    await expect(player).toHaveAttribute("data-chrome", "false");
     await player.tap({ position: { x: 200, y: 200 } });
     await expect(player).toHaveAttribute("data-chrome", "true");
     expect(await backPlace(app, "player"), `${size.width}×${size.height}`).toBe(onPage);
