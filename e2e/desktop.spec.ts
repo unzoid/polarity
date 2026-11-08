@@ -1203,6 +1203,61 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(partySurfaces(app)).toHaveCount(1);
   });
 
+  // Out of the player while the party watches: the party badge's Go to the Current Stream opens it again (#387).
+  const backToParty = async (app: Page) => {
+    await expect(app.locator(".player")).toHaveCount(0);
+    await app.locator(".party-badge").click();
+    await app.locator(".party-popover").getByRole("button", { name: "Go to the Current Stream" }).click();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  };
+  const videoTime = (app: Page) => app.locator(".player video").evaluate((v: HTMLVideoElement) => v.currentTime);
+
+  test("out of the player in a party on an episode, Go to the Current Stream opens it where the party is (#387)", async ({ app }) => {
+    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
+    await card(app, "Fieldwork").click();
+    await app.locator(".episode-card-main:not([disabled])").first().click();
+    const player = app.locator(".player");
+    await expect(player).toHaveAttribute("data-started", "true");
+    await app.getByRole("button", { name: "Watch Party", exact: true }).click();
+    await app.getByRole("button", { name: "Start a Watch Party" }).click();
+    await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
+    await app.keyboard.press("Escape");
+    await expect(partySurfaces(app)).toHaveCount(0);
+    await app.keyboard.press("Escape");
+    await expect(player).toHaveCount(0);
+    // The party plays on while this member browses.
+    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+    await app.waitForTimeout(3000);
+    await backToParty(app);
+    await expect(app.locator(".player-heading")).toContainText("Fieldwork");
+    await expect.poll(() => videoTime(app)).toBeGreaterThan(2.5);
+    await expect(app.getByRole("button", { name: "Pause" })).toBeVisible();
+    // Paused, the party waits where it is: back again, it's paused there.
+    await app.keyboard.press(" ");
+    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    const pausedAt = await videoTime(app);
+    await app.keyboard.press("Escape");
+    await app.waitForTimeout(2000);
+    await backToParty(app);
+    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    await expect.poll(() => videoTime(app)).toBeCloseTo(pausedAt, 0);
+  });
+
+  test("out of the player in a party on a link, Go to the Current Stream plays the link again (#387)", async ({ app }) => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.getByRole("textbox", { name: "Video link" }).fill("https://media.example/film.mp4");
+    await app.getByRole("button", { name: "Watch", exact: true }).click();
+    const player = app.locator(".player");
+    await expect(player).toHaveAttribute("data-started", "true");
+    await app.keyboard.press("Escape");
+    await expect(player).toHaveCount(0);
+    await app.waitForTimeout(3000);
+    await backToParty(app);
+    await expect(app.locator(".player video")).toHaveAttribute("src", "https://media.example/film.mp4");
+    await expect.poll(() => videoTime(app)).toBeGreaterThan(2.5);
+  });
+
   test("a YouTube link plays in YouTube's embedded player, driven by the player's controls (#201)", async ({ app }) => {
     // A stand-in for YouTube's embed that speaks its IFrame Player API messages: no request leaves the machine.
     const commands: string[] = [];
@@ -1239,6 +1294,11 @@ test.describe("signed in, on a fresh profile", () => {
     await app.getByRole("button", { name: "Pause", exact: true }).click();
     await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
     expect(commands).toContain("pauseVideo");
+    // Out of the player and back from the party badge: the same YouTube video, still paused (#387).
+    await app.keyboard.press("Escape");
+    await backToParty(app);
+    await expect(frame).toHaveAttribute("src", /\/embed\/abc-DEF_123\?/);
+    await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
   });
 
   test("a YouTube player whose start stops paused (autoplay refused, or a buffer that ends paused) is ready, not buffering (#383)", async ({ app }) => {
