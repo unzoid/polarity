@@ -388,6 +388,10 @@
 .anime-pick .search-field {
   margin: 0 0.25rem 0.375rem;
 }
+/* "Use Polarity's match" (#335): above the search, apart from the results. */
+.anime-pick-automatic {
+  margin-bottom: 0.375rem;
+}
 .anime-pick-item {
   gap: 0.75rem;
 }

@@ -125,6 +125,7 @@ export const api = {
    */
   linkAnime: (link: Omit<AnimeLink, "updatedAt">) =>
     call<boolean>("link_anime", { link: { ...link, updatedAt: 0 } }),
+  unlinkAnime: (anilist: number) => call<boolean>("unlink_anime", { anilist }),
   animeLinks: () => call<AnimeLink[]>("anime_links"),
 
   // Profile spaces & sync (src-tauri/src/sync.rs). `space` = profile id.

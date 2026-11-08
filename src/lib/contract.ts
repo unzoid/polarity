@@ -151,7 +151,7 @@ export const contract = {
   } satisfies Keys<StreamQuality>,
   Video: { episode: true, id: true, overview: true, rating: true, released: true, season: true, tag: true, thumbnail: true, title: true } satisfies Keys<Video>,
   // contract/library.json (crates/library)
-  AnimeLink: { anilist: true, canonical: true, kitsu: true, mal: true, updatedAt: true } satisfies Keys<AnimeLink>,
+  AnimeLink: { anilist: true, canonical: true, kitsu: true, mal: true, removed: true, updatedAt: true } satisfies Keys<AnimeLink>,
   LibraryItem: { addedAt: true, id: true, name: true, poster: true, type: true, updatedAt: true } satisfies Keys<LibraryItem>,
   Progress: {
     background: true,

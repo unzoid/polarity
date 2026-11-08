@@ -174,7 +174,7 @@ impl Space {
             if self.links.get(&link.anilist).is_some_and(|l| l.updated_at >= link.updated_at) {
                 continue;
             }
-            self.links.insert(link.anilist, link);
+            self.put_link(link);
             new_links = true;
         }
         for item in changes.library {
@@ -451,6 +451,29 @@ mod tests {
         assert_eq!(a.removed, b.removed);
         // So B pushing what it re-keyed changes nothing on A.
         assert!(!a.merge(b.changes_since(20)));
+    }
+
+    #[test]
+    fn a_pick_taken_back_on_one_device_is_taken_back_on_the_other() {
+        // #335: device A picks the wrong series, B pulls it; A takes the pick back, B pulls that.
+        let mut a = Space::default();
+        a.library.insert("kitsu:5".into(), item("kitsu:5", 10));
+        a.progress.insert("kitsu:5:1".into(), progress("kitsu:5", "kitsu:5:1", 10, 100.0));
+        a.library.insert("tt9".into(), item("tt9", 5));
+        let mut b = a.clone();
+        a.link_anime(link(1, "tt9", Some(5), 30));
+        b.merge(a.changes_since(20));
+        assert_eq!(b.progress["kitsu:5:1"].meta_id, "tt9");
+        assert!(a.unlink_anime(1, 40));
+        let removal = a.changes_since(35);
+        assert!(removal.links.iter().any(|l| l.anilist == 1 && l.removed));
+        assert!(b.merge(removal));
+        assert!(b.links[&1].removed);
+        assert_eq!(b.progress["kitsu:5:1"].meta_id, "kitsu:5");
+        assert_eq!(a.library, b.library);
+        assert_eq!(a.removed, b.removed);
+        assert!(b.library.contains_key("kitsu:5") && b.library.contains_key("tt9"));
+        assert!(!a.merge(b.changes_since(35)));
     }
 
     #[test]

@@ -309,6 +309,7 @@ pub fn run() {
             commands::continue_watching,
             commands::watch_history,
             commands::link_anime,
+            commands::unlink_anime,
             commands::anime_links,
             commands::settings_get,
             commands::settings_set,

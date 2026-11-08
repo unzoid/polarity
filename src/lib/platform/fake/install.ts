@@ -126,6 +126,7 @@ const commands: Record<string, (a: Args) => unknown> = {
     animeLinks.set(link.anilist, { ...link, updatedAt: Date.now() });
     return true;
   },
+  unlink_anime: (a) => animeLinks.delete((a as { anilist: number }).anilist),
   anime_ids: () => null,
   anime_episode_flags: () => ({ filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),
