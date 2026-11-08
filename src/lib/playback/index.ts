@@ -11,6 +11,7 @@ export * from "./loadingArt";
 export * from "./lookahead";
 export * from "./playTarget";
 export * from "./readiness";
+export * from "./savedSource";
 export * from "./sourceHistory";
 export * from "./sources";
 export * from "./sourceInfo";

@@ -4,7 +4,7 @@ import { useRouter } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, useStreams } from "../lib/net";
 import { runtimeSeconds } from "../lib/format";
-import { READY_CHECKS, readinessNote, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
+import { READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
 import type { ContentType, RankedStream, Readiness } from "../lib/types";
 import { SourceFilterBar } from "./SourceFilters";
 import { Button } from "./ui/Button";
@@ -241,6 +241,5 @@ function StreamRow({
 }
 
 export function streamKey(s: RankedStream | { stream: RankedStream["stream"] }) {
-  const st = s.stream;
-  return st.url ?? (st.infoHash ? `${st.infoHash.toLowerCase()}#${st.fileIdx ?? 0}` : st.ytId) ?? "";
+  return sourceKey(s.stream);
 }

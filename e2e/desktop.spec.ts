@@ -519,6 +519,35 @@ test("the player's Sources panel marks the same links (#21)", async ({ app }) =>
   await expect(sources.locator('[data-ready="yes"]').nth(1)).toContainText("Ready · starts in 0.4 s");
 });
 
+test("resuming goes on with the saved source only while the add-ons still offer it (#394)", async ({ app }) => {
+  // Saved progress of The Glass Orchard whose source the add-ons don't offer for it (another title's, say).
+  const save = (url: string) =>
+    app.evaluate(
+      ([url]) =>
+        (window as unknown as { __TAURI_INTERNALS__: { invoke: (c: string, a: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("progress_save", {
+          progress: { metaId: "tt9100000", videoId: "tt9100000", type: "movie", name: "The Glass Orchard", stream: { url }, position: 30, duration: 90, updatedAt: Date.now() },
+        }),
+      [url],
+    );
+  const resume = async () => {
+    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+    await card(app, "The Glass Orchard").click();
+    await app.getByRole("button", { name: /^(Resume|Play)$/ }).first().click();
+  };
+  const video = app.locator(".player video");
+  await save("https://media.example/elsewhere.mp4");
+  await resume();
+  await expect(video).toHaveAttribute("src", /^https:\/\/media\.example\/\d\.mp4$/);
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await app.keyboard.press("Escape");
+  await expect(app.locator(".player")).toHaveCount(0);
+
+  // One the add-ons still offer is gone on with, ahead of their ranking.
+  await save("https://media.example/2.mp4");
+  await resume();
+  await expect(video).toHaveAttribute("src", "https://media.example/2.mp4");
+});
+
 test("a source picked in the player's Sources panel plays, while playing and while another is starting (#393)", async ({ app }) => {
   // The second add-on's files never answer, so the player stays starting on them.
   await app.route((url) => url.host === "media.example" && /\/[34]\.mp4$/.test(url.pathname), () => {});

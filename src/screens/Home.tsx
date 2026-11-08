@@ -411,7 +411,8 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
   const openDetail = () => navigate({ name: "detail", type: p.type, id: opens });
   // Which page it opens on is known before the click (mostly a stored anime link: no network).
   useEffect(() => prefetchTitlePage(p.type, opens), [p.type, opens]);
-  const resume = () => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId, stream: p.stream });
+  // The player goes on with the saved source only while the add-ons still offer it (#394).
+  const resume = () => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId });
   const fraction = p.duration ? p.position / p.duration : 0;
   const meta = useQuery({ queryKey: keys.meta(p.type, p.metaId), queryFn: () => api.meta(p.type, p.metaId), staleTime: 60 * 60_000 });
   const logo = meta.data?.logo;
