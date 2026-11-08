@@ -154,8 +154,9 @@ const edgesOf = (el: HTMLElement): Edges => ({ start: el.scrollLeft < 4, end: el
 /** Same edges, same object: a new one per scroll event would re-render every card each frame. */
 const sameEdges = (was: Edges, now: Edges) => (was.start === now.start && was.end === now.end ? was : now);
 
-/** Where the rail's cards line up from its edge: TV's rail runs to the screen's edges and its cards
- *  start at the gutter (its scroll-padding). */
+/** Where the rail's cards line up from its edge (its scroll-padding): on desktop the room its scroller
+ *  keeps for the playing card's ring and the focus outline (#349); TV's rail runs to the screen's
+ *  edges and its cards start at the gutter. */
 export const railInset = (rail: HTMLElement) => parseFloat(getComputedStyle(rail).scrollPaddingLeft) || 0;
 
 /** Scrolls `card` fully into `rail`'s view, the least distance (the rail alone, not its ancestors). */

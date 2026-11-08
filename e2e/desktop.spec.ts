@@ -1100,6 +1100,74 @@ test("the player's episode rail pages with Home's shelf paddles: blurred edge, s
   await expect(prev).toHaveCSS("pointer-events", "auto");
 });
 
+test("the player's episode rail shows the playing and focused cards' whole ring at any scroll, and its edge blur reaches the rail's edges (#349)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
+  await card(app, "Fieldwork").click();
+  await expect(app.locator(".episode-card")).toHaveCount(10);
+  // A later episode, so the rail opens scrolled to it.
+  await app.locator(".episode-card-main:not([disabled])").nth(5).click();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await app.getByRole("button", { name: "Episodes", exact: true }).click();
+  const rail = app.locator(".episode-rail");
+  await expect(rail.locator(".episode-rail-card[aria-current]")).toBeVisible();
+
+  // How far `selector`'s box, grown by its ring (box-shadow spread) or focus outline (width + offset), pokes
+  // out of the rail's visible box on each side; nothing pokes out when all are <= 0.
+  const pokesOut = (selector: string) =>
+    rail.evaluate((el, selector) => {
+      const target = el.querySelector<HTMLElement>(selector)!;
+      const css = getComputedStyle(target);
+      const ring = Math.max(
+        Number(css.boxShadow.match(/(-?[\d.]+)px\)?$/)?.[1] ?? 0),
+        css.outlineStyle === "none" ? 0 : parseFloat(css.outlineWidth) + parseFloat(css.outlineOffset),
+      );
+      const r = el.getBoundingClientRect();
+      const c = target.getBoundingClientRect();
+      return { left: r.left - (c.left - ring), right: c.right + ring - r.right, ring };
+    }, selector);
+  // Polled: a card the keys reach glides into view.
+  const whole = (selector: string) =>
+    expect.poll(async () => {
+      const out = await pokesOut(selector);
+      return out.ring > 0 && out.left <= 0.5 && out.right <= 0.5 ? "whole" : JSON.stringify(out);
+    }).toBe("whole");
+
+  // Opened on the playing episode: its ring is whole without any scrolling, and so is the focus outline.
+  expect(await rail.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  const playing = ".episode-rail-card[aria-current] .episode-rail-still";
+  await whole(playing);
+  await expect(rail.locator('[aria-current="true"] > .episode-rail-main')).toBeFocused();
+  await app.keyboard.press("ArrowLeft");
+  await app.keyboard.press("ArrowRight");
+  await whole(".episode-rail-main:focus-visible");
+
+  // Stepped by the keys to either end, the focused card's outline stays whole each step.
+  for (let i = 0; i < 6; i++) {
+    await app.keyboard.press("ArrowLeft");
+    await whole(".episode-rail-main:focus-visible");
+  }
+  expect(await rail.evaluate((el) => el.scrollLeft)).toBeLessThanOrEqual(1);
+  for (let i = 0; i < 9; i++) {
+    await app.keyboard.press("ArrowRight");
+    await whole(".episode-rail-main:focus-visible");
+  }
+  await expect(rail.locator(".episode-rail-card").last().locator(".episode-rail-main")).toBeFocused();
+
+  // The paddles' blur runs right up to the rail's visible edges, with no sharp strip beyond it, at any window size.
+  await rail.hover();
+  const blurGaps = () =>
+    app.locator(".episode-rail-viewport").evaluate((v) => {
+      const r = v.querySelector(".episode-rail")!.getBoundingClientRect();
+      const blur = (dir: string) => v.querySelector(`.row-paddle[data-dir=${dir}] .edge-blur`)!.getBoundingClientRect();
+      const still = v.querySelector(".episode-rail-still")!.getBoundingClientRect();
+      return [blur("prev").left - r.left, r.right - blur("next").right, blur("prev").top - still.top, still.bottom - blur("prev").bottom];
+    });
+  for (const size of [null, { width: 1000, height: 700 }, { width: 1800, height: 1000 }]) {
+    if (size) await app.setViewportSize(size);
+    for (const gap of await blurGaps()) expect(Math.abs(gap)).toBeLessThanOrEqual(0.5);
+  }
+});
+
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 

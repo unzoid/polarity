@@ -1965,6 +1965,10 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 .episode-rail-viewport {
   --rail-card-w: clamp(220px, 24vw, 340px);
+  /* Room around the cards for the playing one's ring and the focus outline (2px + 2px offset), which
+     the scroller would clip (#349). The rail reaches that far past the column, the cards keep its line,
+     the scroll stops leave it at either end and the paddles' blur covers it. */
+  --rail-room: 4px;
   position: relative;
 }
 .episode-rail {
@@ -1979,8 +1983,9 @@ img.load-mark-base[data-logo-look^="halo"] {
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-  padding: 3px 3px 0.5rem;
-  margin: -3px -3px 0;
+  padding: var(--rail-room) var(--rail-room) 0.5rem;
+  margin: calc(-1 * var(--rail-room)) calc(-1 * var(--rail-room)) 0;
+  scroll-padding-inline: var(--rail-room);
 }
 .episode-rail::-webkit-scrollbar {
   display: none;
@@ -1995,9 +2000,16 @@ img.load-mark-base[data-logo-look^="halo"] {
 /* Paging on desktop (#226): Home's shelf paddles (RowPaddle, cards.css), their blurred edge over
    the stills only. Remotes step through the cards: no paddles on TV. */
 .episode-rail-viewport .row-paddle {
-  top: 3px;
+  top: 0;
   bottom: auto;
   height: calc(var(--rail-card-w) * 9 / 16);
+}
+/* Out to the rail's own edges, past the column by its room (#349). */
+.episode-rail-viewport .row-paddle[data-dir="prev"] {
+  left: calc(-1 * var(--rail-room));
+}
+.episode-rail-viewport .row-paddle[data-dir="next"] {
+  right: calc(-1 * var(--rail-room));
 }
 .episode-rail-card {
   position: relative;
