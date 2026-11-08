@@ -15,6 +15,13 @@ probe (way 2), untested with a real mpv and not yet measured.
 The aim is crop changes the viewer doesn't notice: every frame shown with the crop worked out for
 that frame, and every change a jump (#344: never eased).
 
+**The setting (#330).** Autocrop is one of three crop modes (`src/lib/settings/cropMode.ts`):
+Fit (no autocrop), Crop black bars (autocrop) and Fill window (autocrop, then mpv's `panscan`
+covers the window: `crop::zoom_for` with `fill`). The player's crop button, its shortcut (Z),
+TV's controller binding and Settings → Advanced → Crop share it; prefs from before #330 carry
+over (autocrop on: Crop black bars, with Fill on too: Fill window). Without mpv the button skips
+Crop black bars, and Fill window covers the window with the whole frame.
+
 ## 1. Before our detector (desktop)
 
 mpv ran FFmpeg's `cropdetect` on every frame (`crop::CROPDETECT`, `reset=1`), and

@@ -261,20 +261,22 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   await expect(player).toHaveCount(0);
 });
 
-test("the player fits or fills the window, by its button or Z, and remembers it (#183)", async ({ app }) => {
+test("the player's crop button and Z switch Fit and Fill window, say which, and remember it (#183, #330)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
   await app.getByRole("button", { name: "Play", exact: true }).click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
-  const fill = player.getByRole("button", { name: "Fill window" });
+  const crop = player.getByRole("button", { name: /^Crop:/ });
   const video = player.locator(".player-video");
-  // Fit by default.
-  await expect(fill).toHaveAttribute("aria-pressed", "false");
+  // Fit by default. The browser's video has no autocrop: the cycle skips Crop black bars.
+  await expect(crop).toHaveAccessibleName("Crop: Fit");
+  await expect(crop).toHaveAttribute("title", /^Fit \(next: Fill window\)/);
   await expect(video).toHaveCSS("object-fit", "contain");
   await player.hover();
-  await fill.click();
-  await expect(fill).toHaveAttribute("aria-pressed", "true");
+  await crop.click();
+  await expect(crop).toHaveAccessibleName("Crop: Fill window");
+  await expect(player.getByText("Fill window", { exact: true })).toBeVisible();
   await expect(video).toHaveCSS("object-fit", "cover");
   // Remembered for the next video.
   await player.getByRole("button", { name: "Back", exact: true }).click();
@@ -284,7 +286,8 @@ test("the player fits or fills the window, by its button or Z, and remembers it 
   await expect(video).toHaveCSS("object-fit", "cover");
   await app.keyboard.press("z");
   await expect(video).toHaveCSS("object-fit", "contain");
-  await expect(fill).toHaveAttribute("aria-pressed", "false");
+  await expect(crop).toHaveAccessibleName("Crop: Fit");
+  await expect(player.getByText("Fit", { exact: true })).toBeVisible();
 });
 
 test("the player's focus ring shows for Tab, never for a click or the clicked button's shortcut, and hides with the controls (#329)", async ({ app }) => {
@@ -293,7 +296,7 @@ test("the player's focus ring shows for Tab, never for a click or the clicked bu
   await app.getByRole("button", { name: "Play", exact: true }).click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
-  const fill = player.getByRole("button", { name: "Fill window" });
+  const fill = player.getByRole("button", { name: /^Crop:/ });
   // Drawn: an outline that isn't none or see-through.
   const ring = (el: Locator) =>
     expect.poll(() => el.evaluate((e) => getComputedStyle(e).outlineStyle !== "none" && getComputedStyle(e).outlineColor !== "rgba(0, 0, 0, 0)"));
@@ -303,7 +306,7 @@ test("the player's focus ring shows for Tab, never for a click or the clicked bu
   await ring(fill).toBe(false);
   // Its shortcut keeps the focus where the click left it, still without a ring.
   await app.keyboard.press("z");
-  await expect(fill).toHaveAttribute("aria-pressed", "false");
+  await expect(fill).toHaveAccessibleName("Crop: Fit");
   await expect(fill).toBeFocused();
   await ring(fill).toBe(false);
   // Tab moves the focus: the control it reaches shows the ring.
@@ -2073,10 +2076,10 @@ test("in a narrow window nothing in the player's bars overlaps, the title is cut
 
   await app.setViewportSize({ width: 700, height: 800 });
   await showControls();
-  await expect(top.getByRole("button", { name: "Fill window" })).toHaveCount(0);
+  await expect(top.getByRole("button", { name: /^Crop:/ })).toHaveCount(0);
   await expect.poll(() => barOverlaps(app)).toEqual([]);
   await top.getByRole("button", { name: "More" }).click();
-  const fillItem = app.getByRole("menuitemcheckbox", { name: /Fill window/ });
+  const fillItem = app.getByRole("menuitemcheckbox", { name: /^Crop:/ });
   await expect(fillItem).toHaveAttribute("aria-checked", "false");
   await fillItem.click();
   await expect(player).toHaveAttribute("data-fill", "true");

@@ -55,7 +55,7 @@ export const PLAYER_ACTIONS: { id: PlayerPadAction; label: string }[] = [
   { id: "nextEpisode", label: "Next episode" },
   { id: "mute", label: "Mute" },
   { id: "fullscreen", label: "Fullscreen" },
-  { id: "fill", label: "Fit / fill the window" },
+  { id: "fill", label: "Crop mode: Fit, Crop black bars, Fill window" },
   { id: "none", label: "Nothing" },
 ];
 

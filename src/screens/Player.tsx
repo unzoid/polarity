@@ -76,7 +76,18 @@ import { createWindowPin } from "../components/player/windowPin";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
-import { getPrefs, openSettings, setPrefs, shortcutText, useEpisodeLayout, usePrefs, withShortcut } from "../lib/settings";
+import {
+  cropModeLabel,
+  getPrefs,
+  nextCropMode,
+  openSettings,
+  setPrefs,
+  shortcutText,
+  shownCropMode,
+  useEpisodeLayout,
+  usePrefs,
+  withShortcut,
+} from "../lib/settings";
 import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
@@ -737,19 +748,27 @@ export function Player({
     online: !link && !local,
   });
 
-  // Fit or Fill (#148, #149, #183): the picture inside the screen or window, or covering it with its
-  // edges cropped. A phone or tablet has no window to make fullscreen, so its button there does this;
-  // desktop has its own button and shortcut. Kept on this device. Autocrop (Settings → Advanced)
-  // takes the bars in the video off first, then Fill crops what's left to the window's shape (the
-  // autocrop loop reads mpv's panscan).
-  const { videoFill } = usePrefs();
-  const fill = videoFill;
+  // Crop mode (#148, #149, #183, #330): Fit, Crop black bars or Fill window, one setting (lib/settings/cropMode.ts)
+  // the button, its shortcut, TV's binding and Settings → Advanced share. A phone or tablet has no window to make
+  // fullscreen, so its button there does this. Autocrop takes the bars in the video off; Fill then crops what's
+  // left to the window's shape (mpv's panscan, which the autocrop loop reads). Without mpv there's no autocrop:
+  // the button skips Crop black bars and Fill covers the window with the whole frame. Kept on this device.
+  const { cropMode } = usePrefs();
+  const canCrop = engine === "mpv";
+  const crop = shownCropMode(cropMode, canCrop);
+  const fill = crop === "fill";
+  const nextCrop = nextCropMode(cropMode, canCrop);
   useEffect(() => {
     if (engine === "mpv") void mpv.set("panscan", fill ? 1 : 0);
   }, [engine, mpv, fill]);
-  const toggleFill = useCallback(() => setPrefs({ videoFill: !getPrefs().videoFill }), []);
+  // Each press says which mode it is now: the picture alone doesn't always show it.
+  const cycleCrop = useCallback(() => {
+    const next = nextCropMode(getPrefs().cropMode, canCrop);
+    setPrefs({ cropMode: next });
+    flashNotice(cropModeLabel(next), 1500);
+  }, [canCrop, flashNotice]);
   const pinch = usePinch((direction) => {
-    if (!isDesktop) setPrefs({ videoFill: direction === "out" });
+    if (!isDesktop) setPrefs({ cropMode: direction === "out" ? "fill" : "fit" });
   });
 
   // --- Pin window (#266): desktop only, where the system lets an app stay on top ---
@@ -1006,9 +1025,7 @@ export function Player({
           return true;
         case "fill":
           if (ytFramed) return false;
-          toggleFill();
-          // TV mode has no button showing it: say which it is now.
-          if (tv) flashNotice(getPrefs().videoFill ? "Fill" : "Fit", 1500);
+          cycleCrop();
           return true;
         case "skip":
           skip.skipActive();
@@ -1303,7 +1320,7 @@ export function Player({
             kick(x < third ? "back" : "forward");
             return poke(true);
           }
-          if (!isDesktop) return toggleFill();
+          if (!isDesktop) return cycleCrop();
           // Pinned, the window stays as it is (#266).
           if (pinner.pinned) return;
           void toggleFullscreen();
@@ -1447,10 +1464,10 @@ export function Player({
             {showFill && !more && (
               <IconButton
                 variant="player"
-                onClick={toggleFill}
-                label="Fill window"
-                aria-pressed={fill}
-                title={withShortcut(fill ? "Fit to window" : "Fill window", "fill")}
+                onClick={cycleCrop}
+                label={`Crop: ${cropModeLabel(crop)}`}
+                data-crop={crop}
+                title={withShortcut(`${cropModeLabel(crop)} (next: ${cropModeLabel(nextCrop)})`, "fill")}
               >
                 <FillWindow size={22} />
               </IconButton>
@@ -1467,8 +1484,8 @@ export function Player({
                     </MenuCheckItem>
                   )}
                   {showFill && (
-                    <MenuCheckItem checked={fill} onCheckedChange={toggleFill} meta={shortcutText("fill")}>
-                      Fill window
+                    <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
+                      {`Crop: ${cropModeLabel(crop)}`}
                     </MenuCheckItem>
                   )}
                 </MenuPopup>
@@ -1480,7 +1497,13 @@ export function Player({
               </IconButton>
             )}
             {!tv && !isDesktop && (
-              <IconButton variant="player" onClick={toggleFill} label={fill ? "Fit to screen" : "Fill screen"} aria-pressed={fill}>
+              <IconButton
+                variant="player"
+                onClick={cycleCrop}
+                label={`Crop: ${cropModeLabel(crop)}`}
+                data-crop={crop}
+                title={`${cropModeLabel(crop)} (next: ${cropModeLabel(nextCrop)})`}
+              >
                 {fill ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
               </IconButton>
             )}

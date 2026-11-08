@@ -3,6 +3,7 @@
 
 export * from "./changes";
 export * from "./credits";
+export * from "./cropMode";
 export * from "./fonts";
 export * from "./keybinds";
 export * from "./legal";
