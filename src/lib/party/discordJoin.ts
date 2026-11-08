@@ -1,11 +1,11 @@
 /**
- * Joining a watch party from someone's Discord profile (#153, #154).
+ * Joining a watch party from someone's Discord profile (#153, #154, #357).
  *
- * The "Join watch party" button carries a join token, never the party code:
+ * Discord's Join hands over a join token (the activity's join secret), never the party code:
  * 16 random bytes, then the fingerprint of a key pair the desk made for that
  * token. A token is handed out for JOIN_TOKEN_MS, after which a new one
  * replaces it (the previous one still answers for another JOIN_TOKEN_MS, so a
- * button someone loaded just before the change still works). The member whose
+ * Join someone pressed just before the change still works). The member whose
  * profile it is runs a desk: it listens on a channel named after a hash of
  * each live token, and a joiner who has the token asks there.
  *
@@ -278,7 +278,7 @@ export function createJoinDesk(deps: JoinDeps, room: () => DeskRoom, mode: () =>
   rotate();
 
   return {
-    /** The token buttons carry now; null until its channel is open. */
+    /** The token Discord hands out now; null until its channel is open. */
     token: () => (current && live.some((l) => l.token === current && l.ready) ? current : null),
     requests: (): JoinRequest[] => pending.map(({ id, name }) => ({ id, name })),
     answer,

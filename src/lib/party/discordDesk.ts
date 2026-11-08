@@ -1,5 +1,5 @@
 /**
- * The app's side of joining from Discord (#153, #154): the one join desk
+ * The app's side of joining from Discord (#153, #154, #357): the one join desk
  * (discordJoin.ts) for the party this device is in, run while the party can
  * be joined from Discord, and the join a polarity://party link starts.
  *
@@ -38,25 +38,28 @@ const deps: JoinDeps = {
 // The member's desk.
 
 interface DeskState {
-  /** The token the profile's button carries; null: no button. */
+  /** The token Discord's Join hands out (#357); null: no Join. */
   token: string | null;
+  /** The party's id on Discord: random for each desk, never the party code. */
+  party: string | null;
   requests: JoinRequest[];
 }
 
-const NO_DESK: DeskState = { token: null, requests: [] };
+const NO_DESK: DeskState = { token: null, party: null, requests: [] };
 let desk: JoinDesk | null = null;
 let deskCode: string | null = null;
+let deskParty: string | null = null;
 let mode: JoinMode = "ask";
 let snapshot: DeskState = NO_DESK;
 const listeners = new Set<() => void>();
 
 function changed() {
   const party = getParty();
-  // Locked: nobody can join, so no button either.
+  // Locked: nobody can join, so no Join either.
   const token = desk && !party?.rules.locked ? desk.token() : null;
   const requests = desk?.requests() ?? [];
   if (token === snapshot.token && requests.length === snapshot.requests.length && requests.every((r, i) => r.id === snapshot.requests[i]?.id)) return;
-  snapshot = token || requests.length ? { token, requests } : NO_DESK;
+  snapshot = token || requests.length ? { token, party: token ? deskParty : null, requests } : NO_DESK;
   listeners.forEach((l) => l());
 }
 
@@ -71,6 +74,7 @@ export function runJoinDesk(code: string | null, joinMode: JoinMode) {
   desk?.stop();
   desk = null;
   deskCode = wanted;
+  deskParty = wanted ? deps.newId() : null;
   if (wanted) {
     const d = createJoinDesk(
       deps,
@@ -86,7 +90,7 @@ export function runJoinDesk(code: string | null, joinMode: JoinMode) {
   changed();
 }
 
-/** Re-read when the room's rules change (a lock hides the button). */
+/** Re-read when the room's rules change (a lock takes Join away). */
 export const refreshJoinDesk = () => changed();
 
 export const answerJoinRequest = (id: string, allow: boolean) => desk?.answer(id, allow);
