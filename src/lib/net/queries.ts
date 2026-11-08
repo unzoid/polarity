@@ -54,13 +54,21 @@ export function useStreams(type: ContentType, videoId: string | undefined) {
     [no4k],
   );
   return useQuery({
-    queryKey: keys.streams(type, videoId ?? ""),
-    queryFn: () => api.streams(type, videoId!),
+    ...streamsQuery(type, videoId ?? ""),
     enabled: !!videoId,
-    staleTime: 10 * 60_000,
     select: anime ? select : undefined,
   });
 }
+
+/**
+ * A video's sources from the add-ons. An answer with sources stays fresh for 10 minutes; one with none at all
+ * never does (#375): the next play asks again, so an add-on installed since (or an add-on that was down) counts.
+ */
+export const streamsQuery = (type: ContentType, videoId: string) => ({
+  queryKey: keys.streams(type, videoId),
+  queryFn: () => api.streams(type, videoId),
+  staleTime: ({ state }: { state: { data?: StreamsResult } }) => (state.data && state.data.streams.length + (state.data.hidden ?? 0) > 0 ? 10 * 60_000 : 0),
+});
 
 /** Whether a video is anime: a Kitsu id, or an IMDb show ani.zip knows. */
 export function useIsAnime(videoId: string | undefined) {
@@ -155,12 +163,7 @@ export const prefetchMeta = (type: ContentType, id: string) =>
     staleTime: 60 * 60_000,
   });
 
-export const prefetchStreams = (type: ContentType, videoId: string) =>
-  queryClient.prefetchQuery({
-    queryKey: keys.streams(type, videoId),
-    queryFn: () => api.streams(type, videoId),
-    staleTime: 10 * 60_000,
-  });
+export const prefetchStreams = (type: ContentType, videoId: string) => queryClient.prefetchQuery(streamsQuery(type, videoId));
 
 const preloaded = new Set<string>();
 export function preloadImage(src?: string) {

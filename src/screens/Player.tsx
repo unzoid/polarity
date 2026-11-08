@@ -1146,11 +1146,12 @@ export function Player({
             onSettings={
               tv
                 ? undefined
-                : () => {
+                : (page) => {
                     void exit();
-                    openSettings("sources");
+                    openSettings(page);
                   }
             }
+            onRetry={source.retry}
             onYouTube={ytOutside ? () => void api.openExternal(youtubeUrl(ytOutside)) : undefined}
           />
         )}

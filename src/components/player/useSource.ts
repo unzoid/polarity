@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { useMeta, useProgress, useStreams } from "../../lib/net";
+import { keys, useMeta, useProgress, useStreams } from "../../lib/net";
 import {
   askedLine,
   autoPickOrder,
@@ -31,8 +32,8 @@ export type SourceState =
   /** A torrent source waits for the user to read the one-time notice (`answerNotice`). */
   | { status: "notice"; stream: Stream; label?: string }
   | { status: "ready"; stream: Stream; url: string; label?: string }
-  /** `settings`: the reason names a setting there (Settings → Sources), so the screen links to it. */
-  | { status: "failed"; reason: string; settings?: "sources" };
+  /** `settings`: the reason names a Settings page (Sources for its filters, Add-ons when there's none), so the screen links to it. */
+  | { status: "failed"; reason: string; settings?: "sources" | "addons" };
 
 interface Candidate {
   stream: Stream;
@@ -71,6 +72,7 @@ export function useSource(
   log: LogStep,
   started: () => boolean = () => false,
 ) {
+  const qc = useQueryClient();
   const progress = useProgress(metaId);
   const [saved, setSaved] = useState<Progress | null | undefined>(undefined);
   useEffect(() => {
@@ -91,7 +93,10 @@ export function useSource(
 
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   /** Why there's nothing to try, once the add-ons have answered with nothing to play. */
-  const none = useRef<{ reason: string; settings?: "sources" } | undefined>(undefined);
+  const none = useRef<{ reason: string; settings?: "sources" | "addons" } | undefined>(undefined);
+  // An answer kept from before that's being asked again (an add-on installed or removed since, or one with no
+  // sources, which is never kept fresh) doesn't count: the new answer does (#375).
+  const answer = streams.isStale && streams.isFetching ? undefined : streams.data;
   useEffect(() => {
     if (candidates) return;
     if (picked) {
@@ -105,14 +110,14 @@ export function useSource(
         return setCandidates([{ stream: saved.stream }]);
       }
     }
-    if (streams.data) {
+    if (answer) {
       // Best match for this screen, narrowed by the filters you set in the player
       // for this show (next episode: the same kind of file), else by the source
       // preferences in Settings, when they leave something.
-      const ranked = autoPickOrder(streams.data.streams, settings, metaId, matchRef.current);
+      const ranked = autoPickOrder(answer.streams, settings, metaId, matchRef.current);
       // The room's file first, even past Settings' filters: same file, same timing.
-      const same = prefer ? streams.data.streams.find((r) => sameFile(r.stream, prefer)) : undefined;
-      const { streams: all, failed, hidden = 0, asked, ids } = streams.data;
+      const same = prefer ? answer.streams.find((r) => sameFile(r.stream, prefer)) : undefined;
+      const { streams: all, failed, hidden = 0, asked, ids } = answer;
       const addons = new Set(all.map((r) => r.addon)).size;
       const filtered = all.length - ranked.length + hidden;
       const found = all.length + hidden;
@@ -137,11 +142,11 @@ export function useSource(
           .slice(0, 5)
           .map((s) => ({ stream: s.stream, label: s.label, addon: s.addon, group: s.quality.source })),
       );
-    } else if (streams.isError) {
+    } else if (streams.isError && !streams.isFetching) {
       log(`Couldn't ask the add-ons: ${errorMessage(streams.error)}`, "fail", "sources");
       setCandidates([]);
     }
-  }, [candidates, picked, prefer, saved, streams.data, streams.isError, streams.error, settings, metaId, videoId, log]);
+  }, [candidates, picked, prefer, saved, answer, streams.isError, streams.isFetching, streams.error, settings, metaId, videoId, log]);
 
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SourceState>({ status: "searching" });
@@ -253,6 +258,20 @@ export function useSource(
     kind: (candidates?.[attempt] ?? {}) as SourceKind,
     /** The engine was stopped while the app was in the background (#207): the player's own error waits behind the reason. */
     halted: () => halted.current,
+    /**
+     * The error screen's Try again (#375): asks the add-ons afresh for this video, then starts over with the
+     * new answer (a picked or resumed source is tried again as it was).
+     */
+    retry: () => {
+      halted.current = false;
+      setState({ status: "searching" });
+      log("Asking your add-ons again", "info", "sources");
+      void qc.invalidateQueries({ queryKey: keys.streams(type, videoId), refetchType: "all" }).then(() => {
+        none.current = undefined;
+        setAttempt(0);
+        setCandidates(null);
+      });
+    },
     /** Try the next candidate after a playback error. False if none left (or `halted`). */
     next: () => {
       if (halted.current || !candidates || attempt + 1 >= candidates.length) return false;

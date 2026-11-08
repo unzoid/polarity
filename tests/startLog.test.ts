@@ -107,6 +107,7 @@ describe("asking the add-ons (#360)", () => {
   test("nothing to play says why: no add-on asked, none answered, nothing found, or all filtered", () => {
     expect(noSources({ found: 0, filtered: 0 }).reason).toBe("No sources found. Install a stream add-on in Settings.");
     expect(noSources({ asked: 0, answered: 0, found: 0, filtered: 0 }).reason).toBe("No sources found. Install a stream add-on in Settings.");
+    expect(noSources({ asked: 0, answered: 0, found: 0, filtered: 0 }).settings).toBe("addons");
     expect(noSources({ asked: 2, answered: 0, found: 0, filtered: 0 }).reason).toBe("None of your add-ons answered. Try again in a moment.");
     expect(noSources({ asked: 2, answered: 1, found: 0, filtered: 0 }).reason).toBe("Your add-ons found no sources for this.");
     expect(noSources({ asked: 2, answered: 2, found: 3, filtered: 3 })).toEqual({ reason: "Your source filters left out every source.", settings: "sources" });

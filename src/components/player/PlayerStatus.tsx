@@ -35,6 +35,7 @@ export function PlayerStatus({
   backend,
   onSources,
   onSettings,
+  onRetry,
   onYouTube,
 }: {
   state: ReturnType<typeof useSource>["state"];
@@ -46,8 +47,10 @@ export function PlayerStatus({
   backend: string;
   /** Left out where there's nothing else to choose (a pasted link). */
   onSources?: () => void;
-  /** Opens Settings → Sources, offered when the reason names a setting there. Left out in TV mode. */
-  onSettings?: () => void;
+  /** Opens the Settings page the reason names (Sources for its filters, Add-ons when there's none). Left out in TV mode. */
+  onSettings?: (page: "sources" | "addons") => void;
+  /** Asks the add-ons again after finding no source or none that played (#375). */
+  onRetry?: () => void;
   /** A YouTube video that can't play here (Android): open it in YouTube. */
   onYouTube?: () => void;
 }) {
@@ -114,9 +117,14 @@ export function PlayerStatus({
                 <Sources size={17} /> Choose Another Source
               </Button>
             )}
+            {onRetry && state.status === "failed" && !error && (
+              <Button variant="glass" onClick={onRetry}>
+                Try Again
+              </Button>
+            )}
             {onSettings && state.status === "failed" && state.settings && (
-              <Button variant="glass" onClick={onSettings}>
-                Open Settings
+              <Button variant="glass" onClick={() => onSettings(state.settings!)}>
+                {state.settings === "addons" ? "Open Add-ons" : "Open Settings"}
               </Button>
             )}
             {onYouTube && (
