@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   type Anime,
   aniZipQuery,
+  comesOut,
   distinctLabels,
   episodeMatcher,
   type FranchiseTabs,
@@ -130,7 +131,8 @@ export function AnimeEpisodes({
         };
 
   if (!list.length) {
-    const empty = <EmptyState className="anime-no-episodes">{pb.loading || pb.metaLoading ? "Loading episodes…" : "No episodes to play yet."}</EmptyState>;
+    const coming = comesOut(anime);
+    const empty = <EmptyState className="anime-no-episodes">{coming ? `${coming}.` : pb.loading || pb.metaLoading ? "Loading episodes…" : "No episodes to play yet."}</EmptyState>;
     // A season that hasn't started yet still sits among the others.
     return franchise ? (
       <section className="seasons">

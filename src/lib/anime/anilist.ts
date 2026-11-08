@@ -431,8 +431,8 @@ export function seasonsQuery(client: QueryClient, anime: Anime | undefined) {
           staleTime: 24 * 60 * 60_000,
           queryFn: async ({ signal }) => {
             const data = await gql(
-              `query ($id: Int) { Media(id: $id, type: ANIME) { ${CARD} relations { edges { relationType(version: 2) node {
-                ${CARD} relations { edges { relationType(version: 2) node { id type format } } } } } } } }`,
+              `query ($id: Int) { Media(id: $id, type: ANIME) { ${CARD} description(asHtml: false) relations { edges { relationType(version: 2) node {
+                ${CARD} description(asHtml: false) relations { edges { relationType(version: 2) node { id type format } } } } } } } }`,
               { id },
               signal,
             );

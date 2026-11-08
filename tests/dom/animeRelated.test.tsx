@@ -36,7 +36,7 @@ function Where() {
   return <output>{current.name === "anime-detail" ? current.id : current.name}</output>;
 }
 
-test("a franchise page's Watch Order switches tabs for its own seasons and opens pages only for the rest (#193)", async () => {
+test("a grouped page's Watch Order leaves out its own season tabs and opens pages for the rest (#193, #351)", async () => {
   const qc = new QueryClient();
   qc.setQueryData(keys.animeLinks, []);
   for (const e of [s1, ova, s2, spinOff]) qc.setQueryData(keys.anime.listedImdb(e.id), null);
@@ -61,20 +61,37 @@ test("a franchise page's Watch Order switches tabs for its own seasons and opens
   await settle();
   const row = (title: string) => [...container.querySelectorAll(".row")].find((r) => r.textContent?.includes(title))!;
   const titles = (r: Element) => [...r.querySelectorAll(".card-title")].map((t) => t.textContent);
-  expect(titles(row("Watch Order"))).toEqual(["Harbour Lights", "Harbour Lights: Fog Night", "Harbour Lights Season 2"]);
+  expect(titles(row("Watch Order"))).toEqual(["Harbour Lights: Fog Night"]);
   expect(titles(row("Also in This Franchise"))).toEqual(["Harbour Lights Kitchen"]);
-  const where = () => container.querySelector("output")!.textContent;
-  const home = where();
 
-  const cards = row("Watch Order").querySelectorAll(".anime-card");
-  expect(cards[2].getAttribute("aria-current")).toBe("true");
-  await click(cards[0]);
-  expect(selected).toEqual([s1.id]);
-  expect(where()).toBe(home);
+  await click(row("Watch Order").querySelector(".anime-card")!);
+  expect(selected).toEqual([]);
+  expect(container.querySelector("output")!.textContent).toBe(String(ova.id));
+  await unmount();
+});
 
-  await click(cards[1]);
-  expect(selected).toEqual([s1.id]);
-  expect(where()).toBe(String(ova.id));
+test("a grouped page whose order holds only its tabs shows no Watch Order row (#351)", async () => {
+  const qc = new QueryClient();
+  qc.setQueryData(keys.animeLinks, []);
+  for (const e of [s1, s2, spinOff]) qc.setQueryData(keys.anime.listedImdb(e.id), null);
+  const franchise = {
+    seasons: [
+      { card: s1, label: "Season 1" },
+      { card: s2, label: "Season 2" },
+    ],
+    order: [s1, s2],
+    active: s2.id,
+    select: () => {},
+  };
+  const { container, unmount } = await render(
+    <QueryClientProvider client={qc}>
+      <RouterProvider>
+        <AnimeRelated anime={anime} franchise={franchise} />
+      </RouterProvider>
+    </QueryClientProvider>,
+  );
+  await settle();
+  expect(container.textContent).not.toContain("Watch Order");
   await unmount();
 });
 
