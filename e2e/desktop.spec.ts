@@ -77,6 +77,17 @@ test("search finds movies and series", async ({ app }) => {
   await expect(app.getByRole("textbox", { name: "Search" })).toHaveValue("");
 });
 
+test("search leaves out titles that can't play and have nothing to show; an artless film and an announced series stay (#337)", async ({ app }) => {
+  await app.route("https://media.example.com/**", (route) => route.fulfill({ status: 404, body: "" }));
+  await app.getByRole("button", { name: "Search", exact: true }).click();
+  await app.keyboard.type("quillmoor");
+  await expect(card(app, "Quillmoor Crossing")).toBeVisible();
+  await expect(card(app, "Quillmoor Announced")).toBeVisible();
+  await expect(card(app, "Quillmoor Bare")).toHaveCount(0);
+  // Drawn while its poster loads, gone once the poster and then the backdrop fail.
+  await expect(card(app, "Quillmoor Blank")).toHaveCount(0);
+});
+
 test("a title page adds to and removes from the Library", async ({ app }) => {
   const nav = app.getByRole("navigation", { name: "Primary" });
   await nav.getByRole("button", { name: "Movies", exact: true }).click();

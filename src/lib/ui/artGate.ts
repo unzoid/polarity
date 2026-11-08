@@ -25,7 +25,8 @@ export function chainSettled(chain: (string | null | undefined)[]) {
   return !current || loaded.has(current);
 }
 
-function subscribe(chain: string[], fn: () => void) {
+/** Calls `fn` whenever one of `chain`'s pictures loads or fails; returns the unsubscribe. */
+export function subscribeImages(chain: string[], fn: () => void) {
   for (const u of chain) {
     let set = listeners.get(u);
     if (!set) listeners.set(u, (set = new Set()));
@@ -70,7 +71,7 @@ function seenWatcher() {
 export function useArtGate(src?: string | null, fallbacks?: (string | null | undefined)[]) {
   const chain = [src, ...(fallbacks ?? [])].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
   const key = chain.join("\n");
-  const sub = useCallback((fn: () => void) => subscribe(key ? key.split("\n") : [], fn), [key]);
+  const sub = useCallback((fn: () => void) => subscribeImages(key ? key.split("\n") : [], fn), [key]);
   const ready = useSyncExternalStore(
     sub,
     () => chainSettled(chain),
