@@ -200,3 +200,30 @@ test("TitleLogo: a logo even the app can't read is said in the console, by its h
     restore();
   }
 });
+
+test("TitleLogo: an app answer that isn't a picture's bytes, or a blob URL that can't be made, counts as unmeasured, never an error (#354)", async () => {
+  const logo = "https://pictures.example.org/odd-answer.png";
+  const srcs = [`${logo}?null`, `${logo}?bytes`];
+  shades = { [srcs[0]!]: 0, [srcs[1]!]: 0 };
+  plainOnly = new Set(srcs);
+  const w = window as { __TAURI_INTERNALS__?: unknown };
+  const realCreate = URL.createObjectURL;
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const answer of [null, new ArrayBuffer(8)]) {
+      // A bridge that answers every command with null, as other tests' fakes do; then real bytes whose blob URL fails.
+      w.__TAURI_INTERNALS__ = { invoke: async () => answer };
+      URL.createObjectURL = () => {
+        throw new TypeError("createObjectURL expects a Blob object");
+      };
+      const { container, unmount } = await render(<TitleLogo src={`${logo}?${answer ? "bytes" : "null"}`} alt="A Show" />);
+      await settle();
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(`${logo}?${answer ? "bytes" : "null"}`);
+      await unmount();
+    }
+  } finally {
+    warn.mockRestore();
+    delete w.__TAURI_INTERNALS__;
+    URL.createObjectURL = realCreate;
+  }
+});

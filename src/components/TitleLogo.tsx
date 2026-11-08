@@ -36,18 +36,21 @@ export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
     if (!candidates.length || choices.has(id)) return;
     let live = true;
     const behind = backdrop && spot ? measureBackdrop(backdrop, spot) : Promise.resolve(DARK_PAGE);
-    Promise.all([behind, Promise.all(candidates.map(measureLogo))]).then(([lum, measured]) => {
-      choices.set(
-        id,
+    Promise.all([behind, Promise.all(candidates.map(measureLogo))])
+      .then(([lum, measured]) =>
         chooseLogo(
           candidates,
           measured.map((m) => m.ink),
           lum,
           measured.map((m) => m.shape),
         ),
-      );
-      if (live) setMeasured((n) => n + 1);
-    });
+      )
+      // Whatever goes wrong measuring, the name shows rather than an error escaping.
+      .catch((): Choice => "unsure")
+      .then((c) => {
+        choices.set(id, c);
+        if (live) setMeasured((n) => n + 1);
+      });
     return () => {
       live = false;
     };
@@ -85,18 +88,23 @@ async function loadReadable(src: string): Promise<HTMLImageElement | null> {
   return (await load(src)) ?? (await loadThroughApp(src));
 }
 
-/** The picture's bytes fetched by the app, which CORS doesn't apply to, and loaded from memory; null when that fails. */
+/**
+ * The picture's bytes fetched by the app, which CORS doesn't apply to, and loaded from memory; null when that
+ * fails in any way (no app, no bytes, an answer that isn't bytes), never an error.
+ */
 async function loadThroughApp(src: string): Promise<HTMLImageElement | null> {
-  let bytes: ArrayBuffer;
   try {
-    bytes = await api.pictureBytes(toneUrl(src));
+    const bytes: unknown = await api.pictureBytes(toneUrl(src));
+    if (!(bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(bytes)) return null;
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
+    try {
+      return await load(url, true);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   } catch {
     return null;
   }
-  const url = URL.createObjectURL(new Blob([bytes]));
-  const img = await load(url, true);
-  URL.revokeObjectURL(url);
-  return img;
 }
 
 /** Says in the console that a picture couldn't be measured, by its host alone (the rest may name the title). */
@@ -172,7 +180,7 @@ function measureLogo(src: string) {
       const sized = img ?? (await load(src, true));
       const shape = sized && sized.naturalWidth ? { width: sized.naturalWidth, height: sized.naturalHeight, clear: px ? clearShare(px) : null } : null;
       return { ink: px ? measureInk(px) : null, shape };
-    });
+    }).catch(() => ({ ink: null, shape: null }));
     logos.set(src, measured);
   }
   return measured;
@@ -187,7 +195,7 @@ function measureBackdrop(src: string, spot: LogoSpot) {
       const px = img && pixelsOf(img, 48, spot);
       if (!px) noteUnmeasured("backdrop", src);
       return px ? backdropLuminance(px, spot.scrim) : null;
-    });
+    }).catch(() => null);
     behinds.set(key, lum);
   }
   return lum;
