@@ -20,6 +20,8 @@ export const WEIGHTS = {
   cam: -100,
   /** The file's name says it's another episode: never at the top. */
   otherEpisode: -200,
+  /** A disc release (BD, Blu-ray) of an episode that aired within NEW_EPISODE_DAYS, or hasn't aired: unlikely to be what it says. */
+  notOutYet: -40,
 
   // Bitrate: size ÷ runtime. Size alone never costs points.
   /** Below the least a file of its height needs to look right (BITRATE_FLOOR). */
@@ -77,6 +79,7 @@ export const FACTOR_LABELS: Record<Factor, string> = {
   direct: "Direct link",
   cam: "CAM or telesync",
   otherEpisode: "Another episode",
+  notOutYet: "Disc release of a new episode",
   bitrateLow: "Bitrate for its resolution",
   bitrateBelowOthers: "Bitrate under the others",
   bitrateAboveOthers: "Bitrate above the others",
@@ -102,6 +105,8 @@ export const BITRATE_FLOOR: Record<number, number> = { 2160: 8, 1440: 4, 1080: 2
 export const MIN_TRIES = 2;
 export const RECENT_FAIL_HOURS = 24;
 export const SLOW_START_MS = 10_000;
+/** How long after an episode airs a disc release of it can't be out yet. */
+export const NEW_EPISODE_DAYS = 28;
 
 /** What this device can show and decode; `null` = couldn't tell (no points either way). */
 export interface Device {
@@ -142,6 +147,8 @@ export interface MatchContext {
   preferredGroups: string[];
   history: (kind: "addon" | "group", name: string) => SourceRecord | undefined;
   now: number;
+  /** When the episode aired (ms since the epoch), when known; null for a film or an unknown date. */
+  aired?: number | null;
 }
 
 /** One row of a source's score table: `input` null where the factor doesn't apply. */
@@ -243,6 +250,11 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
   if (q.direct) add("direct", "Direct link", W.direct);
   if (q.lowQualitySource) add("cam", "CAM or telesync", W.cam);
   if (r.otherEpisode) add("otherEpisode", `The file says ${r.fileEpisode ?? "another episode"}`, W.otherEpisode);
+  const days = ctx.aired == null ? null : (ctx.now - ctx.aired) / 86_400_000;
+  if (days != null && days < NEW_EPISODE_DAYS && (q.tags ?? []).includes("BluRay")) {
+    const when = days < 0 ? "hasn't aired yet" : days < 1 ? "aired today" : `aired ${Math.floor(days)} day${Math.floor(days) === 1 ? "" : "s"} ago`;
+    add("notOutYet", `A disc release, but the episode ${when}`, W.notOutYet);
+  }
 
   // Bitrate, against the others of its height and the connection.
   const rate = bitrateMbps(r, ctx.runtimeSec);

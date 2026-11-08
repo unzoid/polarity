@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef } from "react";
 import { ChevronLeft } from "./icons";
+import { useTvMode } from "../tv/tvMode";
 
 type BackButtonProps = Omit<ComponentPropsWithRef<"button">, "children" | "aria-label" | "title">;
 
@@ -10,8 +11,10 @@ type BackButtonProps = Omit<ComponentPropsWithRef<"button">, "children" | "aria-
  * class: `navbar-back` (slides in and out), `player-back` (a shadow to read on the video).
  */
 export function BackButton({ className, ...rest }: BackButtonProps) {
+  // A remote has its own Back button, and no Esc (#431).
+  const tv = useTvMode();
   return (
-    <button className={className ? `back-button pressable ${className}` : "back-button pressable"} aria-label="Back" title="Back (Esc)" {...rest}>
+    <button className={className ? `back-button pressable ${className}` : "back-button pressable"} aria-label="Back" title={tv ? "Back" : "Back (Esc)"} {...rest}>
       <ChevronLeft size={22} strokeWidth={2.25} />
     </button>
   );

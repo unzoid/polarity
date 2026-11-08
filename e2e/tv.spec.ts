@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { png } from "./media";
+import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // TV mode at 1920×1080, driven only by the arrow keys, Enter and Backspace (a remote's Back).
 test.use({ tv: true });
@@ -8,6 +10,12 @@ const focused = (page: Page) => page.locator(":focus");
 
 async function press(page: Page, ...keys: string[]) {
   for (const key of keys) await page.keyboard.press(key);
+}
+
+/** Home's second row, third card: Quiet Machines' page. Waits for Home's first card to take the focus, or the keys walk the tabs. */
+async function openQuietMachines(page: Page) {
+  await expect(focused(page)).toHaveAccessibleName("The Understudies");
+  await press(page, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
 }
 
 test("arrows move between cards and Back returns to the same card", async ({ app }) => {
@@ -52,7 +60,7 @@ test("the section tabs are reached from the top row", async ({ app }) => {
 });
 
 test("a title plays from the remote and Back leaves the player", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -62,7 +70,7 @@ test("a title plays from the remote and Back leaves the player", async ({ app })
 });
 
 test("in a title's Sources, up and down move between the rows of filter chips (re-test 7)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await app.getByRole("button", { name: "Choose Source" }).focus();
   await press(app, "Enter");
@@ -77,7 +85,7 @@ test("in a title's Sources, up and down move between the rows of filter chips (r
 });
 
 test("in the player's Sources, up and down move between the rows of filter chips (re-test 7)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -92,7 +100,7 @@ test("in the player's Sources, up and down move between the rows of filter chips
 });
 
 test("in TV mode's larger type, the player's season dropdown shows a name's descenders and accents whole (#353)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -103,7 +111,7 @@ test("in TV mode's larger type, the player's season dropdown shows a name's desc
 });
 
 test("in the player, the remote walks the episode rail to the season's last episode (#226)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -134,7 +142,7 @@ test("in the player, the remote walks the episode rail to the season's last epis
 });
 
 test("in a title's Sources, holding OK on a row opens its menu; Info shows the source, the remote scrolls it, Back returns to the row (#229)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await app.getByRole("button", { name: "Choose Source" }).focus();
   await press(app, "Enter");
@@ -177,7 +185,7 @@ test("in a title's Sources, holding OK on a row opens its menu; Info shows the s
 });
 
 test("in the player's Sources, holding OK on a row opens its menu, Info opens the panel and Back returns to the row (#229)", async ({ app }) => {
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -210,8 +218,7 @@ test("in the player's Sources, OK on a torrent row tries it, after one failed an
   });
   await app.reload();
   const opens = () => app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0);
-  await expect(focused(app)).toHaveAccessibleName("The Understudies");
-  await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+  await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
   await press(app, "Enter");
   // The fake shell has no engine: each torrent fails.
@@ -233,7 +240,7 @@ test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
   test("starting a watch party from the remote leaves one party panel up, with the focus in it (#247)", async ({ app }) => {
-    await press(app, "ArrowDown", "ArrowRight", "ArrowRight", "Enter");
+    await openQuietMachines(app);
     await expect(focused(app)).toHaveAccessibleName("Play First Episode");
     await press(app, "Enter");
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -298,4 +305,74 @@ test("signed out, the TV offers the phone first; denied, it says so and gets a n
   await press(app, "Enter");
   await expect(code).toHaveText(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
   expect(await code.textContent()).not.toBe(first);
+});
+
+test("Continue Watching cards show the title's logo where it has one, as desktop's do (#437)", async ({ app }) => {
+  // A wide logo of white letters on clear ground, for every title (fake.html?logos=1).
+  const letters = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100">${Array.from({ length: 10 }, (_, i) => `<rect x="${i * 40}" y="25" width="28" height="50" fill="#fff"/>`).join("")}</svg>`;
+  await app.route("https://art.example/logo/**", (route) => route.fulfill({ body: letters, contentType: "image/svg+xml", headers: { "access-control-allow-origin": "*" } }));
+  await app.goto("/fake.html?logos=1");
+  const rail = app.locator(".tv-rail").filter({ has: app.locator(".tv-rail-title", { hasText: "Continue Watching" }) });
+  const first = rail.locator(".tv-card").first();
+  await expect(first.locator("img.tv-card-logo")).toBeVisible();
+  await expect(first.locator("img.tv-card-logo")).toHaveAttribute("src", /^https:\/\/art\.example\/logo\/.+\.svg$/);
+  await expect(first.locator(".tv-card-name")).toHaveCount(0);
+});
+
+test("Continue Watching cards show the name where a title has no logo (#437)", async ({ app }) => {
+  const rail = app.locator(".tv-rail").filter({ has: app.locator(".tv-rail-title", { hasText: "Continue Watching" }) });
+  await expect(rail.locator(".tv-card").first().locator(".tv-card-name")).toBeVisible();
+});
+
+test("the Anime stage shows a later entry's franchise art and logo, as desktop does, never its own banner or name (#431)", async ({ app }) => {
+  // The invented franchise's film (after its series) is the only card; its own banner differs from the series' art.
+  const own = "https://art.example/banner/film.png";
+  const fanart = "https://art.example/fanart/series.png";
+  const logo = "https://art.example/clearlogo/series.png";
+  const film = { ...franchiseMedia(FRANCHISE.film.anilist)!, bannerImage: own };
+  const empty = { media: [], pageInfo: { hasNextPage: false } };
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const body = route.request().postData() ?? "{}";
+    const { query = "", variables } = JSON.parse(body) as { query?: string; variables?: { id?: number } };
+    if (query.includes("trending:")) {
+      const home = Object.fromEntries(["trending", "upcoming", "top", "popular", "movies"].map((k) => [k, empty]));
+      return route.fulfill({ json: { data: { ...home, season: { media: [film], pageInfo: { hasNextPage: false } } } } });
+    }
+    const media = variables?.id === FRANCHISE.film.anilist ? film : franchiseMedia(variables?.id ?? 0);
+    await route.fulfill({ json: { data: media ? { Media: media } : { Page: empty } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) => {
+    const id = Number(new URL(route.request().url()).searchParams.get("anilist_id"));
+    const zip = franchiseZip(id);
+    if (!zip) return route.fulfill({ status: 404, json: {} });
+    const images = id === FRANCHISE.show.anilist ? [{ coverType: "Fanart", url: fanart }, { coverType: "Clearlogo", url: logo }] : [];
+    return route.fulfill({ json: { ...zip, images } });
+  });
+  // A dark backdrop, and a wide logo of white letters on clear ground.
+  const dark = png(64, 36, () => [20, 24, 32, 255]);
+  const letters = png(400, 100, (x, y) => (y > 25 && y < 75 && x % 40 < 28 ? [255, 255, 255, 255] : [0, 0, 0, 0]));
+  await app.route("https://art.example/**", (route) =>
+    route.fulfill({ body: route.request().url().includes("clearlogo") ? letters : dark, contentType: "image/png", headers: { "access-control-allow-origin": "*" } }),
+  );
+  await app.getByRole("button", { name: "Anime", exact: true }).click();
+  const stage = app.locator(".tv-stage");
+  await expect(stage.locator(".tv-stage-art img").last()).toHaveAttribute("src", fanart);
+  await expect(stage.locator(`img[src="${logo}"]`)).toBeVisible();
+  await expect(stage.locator(`img[src="${own}"]`)).toHaveCount(0);
+  await expect(stage.getByText(FRANCHISE.film.name, { exact: true })).toHaveCount(0);
+});
+
+test("a typed genre's rows come in desktop's order: its popular movies and series, its anime, then titles named like it (#338, #431)", async ({ app }) => {
+  // AniList answers a genre or kind of show with an invented show, a title search with nothing.
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { genre?: string; tag?: string } };
+    const media = variables?.genre || variables?.tag ? [longAnimeMedia(SHORT_ANIME)] : [];
+    await route.fulfill({ json: { data: { Page: { media, pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.getByRole("button", { name: "Search", exact: true }).click();
+  await app.keyboard.type("Action");
+  const titles = app.locator(".tv-search-results .tv-rail-title");
+  await expect(titles.filter({ hasText: "Popular Action Anime" })).toBeVisible();
+  const shown = (await titles.allTextContents()).map((t) => t.trim());
+  expect(shown.slice(0, 3)).toEqual(["Popular Action Movies", "Popular Action Series", "Popular Action Anime"]);
 });

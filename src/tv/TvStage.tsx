@@ -19,6 +19,8 @@ export interface StageEntry {
   item: MetaPreview;
   /** A line above the facts, e.g. where you are in a show. */
   kicker?: string;
+  /** The art and logo aren't known yet (an anime's page art, #431): neither shows, nor the name for a moment (#343). */
+  pending?: boolean;
 }
 
 const StageSetter = createContext<(entry: StageEntry) => void>(() => {});
@@ -110,7 +112,7 @@ export function TvStage({ entry }: { entry: StageEntry | null }) {
       <TvBackdrop src={shown?.background} className="tv-stage-art" />
       {shown && (
         <div key={shown.id} className="tv-stage-info" aria-live="polite" {...gate}>
-          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-stage" pending={meta.isLoading} />
+          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-stage" pending={meta.isLoading || !!entry?.pending} />
           {entry?.kicker && <p className="tv-stage-kicker">{entry.kicker}</p>}
           <Facts facts={titleFacts(shown)} />
           {shown.description && <p className="tv-stage-description">{shown.description}</p>}
