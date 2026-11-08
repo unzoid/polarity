@@ -15,6 +15,7 @@ export function Row({
   shape = "poster",
   order,
   loading = false,
+  placed = false,
   children,
 }: {
   title?: string;
@@ -26,6 +27,8 @@ export function Row({
   order?: string;
   /** Skeletons stand in for the cards: their shimmer pauses while the shelf is out of view. */
   loading?: boolean;
+  /** Its owner puts it where it should be (EpisodeShelf, at up next): it isn't sent back to its start. */
+  placed?: boolean;
   children: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -38,7 +41,7 @@ export function Row({
   const touched = useRef(false);
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
+    if (el && !placed && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
   });
 
   // Resuming a title moves it to the front of Continue Watching; the shelf kept

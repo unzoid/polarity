@@ -210,29 +210,72 @@ const time = (iso?: string) => {
  * Then TVDB's season/episode, then position by absolute number.
  */
 export function matchVideo(ep: AniZipEpisode, videos: Video[]): Video | undefined {
-  const regular = videos.filter((v) => v.season > 0);
+  const { near, bySeason, ordered } = videoIndex(videos);
   const aired = time(ep.airDateUtc ?? ep.airDate ?? ep.airdate);
   if (Number.isFinite(aired)) {
-    const near = regular.filter((v) => Math.abs(time(v.released) - aired) <= 1.5 * DAY);
-    if (near.length === 1) return near[0];
-    if (near.length > 1) {
+    const close = near(aired);
+    if (close.length === 1) return close[0].v;
+    if (close.length > 1) {
       // Double-episode days: the one whose number lines up.
-      const byNumber = near.find((v) => v.season === ep.seasonNumber && v.episode === ep.episodeNumber);
-      if (byNumber) return byNumber;
-      const sameDay = near.filter((v) => Math.abs(time(v.released) - aired) < DAY);
-      const ordered = (sameDay.length ? sameDay : near).sort((a, b) => a.season - b.season || a.episode - b.episode);
-      return ordered[0];
+      const byNumber = close.find(({ v }) => v.season === ep.seasonNumber && v.episode === ep.episodeNumber);
+      if (byNumber) return byNumber.v;
+      const sameDay = close.filter(({ t }) => Math.abs(t - aired) < DAY);
+      const first = (sameDay.length ? sameDay : close).sort((a, b) => a.v.season - b.v.season || a.v.episode - b.v.episode);
+      return first[0].v;
     }
   }
   if (ep.seasonNumber && ep.episodeNumber) {
-    const exact = regular.find((v) => v.season === ep.seasonNumber && v.episode === ep.episodeNumber);
+    const exact = bySeason.get(`${ep.seasonNumber}:${ep.episodeNumber}`);
     if (exact) return exact;
   }
-  if (ep.absoluteEpisodeNumber) {
-    const ordered = [...regular].sort((a, b) => a.season - b.season || a.episode - b.episode);
-    return ordered[ep.absoluteEpisodeNumber - 1];
-  }
+  if (ep.absoluteEpisodeNumber) return ordered()[ep.absoluteEpisodeNumber - 1];
   return undefined;
+}
+
+interface Dated {
+  v: Video;
+  t: number;
+  /** Its place among the regular videos, so a match picks between equals as a walk through them would. */
+  at: number;
+}
+
+/**
+ * What {@link matchVideo} looks the videos up by, worked out once per list (#397): asked for every episode,
+ * walking every video each time and reading every date again took a second or more on a show with a thousand.
+ * Kept with the list itself: the lists asked about (a query's answer, a sorted copy) aren't changed afterwards.
+ */
+const indexes = new WeakMap<Video[], ReturnType<typeof buildIndex>>();
+function videoIndex(videos: Video[]) {
+  let index = indexes.get(videos);
+  if (!index) indexes.set(videos, (index = buildIndex(videos)));
+  return index;
+}
+
+function buildIndex(videos: Video[]) {
+  const regular = videos.filter((v) => v.season > 0);
+  const byTime: Dated[] = regular.map((v, at) => ({ v, t: time(v.released), at })).filter((d) => Number.isFinite(d.t));
+  byTime.sort((a, b) => a.t - b.t);
+  const bySeason = new Map<string, Video>();
+  for (const v of regular) {
+    const key = `${v.season}:${v.episode}`;
+    if (!bySeason.has(key)) bySeason.set(key, v);
+  }
+  let sorted: Video[] | undefined;
+  // The regular videos within a day and a half of `aired`, in their own order.
+  const near = (aired: number): Dated[] => {
+    let lo = 0;
+    let hi = byTime.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (byTime[mid].t < aired - 1.5 * DAY) lo = mid + 1;
+      else hi = mid;
+    }
+    const out: Dated[] = [];
+    for (let i = lo; i < byTime.length && byTime[i].t <= aired + 1.5 * DAY; i++) out.push(byTime[i]);
+    return out.sort((a, b) => a.at - b.at);
+  };
+  const ordered = () => (sorted ??= [...regular].sort((a, b) => a.season - b.season || a.episode - b.episode));
+  return { near, bySeason, ordered };
 }
 
 /** The regular episodes that have aired, going by their air date (undated ones don't count). */
