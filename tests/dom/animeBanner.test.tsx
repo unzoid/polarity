@@ -1,8 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useFranchiseBanners, type Anime, type AnimeCard as Media, type BannerArt, type SeasonWalk } from "../../src/lib/anime";
+import { slidesReady, useFranchiseBanners, type Anime, type AnimeCard as Media, type BannerArt, type SeasonWalk } from "../../src/lib/anime";
 import { keys } from "../../src/lib/net";
+import { anilistLimiter, Limiter, PRIORITY, type Priority } from "../../src/lib/net/limiter";
+import { rowPriority } from "../../src/lib/anime/anilist";
 import { setPrefs } from "../../src/lib/settings/prefs";
 import { render } from "./render";
 
@@ -45,10 +47,10 @@ function client() {
   return qc;
 }
 
-async function banners(cards: Media[], qc = client()) {
-  let out: (BannerArt | null)[] | undefined;
+async function banners(cards: Media[], qc = client(), priority?: Priority, first?: Priority) {
+  let out: (BannerArt | null | undefined)[] | undefined;
   function Probe() {
-    out = useFranchiseBanners(cards);
+    out = useFranchiseBanners(cards, priority, first);
     return null;
   }
   const { unmount } = await render(
@@ -100,4 +102,65 @@ test("an airing show nothing links yet takes its art from the title it plays fro
   const art = { background: "https://art.example/background/tt0000930.jpg", logo: "https://art.example/cover/tt0000930.jpg" };
   qc.setQueryData(keys.meta("series", plays), { id: plays, type: "series", name: "Harbor Lights", ...art });
   expect(await banners([airing], qc)).toEqual([{ name: "Harbor Lights", ...art, logos: [art.logo, zipLogo], label: undefined }]);
+});
+
+/** AniList's queue, held: every request waits for its turn, which never comes; `asked` is the priority each would go at. */
+function holdAniList() {
+  const asked: Priority[] = [];
+  const take = spyOn(anilistLimiter, "take").mockImplementation((_signal, priority = PRIORITY.visible) => {
+    asked.push(priority);
+    return new Promise<void>(() => {});
+  });
+  return {
+    asked,
+    level: (i: number) => {
+      const p = asked[i]!;
+      return typeof p === "function" ? p() : p;
+    },
+    restore: () => take.mockRestore(),
+  };
+}
+
+test("#380: each slide's art comes on its own; one still coming doesn't hold back the one before it", async () => {
+  setPrefs({ animeSeparateEntries: false });
+  const held = holdAniList();
+  try {
+    const later = entry(920004, "Quiet Orchard", 2024);
+    expect(await banners([s1, later])).toEqual([{ name: "Lantern Coast", ...general, logos: [general.logo], label: undefined }, undefined]);
+  } finally {
+    held.restore();
+  }
+});
+
+test("#380: the first slide's requests go ahead of the shelves on screen, the others with them", async () => {
+  setPrefs({ animeSeparateEntries: false });
+  const held = holdAniList();
+  const first = entry(920005, "Paper Comet", 2025);
+  const second = entry(920006, "Iron Meadow", 2025);
+  try {
+    await banners([first, second], client(), PRIORITY.visible, PRIORITY.page);
+    expect(held.asked.map((_, i) => held.level(i))).toEqual([PRIORITY.page, PRIORITY.visible]);
+  } finally {
+    held.restore();
+  }
+  // In AniList's queue once its burst is spent: a shelf on screen asked first, then the banner's two slides.
+  const clock = { t: 0, now: () => clock.t, sleep: async (ms: number) => void (clock.t += ms) };
+  const queue = new Limiter({ burst: 1, perMinute: 60, retries: 1, defaultWait: 1000, maxWait: 1000 }, clock);
+  await queue.take();
+  const order: string[] = [];
+  await Promise.all([
+    queue.take(undefined, rowPriority("in")).then(() => order.push("shelf")),
+    queue.take(undefined, held.asked[0]).then(() => order.push("slide 1")),
+    queue.take(undefined, held.asked[1]).then(() => order.push("slide 2")),
+  ]);
+  expect(order).toEqual(["slide 1", "shelf", "slide 2"]);
+});
+
+test("#380: the carousel shows the leading slides whose art is known, in order", () => {
+  const art: BannerArt = { name: "Lantern Coast", ...general };
+  expect(slidesReady([])).toBe(0);
+  expect(slidesReady([undefined, art, art])).toBe(0);
+  expect(slidesReady([art, undefined, art])).toBe(1);
+  // A slide whose franchise couldn't be asked shows with its own art: it doesn't hold back the rest.
+  expect(slidesReady([art, null, art])).toBe(3);
 });
