@@ -1686,8 +1686,13 @@ test("the player pins the window on top and locks it, P unpins, and leaving the 
   await player.hover();
   const pin = player.getByRole("button", { name: "Pin window" });
   await expect(pin).toHaveAttribute("aria-pressed", "false");
+  // A pushpin (#332), tilted while unpinned and upright once pinned, so the glyph itself shows the state.
+  const glyph = () => pin.locator("svg").evaluate((svg) => svg.innerHTML);
+  const unpinnedGlyph = await glyph();
+  expect(unpinnedGlyph).toContain("rotate(45");
   await pin.click();
   await expect(pin).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(glyph).not.toContain("rotate(45");
   await expect.poll(told).toEqual({ set_always_on_top: true, set_resizable: false, set_minimizable: false, set_maximizable: false });
   // Locked in place: nothing to drag the window by, minimise and maximise off, close still there.
   await expect(player.locator("[data-tauri-drag-region]")).toHaveCount(0);
