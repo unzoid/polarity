@@ -361,11 +361,13 @@ test.describe("on an iPhone", () => {
     await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
     await card(app, "Low Water Station").tap();
     await expect(app.getByRole("heading", { level: 1, name: "Low Water Station" })).toBeVisible();
+    // iOS's own edge swipe (#451), past half the width.
     await app.evaluate(() => {
-      const touch = (x: number) => [new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 400 })];
-      document.body.dispatchEvent(new TouchEvent("touchstart", { touches: touch(5), bubbles: true }));
-      document.body.dispatchEvent(new TouchEvent("touchmove", { touches: touch(150), bubbles: true }));
-      document.body.dispatchEvent(new TouchEvent("touchend", { changedTouches: touch(200), bubbles: true }));
+      const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+      const width = window.innerWidth;
+      send({ phase: "begin", x: 4, width, velocity: 0 });
+      send({ phase: "move", x: width * 0.6, width, velocity: 0 });
+      send({ phase: "end", x: width * 0.6, width, velocity: 0 });
     });
     await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
   });
