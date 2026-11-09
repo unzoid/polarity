@@ -176,10 +176,11 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(profiles).toBeVisible();
 });
 
-/** Settings from the profile sheet, on the page `section`. */
-async function openSettingsPage(app: Page, section: string) {
+/** Settings from the profile menu (iOS's own menu on an iPhone, picked through the fake shell), on the page `section`. */
+async function openSettingsPage(app: Page, section: string, { iPhone = false } = {}) {
+  if (iPhone) await app.evaluate(() => ((window as unknown as { __polarFakeDialogPick?: string }).__polarFakeDialogPick = "Settings"));
   await app.getByRole("button", { name: /^Profile/ }).tap();
-  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  if (!iPhone) await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
   const settings = app.locator(".t3s");
   await settings.getByRole("button", { name: section, exact: true }).tap();
   await expect(settings).toHaveAccessibleName(section);
@@ -372,7 +373,7 @@ test.describe("on an iPhone", () => {
         send({ phase: "move", x: width * 0.6, width, velocity: 0 });
         send({ phase: "end", x: width * 0.6, width, velocity: 0 });
       });
-    const settings = await openSettingsPage(app, "Add-ons");
+    const settings = await openSettingsPage(app, "Add-ons", { iPhone: true });
     await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
     await swipe();
     await expect(settings.getByRole("button", { name: "Add-ons", exact: true })).toBeVisible();
