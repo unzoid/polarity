@@ -529,9 +529,10 @@
     flex-wrap: wrap;
     row-gap: 0.75rem;
   }
+  /* Exactly, not at least: whatever a season's tab adds (the search, Skip Filler) centres in it. */
   .anime-seasons-bar > .seasons-picker,
   .anime-seasons-bar > .anime-episodes-tools {
-    min-height: 2.75rem;
+    height: 2.75rem;
   }
   .anime-seasons-bar > .seasons-picker {
     flex: 0 0 auto;
