@@ -388,6 +388,47 @@ test("a phone on its side: each player panel starts under its X, nothing under i
   }
 });
 
+test("the player's Sources panel fits a phone upright and sideways, add-on picker and all (#462)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const [width, height] of [
+    [412, 915],
+    [915, 412],
+  ]) {
+    await app.setViewportSize({ width, height });
+    const button = app.getByRole("button", { name: "Sources", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: width / 2, y: height / 2 } });
+    await button.tap();
+    const column = app.locator('.options-overlay[data-open="true"] .options-column');
+    // The fake add-ons are two: the picker shows, as the issue asks.
+    await expect(column.locator(".srcf-addon")).toBeVisible();
+    const box = async (sel: string) => (await column.locator(sel).first().boundingBox())!;
+    const col = (await column.boundingBox())!;
+    const [title, head, list] = [await box(".options-title"), await box(".options-head"), await box(".options-list")];
+    const at = `${width}×${height}`;
+    expect(col.x, at).toBeGreaterThanOrEqual(0);
+    expect(col.x + col.width, at).toBeLessThanOrEqual(width);
+    expect(col.y + col.height, at).toBeLessThanOrEqual(height);
+    // The filters sit under the title, not squeezed beside it.
+    for (const sel of [".srcf-bar > :first-child", ".srcf-addon", ".srcf-filters"]) {
+      const b = await box(sel);
+      expect(b.y, `${at}: ${sel} under the title`).toBeGreaterThanOrEqual(title.y + title.height);
+      expect(b.x + b.width, `${at}: ${sel} inside the panel`).toBeLessThanOrEqual(col.x + col.width + 1);
+    }
+    // Every row is the panel's width at most, and the list starts under the filters (its fade reaches 12px up).
+    const rows = await column.locator(".options-item").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const right of rows) expect(right, at).toBeLessThanOrEqual(col.x + col.width + 1);
+    expect(list.y + 12, at).toBeGreaterThanOrEqual(head.y + head.height);
+    expect(list.height, `${at}: room for the list`).toBeGreaterThan(80);
+    expect(await fitsWidth(app)).toBe(true);
+    await app.locator('.options-overlay[data-open="true"] .options-close').tap();
+    await expect(column).toHaveCount(0);
+  }
+});
+
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
