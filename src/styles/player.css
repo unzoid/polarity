@@ -1458,9 +1458,30 @@ img.load-mark-base[data-logo-look^="halo"] {
 .player-status[data-failed="true"] .load-mark-fill {
   display: none;
 }
-.player-status-where {
+/* Failed: where it stopped, and the log behind a quiet text button (PlayerStatus). */
+.player-status-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
   margin: -0.5rem 0 0;
+}
+.player-status-where {
+  margin: 0;
   color: var(--text-3);
+}
+.player-status-log {
+  padding: 0;
+  color: var(--text-2);
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .player-status-log:hover {
+    color: var(--text);
+  }
 }
 
 /* The steps under the loading bar: the last few while it loads, the whole log

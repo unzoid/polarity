@@ -755,6 +755,10 @@
   gap: 0.5rem;
   min-width: 0;
 }
+/* TV folds each row to one line (TvChipRow): the chips get the row's whole width, which is what it measures. */
+.srcf-tv .srcf-chips {
+  flex: 1;
+}
 .srcf-chips .source-chip {
   display: inline-flex;
   align-items: center;

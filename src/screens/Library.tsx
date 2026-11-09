@@ -2,8 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Dropdown } from "../components/Dropdown";
 import { ConfirmDeleteButton } from "../components/ConfirmDeleteButton";
 import { DownloadGlyph } from "../components/DownloadButton";
-import { Bookmark, ChevronLeft, ChevronRight, Close, Download, PlaylistIcon, Play, Plus, Watched } from "../components/icons";
-import { Img } from "../components/Img";
+import { ChevronLeft, ChevronRight, Close, Download, Play, Plus, Trailer } from "../components/icons";
 import { PlaylistTile, usePlaylistItem } from "../components/Playlists";
 import { PosterCard } from "../components/PosterCard";
 import { Card, ProgressBar } from "../components/title/Card";
@@ -49,10 +48,9 @@ const SORTS: { value: Sort; label: string }[] = [
 ];
 
 /**
- * Your titles, nothing suggested. Laid out like Apple Music's library: the
- * collections up top as big tiles (Saved, Playlists, Downloads, Watched),
- * each with its count, then a shelf of the latest from each. A tile or "See
- * All" opens the whole collection (route `library-collection`); a playlist
+ * Your titles, nothing suggested. Laid out like Netflix's My Netflix: Downloads
+ * as a panel up top, then a shelf from each collection. A shelf's heading opens
+ * the whole collection (route `library-collection`), as Home's do; a playlist
  * opens from there (route `playlist`), so Esc and Back step out one page at a time.
  */
 export function Library() {
@@ -121,14 +119,6 @@ function Overview({ onOpen }: { onOpen: (o: Open) => void }) {
   const { data: downloads } = useDownloads();
   const playlists = usePlaylists();
   const dl = downloads ?? [];
-  const finished = dl.filter((d) => d.state === "done");
-  const moving = dl.length - finished.length;
-  const bytes = finished.reduce((n, d) => n + (d.total ?? d.received), 0);
-  const seeAll = (view: Collection) => (
-    <button className="library-see-all t-callout" onClick={() => onOpen({ view })}>
-      See All <ChevronRight size={14} strokeWidth={2.25} />
-    </button>
-  );
   const { data: recentFiles = [] } = useRecentFiles();
   const nothing = saved?.length === 0 && history?.length === 0 && playlists.length === 0 && dl.length === 0 && !recentFiles.length;
 
@@ -137,72 +127,36 @@ function Overview({ onOpen }: { onOpen: (o: Open) => void }) {
       <header className="screen-header">
         <h1 className="t-title1">Library</h1>
       </header>
-      <div className="library-collections">
-        <CollectionTile
-          icon={<Bookmark size={22} />}
-          title="Saved"
-          detail={count(saved?.length, "title")}
-          art={saved?.[0]?.poster}
-          onOpen={() => onOpen({ view: "saved" })}
-        />
-        <CollectionTile
-          icon={<PlaylistIcon size={22} />}
-          title="Playlists"
-          detail={count(playlists.length, "playlist")}
-          art={playlists.find((p) => p.items.length)?.items[0]?.poster}
-          onOpen={() => onOpen({ view: "playlists" })}
-        />
-        <CollectionTile
-          icon={<Download size={22} />}
-          title="Downloads"
-          detail={moving ? `${moving} downloading` : finished.length ? `${count(finished.length, "video")} · ${formatBytes(bytes)}` : "None yet"}
-          art={dl[0]?.background ?? dl[0]?.poster}
-          onOpen={() => onOpen({ view: "downloads" })}
-        />
-        <CollectionTile
-          icon={<Watched size={22} />}
-          title="Watched"
-          detail={count(history?.length, "title")}
-          art={history?.[0]?.background ?? history?.[0]?.poster}
-          onOpen={() => onOpen({ view: "watched" })}
-        />
-      </div>
+      <DownloadsPanel downloads={dl} onOpen={() => onOpen({ view: "downloads" })} />
 
       {nothing && <EmptyState>Titles you save, download, watch or put in a playlist gather here.</EmptyState>}
 
       <div className="rows library-rows">
-        {recentFiles.length > 0 && (
-          <Row title="Recent Files" shape="landscape">
-            {recentFiles.map((f) => (
-              <RecentFileCard key={f.path} file={f} />
-            ))}
-          </Row>
-        )}
-        {dl.length > 0 && (
-          <Row title="Downloads" shape="landscape" action={seeAll("downloads")}>
-            {dl.slice(0, 16).map((d) => (
-              <DownloadCard key={d.id} d={d} onOpen={() => onOpen({ view: "downloads" })} />
+        {!!history?.length && (
+          <Row title="Recently Watched" onOpen={() => onOpen({ view: "watched" })}>
+            {history.slice(0, 20).map((p) => (
+              <PosterCard key={p.metaId} item={progressItem(p)} progress={progressFraction(p)} entry={p} />
             ))}
           </Row>
         )}
         {!!saved?.length && (
-          <Row title="Recently Saved" action={seeAll("saved")}>
+          <Row title="Saved" onOpen={() => onOpen({ view: "saved" })}>
             {saved.slice(0, 20).map((item) => (
               <PosterCard key={item.id} item={item} watching={watching.get(item.id)} />
             ))}
           </Row>
         )}
-        {playlists.length > 0 && (
-          <Row title="Playlists" action={seeAll("playlists")}>
-            {playlists.map((p) => (
-              <PlaylistTile key={p.id} playlist={p} onOpen={() => onOpen({ view: "playlist", id: p.id, fresh: false })} />
-            ))}
-          </Row>
-        )}
-        {!!history?.length && (
-          <Row title="Recently Watched" action={seeAll("watched")}>
-            {history.slice(0, 20).map((p) => (
-              <PosterCard key={p.metaId} item={progressItem(p)} progress={progressFraction(p)} entry={p} />
+        {/* Always shown, so a first playlist can be started from here. */}
+        <Row title="Playlists" onOpen={() => onOpen({ view: "playlists" })}>
+          {playlists.map((p) => (
+            <PlaylistTile key={p.id} playlist={p} onOpen={() => onOpen({ view: "playlist", id: p.id, fresh: false })} />
+          ))}
+          {playlists.length < MAX_PLAYLISTS && <NewPlaylistTile onCreate={(id) => onOpen({ view: "playlist", id, fresh: true })} />}
+        </Row>
+        {recentFiles.length > 0 && (
+          <Row title="Recent Files" shape="landscape">
+            {recentFiles.map((f) => (
+              <RecentFileCard key={f.path} file={f} />
             ))}
           </Row>
         )}
@@ -211,19 +165,59 @@ function Overview({ onOpen }: { onOpen: (o: Open) => void }) {
   );
 }
 
-const count = (n: number | undefined, noun: string) => (n == null ? "" : n === 0 ? "None yet" : `${n} ${noun}${n === 1 ? "" : "s"}`);
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-/** A collection as a big tile: its latest art washed out behind an icon, the name and a count. */
-function CollectionTile({ icon, title, detail, art, onOpen }: { icon: ReactNode; title: string; detail: string; art?: string; onOpen: () => void }) {
+/**
+ * Downloads as one panel up top, as on Netflix: a heading that opens the full
+ * page, what's on this device inside it, or where downloads will show when
+ * there are none yet.
+ */
+function DownloadsPanel({ downloads, onOpen }: { downloads: DownloadRecord[]; onOpen: () => void }) {
+  const finished = downloads.filter((d) => d.state === "done");
+  const moving = downloads.length - finished.length;
+  const bytes = finished.reduce((n, d) => n + (d.total ?? d.received), 0);
+  const detail = moving
+    ? `${moving} downloading`
+    : finished.length
+      ? `${count(finished.length, "video")} · ${formatBytes(bytes)}`
+      : "Videos you download appear here.";
   return (
-    <button className="library-tile pressable" onClick={onOpen}>
-      {art && <Img src={art} alt="" className="library-tile-art" />}
-      <span className="library-tile-icon">{icon}</span>
-      <span className="library-tile-text">
-        <span className="library-tile-title">{title}</span>
-        <span className="library-tile-detail tabular">{detail}</span>
-      </span>
-      <ChevronRight size={18} className="library-tile-chevron" />
+    <section className="library-panel">
+      <button className="library-panel-head" onClick={onOpen}>
+        <span className="library-panel-icon">
+          <Download size={20} />
+        </span>
+        <span className="library-panel-text">
+          <span className="library-panel-title">Downloads</span>
+          <span className="library-panel-detail tabular">{detail}</span>
+        </span>
+        <ChevronRight size={20} className="library-panel-chevron" />
+      </button>
+      {downloads.length > 0 && (
+        <Row shape="landscape">
+          {downloads.slice(0, 16).map((d) => (
+            <DownloadCard key={d.id} d={d} onOpen={onOpen} />
+          ))}
+        </Row>
+      )}
+    </section>
+  );
+}
+
+/** The last tile among playlists: starts one and opens it with its name ready to type over. */
+function NewPlaylistTile({ onCreate }: { onCreate: (id: string) => void }) {
+  return (
+    <button
+      className="card card-poster playlist-tile"
+      onClick={() => {
+        const p = createPlaylist("New Playlist");
+        if (p) onCreate(p.id);
+      }}
+    >
+      <div className="card-frame playlist-new">
+        <Plus size={28} />
+        <span className="t-callout">New Playlist</span>
+      </div>
     </button>
   );
 }
@@ -270,7 +264,11 @@ function RecentFileCard({ file }: { file: RecentFile }) {
     <Card
       shape="landscape"
       className="recent-file-card"
-      fallback={<StillPlaceholder />}
+      fallback={
+        <span className="recent-file-placeholder" aria-hidden>
+          <Trailer size={28} />
+        </span>
+      }
       title={fileTitle(file.name)}
       detail={detail}
       hint={file.name}
@@ -395,14 +393,7 @@ function Playlists({ onOpen }: { onOpen: (id: string, isNew?: boolean) => void }
         {playlists.map((p) => (
           <PlaylistTile key={p.id} playlist={p} onOpen={() => onOpen(p.id)} />
         ))}
-        {playlists.length < MAX_PLAYLISTS && (
-          <button className="card card-poster playlist-tile" onClick={() => onOpen(createPlaylist("New Playlist")!.id, true)}>
-            <div className="card-frame playlist-new">
-              <Plus size={28} />
-              <span className="t-callout">New Playlist</span>
-            </div>
-          </button>
-        )}
+        {playlists.length < MAX_PLAYLISTS && <NewPlaylistTile onCreate={(id) => onOpen(id, true)} />}
       </PosterGrid>
     </>
   );

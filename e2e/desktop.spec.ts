@@ -1003,15 +1003,15 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   await expect(seasons.locator(".episode-card")).toHaveCount(SAGA.first.episodes, { timeout: 15_000 });
   await expect(download).toBeVisible();
   const first = await place();
-  // The long series' tab adds the episode ranges, the search and Skip filler.
+  // The long series' tab adds the episode ranges, the search and Skip Filler.
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
-  await expect(tools.locator(".anime-episode-search")).toBeVisible({ timeout: 15_000 });
-  await expect(tools.getByText("Skip filler")).toBeVisible();
+  await expect(tools.locator(".expanding-search")).toBeVisible({ timeout: 15_000 });
+  await expect(tools.getByText("Skip Filler")).toBeVisible();
   await expect(download).toBeVisible();
   expect((await place()).download[1]).toBe(first.download[1]);
   expect((await place()).layout[1]).toBe(first.layout[1]);
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "Season 1" }).click();
-  await expect(tools.locator(".anime-episode-search")).toHaveCount(0, { timeout: 15_000 });
+  await expect(tools.locator(".expanding-search")).toHaveCount(0, { timeout: 15_000 });
   expect(await place()).toEqual(first);
 
   // The least window width (tauri.conf.json), less a Windows scrollbar (17 px), on the long series' last range, the longest label.
@@ -1023,7 +1023,7 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   await app.getByRole("option", { name: "Episodes 1101–1200" }).click();
   await expect(ranges).toContainText("Episodes 1101–1200");
   // Each control whole: inside the window, and not clipped by anything around it.
-  const controls = [ranges, tools.locator(".anime-episode-search"), tools.locator(".anime-toggle"), download, layout];
+  const controls = [ranges, tools.locator(".expanding-search-icon"), tools.locator(".anime-filler-chip"), download, layout];
   for (const control of controls) {
     const cut = await control.evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -1050,7 +1050,9 @@ test("a long anime lists the episodes its series' catalog skips, between their n
   await expect(app.locator(".row").first()).toBeVisible();
   await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), GAP_ANIME.anilist);
   const page = app.locator(`.anime-detail[data-anime="${GAP_ANIME.anilist}"]`).last();
-  const find = page.getByRole("searchbox", { name: "Find an episode by number or title" });
+  // The search waits as a round button; pressed, it opens into the field.
+  await page.getByRole("button", { name: "Find an episode by number or title" }).click();
+  const find = page.getByRole("textbox", { name: "Find an episode by number or title" });
   // 99 and 102 are the catalog's own episodes; 100 and 101 aren't in it.
   for (const [n, id] of [
     [99, `${GAP_ANIME.imdb}:2:49`],
@@ -1901,7 +1903,7 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await expect(app.locator(".downloads-summary")).toContainText("75 downloads · 77.5 GB");
   await expect(app.getByRole("region", { name: "In progress" }).locator(".download-row")).toHaveCount(3);
   // Collapsed: one row per title, no episode rows showing.
-  const titles = app.locator(".downloads-library > .download-title");
+  const titles = app.locator(".downloads-library .downloads-panel > .download-title");
   await expect(titles).toHaveCount(13);
   await expect(app.locator(".download-fold[data-open]")).toHaveCount(0);
 
@@ -1912,11 +1914,11 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await app.reload();
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Library", exact: true }).click();
   await app.getByRole("button", { name: /^Downloads/ }).first().click();
-  await expect(app.locator(".downloads-library > .download-title").filter({ hasText: "Fieldwork" }).getByRole("button", { name: /^Season 1/ })).toBeVisible();
+  await expect(app.locator(".downloads-library .downloads-panel > .download-title").filter({ hasText: "Fieldwork" }).getByRole("button", { name: /^Season 1/ })).toBeVisible();
 
   // Search finds a title; In Progress shows only what's coming down.
   await app.getByRole("searchbox", { name: "Search downloads" }).fill("blue h");
-  await expect(app.locator(".downloads-library > .download-title")).toHaveCount(1);
+  await expect(app.locator(".downloads-library .downloads-panel > .download-title")).toHaveCount(1);
   await app.getByRole("searchbox", { name: "Search downloads" }).fill("");
   await app.getByRole("radio", { name: "In Progress" }).click();
   await expect(app.locator(".downloads-library")).toHaveCount(0);
@@ -1933,8 +1935,10 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await app.getByRole("button", { name: "Select", exact: true }).click();
   await app.getByRole("checkbox", { name: "Select Northbound" }).check();
   await titles.filter({ hasText: "Fieldwork" }).getByRole("checkbox", { name: "Select every episode of Season 2" }).check();
-  await app.getByRole("button", { name: /^Delete Selected \(4\)$/ }).click();
-  await app.getByRole("button", { name: /^Click again: Delete Selected/ }).click();
+  const selectionBar = app.getByRole("region", { name: "Selection" });
+  await expect(selectionBar).toContainText("4 selected");
+  await selectionBar.getByRole("button", { name: "Delete", exact: true }).click();
+  await selectionBar.getByRole("button", { name: "Click again: Delete", exact: true }).click();
   await expect(app.locator(".downloads-summary")).toContainText("62 downloads");
   await expect(titles.filter({ hasText: "Northbound" })).toHaveCount(0);
 });
