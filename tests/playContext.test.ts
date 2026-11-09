@@ -76,6 +76,19 @@ describe("playContext", () => {
     expect(again.altIds("tt0000103:1:1")).toEqual(["kitsu:41:1"]);
   });
 
+  test("#422: a later season keeps its own titles for its episodes, a first season none", () => {
+    const disk = memory();
+    const s = playContextStore(disk);
+    s.remember("tt0000108", { kitsu: 81, anilist: 91, names: ["Made Up Show"] }, [["tt0000108:1:6", 6, 6]]);
+    s.remember("tt0000108", { kitsu: 82, anilist: 92, names: ["Made Up Show: The Second Arc", "Made Up Show 2nd Season"] }, [["tt0000108:2:6", 6, 176]]);
+    const again = playContextStore(disk);
+    expect(again.seasonNames("tt0000108:1:6")).toBeUndefined();
+    expect(again.seasonNames("tt0000108:2:6")).toEqual(["Made Up Show: The Second Arc", "Made Up Show 2nd Season"]);
+    // Lined up again without titles: they go.
+    again.remember("tt0000108", { kitsu: 82, anilist: 92 }, [["tt0000108:2:6", 6, 176]]);
+    expect(again.seasonNames("tt0000108:2:6")).toBeUndefined();
+  });
+
   test("#225: numbers that would ask for another episode are thrown away", () => {
     const s = playContextStore(memory());
     s.remember("tt0000104", { kitsu: 51, count: 12 }, [

@@ -18,7 +18,7 @@ import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
 import { ControllerToast } from "./tv/TvChrome";
 import { isTvMode, setTvMode, useTvMode } from "./tv/tvMode";
-import { dismissDepth, lazyNamed, pressEscape, systemBackAction, useFormFactor, usePageFocus, usePageMotion, useSystemBack } from "./lib/ui";
+import { dismissDepth, lazyNamed, pressEscape, systemBackAction, useFormFactor, usePageFocus, usePageMotion, useSystemBack, watchInputModality } from "./lib/ui";
 import { CardMenuHost } from "./components/CardMenu";
 import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
@@ -298,6 +298,8 @@ function DesktopApp() {
   // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
   const motion = usePageMotion(pages, useFormFactor().form === "phone" && !playing);
   const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
+  // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
+  useEffect(watchInputModality, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

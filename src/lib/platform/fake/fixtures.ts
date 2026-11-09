@@ -122,6 +122,8 @@ function basePreview(type: "movie" | "series", name: string, i: number): MetaPre
  * script serves under /readme-shots/ (docs/screenshots.md says how they're licensed and credited).
  */
 export const FILMS = new URLSearchParams(location.search).get("films") === "1";
+/** `fake.html?logos=1`: every title has a logo (made up, on art.example, which a test answers), as TMDB's titles mostly do (#437). */
+const LOGOS = new URLSearchParams(location.search).get("logos") === "1";
 const OPEN_FILMS: [key: string, name: string, year: string, genres: string[], description: string][] = [
   ["sintel", "Sintel", "2010", ["Animation", "Fantasy"], "A young woman crosses snow, desert and city alone, searching for the baby dragon she once nursed back to health."],
   ["tears-of-steel", "Tears of Steel", "2012", ["Sci-Fi", "Action"], "In a future Amsterdam, a band of scientists and soldiers stage one last scene to stop an army of robots."],
@@ -252,7 +254,7 @@ function baseMeta(id: string): Meta | null {
   const p = all[i];
   return {
     ...p,
-    logo: undefined,
+    logo: LOGOS ? `https://art.example/logo/${p.id}.svg` : undefined,
     runtime: p.type === "movie" ? "118 min" : "52 min",
     cast: ["Ada Brennan", "Tomas Okafor", "Mei Lindqvist", "Rafael Duarte", "June Halloway"],
     director: ["Ines Marchetti"],
