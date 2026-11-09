@@ -37,7 +37,7 @@ import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
 import { UpdateToast, WhatsNewSheet } from "./components/Updates";
 import { startUpdateChecks } from "./lib/updater";
-import { appWindow, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
+import { appWindow, guardTaps, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
 import { PartyHost } from "./components/party/PartyHost";
 import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
@@ -256,6 +256,8 @@ function MainApp() {
 
   // iOS sends no contextmenu for a finger held down: a long press on a title opens its options all the same.
   useEffect(() => (longPressMenus ? onLongPress((held) => openContextMenu(held)) : undefined), []);
+  // A touch that scrolled, or stopped a list gliding after a fling, opens nothing (#459).
+  useEffect(() => guardTaps(), []);
 
   // Switching modes works from anywhere, the player included (Settings → Controls to rebind).
   useEffect(() => {
