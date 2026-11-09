@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { describeTorrent, PEERS_KEY, torrentBlocked, torrentLimits } from "../src/lib/playback/torrent";
+import { describeTorrent, NO_TORRENT_ENGINE, PEERS_KEY, torrentBlocked, torrentLimits } from "../src/lib/playback/torrent";
 import { describeStream, formatReport, STAGE_LABEL } from "../src/lib/playback/startLog";
 
 test("torrent steps read as plain lines", () => {
@@ -53,7 +53,18 @@ test("battery saver keeps nothing for sharing after playback (#207)", () => {
 });
 
 test("on mobile data a torrent waits for Wi-Fi unless the setting allows it (#207)", () => {
-  expect(torrentBlocked({ torrentMobileData: false }, true)).toContain("Settings → Sources");
+  expect(torrentBlocked({ torrentMobileData: false }, true)?.reason).toContain("Settings → Sources");
+  expect(torrentBlocked({ torrentMobileData: false }, true)?.settings).toBe(true);
   expect(torrentBlocked({ torrentMobileData: true }, true)).toBeNull();
   expect(torrentBlocked({ torrentMobileData: false }, false)).toBeNull();
+});
+
+test("without a torrent engine (iOS) a torrent never starts, on any connection, and no setting changes that (#458)", () => {
+  for (const [allowed, mobile] of [
+    [true, false],
+    [true, true],
+    [false, true],
+  ] as const) {
+    expect(torrentBlocked({ torrentMobileData: allowed }, mobile, false)).toEqual({ reason: NO_TORRENT_ENGINE, settings: false });
+  }
 });

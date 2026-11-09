@@ -26,11 +26,26 @@ export const torrentLimits = (
   keepSharing: p.torrentKeepSharing && !batterySaver,
 });
 
-/** Why a torrent source won't start on this connection, if it won't (#207): mobile data while the setting is off. */
-export const torrentBlocked = (p: Pick<Prefs, "torrentMobileData">, onMobileData: boolean): string | null =>
-  onMobileData && !p.torrentMobileData
-    ? "Torrent sources don't play on mobile data. Connect to Wi-Fi, or turn on Play torrent streams on mobile data in Settings → Sources."
+/** What a source list and the player say about a torrent on a device without the engine (iOS, #458). */
+export const NO_TORRENT_ENGINE = "Torrent sources can't play on this device.";
+
+/**
+ * Why a torrent source won't start here, if it won't: no torrent engine on this device (#458), or mobile
+ * data while the setting is off (#207). `settings`: whether a setting can change it.
+ */
+export function torrentBlocked(
+  p: Pick<Prefs, "torrentMobileData">,
+  onMobileData: boolean,
+  playsHere = true,
+): { reason: string; settings: boolean } | null {
+  if (!playsHere) return { reason: NO_TORRENT_ENGINE, settings: false };
+  return onMobileData && !p.torrentMobileData
+    ? {
+        reason: "Torrent sources don't play on mobile data. Connect to Wi-Fi, or turn on Play torrent streams on mobile data in Settings → Sources.",
+        settings: true,
+      }
     : null;
+}
 
 export type TorrentStep =
   | { kind: "searching"; trackers: number; dht: boolean }
