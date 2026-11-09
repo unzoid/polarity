@@ -1003,15 +1003,15 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   await expect(seasons.locator(".episode-card")).toHaveCount(SAGA.first.episodes, { timeout: 15_000 });
   await expect(download).toBeVisible();
   const first = await place();
-  // The long series' tab adds the episode ranges, the search and Skip filler.
+  // The long series' tab adds the episode ranges, the search and Skip Filler.
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
-  await expect(tools.locator(".anime-episode-search")).toBeVisible({ timeout: 15_000 });
-  await expect(tools.getByText("Skip filler")).toBeVisible();
+  await expect(tools.locator(".expanding-search")).toBeVisible({ timeout: 15_000 });
+  await expect(tools.getByText("Skip Filler")).toBeVisible();
   await expect(download).toBeVisible();
   expect((await place()).download[1]).toBe(first.download[1]);
   expect((await place()).layout[1]).toBe(first.layout[1]);
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "Season 1" }).click();
-  await expect(tools.locator(".anime-episode-search")).toHaveCount(0, { timeout: 15_000 });
+  await expect(tools.locator(".expanding-search")).toHaveCount(0, { timeout: 15_000 });
   expect(await place()).toEqual(first);
 
   // The least window width (tauri.conf.json), less a Windows scrollbar (17 px), on the long series' last range, the longest label.
@@ -1023,7 +1023,7 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   await app.getByRole("option", { name: "Episodes 1101–1200" }).click();
   await expect(ranges).toContainText("Episodes 1101–1200");
   // Each control whole: inside the window, and not clipped by anything around it.
-  const controls = [ranges, tools.locator(".anime-episode-search"), tools.locator(".anime-toggle"), download, layout];
+  const controls = [ranges, tools.locator(".expanding-search-icon"), tools.locator(".anime-filler-chip"), download, layout];
   for (const control of controls) {
     const cut = await control.evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -1050,7 +1050,9 @@ test("a long anime lists the episodes its series' catalog skips, between their n
   await expect(app.locator(".row").first()).toBeVisible();
   await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), GAP_ANIME.anilist);
   const page = app.locator(`.anime-detail[data-anime="${GAP_ANIME.anilist}"]`).last();
-  const find = page.getByRole("searchbox", { name: "Find an episode by number or title" });
+  // The search waits as a round button; pressed, it opens into the field.
+  await page.getByRole("button", { name: "Find an episode by number or title" }).click();
+  const find = page.getByRole("textbox", { name: "Find an episode by number or title" });
   // 99 and 102 are the catalog's own episodes; 100 and 101 aren't in it.
   for (const [n, id] of [
     [99, `${GAP_ANIME.imdb}:2:49`],
@@ -1492,7 +1494,7 @@ test("the player's episode rail shows the playing and focused cards' whole ring 
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
-  type Sent = { details: string; buttons?: { label: string; url: string }[] } | null;
+  type Sent = { details: string; buttons?: { label: string; url: string }[]; join?: { party: string; secret: string; size: [number, number]; ask: boolean } } | null;
   const sentToDiscord = (page: Page) => page.evaluate(() => ((window as { __discord?: unknown[] }).__discord ?? []) as Sent[]);
 
   async function showOnDiscord(page: Page, mode: string) {
@@ -1505,27 +1507,34 @@ test.describe("signed in, on a fresh profile", () => {
     await settings.getByRole("button", { name: "Close settings" }).click();
   }
 
-  test("someone with the Join watch party link asks, the host allows, and they're in the party (#153, #154)", async ({ app }) => {
+  test("someone pressing Join on Discord asks, the host allows, and they're in the party (#153, #154, #357)", async ({ app }) => {
     await showOnDiscord(app, "That you're watching");
     await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
     await card(app, "The Glass Orchard").click();
     await app.getByRole("button", { name: "Play", exact: true }).click();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-    // Not in a party: no join button.
+    // Not in a party: nothing to join.
     await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.details).toBe("Watching on Polarity");
     expect((await sentToDiscord(app)).at(-1)?.buttons).toBeUndefined();
+    expect((await sentToDiscord(app)).at(-1)?.join).toBeUndefined();
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
     await app.keyboard.press("Escape");
 
-    await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.buttons?.[0]?.label).toBe("Join watch party");
-    const url = new URL((await sentToDiscord(app)).at(-1)!.buttons![0].url);
-    expect(url.origin + url.pathname).toBe("https://getpolar.app/party/");
-    const token = url.searchParams.get("t")!;
+    // In the party: Discord's own Join (Ask to Join, with "Ask me") carrying the join token, and no buttons.
+    await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.join?.secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const join = (await sentToDiscord(app)).at(-1)!.join!;
+    expect((await sentToDiscord(app)).at(-1)?.buttons).toBeUndefined();
+    expect(join.ask).toBe(true);
+    expect(join.size).toEqual([1, 10]);
+    const token = join.secret;
     // The party code isn't in it.
     const code = (await app.evaluate(() => document.body.innerText)).match(/\b[A-Z0-9]{6}\b/g) ?? [];
-    for (const c of code) expect(url.href).not.toContain(c);
+    for (const c of code) {
+      expect(join.secret).not.toContain(c);
+      expect(join.party).not.toContain(c);
+    }
 
     // Someone else's Polarity, in another page of the same browser.
     const joiner = await app.context().newPage();
@@ -1533,6 +1542,7 @@ test.describe("signed in, on a fresh profile", () => {
     await serveMedia(joiner);
     await joiner.goto("/fake.html?account=1");
     await expect(joiner.locator("#root > *").first()).toBeAttached();
+    // Discord hands the join to the joiner's Polarity, which takes it as this link (src-tauri/src/deep_link.rs).
     await joiner.evaluate((t) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://party/${t}`), token);
     // Nothing is asked until the joiner says so.
     const question = joiner.getByRole("dialog", { name: "Join a watch party?" });
@@ -1893,7 +1903,7 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await expect(app.locator(".downloads-summary")).toContainText("75 downloads · 77.5 GB");
   await expect(app.getByRole("region", { name: "In progress" }).locator(".download-row")).toHaveCount(3);
   // Collapsed: one row per title, no episode rows showing.
-  const titles = app.locator(".downloads-library > .download-title");
+  const titles = app.locator(".downloads-library .downloads-panel > .download-title");
   await expect(titles).toHaveCount(13);
   await expect(app.locator(".download-fold[data-open]")).toHaveCount(0);
 
@@ -1904,11 +1914,11 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await app.reload();
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Library", exact: true }).click();
   await app.getByRole("button", { name: /^Downloads/ }).first().click();
-  await expect(app.locator(".downloads-library > .download-title").filter({ hasText: "Fieldwork" }).getByRole("button", { name: /^Season 1/ })).toBeVisible();
+  await expect(app.locator(".downloads-library .downloads-panel > .download-title").filter({ hasText: "Fieldwork" }).getByRole("button", { name: /^Season 1/ })).toBeVisible();
 
   // Search finds a title; In Progress shows only what's coming down.
   await app.getByRole("searchbox", { name: "Search downloads" }).fill("blue h");
-  await expect(app.locator(".downloads-library > .download-title")).toHaveCount(1);
+  await expect(app.locator(".downloads-library .downloads-panel > .download-title")).toHaveCount(1);
   await app.getByRole("searchbox", { name: "Search downloads" }).fill("");
   await app.getByRole("radio", { name: "In Progress" }).click();
   await expect(app.locator(".downloads-library")).toHaveCount(0);
@@ -1925,8 +1935,10 @@ test("Downloads with 50+ downloads: collapsed titles, totals, search, one-action
   await app.getByRole("button", { name: "Select", exact: true }).click();
   await app.getByRole("checkbox", { name: "Select Northbound" }).check();
   await titles.filter({ hasText: "Fieldwork" }).getByRole("checkbox", { name: "Select every episode of Season 2" }).check();
-  await app.getByRole("button", { name: /^Delete Selected \(4\)$/ }).click();
-  await app.getByRole("button", { name: /^Click again: Delete Selected/ }).click();
+  const selectionBar = app.getByRole("region", { name: "Selection" });
+  await expect(selectionBar).toContainText("4 selected");
+  await selectionBar.getByRole("button", { name: "Delete", exact: true }).click();
+  await selectionBar.getByRole("button", { name: "Click again: Delete", exact: true }).click();
   await expect(app.locator(".downloads-summary")).toContainText("62 downloads");
   await expect(titles.filter({ hasText: "Northbound" })).toHaveCount(0);
 });

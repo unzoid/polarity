@@ -1470,9 +1470,30 @@ img.load-mark-base[data-logo-look^="halo"] {
 .player-status[data-failed="true"] .load-mark-fill {
   display: none;
 }
-.player-status-where {
+/* Failed: where it stopped, and the log behind a quiet text button (PlayerStatus). */
+.player-status-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
   margin: -0.5rem 0 0;
+}
+.player-status-where {
+  margin: 0;
   color: var(--text-3);
+}
+.player-status-log {
+  padding: 0;
+  color: var(--text-2);
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .player-status-log:hover {
+    color: var(--text);
+  }
 }
 
 /* The steps under the loading bar: the last few while it loads, the whole log
@@ -1966,6 +1987,18 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root[data-compact="true"] .options-close {
   top: calc(0.75rem + var(--safe-top));
   left: 0.75rem;
+}
+/* A phone on its side (#464): centred at up to 80% of a short screen, a panel's heading came up under the
+   close button. The panels get the screen under the button's band (its top, its 44px and a gap) instead. */
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) {
+  --options-band: calc(1rem + var(--safe-top) + 44px + 0.5rem);
+  padding: var(--options-band) 0 calc(0.75rem + var(--safe-bottom));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column {
+  max-height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column:has(.srcf:not(.srcf-tv)) {
+  height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
 }
 
 /* --- Episodes (EpisodeRail.tsx): the season dropdown, then the season's episodes side by side,

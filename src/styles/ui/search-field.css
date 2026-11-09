@@ -128,3 +128,103 @@
   width: 36px;
   height: 36px;
 }
+
+/* --- ExpandingSearch: a round glass button among a toolbar's pills that opens
+       leftwards into a field, as the navbar's search does. The box always has its
+       full width; closed, clip-path cuts it down to the circle and a negative
+       margin takes the rest out of the layout, so opening moves no neighbours to
+       its right and animates only clip-path and the icon's transform. */
+.expanding-search {
+  --search-w: clamp(13rem, 20vw, 17rem);
+  --search-h: 38px;
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: var(--search-w);
+  height: var(--search-h);
+  margin-left: calc(var(--search-h) - var(--search-w));
+  padding-left: var(--search-h);
+  padding-right: 0.25rem;
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: inset 0 0 0 1px var(--glass-edge);
+  clip-path: inset(0 0 0 calc(100% - var(--search-h)) round calc(var(--search-h) / 2));
+  transition: clip-path var(--dur-base) var(--ease-out);
+}
+.expanding-search[data-open="true"] {
+  margin-left: 0;
+  clip-path: inset(0 round calc(var(--search-h) / 2));
+}
+.expanding-search-icon {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: var(--search-h);
+  height: var(--search-h);
+  border-radius: var(--r-round);
+  color: var(--text);
+  transform: translateX(calc(var(--search-w) - var(--search-h)));
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-std);
+}
+.expanding-search[data-open="true"] .expanding-search-icon {
+  transform: none;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.expanding-search-icon:active {
+  background: var(--fill-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .expanding-search:not([data-open="true"]) .expanding-search-icon:hover {
+    background: var(--fill-2);
+  }
+}
+.expanding-search-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.expanding-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+.expanding-search[data-open="true"] input {
+  opacity: 1;
+  pointer-events: auto;
+}
+.expanding-search input::placeholder {
+  color: var(--text-3);
+}
+.expanding-search-clear {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-round);
+  color: var(--text-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .expanding-search {
+    transition: none;
+  }
+  .expanding-search-icon {
+    transition-property: background-color;
+  }
+}

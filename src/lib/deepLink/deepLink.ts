@@ -91,5 +91,5 @@ export function watchPage(type: ContentType, id: string) {
   return isSharedId(id) ? `${SITE}/watch/?${new URLSearchParams({ type, id })}` : null;
 }
 
-/** "Join watch party": the website's page for a join token. */
+/** The website's page for a join token (Discord's own Join, #357, opens Polarity directly instead). */
 export const partyPage = (token: string) => `${SITE}/party/?${new URLSearchParams({ t: token })}`;

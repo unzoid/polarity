@@ -205,9 +205,96 @@ function TvBar({ f, note }: { f: SourceFilters; note?: string }) {
   return (
     <div className="srcf srcf-tv" data-nav-memory data-nav-group>
       {[...rest, sort].map((s) => (
-        <ChipRow key={s.label} {...s} />
+        <TvChipRow key={s.label} {...s} />
       ))}
       {note && <p className="srcf-tv-note t-caption">{note}</p>}
+    </div>
+  );
+}
+
+/**
+ * TV: one choice as a single line of chips. What doesn't fit on the line waits behind a "+N More" chip at its end,
+ * so the panel shows every choice at a glance instead of a wall of audio languages and release names; More
+ * opens the rest in place (and Show Less folds it again). A chip that's on is never folded away.
+ */
+function TvChipRow({ label, chips }: Section) {
+  const [open, setOpen] = useState(false);
+  // How many chips fit on the line with the More chip after them; null while measuring (everything drawn).
+  const [fit, setFit] = useState<number | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
+  const reveal = useRef<number | null>(null);
+  const list = chips.map((c) => c.key).join("|");
+
+  // Measured, since chip widths vary: drawn whole, then cut to the line. Again when the panel's width changes.
+  useLayoutEffect(() => setFit(null), [list]);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    // Width only: folding changes the height, which mustn't start another measure.
+    let width = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      setFit(null);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (fit !== null || !el) return;
+    const items = [...el.querySelectorAll<HTMLElement>(":scope > [data-chip]")];
+    if (!items.length) return setFit(0);
+    const top = items[0].offsetTop;
+    const onLine = items.findIndex((c) => c.offsetTop !== top);
+    if (onLine === -1) return setFit(chips.length);
+    // Right edges from the chips' own box (offsetLeft would count from an ancestor, label column and all).
+    const left = el.getBoundingClientRect().left;
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+    const room = el.clientWidth - (more.current?.offsetWidth ?? 0) - gap;
+    let n = onLine;
+    while (n > 1 && items[n - 1].getBoundingClientRect().right - left > room) n--;
+    setFit(n);
+  });
+
+  // After More, the first chip it brought in takes the focus, so the remote carries on where it was.
+  useLayoutEffect(() => {
+    if (reveal.current == null) return;
+    box.current?.querySelectorAll<HTMLElement>(":scope > [data-chip]")[reveal.current]?.focus();
+    reveal.current = null;
+  });
+
+  const folds = fit !== null && fit < chips.length;
+  const shown = fit === null || open || !folds ? chips : chips.filter((c, i) => i < fit || c.on);
+  const hidden = chips.length - shown.length;
+  return (
+    <div className="srcf-chiprow" role="group" aria-label={label}>
+      <div className="srcf-chiprow-head">
+        <span className="srcf-chiprow-label">{label}</span>
+      </div>
+      <div className="srcf-chips" ref={box} data-one-line={!open || undefined}>
+        {shown.map((c) => (
+          <Chip key={c.key} variant="choice" pressed={c.on} onClick={c.pick} data-chip>
+            {c.label}
+            {c.count != null && <span className="srcf-count tabular">{c.count}</span>}
+          </Chip>
+        ))}
+        {(fit === null || folds) && (
+          <Chip
+            ref={more}
+            variant="choice"
+            className="srcf-more"
+            aria-expanded={open}
+            onClick={() => {
+              if (!open) reveal.current = shown.length;
+              setOpen((o) => !o);
+            }}
+          >
+            {open ? "Show Less" : `+${hidden || chips.length} More`}
+          </Chip>
+        )}
+      </div>
     </div>
   );
 }

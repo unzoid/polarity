@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Settings as Cog, Plus, Puzzle, Trash } from "../../components/icons";
+import { ArrowDown, ArrowUp, Check, LinkIcon, Settings as Cog, Plus, Puzzle, Trash } from "../../components/icons";
+import { SwapIcon } from "../../components/SwapIcon";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { keys, useAddons } from "../../lib/net";
@@ -59,6 +60,7 @@ export function AddonsPage() {
               icon={Puzzle}
               title={a.manifest.name}
               caption={linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
+              accessory={<CopyLink url={a.manifestUrl} name={a.manifest.name} />}
               {...expand(a.manifest.id)}
             >
               {a.manifest.description && <p className="settings-expand-text">{a.manifest.description}</p>}
@@ -106,6 +108,29 @@ export function AddonsPage() {
       </Card>
       <StremioLinksCard />
     </>
+  );
+}
+
+/**
+ * Copies an installed add-on's manifest link, to install it elsewhere or share it. The glyph turns into a
+ * check for a moment to say it worked. The link is copied as it is, key included: that's what installs it.
+ */
+function CopyLink({ url, name }: { url: string; name: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+  return (
+    <IconButton
+      variant="settings"
+      label={copied ? `${name} link copied` : `Copy ${name} link`}
+      title={copied ? "Copied" : "Copy Link"}
+      onClick={() => void navigator.clipboard.writeText(url).then(() => setCopied(true), () => {})}
+    >
+      <SwapIcon state={copied ? "copied" : "copy"}>{copied ? <Check size={16} /> : <LinkIcon size={16} />}</SwapIcon>
+    </IconButton>
   );
 }
 

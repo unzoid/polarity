@@ -176,6 +176,23 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(profiles).toBeVisible();
 });
 
+test("an add-on's long name and description, unbroken words and a link among them, wrap inside Settings (#456)", async ({ app }) => {
+  await app.goto("/fake.html?worst=1");
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: "Add-ons", exact: true }).tap();
+  const row = settings.getByRole("button", { name: /^Community Archive of Restored Public-Domain Cinema/ });
+  await row.tap();
+  const description = settings.getByText(/ExampleProvider1\/ExampleProvider2/);
+  await expect(description).toBeVisible();
+  expect(await fitsWidth(app)).toBe(true);
+  // The description itself stays on the screen: its words wrap rather than run off the right.
+  const box = await description.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(app.viewportSize()!.width);
+  expect(await description.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
 /** A notched phone's insets (in CSS px), set on the page as the webview would report them. */
 async function insets(page: Page, i: { top: number; right: number; bottom: number; left: number }) {
   await page.evaluate((i) => {
@@ -321,6 +338,33 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
   await expect(app.locator(".sheet")).toBeVisible();
 });
 
+test("a phone on its side: each player panel starts under its X, nothing under it (#464)", async ({ app }) => {
+  await app.setViewportSize({ width: 915, height: 412 });
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const name of ["Subtitles & Audio", "Sources"]) {
+    const button = app.getByRole("button", { name, exact: true });
+    // The controls may have hidden: a tap on the picture brings them back.
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 450, y: 200 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    const close = overlay.locator(".options-close");
+    await expect(close).toBeVisible();
+    const x = (await close.boundingBox())!;
+    const columns = await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    expect(columns.length).toBeGreaterThan(0);
+    for (const c of columns) {
+      const apart = c.right <= x.x || c.left >= x.x + x.width || c.bottom <= x.y || c.top >= x.y + x.height;
+      expect(apart, `${name}: a column at ${c.left},${c.top} under the X at ${x.x},${x.y}`).toBe(true);
+      expect(c.bottom).toBeLessThanOrEqual(412);
+    }
+    await close.tap();
+    await expect(overlay).toHaveCount(0);
+  }
+});
+
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
@@ -369,6 +413,25 @@ test.describe("on an iPhone", () => {
     await expect(app.getByText("Torrent sources can't play on this device.").first()).toBeVisible({ timeout: 15_000 });
     await expect(app.getByRole("dialog", { name: "Torrent playback" })).toHaveCount(0);
     expect(await app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0)).toBe(0);
+  });
+
+  test("Subtitles & Audio opens the app's own panel, fitted to the phone, not an iOS menu (#465)", async ({ app }) => {
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Play", exact: true }).tap();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    const button = app.getByRole("button", { name: "Subtitles & Audio", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 200, y: 300 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    await expect(overlay).toBeVisible();
+    await expect(overlay.locator(".options-column").first()).toBeVisible();
+    const width = app.viewportSize()!.width;
+    for (const box of await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect))) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+    }
+    expect(await fitsWidth(app)).toBe(true);
   });
 
   test("five tabs in iOS's bar, no More; Search and the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {

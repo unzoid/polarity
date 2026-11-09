@@ -22,8 +22,8 @@ import {
 
 /**
  * Joining a watch party from Discord (#154), both ends, in LinkConfirm's card (TV remotes included):
- * someone asking to join through the button on this user's profile ("Ask me"), and this app joining
- * from a polarity://party link. Each is a party surface while it's up.
+ * someone asking to join through Join on this user's Discord profile ("Ask me"), and this app joining
+ * from Discord's Join (#357) or a polarity://party link. Each is a party surface while it's up.
  */
 export function DiscordJoin() {
   // The desk runs while this party can be joined from Discord: let in, Show on Discord on, Who can join not Nobody.
@@ -70,7 +70,7 @@ function RequestCard({ name, more, onAnswer }: { name: string; more: number; onA
   return (
     <Card title={`${name} wants to join`} onEscape={() => onAnswer(false)}>
       <p className="t-callout">
-        Asked from the Join watch party button on your Discord profile.
+        Asked from Join on your Discord profile.
         {more > 0 && ` ${more} more waiting.`}
       </p>
       <div className="player-status-actions">
@@ -90,7 +90,7 @@ function ConfirmCard({ name }: { name: string }) {
   return (
     <Card title="Join a watch party?" onEscape={dismissLinkJoin}>
       <p className="t-callout">
-        A link asks to join someone's watch party. The host sees your profile name, {name}, and decides whether to let you in.
+        Discord or a link asks to join someone's watch party for you. The host sees your profile name, {name}, and decides whether to let you in.
       </p>
       <div className="player-status-actions">
         <Button variant="glass" onClick={dismissLinkJoin}>
