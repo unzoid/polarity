@@ -1051,12 +1051,24 @@ html[data-os="android"] .options-columns {
 }
 .torrent-notice-limit {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
 }
 .torrent-notice-limit > span {
   flex: none;
+}
+/* Beside its label where there's room; on a phone under it, the card's whole width (#458). */
+.torrent-notice-limit .slider-field {
+  flex: 1 0 14rem;
+  max-width: 16rem;
+  width: auto;
+}
+@media (max-width: 600px) {
+  .torrent-notice-limit .slider-field {
+    max-width: none;
+  }
 }
 .torrent-notice-card .settings-link {
   align-self: flex-start;

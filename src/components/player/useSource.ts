@@ -22,7 +22,7 @@ import {
   type TorrentStep,
 } from "../../lib/playback";
 import { runtimeSeconds } from "../../lib/format";
-import { batterySaver, on, onMobileData } from "../../lib/platform";
+import { batterySaver, on, onMobileData, torrentsPlayHere } from "../../lib/platform";
 import { getPrefs, setPrefs } from "../../lib/settings";
 import type { ContentType, Playable, Progress, Stream } from "../../lib/types";
 import { downloadedStream, useDownloads } from "../../lib/library";
@@ -210,14 +210,14 @@ export function useSource(
     let cancelled = false;
     const name = [candidate.label, candidate.addon].filter(Boolean).join(" · ");
     log(`Source ${attempt + 1} of ${candidates.length}${name ? `: ${name}` : ""}`, "info", "link");
-    const blocked = candidate.stream.infoHash ? torrentBlocked(getPrefs(), onMobileData()) : null;
+    const blocked = candidate.stream.infoHash ? torrentBlocked(getPrefs(), onMobileData(), torrentsPlayHere) : null;
     if (blocked) {
       if (attempt + 1 < candidates.length) {
-        log("A torrent on mobile data: passed over (Settings → Sources)", "warn", "link");
+        log(blocked.settings ? "A torrent on mobile data: passed over (Settings → Sources)" : `${blocked.reason} Passed over.`, "warn", "link");
         setAttempt(attempt + 1);
       } else {
-        log(blocked, "fail", "link");
-        setState({ status: "failed", reason: blocked, settings: "sources" });
+        log(blocked.reason, "fail", "link");
+        setState({ status: "failed", reason: blocked.reason, ...(blocked.settings && { settings: "sources" as const }) });
       }
       return;
     }
