@@ -19,23 +19,25 @@ test("the phone layout: tab bar at the bottom, no window buttons", async ({ app 
   expect(await fitsWidth(app)).toBe(true);
 });
 
-test("with the Calendar on, the tab bar keeps the five sections and the Calendar is a top bar button (#449)", async ({ app }) => {
+test("with the Calendar on, the tab bar keeps its four tabs and the Calendar is a top bar button (#449)", async ({ app }) => {
   await app.goto("/fake.html?showCalendar=true");
   const tabs = app.getByRole("navigation", { name: "Primary" });
   await expect(tabs.getByRole("button", { name: "Library", exact: true })).toBeVisible();
-  await expect(tabs.locator(".navbar-link:not([data-overflow])")).toHaveText(["Home", "Series", "Movies", "Anime", "Library"]);
+  await expect(tabs.locator(".navbar-link:not([data-overflow])")).toHaveText(["Home", "Anime", "Library", "Search"]);
+  // Series and Movies are the two buttons beside the profile.
+  await expect(app.locator(".navbar-actions").getByRole("button", { name: "Series", exact: true })).toBeVisible();
+  await expect(app.locator(".navbar-actions").getByRole("button", { name: "Movies", exact: true })).toBeVisible();
   await expect(tabs.getByRole("button", { name: "Calendar", exact: true })).toHaveCount(0);
   await app.locator(".navbar-actions").getByRole("button", { name: "Calendar", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
 });
 
 test("tabs, a title page and the player by touch", async ({ app }) => {
-  const tabs = app.getByRole("navigation", { name: "Primary" });
-  await tabs.getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Series" })).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
 
-  await tabs.getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await expect(app.getByRole("heading", { level: 1, name: "The Glass Orchard" })).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
@@ -60,7 +62,7 @@ test("tabs, a title page and the player by touch", async ({ app }) => {
   await expect(player).toHaveCount(0);
 });
 
-test("search on a phone is a page of its own: genres to start from, results as you type, Back to where you were", async ({ app }) => {
+test("search on a phone is a tab of its own: genres to start from, results as you type, another tab to leave", async ({ app }) => {
   await app.getByRole("button", { name: "Search", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
   await expect(app.getByRole("button", { name: "Horror", exact: true })).toBeVisible();
@@ -68,7 +70,7 @@ test("search on a phone is a page of its own: genres to start from, results as y
   await app.getByRole("searchbox", { name: "Search" }).fill("orchard");
   await expect(card(app, "Orchard House")).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
-  await app.getByRole("button", { name: "Back", exact: true }).tap();
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Home", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Search" })).toHaveCount(0);
 });
 
@@ -111,8 +113,7 @@ test("a sideways swipe on the featured card steps through the titles", async ({ 
 });
 
 test("a title page's action row fits a phone", async ({ app }) => {
-  const tabs = app.getByRole("navigation", { name: "Primary" });
-  await tabs.getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Kingsbridge").tap();
   const download = app.locator(".detail-actions").getByRole("button").last();
   await expect(download).toBeVisible();
@@ -121,7 +122,7 @@ test("a title page's action row fits a phone", async ({ app }) => {
 });
 
 test("on touch, an episode's Sources and Download buttons are always there, in the quiet style (#79)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Fieldwork").tap();
   const ep = app.locator(".episode-card:has(.episode-card-main:not([disabled]))").first();
   await expect(ep).toBeVisible();
@@ -136,7 +137,7 @@ test("a phone has no TV mode (#141)", async ({ app }) => {
 });
 
 test("the season picker keeps its own row on a phone (#151)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Kingsbridge").tap();
   const picker = app.locator(".seasons-picker");
   await expect(picker).toBeVisible();
@@ -147,7 +148,7 @@ test("the season picker keeps its own row on a phone (#151)", async ({ app }) =>
 });
 
 test("the season dropdown shows a name's descenders and accents whole (#353)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Kingsbridge").tap();
   const value = app.locator(".seasons-picker .select-value");
   await expect(value).toBeVisible();
@@ -240,7 +241,7 @@ async function controlsClearOf(page: Page, i: { top: number; right: number; bott
 }
 
 async function openPlayer(page: Page) {
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await page.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(page, "The Glass Orchard").tap();
   await page.getByRole("button", { name: "Play", exact: true }).tap();
   const player = page.locator(".player");
@@ -266,7 +267,7 @@ test("the player's controls keep clear of the notch and the home indicator, upri
 });
 
 test("Back stays in the title page's spot in the player around the notch, upright and sideways (#348)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   const player = app.locator(".player");
   for (const [size, i] of [
@@ -342,7 +343,7 @@ test.describe("on a tablet", () => {
 });
 
 test("on a phone, a long press on a source opens its info; no i button shows (#229)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Choose source", exact: true }).tap();
   const row = app.locator(".sheet .stream-row").last();
@@ -363,7 +364,7 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
 
 test("a phone on its side: each player panel starts under its X, nothing under it (#464)", async ({ app }) => {
   await app.setViewportSize({ width: 915, height: 412 });
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Play", exact: true }).tap();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -389,7 +390,7 @@ test("a phone on its side: each player panel starts under its X, nothing under i
 });
 
 test("the player's Sources panel fits a phone upright and sideways, add-on picker and all (#462)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Play", exact: true }).tap();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -433,7 +434,7 @@ test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
   test("starting a watch party in the player leaves one party panel up, with the focus in it (#247)", async ({ app }) => {
-    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Play", exact: true }).tap();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -486,19 +487,19 @@ test.describe("on an iPhone", () => {
     expect(await fitsWidth(app)).toBe(true);
   });
 
-  test("five tabs in iOS's bar, no More; Search and the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {
+  test("four tabs in iOS's bar, Search the last, no More; the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {
     // The Calendar turned on (Settings → Browsing): it stays out of the bar, as a sixth tab is what makes iOS add More.
     await app.goto("/fake.html?showCalendar=true");
     const nativeTabs = () => app.evaluate(() => (window as { __nativeTabs?: { tabs: { id: string }[]; hidden: boolean } }).__nativeTabs);
     await expect(app.locator("html")).toHaveAttribute("data-native-tabs", "true");
-    await expect.poll(async () => (await nativeTabs())?.tabs.map((t) => t.id)).toEqual(["home", "discover:series", "discover:movie", "anime", "library"]);
+    await expect.poll(async () => (await nativeTabs())?.tabs.map((t) => t.id)).toEqual(["home", "anime", "library", "search"]);
     expect((await nativeTabs())?.hidden).toBe(false);
 
     const header = app.locator(".navbar-actions");
     await header.getByRole("button", { name: "Calendar", exact: true }).tap();
     await expect(app.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
     await expect(header.getByRole("button", { name: "Calendar", exact: true })).toHaveAttribute("aria-current", "page");
-    await header.getByRole("button", { name: "Search", exact: true }).tap();
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("search"));
     await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
 
     // A title opened from the Library goes back to it with the swipe in from the left edge.
@@ -518,7 +519,7 @@ test.describe("on an iPhone", () => {
   });
 
   test("a sheet opens at half the screen, expands and closes like iOS's own (#174)", async ({ app }) => {
-    await app.locator(".navbar-actions").getByRole("button", { name: "Search", exact: true }).tap();
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("search"));
     await app.getByRole("searchbox", { name: "Search" }).fill("glass orchard");
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Choose source", exact: true }).tap();
@@ -623,7 +624,7 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
   await app.reload();
   const opens = () => app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0);
   const play = async () => {
-    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Play", exact: true }).tap();
   };

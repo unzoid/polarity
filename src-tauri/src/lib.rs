@@ -1,3 +1,4 @@
+mod art_focus;
 #[cfg(any(windows, test))]
 mod automation;
 mod commands;
@@ -371,6 +372,7 @@ pub fn run() {
             native_tabs::native_tabs,
             native_back::native_back,
             native_buttons::native_buttons,
+            art_focus::art_focus,
             native_dialogs::native_dialog,
             native_dialogs::native_share,
             notifications::notifications_permission,

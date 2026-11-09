@@ -168,9 +168,9 @@
   --gutter: max(1rem, var(--safe-left), var(--safe-right));
   /* A phone's cards start from the small size (Settings → Appearance → Card size still scales them): three and
      a half posters across a 390px screen, as phone apps show them. */
-  --poster-w: calc(96px * var(--card-scale));
-  --landscape-w: calc(196px * var(--card-scale));
-  --episode-w: calc(232px * var(--card-scale));
+  --poster-w: calc(104px * var(--card-scale));
+  --landscape-w: calc(208px * var(--card-scale));
+  --episode-w: calc(248px * var(--card-scale));
 }
 :root[data-touch="true"] {
   --hit: 44px;

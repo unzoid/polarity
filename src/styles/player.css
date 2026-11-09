@@ -2064,35 +2064,6 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root:is([data-form="phone"], [data-compact="true"]) .options-head .srcf-bar {
   flex-basis: 100%;
 }
-/* A phone: Filters, its glyph alone, right beside "Sources"; the add-on picker at the far end of that line; the
-   picture choice has the row under them to itself. The bar's controls join the head's own grid. */
-:root[data-form="phone"] .options-head:has(.srcf:not(.srcf-tv)) {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.625rem 0.75rem;
-}
-:root[data-form="phone"] .options-head .srcf-bar {
-  display: contents;
-}
-:root[data-form="phone"] .options-head:has(.srcf:not(.srcf-tv)) .options-title {
-  grid-area: 1 / 1;
-}
-:root[data-form="phone"] .options-head .srcf-bar > .srcf-filters {
-  grid-area: 1 / 2;
-  justify-self: start;
-}
-:root[data-form="phone"] .options-head .srcf-bar > .srcf-addon {
-  grid-area: 1 / 3;
-  justify-self: end;
-}
-:root[data-form="phone"] .options-head .srcf-bar > :first-child {
-  grid-area: 2 / 1 / auto / -1;
-  justify-self: start;
-}
-:root[data-form="phone"] .options-head .srcf-active {
-  grid-column: 1 / -1;
-}
 :root:is([data-form="phone"], [data-compact="true"]) .options-label {
   overflow-wrap: anywhere;
 }

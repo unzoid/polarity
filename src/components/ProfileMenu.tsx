@@ -28,7 +28,7 @@ type Choice = { id: string; label: string; icon: ReactNode; run: () => void; sta
  * Without an account it's a template "Guest" profile (Settings, Sign In);
  * signed in it adds switching profiles, managing them, the account and
  * signing out. The same choices three ways: a menu under the avatar, a sheet
- * from the bottom edge on a phone (in reach of a thumb), and on iOS the
+ * from the bottom edge on a phone (in reach of a thumb), and on an iPad the
  * system's own menu.
  */
 export function ProfileMenu() {
@@ -67,7 +67,8 @@ export function ProfileMenu() {
         ? [{ id: "connect-database", label: "Connect a Database…", icon: <Profile />, run: () => openSettings("advanced"), stay: true }]
         : [];
 
-  if (nativeDialogsAvailable) {
+  // An iPad gets iOS's own menu under the avatar; a phone, iPhones too, the sheet below.
+  if (nativeDialogsAvailable && !phone) {
     // The web menu below, as groups of choices (a separator between groups).
     const groups = [[...profiles, ...manage], actions, session];
     const choices = groups.flat();

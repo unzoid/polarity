@@ -1,7 +1,4 @@
-import { useContext, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useFormFactor } from "../lib/ui";
-import { SheetHeaderSlot } from "./Sheet";
+import { useLayoutEffect, useRef, useState } from "react";
 import { SORTS, type SourceFilters } from "../lib/playback";
 import type { SourceSort } from "../lib/types";
 import { Close, Filters } from "./icons";
@@ -142,10 +139,7 @@ function activeFilters(f: SourceFilters) {
 function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
   const { filter, facets } = f;
   const active = activeFilters(f);
-  // On a phone Filters is its glyph alone, beside the heading: in a sheet's header (here), or the player's
-  // column head (player.css), leaving the row to the picture choice.
-  const slot = useContext(SheetHeaderSlot);
-  const phone = useFormFactor().form === "phone";
+  // On a phone Filters is its glyph alone, right after the picture choice (sheet.css).
   const filters = (
     <PopoverRoot>
       <PopoverTrigger className="srcf-filters pressable" aria-label={active.length ? `Filters, ${active.length} on` : "Filters"}>
@@ -190,7 +184,7 @@ function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
           />
           </span>
         )}
-        {phone && slot ? createPortal(filters, slot) : filters}
+        {filters}
       </div>
       {active.length > 0 && (
         <div className="srcf-active" role="group" aria-label="Filters on">

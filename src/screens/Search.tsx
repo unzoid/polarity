@@ -25,7 +25,7 @@ import {
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
 import { useRouter } from "../lib/router";
-import { useFormFactor } from "../lib/ui";
+import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -115,8 +115,11 @@ function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
   const { data: animeArt } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
+  // The tiles come in as one, pictures and colours together (lib/ui/together.ts), not colour first and a
+  // picture here and there after.
+  const together = useTogether();
   return (
-    <div className="search-start">
+    <div className="search-start" {...together}>
       {recent.length > 0 && (
         <section className="search-start-section">
           <div className="search-start-head">
@@ -192,7 +195,7 @@ function GenreTile({ genre, image }: { genre: string; image?: string }) {
   const [loaded, setLoaded] = useState(false);
   const [a, b] = TILE_HUES[genre] ?? [220, 280];
   return (
-    <button className="genre-tile pressable" style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
+    <button className="genre-tile together-wait pressable" style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
       {image && <img src={image} alt="" loading="lazy" decoding="async" draggable={false} data-loaded={loaded} onLoad={() => setLoaded(true)} />}
       <span>{genre}</span>
     </button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Entry, TabRoute } from "../router";
 import { tabId } from "../navTabs";
 import { prefersReducedMotion } from "./reducedMotion";
+import { imagesSettled } from "./together";
 
 /** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
 const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
@@ -11,8 +12,15 @@ const SETTLE = 300;
 /** The same for a title's page growing out of its card, which takes longer. */
 const SETTLE_CARD = 520;
 
-/** A card's place on the screen, in CSS pixels. */
-export type CardRect = { x: number; y: number; w: number; h: number };
+/**
+ * How long a page coming in may wait for its pictures before it moves anyway. The change plays once the new page
+ * is drawn and its pictures are in, so it's seen whole and every frame of it is seen; started with the tap it
+ * played while the page was still being built, and was over, or stuttering, by the time anything showed.
+ */
+const READY_CAP = 320;
+
+/** A card's place on the screen, in CSS pixels, and the picture on it. */
+export type CardRect = { x: number; y: number; w: number; h: number; src?: string };
 
 /**
  * A page change on a phone, for shell.css to play: `enter` is the page coming in, `leave` the one going, `dir`
@@ -20,7 +28,15 @@ export type CardRect = { x: number; y: number; w: number; h: number };
  * no longer in the stack (Back, a tab switch), to render once more while it leaves. `card`: the title's page
  * grows out of the card that opened it (dir 1), or goes back into it (dir -1), instead of coming from the side.
  */
-export type PageMotion = { enter: number; leave: number; dir: -1 | 0 | 1; leaving?: Entry; card?: CardRect };
+export type PageMotion = {
+  enter: number;
+  leave: number;
+  dir: -1 | 0 | 1;
+  leaving?: Entry;
+  card?: CardRect;
+  /** The new page is drawn and its pictures are in: the pair moves. Until then the old page stays as it is. */
+  go?: boolean;
+};
 
 /** A card pressed a moment ago opened the page that comes next. */
 const TAP_FRESH = 800;
@@ -32,8 +48,11 @@ const origins = new Map<number, CardRect>();
 export function watchCardTaps() {
   const onClick = (e: MouseEvent) => {
     const card = e.target instanceof Element ? e.target.closest(".card") : null;
-    const r = (card?.querySelector(".card-frame") ?? card)?.getBoundingClientRect();
-    tapped = r && r.width > 0 ? { rect: { x: r.left, y: r.top, w: r.width, h: r.height }, at: performance.now() } : undefined;
+    const frame = card?.querySelector(".card-frame") ?? card;
+    const r = frame?.getBoundingClientRect();
+    const img = frame?.querySelector("img");
+    const src = img?.complete && img.naturalWidth > 0 ? img.currentSrc || img.src : undefined;
+    tapped = r && r.width > 0 ? { rect: { x: r.left, y: r.top, w: r.width, h: r.height, src }, at: performance.now() } : undefined;
   };
   document.addEventListener("click", onClick, true);
   return () => document.removeEventListener("click", onClick, true);
@@ -42,17 +61,17 @@ export function watchCardTaps() {
 const isTitlePage = (e: Entry) => e.route.name === "detail" || e.route.name === "anime-detail";
 
 /**
- * What shell.css needs to play a card's motion on a page `width` by `height`: where the page's top left corner
- * is at the card, how small the page is there (its width the card's), how much of its height is cut away to
- * the card's shape, and the corner radius that looks like the card's at that size.
+ * What shell.css needs to play a card's motion on a page `width` across: where the page's top left corner is at
+ * the card, how small the page is there (its width the card's), the card's shape (height over width) for the
+ * copy of its picture that grows with the page, and the corner radius that looks like the card's at that size.
  */
-export function cardMotionVars(card: CardRect, width: number, height: number): Record<string, string> {
+export function cardMotionVars(card: CardRect, width: number): Record<string, string> {
   const scale = card.w / width;
   return {
     "--card-x": `${card.x}px`,
     "--card-y": `${card.y}px`,
     "--card-s": String(scale),
-    "--card-cut": `${Math.max(0, height - card.h / scale)}px`,
+    "--card-shape": String(card.h / card.w),
     "--card-r": `${8 / scale}px`,
   };
 }
@@ -83,13 +102,33 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
     setSeen(now); // during render: this render already draws the change with its motion
   }
 
+  // The pair waits for the new page: two frames for it to be laid out and drawn (unseen), then its pictures.
+  const [gone, setGone] = useState<Seen>();
   useEffect(() => {
-    if (!seen.motion) return;
-    const t = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), seen.motion.card ? SETTLE_CARD : SETTLE);
-    return () => window.clearTimeout(t);
+    const motion = seen.motion;
+    if (!motion) return;
+    let live = true;
+    let timer = 0;
+    const start = () => {
+      if (!live) return;
+      setGone(seen);
+      timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), motion.card ? SETTLE_CARD : SETTLE);
+    };
+    const frames = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const page = document.querySelector(`.page[data-page-key="${motion.enter}"]`);
+        if (page) void imagesSettled(page, READY_CAP).then(start);
+        else start();
+      }),
+    );
+    return () => {
+      live = false;
+      cancelAnimationFrame(frames);
+      window.clearTimeout(timer);
+    };
   }, [seen]);
 
-  return now.motion;
+  return now.motion && { ...now.motion, go: gone === now };
 }
 
 function motionOf(seen: Seen, prev: Entry, top: Entry, pages: Entry[]): PageMotion {

@@ -135,11 +135,18 @@
   inset: 0 0 -12rem;
   z-index: -1;
   pointer-events: none;
-  /* The colour is already a dark shade (heroGlow.ts): full at the corner, the whole top of the page tinted with
-     it, dark by the card's foot. */
+  /* The colour is already a dark shade (heroGlow.ts). It comes from the top right corner, as a light there would:
+     brightest in the corner, falling away towards the left and down the page; the rest of the top keeps only a
+     faint tint of it, so the corner reads as the source. */
   background:
-    radial-gradient(140% 75% at 100% 0%, var(--glow) 0%, color-mix(in srgb, var(--glow) 60%, transparent) 40%, transparent 75%),
-    linear-gradient(to bottom, color-mix(in srgb, var(--glow) 75%, transparent), color-mix(in srgb, var(--glow) 30%, transparent) 55%, transparent 90%);
+    radial-gradient(
+      125% 62% at 100% 0%,
+      color-mix(in srgb, var(--glow), white 14%) 0%,
+      var(--glow) 22%,
+      color-mix(in srgb, var(--glow) 45%, transparent) 50%,
+      transparent 78%
+    ),
+    linear-gradient(to bottom, color-mix(in srgb, var(--glow) 28%, transparent), transparent 70%);
   opacity: 0;
   transition:
     --glow 900ms var(--ease-std),
@@ -333,6 +340,12 @@
   /* Home is the lean-back page: everything a size up from the rest of the app. */
   --poster-w: calc(clamp(172px, 13.5vw, 236px) * var(--card-scale, 1));
   --landscape-w: calc(clamp(300px, 25vw, 440px) * var(--card-scale, 1));
+}
+/* Not on a phone: Home's size up made its posters two to a screen there. It keeps the phone's own sizes
+   (tokens.css), three posters and the next one peeking in at every card size. */
+:root[data-form="phone"] .home {
+  --poster-w: calc(104px * var(--card-scale, 1));
+  --landscape-w: calc(208px * var(--card-scale, 1));
 }
 .hero,
 .home-rows {
@@ -1001,7 +1014,9 @@
    the kind and genres under it, and two equal buttons across the bottom (Watch Now | Save).
    The synopsis waits on the title's page; on a card this size it covered the picture. */
 :root[data-form="phone"] .hero {
-  padding-top: calc(var(--nav-h) + 0.25rem);
+  /* Set in from the screen's edges further than the rows under it, as Netflix's card is: it reads as a card
+     standing on the page, with the glow showing round it. */
+  padding: calc(var(--nav-h) + 0.5rem) calc(var(--gutter) + 0.625rem) 0;
 }
 :root[data-form="phone"] .hero-card {
   border-radius: 14px;

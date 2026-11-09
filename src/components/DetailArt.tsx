@@ -2,19 +2,43 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useFormFactor } from "../lib/ui";
 import { artFocusX, focusPosition } from "../lib/ui";
 import { loadReadable, pixelsOf } from "./TitleLogo";
+import { nativeArtFocus, nativeArtFocusAvailable } from "../lib/platform";
 
 /** Each picture's subject (artFocusX) and shape, measured once: null when it can't be read. */
 const found = new Map<string, Promise<{ focus: number; aspect: number } | null>>();
 
 const SAMPLE_W = 48;
+/** The picture the system is asked about: wide enough for a face in a crowd to be found. */
+const ASK_W = 480;
+
+/** `img` as a small JPEG data URL; null when its pixels can't be read (no CORS). */
+function small(img: HTMLImageElement): string | null {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = ASK_W;
+    canvas.height = Math.max(1, Math.round((img.naturalHeight / img.naturalWidth) * ASK_W));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.8);
+  } catch {
+    return null;
+  }
+}
 
 function measure(src: string) {
   let f = found.get(src);
   if (!f) {
     f = loadReadable(src)
-      .then((img) => {
-        const px = img && pixelsOf(img, SAMPLE_W);
-        return img && px ? { focus: artFocusX(px, SAMPLE_W), aspect: img.naturalWidth / img.naturalHeight } : null;
+      .then(async (img) => {
+        if (!img || !img.naturalWidth) return null;
+        const aspect = img.naturalWidth / img.naturalHeight;
+        // iOS finds the faces (or what draws the eye); elsewhere, and when it finds nothing, the busy part of the picture.
+        const picture = nativeArtFocusAvailable ? small(img) : null;
+        const asked = picture ? await nativeArtFocus(picture) : null;
+        if (asked !== null) return { focus: asked, aspect };
+        const px = pixelsOf(img, SAMPLE_W);
+        return px ? { focus: artFocusX(px, SAMPLE_W), aspect } : null;
       })
       .catch(() => null);
     found.set(src, f);

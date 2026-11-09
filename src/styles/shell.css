@@ -91,14 +91,24 @@
 :root[data-form="phone"] .page-pushed {
   animation: none;
 }
-:root[data-form="phone"] .page[data-motion="enter"] {
-  animation: page-enter 260ms var(--ease-out) both;
+/* Neither moves until the new page is drawn with its pictures in (`data-go`, pageMotion.ts): it waits unseen,
+   the old one stays as it was, and then the whole change is seen, every frame of it. */
+:root[data-form="phone"] .page[data-motion="enter"]:not([data-go]) {
+  opacity: 0;
+  pointer-events: none;
+}
+:root[data-form="phone"] .page[data-motion="enter"][data-go] {
+  animation: page-enter 300ms var(--ease-out) both;
+  will-change: transform, opacity;
 }
 :root[data-form="phone"] .page[data-motion="leave"] {
   visibility: visible;
   content-visibility: visible;
   pointer-events: none;
-  animation: page-leave 180ms var(--ease-out) forwards;
+}
+:root[data-form="phone"] .page[data-motion="leave"][data-go] {
+  animation: page-leave 200ms var(--ease-out) forwards;
+  will-change: transform, opacity;
 }
 @keyframes page-enter {
   from {
@@ -112,60 +122,114 @@
     transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.5));
   }
 }
-/* A title opened from a card (pageMotion.ts `card`): its page grows out of the card, from the card's own place
-   and shape to the whole screen, while the page behind sinks back, blurred and dimmed. Back plays it the other
-   way: the page goes back into its card and the one behind comes into focus. The page is drawn at the card's
-   width (--card-s) with its corner at the card's (--card-x/y), cut to the card's height (--card-cut) and
-   corners (--card-r); it has faded in before it has grown much, so the card seems to lift and open. */
-:root[data-form="phone"] .page[data-card] {
-  --card-ease: cubic-bezier(0.3, 0.9, 0.25, 1);
+/* A title opened from a card (pageMotion.ts `card`): the card itself opens into the page. A copy of the card's
+   picture (.card-ghost, App.tsx) starts exactly on the card and grows to the screen's width at its top, where the
+   page's art is; the page grows with it, as one piece (the same move: its corner at the card's, --card-x/y, its
+   width the card's, --card-s), fading in under the picture, which then fades away to leave the page. The page
+   behind sinks back, blurred and dimmed. Back plays it the other way, ending on the card. Only transforms and
+   opacity move, so the compositor plays it whatever the page is busy with; the corners (--card-r, the card's at
+   that size) don't change. */
+:root[data-form="phone"] :is(.page[data-card], .card-ghost) {
+  --card-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --card-at: translate(var(--card-x), var(--card-y)) scale(var(--card-s));
 }
 :root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
 :root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
   background: var(--bg);
   transform-origin: 0 0;
-  will-change: transform, clip-path;
+  border-radius: var(--card-r);
+  overflow: hidden;
+  will-change: transform, opacity;
 }
-:root[data-form="phone"] .page[data-card="open"][data-motion="enter"] {
-  animation: card-open 460ms var(--card-ease) both;
+:root[data-form="phone"] .page[data-card="open"][data-motion="enter"][data-go] {
+  animation: card-page-open 440ms var(--card-ease) both;
 }
-:root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
-  animation: card-close 380ms var(--card-ease) forwards;
+:root[data-form="phone"] .page[data-card="close"][data-motion="leave"][data-go] {
+  animation: card-page-close 360ms var(--card-ease) forwards;
 }
-:root[data-form="phone"] .page[data-card="open"][data-motion="leave"] {
-  animation: card-behind 460ms var(--ease-out) forwards;
+:root[data-form="phone"] .page[data-card="open"][data-motion="leave"][data-go] {
+  animation: card-behind 440ms var(--ease-out) forwards;
 }
-:root[data-form="phone"] .page[data-card="close"][data-motion="enter"] {
-  animation: card-behind 380ms var(--ease-out) reverse both;
+:root[data-form="phone"] .page[data-card="close"][data-motion="enter"][data-go] {
+  animation: card-behind 360ms var(--ease-out) reverse both;
 }
-@keyframes card-open {
+.card-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: calc(100vw * var(--card-shape));
+  object-fit: cover;
+  border-radius: var(--card-r);
+  transform-origin: 0 0;
+  transform: var(--card-at);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+/* Closing, it isn't there until the page starts back. */
+.card-ghost[data-card="close"]:not([data-go]) {
+  opacity: 0;
+}
+.card-ghost[data-card="open"][data-go] {
+  animation: card-ghost-open 440ms var(--card-ease) both;
+}
+.card-ghost[data-card="close"][data-go] {
+  animation: card-ghost-close 360ms var(--card-ease) both;
+}
+@keyframes card-page-open {
   from {
     opacity: 0;
-    transform: translate(var(--card-x), var(--card-y)) scale(var(--card-s));
-    clip-path: inset(0 0 var(--card-cut) 0 round var(--card-r));
+    transform: var(--card-at);
   }
-  22% {
+  45% {
     opacity: 1;
   }
   to {
     opacity: 1;
     transform: none;
-    clip-path: inset(0 0 0 0 round 0px);
   }
 }
-@keyframes card-close {
+@keyframes card-page-close {
   from {
     opacity: 1;
     transform: none;
-    clip-path: inset(0 0 0 0 round 0px);
   }
-  75% {
+  35% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 0;
+  }
+  to {
+    opacity: 0;
+    transform: var(--card-at);
+  }
+}
+@keyframes card-ghost-open {
+  from {
+    opacity: 1;
+    transform: var(--card-at);
+  }
+  45% {
     opacity: 1;
   }
   to {
     opacity: 0;
-    transform: translate(var(--card-x), var(--card-y)) scale(var(--card-s));
-    clip-path: inset(0 0 var(--card-cut) 0 round var(--card-r));
+    transform: none;
+  }
+}
+@keyframes card-ghost-close {
+  from {
+    opacity: 0;
+    transform: none;
+  }
+  50% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: var(--card-at);
   }
 }
 @keyframes card-behind {

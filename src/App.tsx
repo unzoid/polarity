@@ -392,10 +392,10 @@ function DesktopApp() {
             aria-hidden={(motion?.leave === entry.key && entry !== topPage) || undefined}
             // A title's page out of its card, and back into it (shell.css).
             data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
+            // The pair moves once the new page is drawn with its pictures in (pageMotion.ts `go`).
+            data-go={motion?.go || undefined}
             style={
-              motion
-                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
-                : undefined
+              motion ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth)) } as CSSProperties) : undefined
             }
             data-under-player={(entry === topPage && !!player) || undefined}
             data-page-key={entry.key}
@@ -406,6 +406,20 @@ function DesktopApp() {
             </ErrorBoundary>
           </section>
         ))}
+        {/* The card's own picture, lifting off the page and growing with the title's page as it opens, and
+            coming back down onto the card as it closes (shell.css). */}
+        {motion?.card?.src && (
+          <img
+            className="card-ghost"
+            src={motion.card.src}
+            alt=""
+            aria-hidden
+            draggable={false}
+            data-card={motion.dir === 1 ? "open" : "close"}
+            data-go={motion.go || undefined}
+            style={cardMotionVars(motion.card, window.innerWidth) as CSSProperties}
+          />
+        )}
         <ControllerToast tv={false} />
         <SeriesPickToast />
         <UpdateToast hidden={!!playing} />

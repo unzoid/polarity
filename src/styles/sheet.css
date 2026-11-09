@@ -463,25 +463,27 @@
 /* A phone: the quality switch has the first row; the add-on dropdown and Filters share the
    second, the dropdown taking what Filters leaves, rather than drifting to the right on their own. */
 :root[data-form="phone"] .srcf-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 0.625rem;
 }
 :root[data-form="phone"] .srcf-bar > :first-child {
-  grid-column: 1 / -1;
-  justify-self: start;
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 36px - 0.625rem);
 }
 :root[data-form="phone"] .srcf-bar > :first-child:empty {
   display: none;
 }
+:root[data-form="phone"] .srcf-bar > .srcf-filters {
+  order: 1;
+}
+/* The add-on picker follows them where there's room (the player, held sideways), else takes the next row. */
 :root[data-form="phone"] .srcf-addon {
-  min-width: 0;
-  max-width: none;
+  order: 2;
   margin-left: 0;
 }
-/* Filters is its glyph alone on a phone, beside the heading: in the sheet's header (Sheet.tsx's slot), level
-   with "Sources", or the player's column head (player.css). */
+/* Filters is its glyph alone on a phone, right after the quality switch on its row. */
 :root[data-form="phone"] .srcf-filters {
   justify-content: center;
   width: 36px;
@@ -489,24 +491,6 @@
 }
 :root[data-form="phone"] .srcf-filters-label {
   display: none;
-}
-.sheet-header > div:not(.sheet-grabber, .sheet-header-slot) {
-  min-width: 0;
-}
-.sheet-header-slot {
-  flex: none;
-  align-self: flex-start;
-  cursor: auto;
-}
-.sheet-header-slot:empty {
-  display: none;
-}
-/* Without an add-on choice, Filters starts the row. */
-:root[data-form="phone"] .srcf-bar > .srcf-filters:nth-child(2) {
-  justify-self: start;
-}
-:root[data-form="phone"] .srcf-bar > .srcf-active {
-  grid-column: 1 / -1;
 }
 /* As wide as its label (up to a point), never so narrow "All add-ons" is cut. */
 .srcf-addon {

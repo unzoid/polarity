@@ -85,6 +85,9 @@
   padding: 0.75rem 0.875rem;
   overflow: hidden;
   border-radius: var(--r-md);
+  /* WebKit lets the blended layers below out past the rounded corners until it has drawn them once (the tiles
+     with a picture showed square): a clip path cuts them from the first frame. */
+  clip-path: inset(0 round var(--r-md));
   background: linear-gradient(150deg, hsl(var(--tile-a) 80% 52%), hsl(var(--tile-b) 75% 34%));
   color: #fff;
   font-size: 1.0625rem;
@@ -92,6 +95,10 @@
   letter-spacing: -0.01em;
   text-align: left;
   -webkit-touch-callout: none;
+  /* Its press (.pressable) and its coming in with the other tiles (.together-wait). */
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
 }
 /* The picture in two colours (a duotone, as Apple TV's tiles): in grey, then multiplied by the genre's
    gradient, which paints its light parts from one hue across to the other, then lightened to a deep shade
@@ -1474,8 +1481,46 @@
     transition: none;
   }
 }
-:root[data-form="phone"] .downloads-toolbar > :first-child {
-  flex: 1 1 100%;
+/* A phone's Downloads: the count and room as a quiet line, sort and Select on one row (Select at its end), and
+   "Downloading 1 of 2" on one line with its bar taking what's left. */
+:root[data-form="phone"] .downloads-summary {
+  margin-bottom: 0.75rem;
+}
+:root[data-form="phone"] .downloads-summary .t-headline {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text-2);
+}
+:root[data-form="phone"] .downloads-toolbar {
+  flex-wrap: nowrap;
+  margin-bottom: 1.5rem;
+}
+:root[data-form="phone"] .downloads-toolbar .downloads-select {
+  margin-left: auto;
+}
+:root[data-form="phone"] .downloads-active-head {
+  align-items: center;
+  margin-bottom: 0.625rem;
+}
+:root[data-form="phone"] .downloads-active-head .downloads-heading {
+  flex: none;
+  margin: 0;
+  font-size: var(--fs-xl);
+  white-space: nowrap;
+}
+:root[data-form="phone"] .downloads-active-bar {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+/* An episode's name gets a second line rather than being cut after a few words. */
+:root[data-form="phone"] .download-row-text > .t-headline {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  font-size: var(--fs-base);
+  line-height: 1.25;
 }
 :root[data-form="phone"] .downloads-search {
   flex: 1;
@@ -1776,6 +1821,20 @@
 .playlist-new::before,
 .playlist-new::after {
   display: none;
+}
+/* Its words centred on their own lines, with room either side: on a phone's small card "New Playlist" ran
+   from the left edge and out past the right one. */
+.playlist-new > span {
+  padding: 0 0.375rem;
+  text-align: center;
+  line-height: 1.2;
+}
+:root[data-form="phone"] .playlist-new > span {
+  font-size: var(--fs-sm);
+}
+:root[data-form="phone"] .playlist-new > svg {
+  width: 22px;
+  height: 22px;
 }
 @media (hover: hover) and (pointer: fine) {
   .playlist-tile:hover .playlist-new {
