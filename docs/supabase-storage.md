@@ -419,7 +419,8 @@ travels.
   the next request. Limits: 5 live requests per address; 10,000 live in all, past which the oldest unanswered ones
   make way for new ones; 10 tries per user per 10 minutes (every lookup, and every answer to a code that isn't
   there). Requests start one at a time (an advisory lock), so parallel ones can't get past the counts.
-- Deploy: apply the migration, then `supabase functions deploy tv-sign-in --no-verify-jwt` (the TV has no session
+- Deploy: CI applies the migration, then deploys the function with `--no-verify-jwt` (docs/dev-channel.md, "Database
+  changes"; by hand: `supabase functions deploy tv-sign-in --no-verify-jwt`) (the TV has no session
   yet; the function checks the user's token itself for look and answer). It reads `SUPABASE_URL` and
   `SUPABASE_SERVICE_ROLE_KEY`, which Supabase provides to functions.
 - Tests: `tests/sql/tvSignIn.test.ts` (PGlite), `tests/tvSignInFunction.test.ts` (the function's steps with an
