@@ -19,7 +19,7 @@ extern void polar_button_pressed(const char *id);
 extern WKWebView *polar_web_view(void);
 
 @interface PolarButtonsTicker : NSObject
-- (void)tick:(CADisplayLink *)link;
+- (void)tick:(CADisplayLink *)displayLink;
 @end
 
 /// Covers most of the page: a touch anywhere but on a button goes through to the web view under it.
@@ -43,7 +43,7 @@ static NSMutableDictionary<NSString *, NSString *> *looks;
 static __weak UIScrollView *scroller;
 /// The web app's top bar ends here (CSS pixels, which are the web view's points).
 static CGFloat clip_top;
-static CADisplayLink *link;
+static CADisplayLink *frames;
 static PolarButtonsTicker *ticker;
 
 static double number(id value) { return [value isKindOfClass:NSNumber.class] ? [value doubleValue] : 0; }
@@ -99,8 +99,8 @@ static void place(void) {
 
 static void hide(void) {
     clip.hidden = YES;
-    [link invalidate];
-    link = nil;
+    [frames invalidate];
+    frames = nil;
     scroller = nil;
 }
 
@@ -198,10 +198,10 @@ static void apply(NSDictionary *state) {
         return;
     }
     scroller = s;
-    if (!link) {
+    if (!frames) {
         if (!ticker) ticker = [PolarButtonsTicker new];
-        link = [CADisplayLink displayLinkWithTarget:ticker selector:@selector(tick:)];
-        [link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+        frames = [CADisplayLink displayLinkWithTarget:ticker selector:@selector(tick:)];
+        [frames addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     }
     place();
 }
