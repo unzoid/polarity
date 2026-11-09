@@ -326,7 +326,8 @@ const W_ADDONS: InstalledAddon[] = [
       id: "org.example.community-archive-of-restored-public-domain-cinema",
       version: "12.345.6789-beta.12",
       name: "Community Archive of Restored Public-Domain Cinema (Volunteer Edition, EU West)",
-      description: BLURB.repeat(4),
+      // Long unbroken words too, as real descriptions have: providers joined by slashes, a link (#456).
+      description: `${BLURB.repeat(4)} Providers: ${Array.from({ length: 24 }, (_, i) => `ExampleProvider${i + 1}`).join("/")}. Docs: https://addons.example/community-archive/documentation/getting-started/configuration-reference`,
       types: ["movie", "series", "anime", "channel", "tv", "other"],
       resources: ["catalog", "meta", "stream", "subtitles", "addon_catalog"],
       behaviorHints: { configurable: true, configurationRequired: true },

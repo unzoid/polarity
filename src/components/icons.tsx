@@ -37,6 +37,7 @@ export const ChevronLeft = icon(S24.ChevronLeftIcon, S20.ChevronLeftIcon, S16.Ch
 export const ChevronRight = icon(S24.ChevronRightIcon, S20.ChevronRightIcon, S16.ChevronRightIcon);
 export const Close = icon(S24.XMarkIcon, S20.XMarkIcon, S16.XMarkIcon);
 export const Copy = icon(S24.DocumentDuplicateIcon, S20.DocumentDuplicateIcon, S16.DocumentDuplicateIcon);
+export const LinkIcon = icon(S24.LinkIcon, S20.LinkIcon, S16.LinkIcon);
 export const Controls = icon(S24.CommandLineIcon, S20.CommandLineIcon, S16.CommandLineIcon);
 export const Desktop = icon(S24.ComputerDesktopIcon, S20.ComputerDesktopIcon, S16.ComputerDesktopIcon);
 export const Bell = icon(S24.BellIcon, S20.BellIcon, S16.BellIcon);

@@ -61,11 +61,17 @@ jobs:
           retention-days: 14
 
   # The web build in real browsers against the fake shell (playwright.config.ts):
-  # desktop in Chromium and WebKit, TV and phone sizes in Chromium.
+  # desktop in Chromium and WebKit, TV and phone sizes in Chromium. In two halves side by side (#481): the whole
+  # suite on one runner took 20 minutes and a slow runner nearly twice that, past the time limit with every test
+  # passing. Each half takes about half, which leaves a slow runner room under the same limit.
   e2e-web:
-    name: End to end (web build)
+    name: End to end (web build, ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     # Playwright's own image for the version in bun.lock (1.64.1), pinned by digest: the browsers'
     # system packages are already installed, so no run depends on Ubuntu's package mirror. Running
     # as the runner's user (1001) follows Playwright's guide for GitHub Actions. When @playwright/test
@@ -95,12 +101,13 @@ jobs:
             echo "::warning::Installing the browsers failed or stalled (attempt $attempt of 3)"
           done
           exit 1
-      - run: bun run e2e
+      - run: bun run e2e --shard=${{ matrix.shard }}/2
+      # Also when the time limit stops the job, so what failed before then can be read.
       - name: Keep the report, traces and screenshots
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-report
+          name: e2e-report-${{ matrix.shard }}
           path: |
             e2e/.report
             e2e/.results

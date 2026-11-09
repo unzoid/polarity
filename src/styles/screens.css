@@ -186,6 +186,8 @@
 .settings-row-title {
   font-size: var(--fs-lg);
   font-weight: 600;
+  /* An add-on names itself: a long unbroken name wraps inside the row (#456). */
+  overflow-wrap: anywhere;
 }
 .settings-row-caption {
   font-size: var(--fs-sm);
@@ -328,6 +330,23 @@
 .settings-expand[data-open="true"] .settings-chevron {
   transform: rotate(90deg);
 }
+/* A row with a button of its own beside the chevron (ExpandRow `accessory`): the button sits over the row,
+   in room kept clear just before the chevron, so the whole row still lights up and opens. */
+.settings-expand-head {
+  position: relative;
+}
+.settings-row-button[data-accessory] .settings-chevron {
+  margin-left: 2.75rem;
+}
+.settings-expand-accessory {
+  position: absolute;
+  top: 50%;
+  right: calc(1.5rem + 18px + 0.375rem);
+  translate: 0 -50%;
+}
+.t3s .settings-expand-accessory {
+  right: calc(1.25rem + 18px + 0.375rem);
+}
 /* The opened part fades in under its row. The height change itself is
    instant: animating height would re-lay out the page on every frame. */
 .settings-expand-body {
@@ -343,10 +362,12 @@
   font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--text-2);
+  /* An add-on's description may hold long unbroken words (providers joined by slashes, a link):
+     they wrap here instead of widening the whole page (#456). */
+  overflow-wrap: anywhere;
 }
 .settings-url {
   color: var(--text-3);
-  overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -725,127 +746,109 @@
   }
 }
 
-/* --- Library: collection tiles, then a shelf from each. -------------------------------------- */
-.library-collections {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 0 var(--gutter) 2.5rem var(--content-start);
+/* --- Library: Downloads as a panel, then a shelf from each collection. ---------------------- */
+/* One material surface, no art behind it: a grouped section, not a picture.
+   Continuous (squircle) corners where the webview draws them, round ones
+   otherwise, like the volume HUD. */
+.library-panel {
+  margin: 0 var(--gutter) 2.5rem var(--content-start);
+  overflow: hidden;
+  border-radius: var(--r-panel);
+  corner-shape: squircle;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--hairline);
 }
-@media (max-width: 960px) {
-  .library-collections {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+/* The shelf inside lines up with the heading's padding, not the page's. */
+.library-panel > * {
+  --gutter: 1.25rem;
+  --content-start: 1.25rem;
 }
-/* A tile: the collection's latest art, blurred to a wash of its colour, under
-   an icon, the name and a count. Material, not a picture: the art is only
-   there to tell the tiles apart at a glance. */
-.library-tile {
-  position: relative;
-  isolation: isolate;
+.library-panel > .row {
+  padding-bottom: 1rem;
+}
+/* The heading is the panel's link: it highlights on press, as a list row does. */
+.library-panel-head {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  min-height: 5.5rem;
-  padding: 1rem 1rem 1rem 1.125rem;
-  overflow: hidden;
-  border-radius: var(--r-lg);
-  background: var(--fill-2);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  width: 100%;
+  padding: 1rem 1.25rem;
   text-align: left;
-  transition:
-    transform var(--dur-press) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-std);
+  transition: background-color var(--dur-fast) var(--ease-std);
 }
-.library-tile-art {
-  position: absolute;
-  inset: -20%;
-  z-index: -1;
-  width: 140%;
-  height: 140%;
-  object-fit: cover;
-  /* A hint of the titles inside, not a wash of colour. */
-  filter: blur(40px) saturate(120%) brightness(0.5);
-  opacity: 0.45;
+.library-panel-head:active {
+  background: var(--fill-2);
+  transition: none;
 }
-@media (hover: hover) and (pointer: fine) {
-  .library-tile:hover {
-    background: var(--fill-3);
-  }
-  .library-tile:hover .library-tile-chevron {
-    transform: translateX(2px);
-    opacity: 0.9;
-  }
-}
-.library-tile-icon {
+.library-panel-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--r-round);
-  background: var(--fill-4);
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--r-md);
+  corner-shape: squircle;
+  background: var(--fill-3);
   color: var(--text);
 }
-.library-tile-text {
+.library-panel-text {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
 }
-.library-tile-title {
+.library-panel-title {
   font-size: var(--fs-xl);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-.library-tile-detail {
+.library-panel-detail {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: var(--fs-sm);
   color: var(--text-2);
 }
-.library-tile-chevron {
+.library-panel-chevron {
   flex: none;
-  opacity: 0.5;
+  color: var(--text-3);
   transition:
     transform var(--dur-fast) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-std);
+    color var(--dur-fast) var(--ease-std);
 }
-/* Phone: two tiles a row leave no room for the chevron; the name and count keep it. */
-:root[data-form="phone"] .library-collections {
-  gap: 0.625rem;
+@media (hover: hover) and (pointer: fine) {
+  .library-panel-head:hover {
+    background: var(--fill-1);
+  }
+  .library-panel-head:hover .library-panel-chevron {
+    color: var(--text);
+    transform: translateX(3px);
+  }
 }
-:root[data-form="phone"] .library-tile {
-  gap: 0.625rem;
-  min-height: 4.5rem;
-  padding: 0.75rem;
+@media (prefers-reduced-motion: reduce) {
+  .library-panel-chevron {
+    transition: none;
+  }
+  .library-panel-head:hover .library-panel-chevron {
+    transform: none;
+  }
 }
-:root[data-form="phone"] .library-tile-icon {
-  width: 2.25rem;
-  height: 2.25rem;
+:root[data-form="phone"] .library-panel {
+  margin-bottom: 1.75rem;
 }
-:root[data-form="phone"] .library-tile-title {
+:root[data-form="phone"] .library-panel > * {
+  --gutter: 1rem;
+  --content-start: 1rem;
+}
+:root[data-form="phone"] .library-panel-head {
+  padding: 0.875rem 1rem;
+}
+:root[data-form="phone"] .library-panel-title {
   font-size: var(--fs-lg);
-}
-:root[data-form="phone"] .library-tile-chevron {
-  display: none;
 }
 .library-rows {
   padding-bottom: 3rem;
-}
-.library-see-all {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.125rem;
-  color: var(--text-2);
-  font-weight: 600;
-}
-@media (hover: hover) and (pointer: fine) {
-  .library-see-all:hover {
-    color: var(--text);
-  }
 }
 /* A whole collection: "‹ Library" over the title, filters on the right. */
 .library-page-header {
@@ -886,7 +889,17 @@
     transform: none;
   }
 }
-/* Library → Recent Files (#204): a file on this device, its kind on the art and × to take it off. */
+/* Library → Recent Files (#204): a file on this device, its kind on the art and × to take it off.
+   A file has no artwork: a quiet film glyph on the card's material stands in,
+   not the "no still" glyph, which reads as something missing. */
+.recent-file-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, var(--fill-3), var(--fill-1));
+  color: var(--text-3);
+}
 .recent-file-kind {
   position: absolute;
   left: 0.75rem;
@@ -1040,7 +1053,8 @@
   width: 9.5rem;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: var(--r-sm, 8px);
+  border-radius: var(--r-sm);
+  corner-shape: squircle;
   background: var(--fill-2);
 }
 .download-row-still img {
@@ -1112,25 +1126,25 @@
 .downloads-toolbar-gap {
   flex: 1;
 }
-.downloads-search {
+/* Every control in the toolbar is the segmented control's pill: one height, one glass. */
+.downloads-search.search-field-pill {
   width: 14rem;
+  height: 38px;
+  border: 0;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
 }
-.downloads-selectbar {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  margin-bottom: 1rem;
-  padding: 0.375rem 0.375rem 0.375rem 1rem;
-  border-radius: var(--r-md);
-  background: var(--surface-1);
-  box-shadow: 0 0 0 1px var(--hairline);
+.downloads-toolbar .btn,
+.downloads-selectbar .btn {
+  height: 38px;
+  padding: 0 1rem;
+  font-size: var(--fs-md);
 }
-.downloads-selectbar > span {
-  flex: 1;
+.downloads-toolbar .btn:not(.btn-primary) {
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
 }
 .downloads-bulk {
   display: inline-flex;
@@ -1139,12 +1153,163 @@
 }
 .btn.downloads-bulk.confirm-delete[data-armed] {
   background: rgb(255 107 94 / 0.18);
+  box-shadow: none;
   color: var(--danger);
 }
+/* A title's or season's own deletes: a smaller, quieter pill inside the list. */
 .btn.downloads-bulk-sm {
-  height: 32px;
+  height: 30px;
   padding: 0 0.75rem;
+  gap: 0.3125rem;
+  background: var(--fill-2);
   font-size: var(--fs-sm);
+}
+@media (hover: hover) and (pointer: fine) {
+  .downloads-toolbar .btn:not(.btn-primary):hover,
+  .downloads-selectbar .btn:not(:disabled):hover,
+  .btn.downloads-bulk-sm:hover {
+    background: var(--fill-3);
+  }
+}
+/* Selecting (#15): the actions float at the bottom of the window over a thick
+   material, as Photos' selection toolbar does, so they stay in reach down a
+   long list. It rises in from just below where it rests. */
+.downloads[data-selecting] {
+  padding-bottom: 6rem;
+}
+.downloads-selectbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + max(1.25rem, var(--safe-bottom)));
+  z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 0.375rem;
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    0 0 0 1px var(--glass-edge),
+    0 16px 40px -12px rgb(0 0 0 / 0.7);
+  transform: translateX(-50%);
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+@starting-style {
+  .downloads-selectbar {
+    opacity: 0;
+    transform: translate(-50%, 0.75rem);
+  }
+}
+.downloads-selectbar .btn {
+  background: var(--fill-2);
+}
+.downloads-selectbar .btn.confirm-delete:not(:disabled):not([data-armed]) {
+  color: var(--danger);
+}
+.downloads-selectbar-count {
+  flex: 1;
+  text-align: center;
+  color: var(--text-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  @starting-style {
+    .downloads-selectbar {
+      transform: translateX(-50%);
+    }
+  }
+}
+/* One grouped surface per list, as on the Library page: hairlines between the
+   rows, the first one hidden under the panel's top edge. */
+.downloads-panel {
+  padding: 0 1rem;
+  overflow: hidden;
+  border-radius: var(--r-panel);
+  corner-shape: squircle;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.downloads-panel > :first-child {
+  margin-top: -1px;
+}
+/* Room after the last row: the row padding alone sits tight against the edge. */
+.downloads-panel > :last-child {
+  margin-bottom: 0.25rem;
+}
+:root[data-form="phone"] .downloads-panel {
+  padding: 0 0.75rem;
+}
+/* Select boxes: the round check of iOS lists — an empty ring, filled with the
+   accent and a white tick once picked (a dash when part of a group is). */
+.download-check {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin: 0;
+  border: 1.5px solid var(--text-3);
+  border-radius: var(--r-round);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform var(--dur-press) var(--ease-out),
+    opacity 180ms var(--ease-out);
+}
+@starting-style {
+  .download-check {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+.download-check:active {
+  transform: scale(0.9);
+}
+.download-check:checked,
+.download-check:indeterminate {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.download-check::after {
+  content: "";
+  width: 0.75rem;
+  height: 0.75rem;
+  background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 160ms var(--ease-out);
+}
+.download-check:indeterminate::after {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.download-check:checked::after,
+.download-check:indeterminate::after {
+  opacity: 1;
+  transform: none;
+}
+.download-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .download-check:not(:checked):not(:indeterminate):hover {
+    border-color: var(--text-2);
+  }
 }
 .downloads-heading {
   margin: 0 0 0.5rem;
@@ -1209,7 +1374,8 @@
   width: 2.75rem;
   aspect-ratio: 2 / 3;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
+  corner-shape: squircle;
   background: var(--fill-2);
 }
 .download-title-poster img {
@@ -1239,11 +1405,15 @@
   min-height: 0;
   overflow: hidden;
 }
+/* In line with the episode rows below them. */
 .download-title-actions {
   display: flex;
   justify-content: flex-start;
   gap: 0.5rem;
-  padding: 0 0 0.5rem;
+  padding: 0 0 0.75rem 3.75rem;
+}
+:root[data-form="phone"] .download-title-actions {
+  padding-left: 0;
 }
 .download-title .download-rows,
 .download-season {
@@ -1285,14 +1455,6 @@
 }
 .download-row[data-watched] .download-row-still img {
   opacity: 0.6;
-}
-.download-check {
-  flex: none;
-  width: 1.125rem;
-  height: 1.125rem;
-  margin: 0;
-  accent-color: var(--progress);
-  cursor: pointer;
 }
 @media (prefers-reduced-motion: reduce) {
   .download-fold,

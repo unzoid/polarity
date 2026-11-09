@@ -76,6 +76,8 @@ export function PlayerStatus({
   const hidden = !mark && (waiting || (!!candidate && choice === undefined));
   const failed = state.status === "failed" || !!error;
   const stageAt = failed ? failedStage(steps) : undefined;
+  // Failed, the screen leads with what to do next; the log waits behind Show Steps (Copy Details has it all).
+  const [log, setLog] = useState(false);
 
   const stage = state.status === "searching" ? "searching" : state.status === "resolving" || state.status === "notice" ? "resolving" : "starting";
   const message = failed
@@ -126,8 +128,17 @@ export function PlayerStatus({
         <p key={message} className="player-status-message t-callout" role="status">
           {message}
         </p>
-        {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
-        <StartSteps steps={steps} all={failed} />
+        {failed && (stageAt || steps.length > 0) && (
+          <div className="player-status-meta">
+            {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
+            {steps.length > 0 && (
+              <button type="button" className="player-status-log t-caption" aria-expanded={log} onClick={() => setLog((v) => !v)}>
+                {log ? "Hide Steps" : "Show Steps"}
+              </button>
+            )}
+          </div>
+        )}
+        {(!failed || log) && <StartSteps steps={steps} all={failed} />}
         {failed && (
           <div className="player-status-actions">
             {/* Focused, so Enter (or a controller's A) picks it straight away. */}
