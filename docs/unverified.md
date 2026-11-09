@@ -199,6 +199,30 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
    windows resized: the tablet layout; under 600 px wide the player shows glyph-only actions and the title
    beside Back. With a keyboard and a trackpad: Escape is Back, the shortcuts work, hover shows on cards.
 
+## iOS green tint (#416)
+
+An iPhone showed video with green and purple patches. Its log (`video: decoder …; decoded …; drawn …`
+lines, `polar_player::video_path`) showed the colour tags right throughout, and the picture right once
+mpv, after a trip to the home screen, had fallen back from `videotoolbox` (frames drawn straight from
+VideoToolbox through OpenGL ES) to `videotoolbox-copy` and then to software decoding. So the fault is in
+the zero-copy path between VideoToolbox and mpv's OpenGL ES output; reading mpv's iOS interop
+(`hwdec_ios_gl.m`, NV12's planes as LUMINANCE / LUMINANCE_ALPHA textures) and its renderer didn't show
+where. What changed:
+- iOS decodes with `videotoolbox-copy` (`Tune::ios_hwdec`): VideoToolbox still decodes, its frames are
+  copied to memory and drawn as software-decoded ones are. Hardware decoding off is still `no`.
+- After the app comes back to the foreground, if VideoToolbox was decoding before and mpv has fallen back
+  to software since, hardware decoding is turned off and on again (`player::hardware_decoding_back`), so
+  the rest of the video isn't decoded in software.
+
+Nothing here runs iOS. `scripts/colour-bars.sh <dir>` makes SMPTE colour-bar clips (H.264 8-bit, HEVC
+10-bit, HEVC 10-bit PQ, AV1) and `bars.png`, how they should look. To check on an iPhone:
+- Play each clip and a real episode: no cast on the grey and white bars, colours as in `bars.png` (the PQ
+  clip dimmer, but not tinted). polar.log's `video:` lines should say `decoder videotoolbox-copy`.
+- During playback, go to the home screen for a few seconds and come back: the picture stays right, and
+  within a few seconds the log has a new `video:` line back on `videotoolbox-copy` (not `software`).
+- A 4K HEVC episode plays without dropped frames (the copy costs some battery; the log's `video:` lines
+  and the phone's warmth are worth noting).
+
 ## iOS tab bar (#174)
 
 The sections (Home, Series, Movies, Anime, Library, and Calendar when it's on) are iOS's own tab bar: a
