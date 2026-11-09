@@ -190,11 +190,15 @@ pub async fn streams(
     alt_ids: Option<Vec<String>>,
     // The episode's absolute number(s), when the app knows them (an anime's): a file numbered that way is this episode.
     absolute: Option<Vec<u32>>,
+    // A later anime season's own titles: a file named by one without a season number is that season's.
+    season_names: Option<Vec<String>>,
 ) -> Result<StreamsResult> {
     let mut ids = vec![video_id];
     ids.extend(alt_ids.unwrap_or_default());
     // What every file is checked against: another episode's file is listed last and never picked by itself.
-    let wanted = WantedEpisode::from_ids(ids.iter().map(String::as_str), &absolute.unwrap_or_default());
+    let names = season_names.unwrap_or_default();
+    let wanted = WantedEpisode::from_ids(ids.iter().map(String::as_str), &absolute.unwrap_or_default())
+        .map(|w| w.with_names(names.iter().map(String::as_str)));
 
     // One request per (addon, id) the addon claims to serve.
     let jobs: Vec<(InstalledAddon, String)> = installed(&state)

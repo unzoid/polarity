@@ -24,7 +24,8 @@ function useOpen(item: MetaPreview, id = item.id) {
 }
 
 /**
- * Portrait 2:3 poster — used in grids (Movies, Series, Search, Library). A poster that doesn't load leaves the name.
+ * Portrait 2:3 poster — used in grids (Movies, Series, Search, Library). A poster that doesn't load gives way to the
+ * backdrop, and when neither does, the name (lists drop such a title when it can't play either: useListable).
  * `watching`: the episode being watched (`entry`'s by default); with seasons as separate shows, an anime shows its entry (#22).
  */
 export function PosterCard({ item: stored, progress, entry, watching }: { item: MetaPreview; progress?: number; entry?: Progress; watching?: string }) {
@@ -35,6 +36,7 @@ export function PosterCard({ item: stored, progress, entry, watching }: { item: 
     <Card
       shape="poster"
       art={item.poster}
+      artFallbacks={item.background ? [item.background] : undefined}
       fallback={<span className="card-fallback t-headline">{item.name}</span>}
       title={item.name}
       detail={item.releaseInfo ?? ""}

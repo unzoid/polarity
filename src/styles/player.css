@@ -46,11 +46,11 @@
 /* The focus ring only for focus moved by the keyboard (#329, useKeyboardFocus): never after a click,
    nor for a shortcut pressed while a clicked button keeps the focus. It fades in quickly and fades
    out with the controls that hold it; the next key brings both back. */
-.player:not([data-key-focus]) :is(:focus-visible, :focus-visible .card-frame, .srcf-slider-thumb:has(:focus-visible)) {
+.player:not([data-key-focus]) :is(:focus-visible, :focus-visible :is(.card-frame, .episode-rail-still), .srcf-slider-thumb:has(:focus-visible)) {
   outline-color: transparent;
 }
 .player[data-key-focus] :is(button, a[href], input, [role="slider"]):focus-visible,
-.player[data-key-focus] :focus-visible .card-frame {
+.player[data-key-focus] :focus-visible :is(.card-frame, .episode-rail-still) {
   animation: focus-ring-in var(--dur-fast) var(--ease-out);
 }
 @keyframes focus-ring-in {
@@ -60,7 +60,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .player[data-key-focus] :is(button, a[href], input, [role="slider"]):focus-visible,
-  .player[data-key-focus] :focus-visible .card-frame {
+  .player[data-key-focus] :focus-visible :is(.card-frame, .episode-rail-still) {
     animation: none;
   }
 }
@@ -91,8 +91,10 @@
   align-items: start;
   column-gap: 1rem;
   /* The safe-area insets are 0 on a desktop; on a phone or tablet the bars keep clear of the notch,
-     the camera cutout and the home indicator (tokens.css). */
-  padding: calc(1rem + var(--safe-top)) var(--safe-right) 4rem var(--safe-left);
+     the camera cutout and the home indicator (tokens.css). Back places itself from these. */
+  --bar-top: calc(1rem + var(--safe-top));
+  --bar-left: var(--safe-left);
+  padding: var(--bar-top) var(--safe-right) 4rem var(--bar-left);
   background: linear-gradient(to bottom, rgb(0 0 0 / 0.6), transparent);
   z-index: 2;
 }
@@ -106,10 +108,16 @@
     transform var(--dur-press) var(--ease-out),
     opacity var(--dur-fast) var(--ease-std);
 }
-.player-top > .player-icon {
+/* Back stands exactly where the navbar's does on the pages (#348, shell.css). Its inset is its own margin, not the
+   bar's padding: the bar's sides stay alike, so its middle is the window's. */
+.player-top > .player-back {
   justify-self: start;
-  /* Back's inset is its own margin, not the bar's padding: the bar's sides stay alike, so its middle is the window's. */
-  margin-left: max(0px, 1.25rem - var(--safe-left));
+  margin-left: calc(var(--nav-start) - var(--bar-left));
+  margin-top: calc(var(--back-top) - var(--bar-top));
+}
+/* A bare glyph on the video: a soft shadow keeps it readable on bright frames, like the bars' other controls. */
+.player-back {
+  filter: drop-shadow(0 1px 8px rgb(0 0 0 / 0.45));
 }
 /* Centred heading: S2:E3 “Title”, show name underneath. */
 .player-heading {
@@ -409,10 +417,9 @@
 :root:is([data-form="phone"], [data-compact="true"]) .player-top {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   column-gap: 0.5rem;
-  padding: calc(0.5rem + var(--safe-top)) var(--safe-right) 3rem calc(0.5rem + var(--safe-left));
-}
-:root:is([data-form="phone"], [data-compact="true"]) .player-top > .player-icon {
-  margin-left: 0;
+  --bar-top: calc(0.5rem + var(--safe-top));
+  --bar-left: calc(0.5rem + var(--safe-left));
+  padding-bottom: 3rem;
 }
 :root:is([data-form="phone"], [data-compact="true"]) .player-heading {
   align-items: flex-start;
@@ -2146,6 +2153,23 @@ img.load-mark-base[data-logo-look^="halo"] {
   .episode-rail-card:not([aria-current]) .episode-rail-main:not(:disabled):hover {
     color: var(--text);
   }
+}
+/* The arrow keys step through the rail as a remote does on TV: the focused card's still takes the
+   ring and its title brightens, no box round the whole card, and the paddles' blurred edges stay
+   away (they're for a mouse over the rail); the rail just moves along. */
+.episode-rail-main:focus-visible {
+  outline: none;
+  color: var(--text);
+}
+.episode-rail-main:focus-visible .episode-rail-still {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.episode-rail-viewport:has(.episode-rail-main:focus-visible):not(:hover) .row-paddle {
+  --edge-shown: 0;
+}
+.episode-rail-viewport:has(.episode-rail-main:focus-visible):not(:hover) .row-paddle .edge-blur i {
+  backdrop-filter: none;
 }
 /* Settings → Browsing → Spoilers, as on the title page. */
 :root[data-hide-thumbs="true"] .episode-rail-card[data-unwatched="true"] .episode-rail-still img {

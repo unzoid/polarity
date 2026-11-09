@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { backHistory, nativeTabsState, routeTitle, tabId, tabRoute, type NavLink } from "../src/lib/navTabs";
+import { backHistory, MAX_NATIVE_TABS, nativeTabsState, routeTitle, tabId, tabRoute, type NavLink } from "../src/lib/navTabs";
 import type { Entry, Route } from "../src/lib/router";
 
 const LINKS: NavLink[] = [
@@ -18,7 +18,7 @@ test("each section has its own id, Movies and Series apart", () => {
 test("the tabs carry their titles and SF Symbols", () => {
   const { tabs } = nativeTabsState(LINKS, stack({ name: "home" }), false);
   expect(tabs[0]).toEqual({ id: "home", title: "Home", icon: "house" });
-  expect(tabs.map((t) => t.icon)).toEqual(["house", "tv", "film", "books.vertical", "magnifyingglass"]);
+  expect(tabs.map((t) => t.icon)).toEqual(["house", "tv", "film", "books.vertical"]);
 });
 
 test("the current tab is the stack's root, also under pushed pages and from a shelf's heading", () => {
@@ -27,12 +27,17 @@ test("the current tab is the stack's root, also under pushed pages and from a sh
   expect(nativeTabsState(LINKS, stack({ name: "discover", type: "movie", catalog: "top", genre: "Drama" }), false).selected).toBe("discover:movie");
 });
 
-test("search is the last tab, current when it opened the stack, not over a section's search (#174)", () => {
-  const { tabs } = nativeTabsState(LINKS, stack({ name: "home" }), false);
-  expect(tabs[tabs.length - 1]).toEqual({ id: "search", title: "Search", icon: "magnifyingglass" });
-  expect(nativeTabsState(LINKS, stack({ name: "search" }), false).selected).toBe("search");
+test("five tabs at most and no search tab, so iOS never adds its own More tab (#449)", () => {
+  const anime: NavLink = { route: { name: "anime" }, label: "Anime" };
+  const calendar: NavLink = { route: { name: "calendar" }, label: "Calendar" };
+  const all = [...LINKS.slice(0, 3), anime, LINKS[3], calendar];
+  const { tabs } = nativeTabsState(all, stack({ name: "home" }), false);
+  expect(MAX_NATIVE_TABS).toBe(5);
+  expect(tabs.map((t) => t.id)).toEqual(["home", "discover:series", "discover:movie", "anime", "library"]);
+  // Search opened from the top bar's button is no tab: none is current on it.
+  expect(nativeTabsState(LINKS, stack({ name: "search" }), false).selected).toBeNull();
   expect(nativeTabsState(LINKS, stack({ name: "home" }, { name: "search" }), false).selected).toBe("home");
-  expect(tabRoute(LINKS, "search")).toEqual({ name: "search" });
+  expect(tabRoute(LINKS, "search")).toBeUndefined();
 });
 
 test("no tab is current on a page outside them", () => {

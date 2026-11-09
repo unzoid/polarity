@@ -285,6 +285,7 @@ export const contract = {
     background: true,
     color: true,
     font: true,
+    fontFromSubtitles: true,
     opacity: true,
     outline: true,
     outlineColor: true,

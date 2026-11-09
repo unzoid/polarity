@@ -42,6 +42,37 @@
   overflow-x: hidden;
   padding-bottom: 4rem;
 }
+/* iOS's Back following the finger (lib/ui/pageDrag.ts, #451): the page on top slides right with it over the
+   one under it, which shows for this and comes in from a little to the left, dimmed less as it comes. Each
+   is its own layer for the move, below the navbar. */
+.page[data-drag] {
+  z-index: 0;
+  isolation: isolate;
+  will-change: transform;
+}
+.page[data-drag="top"] {
+  background: var(--bg);
+  box-shadow: -10px 0 28px rgb(0 0 0 / 0.45);
+}
+.page[data-drag="under"] {
+  visibility: visible;
+  content-visibility: visible;
+}
+.page[data-drag="under"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+  opacity: calc(0.35 * (1 - var(--drag-in, 0)));
+  pointer-events: none;
+}
+.page[data-drag-settle] {
+  transition: transform 280ms var(--ease-out);
+}
+.page[data-drag-settle]::after {
+  transition: opacity 280ms var(--ease-out);
+}
 /* Pushed pages (detail) get one short entrance; tab switches get none. */
 .page-pushed {
   animation: page-in var(--dur-base) var(--ease-out);
@@ -99,9 +130,8 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  /* The wordmark's ink lines up with the page's content edge (the hero card,
-     row titles): the brand button pads its glyphs by 0.5rem. */
-  padding-left: calc(var(--content-start) - 0.5rem);
+  /* Where Back sits (--nav-start, below): the wordmark's ink lines up with the page's content edge. */
+  padding-left: var(--nav-start);
 }
 .navbar::before {
   content: "";
@@ -252,6 +282,52 @@
     transform var(--dur-press) var(--ease-out),
     opacity var(--dur-fast) var(--ease-std);
 }
+/* --- Back (#348): one button (components/BackButton.tsx), on the pages in the navbar and in the player's top bar,
+   at the same spot. These say where the navbar puts it, so the player puts it there too. */
+:root {
+  /* The navbar's left padding. The wordmark's ink lines up with the page's content edge (the hero card,
+     row titles): the brand button pads its glyphs by 0.5rem. */
+  --nav-start: calc(var(--content-start) - 0.5rem);
+  /* Above the navbar's row: the status bar on a phone. */
+  --nav-pad-top: 0px;
+  --back-size: 40px;
+  /* Its size on screen (a finger's on touch), and its top edge: centred in the navbar's row. */
+  --back-box: max(var(--back-size), var(--hit));
+  --back-top: calc(var(--nav-pad-top) + (var(--nav-h) - var(--nav-pad-top) - var(--back-box)) / 2);
+}
+@media (max-width: 860px) {
+  :root {
+    --nav-start: 0.75rem;
+    --back-size: 36px;
+  }
+}
+:root[data-form="phone"] {
+  /* The bar's ends line up with the page's content edges (--gutter, which keeps clear of a camera cutout
+     held sideways); Back itself never reaches into the cutout. */
+  --nav-start: max(calc(var(--gutter) - 0.5rem), var(--safe-left));
+  --nav-pad-top: var(--safe-top);
+}
+html[data-os="mac"] {
+  --nav-start: max(calc(var(--content-start) - 0.5rem), var(--traffic-lights));
+}
+.back-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--back-size);
+  height: var(--back-size);
+  min-width: var(--hit);
+  min-height: var(--hit);
+  color: var(--text);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .back-button:hover {
+    opacity: 0.75;
+  }
+}
 /* Hidden, Back folds away to the left so the wordmark sits at the edge; when
    there's somewhere to go back to it slides in and the wordmark makes room.
    One element in the bar, so animating its margin is cheap. */
@@ -263,7 +339,7 @@
     margin-left var(--dur-base) var(--ease-out);
 }
 .navbar-back[data-shown="false"] {
-  margin-left: calc(-40px - 0.5rem);
+  margin-left: calc(0px - var(--back-box) - 0.5rem);
   opacity: 0;
   pointer-events: none;
 }
@@ -409,9 +485,6 @@
   }
 }
 @media (max-width: 860px) {
-  .navbar {
-    padding-left: 0.75rem;
-  }
   .navbar-brand {
     padding: 0 0.25rem;
     margin-right: 0.25rem;
@@ -468,8 +541,7 @@
    and the actions, below the status bar. NavLinks measures the bar's own width,
    so "More" still takes what doesn't fit. */
 :root[data-form="phone"] .navbar {
-  padding-top: var(--safe-top);
-  padding-left: 0.5rem;
+  padding-top: var(--nav-pad-top);
 }
 :root[data-form="phone"] .navbar-links {
   position: fixed;
@@ -499,10 +571,9 @@
   margin-right: 0;
   padding: 0 0.5rem;
 }
-/* The bar's ends line up with the page's content edges (--gutter, which keeps clear of a camera
-   cutout held sideways): the wordmark and the avatar pad their glyphs by about half a rem. */
+/* The right end lines up with the page's content edge as the left does (--nav-start): the avatar pads its
+   glyph by about 0.375rem. */
 :root[data-form="phone"] .navbar {
-  padding-left: calc(var(--gutter) - 0.5rem);
   padding-right: calc(var(--gutter) - 0.375rem);
 }
 :root[data-form="phone"] .navbar-actions {
@@ -522,9 +593,8 @@
   }
 }
 /* iOS draws the tabs itself (components/NativeTabs.tsx): its tab bar is part of the safe area, so pages
-   pad by that alone. */
-:root[data-native-tabs] .navbar-links,
-:root[data-native-tabs] .navbar-search-page {
+   pad by that alone. Search stays the top bar's button (#449). */
+:root[data-native-tabs] .navbar-links {
   display: none;
 }
 :root[data-native-tabs][data-form="phone"] {
@@ -543,6 +613,22 @@
    go under it and scroll sideways rather than run off the edge. */
 :root[data-form="phone"] .screen-header {
   flex-wrap: wrap;
+  /* The page starts right under the top bar, as a phone app's large title does (#450): the desktop's
+     1.75rem plus the heading's default margin left a band of nothing under the status bar and the bar. */
+  padding-top: calc(var(--nav-h) + 0.5rem);
+}
+:root[data-form="phone"] .screen-header h1 {
+  margin: 0;
+}
+:root[data-form="phone"] :is(.playlist-view, .anime[data-hero="false"] .anime-nav, .anime[data-hero="false"] .home-rows) {
+  padding-top: calc(var(--nav-h) + 0.5rem);
+}
+:root[data-form="phone"] .anime[data-hero="false"] .anime-nav + .home-rows {
+  padding-top: 0;
+}
+/* The phone's empty-state padding would otherwise put AniList's "didn't answer" under the top bar. */
+:root[data-form="phone"] .empty-state.anime-unreachable {
+  padding-top: calc(var(--nav-h) + 3rem);
 }
 :root[data-form="phone"] .discover-controls {
   max-width: 100%;
@@ -816,14 +902,11 @@ html[data-os="mac"] body::after {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
   pointer-events: none;
 }
-html[data-os="mac"] .navbar {
-  padding-left: max(calc(var(--content-start) - 0.5rem), var(--traffic-lights));
-}
 html[data-os="mac"] .account-bar {
   padding-left: max(var(--gutter), var(--traffic-lights));
 }
 html[data-os="mac"] .player-top {
-  padding-left: var(--traffic-lights);
+  --bar-left: var(--traffic-lights);
 }
 html[data-os="mac"] .options-close {
   left: var(--traffic-lights);

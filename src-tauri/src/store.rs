@@ -167,6 +167,10 @@ pub struct SubtitleStyle {
     pub background: u32,
     /// Font family name, as installed on the system.
     pub font: String,
+    /// Styled subtitles keep their release's font. Missing (`None`) in styles saved before the
+    /// choice existed; the app reads those from `font` (SubtitleSettings.tsx `keepsReleaseFont`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_from_subtitles: Option<bool>,
 }
 
 impl Default for SubtitleStyle {
@@ -180,6 +184,7 @@ impl Default for SubtitleStyle {
             outline_color: "#000000".into(),
             background: 0,
             font: "Segoe UI Semibold".into(),
+            font_from_subtitles: Some(true),
         }
     }
 }

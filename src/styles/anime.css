@@ -493,6 +493,44 @@
   gap: 1.25rem;
   flex: none;
 }
+/* The toolbar under the season tabs (#426): one height whatever it holds (Download Season is the
+   tallest), so it stays put from tab to tab; the episode ranges keep their whole width, and the tools
+   give way instead (the search narrows, then they move under the ranges), so nothing is cut off. */
+@media (min-width: 601px) {
+  .anime-seasons-bar {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+  .anime-seasons-bar > .seasons-picker,
+  .anime-seasons-bar > .anime-episodes-tools {
+    min-height: 2.75rem;
+  }
+  .anime-seasons-bar > .seasons-picker {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    overflow: visible;
+  }
+  .anime-seasons-bar .anime-ranges {
+    padding-bottom: 0;
+  }
+  /* From nothing, so the row breaks only at the tools' least width (the search at its narrowest). */
+  .anime-seasons-bar > .anime-episodes-tools {
+    flex: 1 1 0%;
+    justify-content: flex-end;
+  }
+  .anime-seasons-bar .anime-episodes-tools > :not(.anime-episode-search) {
+    flex: none;
+    white-space: nowrap;
+  }
+  .anime-seasons-bar .anime-episode-search {
+    flex: 0 1 12rem;
+    width: auto;
+    min-width: 7rem;
+    /* Its field's own width doesn't hold the row open: it narrows to 7rem first. */
+    contain: inline-size;
+  }
+}
 .anime-episodes-tools .segmented {
   background: transparent;
   backdrop-filter: none;
@@ -708,4 +746,81 @@
 .anime-list-note {
   margin: 0.75rem 0 0;
   padding: 0 var(--gutter) 0 var(--content-start);
+}
+
+/* --- A film's season tab (#352): the film as one wide card where a season's episodes go, its
+       still on the left, its details beside it, and Sources and Download under the details. */
+.film-card {
+  --film-still: clamp(18rem, 38vw, 34rem);
+  --film-gap: 1.75rem;
+  position: relative;
+  padding: 0.25rem var(--gutter) 1rem var(--content-start);
+}
+.film-card-main {
+  display: grid;
+  grid-template-columns: var(--film-still) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--film-gap);
+  width: 100%;
+}
+.film-card-main:disabled {
+  opacity: 0.5;
+}
+/* A card this size lifts less than a shelf's. */
+@media (hover: hover) and (pointer: fine) {
+  .film-card-main:hover .card-frame {
+    transform: scale(1.015);
+  }
+}
+.film-card-main:focus-visible .card-frame {
+  transform: scale(1.015);
+}
+.film-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  /* Room under the story for the buttons, which can't sit inside the card's own button. */
+  padding: 0.25rem 0 3.5rem;
+}
+.film-card-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.film-card-facts {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-2);
+}
+.film-card-overview {
+  margin: 0;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.film-card-actions {
+  position: absolute;
+  left: calc(var(--content-start) + var(--film-still) + var(--film-gap));
+  bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+/* A phone, or a narrow window: the details under the still, then the buttons. */
+@media (max-width: 720px) {
+  .film-card-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .film-card-text {
+    padding-bottom: 0;
+  }
+  .film-card-actions {
+    position: static;
+    margin-top: 0.75rem;
+  }
 }

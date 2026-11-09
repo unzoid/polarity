@@ -461,6 +461,8 @@ export interface SubtitleStyle {
   outlineColor: string;
   /** Opacity of a dark box behind the text, percent (0 = none). */
   background: number;
-  /** System font family name (older saved styles may lack it). */
+  /** System font family name (older saved styles may lack it): plain-text subtitles always use it, styled ones only when `fontFromSubtitles` is false. */
   font?: string;
+  /** Styled subtitles keep their release's font ("From the subtitles"). Missing in styles saved before the choice: see SubtitleSettings' `keepsReleaseFont`. */
+  fontFromSubtitles?: boolean;
 }

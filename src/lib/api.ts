@@ -68,10 +68,16 @@ export const api = {
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
-  /** Also asked by the episode's other ids; files are checked against its absolute number too (anime). */
+  /** Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime). */
   streams: (type: ContentType, videoId: string) => {
     const absolute = playContext.absolute(videoId);
-    return call<StreamsResult>("streams", { ty: type, videoId, altIds: playContext.altIds(videoId) ?? null, absolute: absolute === undefined ? null : [absolute] });
+    return call<StreamsResult>("streams", {
+      ty: type,
+      videoId,
+      altIds: playContext.altIds(videoId) ?? null,
+      absolute: absolute === undefined ? null : [absolute],
+      seasonNames: playContext.seasonNames(videoId) ?? null,
+    });
   },
   resolveStream: (stream: Stream) => call<Playable>("resolve_stream", { stream }),
   /** Start playing a torrent source (replacing the one playing); its steps arrive as `player://torrent` with `stepId`. */

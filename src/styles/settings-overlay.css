@@ -531,6 +531,12 @@
   box-shadow: var(--t3-control-shade);
   font-weight: 400;
 }
+/* Share add-ons and keys' choices are long (#429): wide enough to show the chosen one whole. On a phone it's full width. */
+@media (min-width: 601px) {
+  .t3s .settings-row[data-setting="shareSetup"] .select-trigger {
+    width: 19rem;
+  }
+}
 @media (hover: hover) and (pointer: fine) {
   .t3s .select-trigger:hover {
     background: var(--t3-control-hover);

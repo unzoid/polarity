@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Entry, TabRoute } from "../router";
-import { SEARCH_TAB, tabId } from "../navTabs";
+import { tabId } from "../navTabs";
 
-/** The sections in the order the tab bars show them (NavBar's links, then iOS's search tab). */
-const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", SEARCH_TAB.id];
+/** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
+const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
 
 /** How long a change's pages keep their motion: the entrance (shell.css), and a frame to spare. */
 const SETTLE = 300;
@@ -14,6 +14,13 @@ const SETTLE = 300;
  * no longer in the stack (Back, a tab switch), to render once more while it leaves.
  */
 export type PageMotion = { enter: number; leave: number; dir: -1 | 0 | 1; leaving?: Entry };
+
+let skipNext = false;
+
+/** The next page change plays no motion: the pages are already where it would take them (pageDrag.ts). */
+export function skipNextPageMotion() {
+  skipNext = true;
+}
 
 type Seen = { top?: Entry; keys: number[]; root?: TabRoute; motion?: PageMotion };
 
@@ -28,7 +35,9 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
   let now = seen;
   if (top?.key !== seen.top?.key) {
     now = { top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined };
-    if (enabled && top && seen.top) now.motion = motionOf(seen, seen.top, top, pages);
+    const skip = skipNext;
+    skipNext = false;
+    if (enabled && top && seen.top && !skip) now.motion = motionOf(seen, seen.top, top, pages);
     setSeen(now); // during render: this render already draws the change with its motion
   }
 

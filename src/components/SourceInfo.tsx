@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { Info, Play } from "./icons";
-import { Button } from "./ui/Button";
+import { Check, Close, Copy, Info, Play } from "./icons";
+import { Button, IconButton } from "./ui/Button";
 import { useLayer } from "../lib/ui";
 import { sourceInfo, sourceInfoText, type InfoSection, type SourceInfoContext } from "../lib/playback";
 import type { RankedStream } from "../lib/types";
@@ -14,7 +14,7 @@ import { isMenuKey } from "../tv/menuKey";
 /**
  * A source's "i" panel (#229): everything the source carries, masked
  * (lib/playback/sourceInfo.ts), with a Copy button where there's a clipboard.
- * On desktop and phones a card over the page; on TV a full-screen panel that
+ * On desktop and phones a card over the page, Copy and Close as icons in its corner; on TV a full-screen panel that
  * the D-pad scrolls, reached from the row's menu (TvSourceMenu).
  */
 
@@ -50,13 +50,18 @@ function CopyButton({ text, tv }: { text: string; tv?: boolean }) {
     const t = window.setTimeout(() => setCopied(false), 2000);
     return () => window.clearTimeout(t);
   }, [copied]);
+  const copy = () => void navigator.clipboard.writeText(text).then(() => setCopied(true), () => setCopied(false));
+  const label = copied ? "Copied" : "Copy";
+  if (!tv) {
+    return (
+      <IconButton label={label} title={label} onClick={copy}>
+        {copied ? <Check size={20} /> : <Copy size={20} />}
+      </IconButton>
+    );
+  }
   return (
-    <Button
-      variant="glass"
-      className={tv ? "tv-pill" : undefined}
-      onClick={() => void navigator.clipboard.writeText(text).then(() => setCopied(true), () => setCopied(false))}
-    >
-      {copied ? "Copied" : "Copy"}
+    <Button variant="glass" className="tv-pill" onClick={copy}>
+      {label}
     </Button>
   );
 }
@@ -135,20 +140,22 @@ function DesktopPanel({ request, onClose }: { request: SourceInfoRequest; onClos
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="source-info-card">
-        <header>
-          <h2 id="source-info-title" className="t-title2">
-            Source Info
-          </h2>
-          <p className="t-caption muted">{request.title}</p>
+        <header className="source-info-head">
+          <div>
+            <h2 id="source-info-title" className="t-title2">
+              Source Info
+            </h2>
+            <p className="t-caption muted">{request.title}</p>
+          </div>
+          <div className="source-info-tools">
+            {canCopy() && <CopyButton text={sourceInfoText(request.sections)} />}
+            <IconButton label="Close" title="Close (Esc)" onClick={onClose} autoFocus>
+              <Close size={20} />
+            </IconButton>
+          </div>
         </header>
         <div className="source-info-body" data-testid="source-info-body">
           <Sections sections={request.sections} />
-        </div>
-        <div className="source-info-actions">
-          {canCopy() && <CopyButton text={sourceInfoText(request.sections)} />}
-          <Button variant="primary" onClick={onClose} autoFocus>
-            Done
-          </Button>
         </div>
       </div>
     </div>,

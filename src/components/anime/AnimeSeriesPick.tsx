@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { animeLinks, pickAnimeImdb, unpickAnime, type AnimeCard } from "../../lib/anime";
+import { useListable } from "../../lib/catalog";
 import { keys, useSearch } from "../../lib/net";
 import { Img } from "../Img";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "../ui/Popover";
@@ -21,7 +22,9 @@ export function AnimeSeriesPick({ anime, isMovie, current, mal, kitsu }: { anime
   const { data: links } = useQuery({ queryKey: keys.animeLinks, queryFn: animeLinks, staleTime: Infinity });
   const stored = links?.some((l) => l.anilist === anime.id);
   const kind = isMovie ? "film" : "series";
-  const results = (isMovie ? data?.movies : data?.series)?.filter((m) => m.id.startsWith("tt")) ?? [];
+  const found = useMemo(() => (isMovie ? data?.movies : data?.series)?.filter((m) => m.id.startsWith("tt")), [data, isMovie]);
+  // Nothing to play and nothing to show (#337) isn't offered.
+  const results = useListable(found) ?? [];
 
   const pick = (id: string, name: string) => {
     setOpen(false);
@@ -46,7 +49,11 @@ export function AnimeSeriesPick({ anime, isMovie, current, mal, kitsu }: { anime
         <div className="playlist-menu-list anime-pick-list" aria-busy={isFetching || undefined}>
           {results.map((m) => (
             <button key={m.id} className="playlist-menu-item anime-pick-item" aria-current={m.id === current || undefined} onClick={() => pick(m.id, m.name)}>
-              {m.poster ? <Img src={m.poster} alt="" className="anime-pick-poster" /> : <span className="anime-pick-poster" />}
+              {m.poster || m.background ? (
+                <Img src={m.poster ?? m.background} fallbacks={[m.background]} alt="" className="anime-pick-poster" />
+              ) : (
+                <span className="anime-pick-poster" />
+              )}
               <span className="anime-pick-name">{m.name}</span>
               {m.releaseInfo && <span className="anime-pick-year tabular">{m.releaseInfo}</span>}
             </button>

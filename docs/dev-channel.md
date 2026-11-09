@@ -41,13 +41,36 @@ own feed, and each feed is signed with its own key.
 - **Published in one rolling pre-release**, "Dev build" (tag `dev`), so the Releases list has a
   single dev line that never sits between releases and never becomes "Latest". Each build:
   - moves the `dev` tag to its commit;
-  - uploads its files with the build number in the name (`polarity-dev.57-Windows-x64-setup.exe`,
-    `polarity-dev.57-macOS-arm64.dmg`, `polarity-dev.57-Linux-x64.AppImage`…, with the mpv source
-    archives for Windows and macOS, docs/licensing.md) and its own feed `latest-dev.57.json`;
+  - uploads its files, named platform first and then by the build number padded to four digits,
+    so GitHub's alphabetical list keeps each platform's builds together, oldest to newest (below);
   - replaces the channel's `latest.json`, which offers this build and lists every kept one;
   - removes the files of builds older than the newest 11 (this one and the previous 10);
-  - rewrites the entry's notes: hash, build number, date, the merged pull request's title, and
-    the kept builds.
+  - rewrites the entry's notes: hash, build number, date and the merged pull request's title; a
+    Downloads section for this build by platform; a table of the earlier kept builds (build,
+    commit, date, pull request) with a link per platform; the mpv sources of this build.
+
+### File names
+
+| File | For |
+|---|---|
+| `Polarity-Dev-Windows-x64-0057-setup.exe` | Windows installer |
+| `Polarity-Dev-macOS-arm64-0057.dmg` | macOS, Apple silicon |
+| `Polarity-Dev-macOS-arm64-0057.app.tar.gz` | the macOS app as the updater downloads it |
+| `Polarity-Dev-Linux-x64-0057.AppImage`, `Polarity-Dev-Linux-x64-0057.deb` | Linux |
+| `Sources-Polarity-Dev-<Platform>-<arch>-0057-mpv.tar` | the sources of the bundled mpv builds, Windows and macOS (docs/licensing.md) |
+| `Updates-Dev-0057.json` | build 57's own feed, for going back to it |
+| `latest.json` | the channel's feed every dev build checks |
+
+The `Sources-` and `Updates-` files sort after the installers. `latest.json` keeps its name, so it
+sorts first: every installed dev build asks for it by that name. Updater signatures aren't uploaded;
+the feeds carry them.
+
+Builds made before these names (build 5) are called `polarity-dev.5-…` with the feed
+`latest-dev.5.json`. They stay until they're older than the newest 11, and their `.sig` files are
+removed by the next build. Such a build asks for a kept build's feed as `latest-dev.<N>.json`, so
+while one is kept each new build's feed goes up under that name too; it updates through
+`latest.json` as before. Newer builds ask for `Updates-Dev-<NNNN>.json` and then `latest-dev.<N>.json`,
+so they can go back to an old-named build.
 
 ## Its own app
 
@@ -55,7 +78,7 @@ A dev build installs and runs as an app of its own next to the released Polarity
 (`devConf` in `scripts/devChannel.ts`, `src-tauri/src/dev_channel.rs`, `src/lib/platform/build.ts`):
 
 - **Name:** "Polarity Dev" in the Start menu, the Applications folder and the taskbar; its program
-  and package are `polarity-dev`, its release files `polarity-dev.N-…`.
+  and package are `polarity-dev`, its release files `Polarity-Dev-…` (above).
 - **Identifier:** `app.getpolar.desktop.dev`, so its own install folder, app data and settings,
   keychain entries and notifications. The released app's data is never touched; a dev build starts
   empty and signed out.
@@ -100,7 +123,10 @@ databases, neither production nor development.
   bun scripts/devDatabaseCode.ts https://<project>.supabase.co <publishable key>
   ```
 
-- **Release builds** are unchanged and have no such setting.
+- **Release builds** are unchanged and have no such setting. Its code is not in their bundle at all:
+  `buildChannel` is a constant the bundler folds, so `buildChannel === "dev"` branches are dropped.
+  The same goes for the watch log (#424). CI checks it on every push: `bun scripts/releaseBundle.ts`
+  builds a release and a dev build and fails if the release has any of the dev-only parts' texts.
 - **CI's builds:** once `ci.yml` gives the Android and iOS builds the production settings
   (`VITE_SUPABASE_*` secrets), only builds of `master` should get them; builds of other branches,
   `dev` included, get none.
@@ -118,11 +144,52 @@ Run by whoever owns the dev Supabase project, with the Supabase CLI:
 2. **Invite accounts:** Authentication → Users → Add user → Send invitation, one per teammate.
 3. **Sign-in email:** Authentication → Emails → "Magic Link" and "Confirm signup": paste `supabase/email-templates/code.html`
    (the app signs in with the six-digit code, not a link).
-4. **Apply the migrations:** `supabase link --project-ref <project>`, then `supabase db push`
-   (everything in `supabase/migrations`, in order). `supabase/optional/` stays optional, as on production.
-5. **Deploy the Edge Function** for TV sign-in: `supabase functions deploy tv-sign-in --no-verify-jwt`
-   (docs/supabase-storage.md §9).
-6. **Make the connection code** (above) and share it privately.
+4. **Migrations and the Edge Function** are applied by CI once the `supabase-dev` environment is set
+   up (below, "Database changes"). To bring a new project up to date at once, run the workflow by hand
+   (Actions → Database → Run workflow on `dev`): it applies every migration and deploys every function,
+   `tv-sign-in` included. `supabase/optional/` stays optional, as on production.
+5. **Make the connection code** (above) and share it privately.
+
+## Database changes (`.github/workflows/supabase.yml`)
+
+New migrations in `supabase/migrations` and changed Edge Functions in `supabase/functions` reach the
+Supabase projects through CI (`scripts/supabaseDeploy.ts`):
+
+| When | What runs | Where |
+|---|---|---|
+| A pull request into `dev` or `master` that touches them | lists the migrations the merge would apply and checks their versions (unique, later than the base's newest); no secrets, no database | the check "Migrations a merge would apply" |
+| A push to `dev` that touches them | the new migrations (listed with `supabase db push --dry-run`, then applied in order), then the changed functions | the dev project, environment `supabase-dev` |
+| A push to `master` (a release) that touches them | the same, after the owner approves the run | the production project, environment `supabase-production` |
+| Actions → Database → Run workflow, on `dev` or `master` | every migration not yet applied and every function | that branch's project |
+
+- A failed migration stops the run; the log names it and nothing after it runs. Nothing is retried: the
+  fix is a new migration. A migration already applied is never run again (Supabase keeps the history in
+  `supabase_migrations.schema_migrations`).
+- `supabase/optional`, `supabase/admin` and `supabase/checks` are never run by CI: they stay manual,
+  as each file says.
+- A missing setting stops the step that needs it, naming what is missing and the environment.
+- Functions called without a user's session are deployed with `--no-verify-jwt`; today that is
+  `tv-sign-in` (docs/supabase-storage.md §9). A new one of that kind goes in `WITHOUT_JWT` in the script.
+
+### What the owner sets up for it
+
+1. Settings → Environments → New environment **`supabase-dev`**:
+   - Deployment branches and tags: "Selected branches and tags", add `dev`.
+   - Variables: `SUPABASE_PROJECT_REF` (the dev project's reference, from its URL) and `SUPABASE_DB_HOST`
+     (Dashboard → Connect → Session pooler: the host, like `aws-0-<region>.pooler.supabase.com`; the
+     session pooler because GitHub's runners have no IPv6 for the direct address).
+   - Secrets: `SUPABASE_DB_PASSWORD` (the dev database's password) and `SUPABASE_ACCESS_TOKEN` (a personal
+     access token, Account → Access Tokens, for deploying functions).
+2. New environment **`supabase-production`**, the same with the production project's values, and:
+   - Deployment branches and tags: only `master`.
+   - Required reviewers: the owner. "Prevent self-review" can stay off if the owner both merges and approves.
+3. Keep these out of repository-wide secrets: a workflow on any branch could read those. An access token
+   reaches every project of its account, which is why it sits behind each environment's branch rule (and,
+   for production, the reviewer). A token from an account that only has these projects is better.
+4. If a project already has migrations applied by hand, check that its history matches before the first
+   run: `supabase migration list --db-url <session pooler URL>` shows each migration as local and remote;
+   one applied by hand but missing from the history is recorded with `supabase migration repair <version>
+   --status applied --db-url ...`, so CI doesn't apply it twice.
 
 ## What the owner sets up
 

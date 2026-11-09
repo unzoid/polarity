@@ -31,6 +31,7 @@ export * from "./responses";
 export * from "./search";
 export * from "./seasonLabels";
 export * from "./seasons";
+export * from "./shelfEpisodes";
 export * from "./shelves";
 export * from "./splitParts";
 export * from "./stills";

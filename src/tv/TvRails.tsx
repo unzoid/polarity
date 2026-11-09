@@ -4,10 +4,10 @@ import { Img } from "../components/Img";
 import { LogoOrName, ProgressBar, useCardArt } from "../components/title/Card";
 import { useEntryShown, type EntryAt } from "../lib/anime";
 import { episodeCode, formatRemaining } from "../lib/format";
-import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useRecommend } from "../lib/net";
+import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
 import { useRouter } from "../lib/router";
 import { useArtGate, useCardIntent } from "../lib/ui";
-import type { Shape, Shelf } from "../lib/catalog";
+import { useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
 import { StageProvider, TvStage, useStage, useStageSeed } from "./TvStage";
 import { isMenuKey, openCardMenu } from "./TvCardMenu";
@@ -34,6 +34,8 @@ export function TvCard({
   localOnly,
   onFocusChange,
   staged,
+  stagePending = false,
+  logoPending = false,
 }: {
   item: MetaPreview;
   shape: Shape;
@@ -53,6 +55,10 @@ export function TvCard({
   onFocusChange?: (focused: boolean) => void;
   /** What the stage shows for this card where it isn't the card's own art (the Anime tab's featured row, #325). */
   staged?: MetaPreview;
+  /** The stage's art and logo aren't known yet: it shows neither, nor the name for a moment (#343, #431). */
+  stagePending?: boolean;
+  /** The card's logo isn't known yet: the name waits a moment for it (#343). */
+  logoPending?: boolean;
 }) {
   const { navigate } = useRouter();
   const { item, entry: shownEntry } = useEntryShown(stored, watching ?? entry?.videoId);
@@ -66,9 +72,9 @@ export function TvCard({
   }, INTENT_MS);
   // Show on the stage until something is focused, if this is the page's first title.
   useEffect(() => {
-    if (el.current) seedStage({ item: onStage, kicker }, el.current);
+    if (el.current) seedStage({ item: onStage, kicker, pending: stagePending }, el.current);
     // Again once a placeholder title (a playlist entry still loading) fills in, or better art arrives.
-  }, [item.id, onStage.name, onStage.background, onStage.logo]);
+  }, [item.id, onStage.name, onStage.background, onStage.logo, stagePending]);
   // Art that won't load falls back to the title, not an empty frame; better art arriving gets a fresh try.
   const preferred = shape === "poster" ? (item.poster ?? item.background) : (item.background ?? item.poster);
   const { shown: art, onError: onArtError } = useCardArt(preferred);
@@ -85,7 +91,7 @@ export function TvCard({
       aria-label={item.name}
       onClick={open}
       onFocus={() => {
-        stage({ item: onStage, kicker });
+        stage({ item: onStage, kicker, pending: stagePending });
         onFocusChange?.(true);
         intent.onFocus();
       }}
@@ -115,7 +121,7 @@ export function TvCard({
         {shape === "landscape" && art && (
           <>
             <span className="tv-card-scrim art-after" />
-            <LogoOrName logo={item.logo} alt="" logoClass="tv-card-logo" name={<span className="tv-card-name art-after">{item.name}</span>} />
+            <LogoOrName logo={item.logo} logos={item.logos} pending={logoPending} alt="" logoClass="tv-card-logo" name={<span className="tv-card-name art-after">{item.name}</span>} />
           </>
         )}
         {chip && <span className="tv-card-chip">{chip}</span>}
@@ -175,7 +181,22 @@ export function TvSkeletonRail({ title, shape, count = 8, note }: { title?: stri
 }
 
 /** `watching`: title id → the episode last watched, for saved anime shown by their entry (#22). */
-export function TvItemsRail({ title, items, shape, watching }: { title: string; items?: MetaPreview[]; shape: Shape; watching?: ReadonlyMap<string, string> }) {
+export function TvItemsRail({
+  title,
+  items: given,
+  shape,
+  watching,
+  saved,
+}: {
+  title: string;
+  items?: MetaPreview[];
+  shape: Shape;
+  watching?: ReadonlyMap<string, string>;
+  /** The user's own titles: all of them, even ones a catalog's list would leave out (#337). */
+  saved?: boolean;
+}) {
+  const listed = useListable(given);
+  const items = saved ? given : listed;
   if (!items) return <TvSkeletonRail title={title} shape={shape} />;
   if (!items.length) return null;
   return (
@@ -220,14 +241,24 @@ export function TvContinueRail() {
   );
 }
 
-/** With seasons as separate shows, an anime's episode goes by its number in its entry (#22). */
+/**
+ * With seasons as separate shows, an anime's episode goes by its number in its entry (#22). The title's logo over the
+ * art, as desktop's Continue Watching (#437): the title page's logos, checked by `TitleLogo`; nothing in its place while
+ * the title loads (#343), the name where there's none. An entry of a show goes by its own name.
+ */
 function TvContinueCard({ p }: { p: Progress }) {
   const { navigate } = useRouter();
-  const stored = useMemo(() => continueItem(p), [p]);
-  const { entry } = useEntryShown(stored, p.videoId);
+  const plain = useMemo(() => continueItem(p), [p]);
+  const { entry } = useEntryShown(plain, p.videoId);
+  const meta = useMeta(p.type, p.metaId, !entry);
+  const stored = useMemo(
+    () => (entry || !meta.data ? plain : { ...plain, logo: meta.data.logo ?? undefined, logos: meta.data.logos }),
+    [plain, entry, meta.data],
+  );
   return (
     <TvCard
       item={stored}
+      logoPending={!entry && meta.isLoading}
       shape="landscape"
       progress={p.duration ? p.position / p.duration : 0}
       kicker={continueKicker(p, entry)}

@@ -147,13 +147,18 @@ export const SETTINGS: SettingDef[] = [
   { id: "manageProfiles", page: "account", title: "Manage profiles", keywords: "edit add remove avatar" },
   { id: "secrets", page: "account", title: "API keys and addons", keywords: "sync encrypt encrypted passphrase keys addons secret" },
   {
-    id: "shareAddonsAndKeys",
+    id: "shareSetup",
     page: "account",
-    title: "Share add-ons and keys between profiles on this device",
-    caption: "On: a profile new to this device starts with the add-ons and API keys already here. Off: it starts with its own from your account, or none.",
-    keywords: "profiles addons api keys device shared separate per profile",
-    bind: p("shareAddonsAndKeys"),
-    control: toggle,
+    title: "Share add-ons and keys",
+    caption:
+      "What a profile new to this device starts with. With every account on this device, add-ons and API keys reach other accounts' profiles signed in here, and sync to their accounts.",
+    keywords: "profiles addons api keys device shared separate per profile account accounts",
+    bind: p("shareSetup"),
+    control: choice([
+      { value: "none", label: "Not shared" },
+      { value: "account", label: "Between this account's profiles" },
+      { value: "device", label: "With every account on this device" },
+    ]),
   },
   { id: "copySetup", page: "account", title: "Add-ons and Keys", keywords: "copy addons api keys profile guest device start" },
   { id: "stremioImport", page: "account", title: "Import from Stremio", keywords: "import move switch library history watched progress addons export json file" },
@@ -1263,6 +1268,7 @@ export const SETTINGS: SettingDef[] = [
   { id: "privacyPolicy", page: "about", title: "Privacy Policy", keywords: "privacy data gdpr personal delete export" },
   { id: "termsOfUse", page: "about", title: "Terms of Use", keywords: "terms conditions rules legal" },
   { id: "animeCache", page: "about", title: "Anime data", keywords: "cache clear filler recap anime-lists ids storage disk anilist shelves" },
+  { id: "pickedTracks", page: "about", title: "Picked tracks", keywords: "remembered audio subtitles subtitle delay per source clear forget" },
 ];
 
 const BY_ID = new Map(SETTINGS.map((d) => [d.id, d]));

@@ -99,6 +99,29 @@ export const labelShowsWhole = (label: Locator, text: string) =>
   }, text);
 
 /**
+ * Where the shown Back button is (#348): the navbar's on a page (`.navbar-back`), the player's in the player (`.player-back`),
+ * rounded to the pixel, once it has settled. Each must be the shared BackButton (`.back-button`).
+ */
+export const backPlace = async (page: Page, which: "navbar" | "player") => {
+  const back = page.locator(which === "navbar" ? ".navbar-back.back-button" : ".player-top > .player-back.back-button");
+  await expect(back).toBeVisible();
+  // Read once the page has settled: after two frames have been drawn (WebKit can leave the layout where it was between
+  // reads, so two reads in a row agreed half a pixel short of where the navbar's slide-in lands), with no transition or
+  // animation running on it or anything it sits in.
+  const place = () =>
+    back.evaluate(async (el) => {
+      await new Promise((frame) => requestAnimationFrame(() => requestAnimationFrame(frame)));
+      for (let at: Element | null = el; at; at = at.parentElement) if (at.getAnimations().some((a) => a.playState === "running")) return "moving";
+      const r = el.getBoundingClientRect();
+      return [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+    });
+  // And until two reads agree, for whatever moves it without an animation (a page still laying out).
+  let last = "";
+  await expect.poll(async () => (last === (last = await place()) ? last : "moving")).not.toBe("moving");
+  return last;
+};
+
+/**
  * Every pair of things in the player's top or bottom bar whose boxes meet (#396): the controls, and the title and show
  * lines as drawn (cut short to their box). Hidden controls (a folded slider, words of an icon-only action) don't count;
  * neither does a control sticking out of the window. Empty when nothing overlaps.

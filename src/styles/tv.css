@@ -8,6 +8,9 @@
    ========================================================================== */
 :root[data-tv="true"] {
   font-size: clamp(15px, min(1.15vw, 2.05vh), 34px);
+  /* The player's Back (#348, #431) lines up with TV's nav row and rails: at the gutter, the nav buttons' size. */
+  --nav-start: 4.5vw;
+  --back-size: 2.7rem;
 }
 
 .tv {
@@ -1066,6 +1069,10 @@
   gap: 0.5rem;
   padding: 1.5rem var(--tv-gutter) 2rem 1rem;
 }
+/* The episodes of a long season that aren't drawn (#436): as tall as they would be, so the list keeps its length. */
+.tv-episode-gap {
+  flex: none;
+}
 .tv-episode {
   display: flex;
   align-items: center;
@@ -1423,6 +1430,13 @@
 .tv .options-column[data-size="wide"] {
   width: min(38rem, 52vw);
 }
+/* A panel beside YouTube's player (the party's, Captions, Speed: #384, #434) is as wide as the panel, whatever the column's size. */
+.tv .options-overlay[data-place="beside"] .options-columns {
+  width: 100%;
+}
+.tv .options-overlay[data-place="beside"] .options-column {
+  width: auto;
+}
 /* Episodes (EpisodeRail.tsx) as tvOS lays them out: low on the screen, the rail running to both of
    its edges (cards start at the gutter and are cut by the screen, not the column), and focus the
    same lift and ring as the cards at home. No play glyph or Download on every card: the focused
@@ -1463,6 +1477,10 @@
 }
 .tv .episode-rail-card[aria-current] .episode-rail-still {
   box-shadow: none;
+}
+/* The lift and its ring below, not desktop's outline. */
+.tv .episode-rail-main:focus-visible .episode-rail-still {
+  outline: none;
 }
 .tv .episode-rail-main:focus .episode-rail-still {
   transform: scale(var(--tv-lift));

@@ -42,6 +42,8 @@ interface TitleContext {
   kitsu?: number;
   /** Video id → its entry's ids and number; an older version kept the number alone. */
   eps: Record<string, EpisodeIds | number>;
+  /** A later season's own titles, by its entry's AniList id: a file may name it by one instead of "S2" (#422). */
+  names?: Record<string, string[]>;
   /** Filler episodes, by video id. */
   fillers?: string[];
   /** Filler episodes by number, as an older version kept them: only for its episodes. */
@@ -73,6 +75,7 @@ export interface EpisodeContext {
 export type LinedEpisode = [videoId: string, n: number, absolute?: number];
 
 const MAX_TITLES = 300;
+const MAX_NAMES = 3;
 const STORAGE = "polar.animePlayContext.v1";
 
 /** The part of `Storage` this needs; tests pass a Map-backed one. */
@@ -109,11 +112,18 @@ function readSaved(v: unknown): Saved {
       if (e !== undefined) eps[video] = e;
     }
     const filler = listOf(t.filler, count);
-    const fillers = listOf(t.fillers, (x) => (typeof x === "string" ? x : undefined));
+    const text = (x: unknown) => (typeof x === "string" ? x : undefined);
+    const fillers = listOf(t.fillers, text);
+    const names: Record<string, string[]> = {};
+    for (const [al, list] of Object.entries(isRecord(t.names) ? t.names : {})) {
+      const kept = listOf(list, text).slice(0, MAX_NAMES);
+      if (count(Number(al)) !== undefined && kept.length) names[al] = kept;
+    }
     out[title] = {
       ...(mal !== undefined && { mal }),
       ...(kitsu !== undefined && { kitsu }),
       eps,
+      ...(Object.keys(names).length > 0 && { names }),
       ...(fillers.length > 0 && { fillers }),
       ...(filler.length > 0 && { filler }),
       at: at ?? 0,
@@ -172,9 +182,11 @@ export function playContextStore(storage: KeyValue | undefined, now: () => numbe
      * One entry's episodes as its anime page lined them up. Replaces what was kept for this entry's
      * episodes (and anything an older version kept for the title); other entries' stay. `count`: the
      * entry's number of episodes, when known; numbers past it are dropped. `anilist`: the entry's
-     * AniList id, kept with each episode for a linked list. Filler flags stay until `filler` replaces them.
+     * AniList id, kept with each episode for a linked list. `names`: the entry's own titles, kept only for a
+     * season after the first (an episode counted from the show's start past its number in the entry) with an
+     * AniList id. Filler flags stay until `filler` replaces them.
      */
-    remember(titleId: string, ids: { mal?: number; kitsu?: number; anilist?: number; count?: number }, episodes: LinedEpisode[]) {
+    remember(titleId: string, ids: { mal?: number; kitsu?: number; anilist?: number; count?: number; names?: string[] }, episodes: LinedEpisode[]) {
       const all = load();
       const old = all[titleId];
       const entry = (e: EpisodeIds) => (ids.kitsu !== undefined ? e.kitsu === ids.kitsu : ids.mal !== undefined && e.kitsu === undefined && e.mal === ids.mal);
@@ -191,6 +203,14 @@ export function playContextStore(storage: KeyValue | undefined, now: () => numbe
         };
       }
       const next: TitleContext = { ...(ids.mal !== undefined && { mal: ids.mal }), ...(ids.kitsu !== undefined && { kitsu: ids.kitsu }), eps, at: now() };
+      const later = episodes.some(([, n, abs]) => abs !== undefined && abs > n);
+      const names = { ...old?.names };
+      if (ids.anilist !== undefined) delete names[ids.anilist];
+      if (ids.anilist !== undefined && later && ids.names?.length) names[ids.anilist] = ids.names.slice(0, MAX_NAMES);
+      // Only entries that still have episodes here keep their titles.
+      const entries = new Set(Object.values(eps).flatMap((e) => (typeof e === "object" && e.al !== undefined ? [String(e.al)] : [])));
+      for (const al of Object.keys(names)) if (!entries.has(al)) delete names[al];
+      if (Object.keys(names).length) next.names = names;
       if (old?.fillers) next.fillers = old.fillers;
       if (old && JSON.stringify({ ...old, at: 0 }) === JSON.stringify({ ...next, at: 0 }) && now() - old.at < 86_400_000) return;
       all[titleId] = next;
@@ -236,6 +256,12 @@ export function playContextStore(storage: KeyValue | undefined, now: () => numbe
     absolute(videoId: string): number | undefined {
       const e = load()[titleOfVideo(videoId)]?.eps[videoId];
       return typeof e === "object" ? e.abs : undefined;
+    },
+    /** The own titles of the later season the video is an episode of, when its page knew them (#422). */
+    seasonNames(videoId: string): string[] | undefined {
+      const ctx = load()[titleOfVideo(videoId)];
+      const e = ctx?.eps[videoId];
+      return typeof e === "object" && e.al !== undefined ? ctx?.names?.[e.al] : undefined;
     },
     isFiller(videoId: string): boolean {
       const ctx = load()[titleOfVideo(videoId)];

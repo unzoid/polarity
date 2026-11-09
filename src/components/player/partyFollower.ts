@@ -1,5 +1,6 @@
 import type { Playback } from "../../lib/party";
 import type { MediaLike } from "./mpvMedia";
+import { watch } from "../../lib/playback/watchLog";
 
 /** Within this, leave it alone. */
 const IN_SYNC = 0.12;
@@ -84,11 +85,13 @@ export function createPartyFollower(d: FollowerDeps) {
     if (seekSent != null) return; // let the last one land
     commanded.seekAt = seekSent = d.now();
     commanded.seekTo = t;
+    watch(`watch party: catching up, seek to ${t.toFixed(1)} s`);
     m.currentTime = t;
   };
   const command = (paused: boolean) => {
     if (m.paused === paused) return;
     commanded = { ...commanded, paused, at: d.now() };
+    watch(`watch party: ${paused ? "pause" : "play"}`);
     if (paused) m.pause();
     else m.play().catch(() => {});
   };

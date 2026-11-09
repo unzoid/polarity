@@ -1,5 +1,6 @@
 import { call, on } from "../../lib/platform";
 import { mpvVolume, type StartStage, type StepTone } from "../../lib/playback";
+import { WATCH_LOG } from "../../lib/playback/watchLog";
 import { listenProbe, nextProbeId, probeStep } from "./useStartLog";
 import { errorCode, errorMessage, warnFailed } from "../../lib/errors";
 import { playingTrack } from "./trackChoice";
@@ -97,6 +98,9 @@ export class MpvMedia extends EventTarget implements MediaLike {
   private seekAt = 0;
   /** A frame step is under way: an older mpv's own step un-pauses for one frame, which isn't the viewer pressing play. */
   private stepping = false;
+  /** Autocrop holds playback for a screenshot (#424): mpv is paused, but not by anyone watching. */
+  private held = false;
+  private frameCounts: Record<string, number> = {};
 
   tracks: MpvTrack[] = [];
   /** Container chapters, when the file has any. */
@@ -119,8 +123,10 @@ export class MpvMedia extends EventTarget implements MediaLike {
    */
   attach(): Promise<() => void> {
     const p = Promise.all([
-      on<{ name: string; data: unknown }>("mpv://property", (p) => this.onProperty(p.name, p.data)),
+      on<{ name: string; data: unknown; held?: boolean }>("mpv://property", (p) => this.onProperty(p.name, p.data, p.held)),
       on<{ event: string; reason?: string; file_error?: string }>("mpv://event", (p) => this.onEvent(p)),
+      // The engine's own lines for a dev build's watch log (autocrop, its lookahead).
+      ...(WATCH_LOG ? [on<{ text: string }>("mpv://watch", (p) => this.note(p.text))] : []),
     ]);
     this.listening = p.then(() => undefined);
     return p.then((fns) => () => fns.forEach((u) => u()));
@@ -142,6 +148,8 @@ export class MpvMedia extends EventTarget implements MediaLike {
     this.loaded = false;
     this.isEnded = false;
     this.seekTarget = null;
+    this.held = false;
+    this.frameCounts = {};
     this.error = null;
     this.time = start ?? 0;
     this.stamp = performance.now();
@@ -234,7 +242,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
   }
 
   get currentTime() {
-    if (this.isPaused || this.buffering || this.isEnded) return this.time;
+    if (this.isPaused || this.held || this.buffering || this.isEnded) return this.time;
     const t = this.time + ((performance.now() - this.stamp) / 1000) * this.rate;
     return Number.isFinite(this.dur) ? Math.min(t, this.dur) : t;
   }
@@ -307,6 +315,11 @@ export class MpvMedia extends EventTarget implements MediaLike {
 
   // --- mpv → DOM events ------------------------------------------------------
 
+  /** A line for the watch log (#424), which only dev builds keep. */
+  private note(text: string) {
+    this.dispatchEvent(new CustomEvent<string>("watch", { detail: text }));
+  }
+
   private emit(type: string) {
     this.dispatchEvent(new Event(type));
   }
@@ -322,7 +335,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
     this.emit("error");
   }
 
-  private onProperty(name: string, data: unknown) {
+  private onProperty(name: string, data: unknown, held = false) {
     switch (name) {
       case "time-pos":
         if (typeof data === "number") {
@@ -348,6 +361,16 @@ export class MpvMedia extends EventTarget implements MediaLike {
         }
         break;
       case "pause":
+        // Autocrop's hold isn't a pause: nothing shows the controls or tells the watch party. Playing on from the
+        // viewer's own pause is a play, whatever the engine thought.
+        if (held && !(data !== true && this.isPaused)) {
+          this.time = this.currentTime;
+          this.stamp = performance.now();
+          this.held = data === true;
+          if (WATCH_LOG) this.note(this.held ? "autocrop held playback" : "autocrop played on");
+          break;
+        }
+        this.held = false;
         if (this.stepping && data !== true) break;
         this.time = this.currentTime;
         this.stamp = performance.now();
@@ -391,6 +414,16 @@ export class MpvMedia extends EventTarget implements MediaLike {
         this.chapters = Array.isArray(data) ? (data as MpvChapter[]) : [];
         this.emit("chapters");
         break;
+      // Only a build with the watch log observes these (#424): each rise is a line.
+      case "frame-drop-count":
+      case "decoder-frame-drop-count":
+      case "vo-delayed-frame-count":
+        if (WATCH_LOG && typeof data === "number") {
+          const was = this.frameCounts[name] ?? 0;
+          this.frameCounts[name] = data;
+          if (data > was) this.note(`${FRAME_COUNTS[name]}: ${data - was} more (${data} in all)`);
+        }
+        break;
       case "aid":
       case "sid":
         this[name] = typeof data === "number" ? data : data === false || data === "no" ? "no" : data === "auto" ? "auto" : null;
@@ -400,6 +433,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
   }
 
   private onEvent(e: { event: string; reason?: string; file_error?: string }) {
+    if (WATCH_LOG) this.note(`mpv: ${e.event}${e.reason ? ` (${e.reason})` : ""}`);
     if (e.event === "file-loaded") this.step("mpv opened the file", "ok", "player");
     if (e.event === "end-file" && e.reason === "error") {
       this.step(`mpv couldn't play it: ${e.file_error ?? "unknown error"}`, "fail", "player");
@@ -411,6 +445,13 @@ export class MpvMedia extends EventTarget implements MediaLike {
     }
   }
 }
+
+/** What the watch log calls mpv's frame counts. */
+const FRAME_COUNTS: Record<string, string> = {
+  "frame-drop-count": "frames dropped by the output",
+  "decoder-frame-drop-count": "frames dropped by the decoder",
+  "vo-delayed-frame-count": "frames shown late",
+};
 
 /** "Tracks: video hevc, 2 audio (eac3, aac), 3 subtitles". */
 function describeTracks(tracks: MpvTrack[]) {

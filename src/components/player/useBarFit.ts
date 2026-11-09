@@ -57,6 +57,8 @@ export function fitLabels(widths: number[], room: number): boolean {
 }
 
 const px = (v: string) => parseFloat(v) || 0;
+/** A top-bar glyph button's width (`.player-icon`), when none is in the bar to measure. */
+const ICON_W = 44;
 const innerWidth = (el: HTMLElement) => {
   const s = getComputedStyle(el);
   return el.clientWidth - px(s.paddingLeft) - px(s.paddingRight);
@@ -67,6 +69,8 @@ const innerWidth = (el: HTMLElement) => {
  * is how many top controls "More" would take. `signature` changes whenever what's in the bars does (labels,
  * title, which controls show), so the bars are measured again; resizing the window measures them too.
  * Off (`enabled` false: a phone, a compact window, TV), everything shows and the layout's own rules apply.
+ * `moreStays`: "More" shows whatever fits (a build with the watch log, #424), so moving pin and fill saves their
+ * whole width.
  */
 export function useBarFit(
   top: RefObject<HTMLElement | null>,
@@ -74,6 +78,7 @@ export function useBarFit(
   movable: number,
   enabled: boolean,
   signature: string,
+  moreStays = false,
 ): BarFit {
   const [fit, setFit] = useState(FULL_FIT);
   const latest = useRef({ fit, movable });
@@ -93,7 +98,7 @@ export function useBarFit(
       const { fit: now, movable } = latest.current;
       const next = { ...now };
 
-      const back = bar.querySelector<HTMLElement>(":scope > .player-icon");
+      const back = bar.querySelector<HTMLElement>(":scope > .player-back");
       const end = bar.querySelector<HTMLElement>(".player-top-end");
       const cluster = bar.querySelector<HTMLElement>(".player-top-actions");
       if (back && end && cluster) {
@@ -101,8 +106,11 @@ export function useBarFit(
         const slider = bar.querySelector<HTMLElement>(".player-volume-slider");
         if (slider && now.slider) sliderWidth.current = slider.offsetWidth + gap;
         const sliderW = slider ? sliderWidth.current : 0;
-        const moreButton = now.more ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
-        const movableW = movable * (back.offsetWidth + gap);
+        const moreButton = now.more && !moreStays ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
+        // Back stands at the navbar's spot (#348): its inset is part of what it takes.
+        const backW = back.offsetWidth + px(getComputedStyle(back).marginLeft);
+        const icon = cluster.querySelector<HTMLElement>(".player-icon")?.offsetWidth ?? ICON_W;
+        const movableW = movable * (icon + gap);
         const title = Math.max(0, ...Array.from(bar.querySelectorAll<HTMLElement>(".player-heading > *"), (el) => el.scrollWidth));
         const s = getComputedStyle(bar);
         Object.assign(
@@ -110,11 +118,11 @@ export function useBarFit(
           fitTop({
             room: innerWidth(bar),
             gaps: 2 * px(s.columnGap),
-            back: back.offsetWidth,
+            back: backW,
             title,
             end: end.offsetWidth + (now.slider ? 0 : sliderW) + (now.more ? movableW - moreButton : 0),
             slider: sliderW,
-            movable: movable ? movableW - (back.offsetWidth + gap) : 0,
+            movable: movable ? movableW - (moreStays ? 0 : icon + gap) : 0,
           }),
         );
       }
@@ -137,7 +145,7 @@ export function useBarFit(
     // The interface font arriving changes every width.
     void document.fonts?.ready.then(measure);
     return () => observer.disconnect();
-  }, [top, actions, enabled, signature, fit]);
+  }, [top, actions, enabled, signature, fit, moreStays]);
 
   return enabled ? fit : FULL_FIT;
 }
