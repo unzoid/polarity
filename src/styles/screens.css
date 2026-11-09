@@ -186,6 +186,8 @@
 .settings-row-title {
   font-size: var(--fs-lg);
   font-weight: 600;
+  /* An add-on names itself: a long unbroken name wraps inside the row (#456). */
+  overflow-wrap: anywhere;
 }
 .settings-row-caption {
   font-size: var(--fs-sm);
@@ -360,10 +362,12 @@
   font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--text-2);
+  /* An add-on's description may hold long unbroken words (providers joined by slashes, a link):
+     they wrap here instead of widening the whole page (#456). */
+  overflow-wrap: anywhere;
 }
 .settings-url {
   color: var(--text-3);
-  overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
 }

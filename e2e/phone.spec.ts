@@ -176,6 +176,23 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(profiles).toBeVisible();
 });
 
+test("an add-on's long name and description, unbroken words and a link among them, wrap inside Settings (#456)", async ({ app }) => {
+  await app.goto("/fake.html?worst=1");
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: "Add-ons", exact: true }).tap();
+  const row = settings.getByRole("button", { name: /^Community Archive of Restored Public-Domain Cinema/ });
+  await row.tap();
+  const description = settings.getByText(/ExampleProvider1\/ExampleProvider2/);
+  await expect(description).toBeVisible();
+  expect(await fitsWidth(app)).toBe(true);
+  // The description itself stays on the screen: its words wrap rather than run off the right.
+  const box = await description.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(app.viewportSize()!.width);
+  expect(await description.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
 /** A notched phone's insets (in CSS px), set on the page as the webview would report them. */
 async function insets(page: Page, i: { top: number; right: number; bottom: number; left: number }) {
   await page.evaluate((i) => {
