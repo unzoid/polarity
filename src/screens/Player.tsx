@@ -71,7 +71,7 @@ import { SkipTransport } from "../components/player/SkipTransport";
 import { useTracks } from "../components/player/useTracks";
 import { useKeyboardFocus } from "../components/player/useKeyboardFocus";
 import { usePinch } from "../components/player/usePinch";
-import { pickedSpeed, pickedTrack, speedLabel, speedMenu, tracksMenu } from "../components/player/nativeMenus";
+import { pickedSpeed, speedLabel, speedMenu } from "../components/player/nativeMenus";
 import {
   DEFAULT_SUBTITLE_STYLE,
   SubtitlePreview,
@@ -1000,25 +1000,15 @@ export function Player({
     setOptionsByKey(true);
     setOptions((open) => (open === o ? null : o));
   };
-  // A tap on Speed or Subtitles & Audio: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker.
+  // A tap on Speed: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker. Every other
+  // button, Subtitles & Audio included (#465), opens the app's own panel everywhere.
   const openOptions = (o: NonNullable<typeof options>, from: Element) => {
-    if (!nativeDialogsAvailable || (o !== "speed" && o !== "tracks")) return setOptions(o);
-    const menu = o === "speed" ? speedMenu(SPEEDS, rate) : tracksMenu(tracks);
+    if (!nativeDialogsAvailable || o !== "speed") return setOptions(o);
     setNativeMenu(true);
-    showNativeDialog({ ...menu, anchor: anchorOf(from) })
+    showNativeDialog({ ...speedMenu(SPEEDS, rate), anchor: anchorOf(from) })
       .then((id) => {
-        if (o === "speed") {
-          const r = pickedSpeed(id);
-          if (r != null && r !== rate) setRate(r);
-          return;
-        }
-        const pick = pickedTrack(id);
-        if (pick === "settings") {
-          setSubSettingsOpen(true);
-          setOptions("tracks");
-        } else if (pick && "audio" in pick) {
-          if (pick.audio !== tracks.audioId) tracks.selectAudio(pick.audio);
-        } else if (pick && pick.subtitle !== tracks.subId) void tracks.selectSubtitle(pick.subtitle);
+        const r = pickedSpeed(id);
+        if (r != null && r !== rate) setRate(r);
       })
       .catch(warnFailed("menu"))
       .finally(() => setNativeMenu(false));

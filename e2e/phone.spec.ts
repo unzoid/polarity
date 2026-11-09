@@ -341,6 +341,25 @@ test.describe("signed in, on a fresh profile", () => {
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
 
+  test("Subtitles & Audio opens the app's own panel, fitted to the phone, not an iOS menu (#465)", async ({ app }) => {
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Play", exact: true }).tap();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    const button = app.getByRole("button", { name: "Subtitles & Audio", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 200, y: 300 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    await expect(overlay).toBeVisible();
+    await expect(overlay.locator(".options-column").first()).toBeVisible();
+    const width = app.viewportSize()!.width;
+    for (const box of await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect))) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+    }
+    expect(await fitsWidth(app)).toBe(true);
+  });
+
   test("five tabs in iOS's bar, no More; Search and the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {
     // The Calendar turned on (Settings → Browsing): it stays out of the bar, as a sixth tab is what makes iOS add More.
     await app.goto("/fake.html?showCalendar=true");
