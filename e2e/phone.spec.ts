@@ -404,3 +404,37 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
   await play();
   await expect(app.getByRole("dialog", { name: "Torrent playback" })).toBeVisible();
 });
+
+test("each page starts right under the top bar, which sits right under the status bar, with or without a notch (#450)", async ({ app }) => {
+  const tabs = app.getByRole("navigation", { name: "Primary" });
+  for (const top of [0, 59]) {
+    await insets(app, { top, right: 0, bottom: top ? 34 : 0, left: 0 });
+    for (const [tab, first] of [
+      ["Home", ".hero-card"],
+      ["Series", ".screen-header h1"],
+      ["Library", ".screen-header h1"],
+    ] as const) {
+      await tabs.getByRole("button", { name: tab, exact: true }).tap();
+      const content = app.locator(first).first();
+      await expect(content).toBeVisible();
+      const [bar, logo, page] = await Promise.all([
+        app.locator(".navbar").boundingBox(),
+        app.locator(".brand-logo").boundingBox(),
+        content.boundingBox(),
+      ]);
+      // The bar's row begins where the status bar ends, the logo centred in it.
+      expect(Math.round(logo!.y + logo!.height / 2), `${tab}, inset ${top}`).toBe(Math.round(top + (bar!.height - top) / 2));
+      const gap = page!.y - (bar!.y + bar!.height);
+      expect(gap, `${tab}, inset ${top}`).toBeGreaterThanOrEqual(0);
+      expect(gap, `${tab}, inset ${top}`).toBeLessThanOrEqual(12);
+    }
+  }
+  // Anime with AniList not answering: its message stays clear of the bar too.
+  await app.route("https://graphql.anilist.co/**", (route) => route.fulfill({ status: 503, body: "" }));
+  await tabs.getByRole("button", { name: "Anime", exact: true }).tap();
+  const note = app.locator(".anime-unreachable");
+  await expect(note).toBeVisible({ timeout: 15_000 });
+  const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
+  // The text's own top, once the page has slid in.
+  await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
+});

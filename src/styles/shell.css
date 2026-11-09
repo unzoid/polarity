@@ -583,6 +583,22 @@ html[data-os="mac"] {
    go under it and scroll sideways rather than run off the edge. */
 :root[data-form="phone"] .screen-header {
   flex-wrap: wrap;
+  /* The page starts right under the top bar, as a phone app's large title does (#450): the desktop's
+     1.75rem plus the heading's default margin left a band of nothing under the status bar and the bar. */
+  padding-top: calc(var(--nav-h) + 0.5rem);
+}
+:root[data-form="phone"] .screen-header h1 {
+  margin: 0;
+}
+:root[data-form="phone"] :is(.playlist-view, .anime[data-hero="false"] .anime-nav, .anime[data-hero="false"] .home-rows) {
+  padding-top: calc(var(--nav-h) + 0.5rem);
+}
+:root[data-form="phone"] .anime[data-hero="false"] .anime-nav + .home-rows {
+  padding-top: 0;
+}
+/* The phone's empty-state padding would otherwise put AniList's "didn't answer" under the top bar. */
+:root[data-form="phone"] .empty-state.anime-unreachable {
+  padding-top: calc(var(--nav-h) + 3rem);
 }
 :root[data-form="phone"] .discover-controls {
   max-width: 100%;

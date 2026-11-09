@@ -198,6 +198,18 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
    windows resized: the tablet layout; under 600 px wide the player shows glyph-only actions and the title
    beside Back. With a keyboard and a trackpad: Escape is Back, the shortcuts work, hover shows on cards.
 
+## The space under the top bar on phones (#450)
+
+On a phone a page's title (Series, Movies, Library, Calendar, Anime without its carousel, a playlist) now
+starts 0.5rem under the top bar; before, the desktop's 1.75rem plus the heading's default margin left about
+48 px of nothing there. Home's featured card already sat right under it. The phone e2e measures the gap on
+Home, Series and Library, with and without a notch's inset, and that the bar's row starts where the
+status bar ends. Only the web layout runs here. On an iPhone (with #449's change, so no More tab):
+- Home, Series, Library: the logo sits just under the status bar, and the page's title or card just under
+  the logo's row, with no band of empty space above or below the bar.
+- If the bar itself sits lower than the status bar's height, that space comes from the safe area iOS
+  reports to the web view (the native side), not from the page: note how much and on which pages.
+
 ## iOS green tint (#416)
 
 An iPhone showed video with green and purple patches. Its log (`video: decoder …; decoded …; drawn …`
