@@ -1,8 +1,9 @@
 import { deflateRawSync } from "node:zlib";
 import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { mediaAnswer } from "./anilistMock";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
-import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
+import { FRANCHISE, franchiseMedia, franchiseZip, GAP_ANIME, longAnimeMedia, longAnimeZip, SAGA, sagaMedia, sagaZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // The desktop layout (also run in WebKit on CI). Titles come from src/lib/platform/fake/fixtures.ts.
 
@@ -346,6 +347,36 @@ test("the player's crop button and Z switch Fit and Fill window, say which, and 
   await expect(video).toHaveCSS("object-fit", "contain");
   await expect(crop).toHaveAccessibleName("Crop: Fit");
   await expect(player.getByText("Fit", { exact: true })).toBeVisible();
+});
+
+test("a dev build's player copies its watch log: what played, sought and showed the controls, with hosts and no links (#424)", async ({ app }) => {
+  await app.evaluate(() => {
+    const w = window as unknown as { __copied: string };
+    w.__copied = "";
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t: string) => void (w.__copied = t) } });
+  });
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  await app.keyboard.press("ArrowRight");
+  await expect(player).toHaveAttribute("data-chrome", "false", { timeout: 6000 });
+  await app.mouse.move(300, 300);
+  await app.mouse.move(310, 310);
+  await expect(player).toHaveAttribute("data-chrome", "true");
+  await player.getByRole("button", { name: "More" }).click();
+  await app.getByRole("menuitem", { name: "Copy Watch Log" }).click();
+  await expect(player.getByText("Watch log copied")).toBeVisible();
+  const log = await app.evaluate(() => (window as unknown as { __copied: string }).__copied);
+  const lines = log.split("\n");
+  expect(lines[0]).toBe("Polarity watch log");
+  expect(lines[1]).toMatch(/· player: html$/);
+  for (const line of [/ player opened$/, / source: direct file \(\.mp4\) on media\.example, html$/, / play$/, / seek by the viewer: \+10 s$/, / seeking to /, / controls hidden: time$/, / controls shown: pointer$/])
+    expect(lines.some((l) => line.test(l)), `${line} in\n${log}`).toBe(true);
+  // Each line: seconds since the player opened, then the position in the video.
+  expect(log).toMatch(/\n\+ +\d+\.\d{3} +0:00:\d\d\.\d  seek by the viewer/);
+  expect(log).not.toMatch(/https?:\/\//);
 });
 
 test("the player's focus ring shows for Tab, never for a click or the clicked button's shortcut, and hides with the controls (#329)", async ({ app }) => {
@@ -902,9 +933,8 @@ test("Download Season downloads every released episode of the season, then says 
 /** The invented franchise's AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has its series and film. */
 async function answerFranchise(app: Page) {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    const media = franchiseMedia(variables?.id ?? 0);
-    await route.fulfill({ json: { data: media ? { Media: media } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), franchiseMedia);
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const zip = franchiseZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
@@ -946,6 +976,101 @@ test("an anime season tab downloads its released episodes; a film's tab shows th
 
   // Pressing it plays the film.
   await film.getByRole("button", { name: `Play ${FRANCHISE.film.name}` }).click();
+  await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
+});
+
+test("the season toolbar stays where it is whichever tab is chosen, and nothing in it is cut off at the least window width (#426)", async ({ app }) => {
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const data = mediaAnswer(route.request().postData(), sagaMedia);
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) => {
+    const zip = sagaZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
+    return zip ? route.fulfill({ json: zip }) : route.fulfill({ status: 404, json: {} });
+  });
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), SAGA.first.anilist);
+  const page = app.locator(`.anime-detail[data-anime="${SAGA.first.anilist}"]`).last();
+  const seasons = page.locator(".seasons");
+  const tools = seasons.locator(".anime-episodes-tools");
+  const download = seasons.getByRole("button", { name: /^Download Season/ });
+  const layout = seasons.getByRole("radiogroup", { name: "Episode layout" });
+  // Where Download Season and the layout switch are, from the season tabs' top left (the page may scroll).
+  const place = async () => {
+    const [t, d, l] = [await seasons.locator(".seasons-tabs").boundingBox(), await download.boundingBox(), await layout.boundingBox()];
+    return { download: [d!.x - t!.x, d!.y - t!.y, d!.height], layout: [l!.x - t!.x, l!.y - t!.y, l!.height] };
+  };
+  await expect(seasons.locator(".episode-card")).toHaveCount(SAGA.first.episodes, { timeout: 15_000 });
+  await expect(download).toBeVisible();
+  const first = await place();
+  // The long series' tab adds the episode ranges, the search and Skip filler.
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
+  await expect(tools.locator(".anime-episode-search")).toBeVisible({ timeout: 15_000 });
+  await expect(tools.getByText("Skip filler")).toBeVisible();
+  await expect(download).toBeVisible();
+  expect((await place()).download[1]).toBe(first.download[1]);
+  expect((await place()).layout[1]).toBe(first.layout[1]);
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: "Season 1" }).click();
+  await expect(tools.locator(".anime-episode-search")).toHaveCount(0, { timeout: 15_000 });
+  expect(await place()).toEqual(first);
+
+  // The least window width (tauri.conf.json), less a Windows scrollbar (17 px), on the long series' last range, the longest label.
+  await app.setViewportSize({ width: 943, height: 800 });
+  await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
+  const ranges = seasons.getByRole("combobox", { name: "Episodes" });
+  await expect(ranges).toBeVisible({ timeout: 15_000 });
+  await ranges.click();
+  await app.getByRole("option", { name: "Episodes 1101–1200" }).click();
+  await expect(ranges).toContainText("Episodes 1101–1200");
+  // Each control whole: inside the window, and not clipped by anything around it.
+  const controls = [ranges, tools.locator(".anime-episode-search"), tools.locator(".anime-toggle"), download, layout];
+  for (const control of controls) {
+    const cut = await control.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.left < 0 || r.right > innerWidth || r.width === 0) return `outside the window: ${r.left}–${r.right}`;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        if (getComputedStyle(p).overflowX === "visible") continue;
+        const b = p.getBoundingClientRect();
+        if (r.left < b.left - 0.5 || r.right > b.right + 0.5) return `cut by .${p.className}: ${r.left}–${r.right} in ${b.left}–${b.right}`;
+      }
+      return null;
+    });
+    expect(cut, await control.evaluate((el) => el.className || el.tagName)).toBeNull();
+  }
+});
+
+test("a long anime lists the episodes its series' catalog skips, between their neighbours, and plays them by the entry's Kitsu id (#427)", async ({ app }) => {
+  await app.route("https://graphql.anilist.co/**", async (route) => {
+    const data = mediaAnswer(route.request().postData(), (id) => (id === GAP_ANIME.anilist ? longAnimeMedia(GAP_ANIME) : undefined));
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+  });
+  await app.route("https://api.ani.zip/**", (route) =>
+    Number(new URL(route.request().url()).searchParams.get("anilist_id")) === GAP_ANIME.anilist ? route.fulfill({ json: longAnimeZip(GAP_ANIME) }) : route.fulfill({ status: 404, json: {} }),
+  );
+  await expect(app.locator(".row").first()).toBeVisible();
+  await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), GAP_ANIME.anilist);
+  const page = app.locator(`.anime-detail[data-anime="${GAP_ANIME.anilist}"]`).last();
+  const find = page.getByRole("searchbox", { name: "Find an episode by number or title" });
+  // 99 and 102 are the catalog's own episodes; 100 and 101 aren't in it.
+  for (const [n, id] of [
+    [99, `${GAP_ANIME.imdb}:2:49`],
+    [100, `kitsu:${GAP_ANIME.kitsu}:100`],
+    [101, `kitsu:${GAP_ANIME.kitsu}:101`],
+    [102, `${GAP_ANIME.imdb}:3:2`],
+  ] as const) {
+    await find.fill(String(n));
+    const card = page.locator(".seasons .episode-card");
+    await expect(card).toHaveCount(1, { timeout: 15_000 });
+    await expect(card).toHaveAttribute("data-video", id);
+    await expect(card).toContainText(`The Lantern's Road, Part ${n}`);
+  }
+  // Every number from 1 to 150 is in the list, once.
+  await find.fill("");
+  const ranges = page.getByRole("radio", { name: /^\d+–\d+$/ });
+  await expect(ranges).toHaveText(["1–100", "101–150"]);
+  // 101 plays: the player opens on it.
+  await find.fill("101");
+  await page.locator(".seasons .episode-card .episode-card-main").click();
   await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
 });
 
@@ -1530,6 +1655,21 @@ test.describe("signed in, on a fresh profile", () => {
     await toast.getByRole("button", { name: "Join" }).click();
     await expect(app.getByRole("dialog", { name: "Friends" }).getByText("Joining the watch party…")).toBeVisible();
     await expect(toast).toHaveCount(0);
+  });
+
+  test("Settings → Account → Share add-ons and keys: three choices, between this account's profiles by default (#429)", async ({ app }) => {
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Account" }).click();
+    const row = app.locator('[data-setting="shareSetup"]');
+    await expect(row).toContainText("Share add-ons and keys");
+    await expect(row).toContainText("sync to their accounts");
+    const pick = row.getByRole("combobox");
+    await expect(pick).toContainText("Between this account's profiles");
+    await pick.click();
+    await expect(app.getByRole("option")).toHaveText(["Not shared", "Between this account's profiles", "With every account on this device"]);
+    await app.getByRole("option", { name: "Not shared" }).click();
+    await expect(pick).toContainText("Not shared");
+    expect(await app.evaluate(() => JSON.parse(localStorage.getItem("polar.prefs") ?? "{}").shareSetup)).toBe("none");
   });
 
   test("Settings → Account → Friends: on and off for this profile, and what friends see (#135)", async ({ app }) => {

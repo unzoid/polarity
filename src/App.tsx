@@ -1,11 +1,12 @@
-import { Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { MotionConfig } from "motion/react";
 import { actionFor, getPrefs, isSettingsOpen, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
 import type { Settings as SettingsT } from "./lib/types";
 import { NavBar } from "./components/NavBar";
+import { useNativeSwipe } from "./components/NativeBack";
 import { PlayerLayer, preloadPlayer, usePlayerLayer } from "./components/PlayerLayer";
 import { useSettings } from "./lib/net";
-import { rootTab, RouterProvider, useRouter, type Route } from "./lib/router";
+import { rootTab, RouterProvider, useRouter, type Entry, type Route } from "./lib/router";
 import { focusSearch } from "./lib/catalog";
 import { Home } from "./screens/Home";
 import { Discover } from "./screens/Discover";
@@ -18,7 +19,18 @@ import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
 import { ControllerToast } from "./tv/TvChrome";
 import { isTvMode, setTvMode, useTvMode } from "./tv/tvMode";
-import { dismissDepth, lazyNamed, pressEscape, systemBackAction, useFormFactor, usePageFocus, usePageMotion, useSystemBack } from "./lib/ui";
+import {
+  dismissDepth,
+  lazyNamed,
+  onDismissDepth,
+  pageDrag,
+  pressEscape,
+  systemBackAction,
+  useFormFactor,
+  usePageFocus,
+  usePageMotion,
+  useSystemBack,
+} from "./lib/ui";
 import { CardMenuHost } from "./components/CardMenu";
 import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
@@ -316,13 +328,38 @@ function DesktopApp() {
 
   // Android's back button and gesture: Escape's Back, then Home, then the app goes to the background.
   // iOS's swipe in from the left edge: Escape's Back only.
-  useSystemBack(() => {
-    const open = !!playing || isSettingsOpen() || dismissDepth() > 0;
-    const action = systemBackAction({ open, pushed: stack.length - 1, atHome: rootTab(stack).name === "home", swipe: systemBack === "swipe" });
-    if (action === "escape") pressEscape();
-    else if (action === "home") tab({ name: "home" });
-    else if (action === "leave") void leaveApp();
-  });
+  // iOS's swipe, on a pushed page with nothing over it, moves the page with the finger (#451).
+  const main = useRef<HTMLElement>(null);
+  const now = useRef({ pages, back });
+  now.current = { pages, back };
+  const drag = useMemo(
+    () =>
+      pageDrag(
+        () => {
+          const { pages } = now.current;
+          const at = (e: Entry | undefined) => e && main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${e.key}"]`);
+          const top = at(pages[pages.length - 1]);
+          const under = pages.length > 1 && at(pages[pages.length - 2]);
+          return top && under ? { top, under } : null;
+        },
+        () => now.current.back(),
+      ),
+    [],
+  );
+  const open = () => !!playing || isSettingsOpen() || dismissDepth() > 0;
+  useSystemBack(
+    () => {
+      const action = systemBackAction({ open: open(), pushed: stack.length - 1, atHome: rootTab(stack).name === "home", swipe: systemBack === "swipe" });
+      if (action === "escape") pressEscape();
+      else if (action === "home") tab({ name: "home" });
+      else if (action === "leave") void leaveApp();
+    },
+    () => (open() ? undefined : drag),
+  );
+  // The swipe is Back wherever something can be left; at a tab's own page iOS leaves the edge to the page.
+  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
+  const settingsOpen = useSettingsOverlay().open;
+  useNativeSwipe(!!playing || settingsOpen || layers > 0 || stack.length > 1);
 
   return (
     <div
@@ -334,7 +371,7 @@ function DesktopApp() {
       data-rating-colors={settings?.ratingColors ?? false}
       data-player-leaving={leaving}
     >
-      <main className="main">
+      <main className="main" ref={main}>
         <NavBar />
         {shown.map((entry) => (
           <section

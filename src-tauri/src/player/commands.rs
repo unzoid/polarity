@@ -105,6 +105,7 @@ pub async fn mpv_load(
     }
     // A new file is measured afresh (autocrop): drop the last one's crop.
     let load = state.mpv.loads.fetch_add(1, Ordering::SeqCst) + 1;
+    state.mpv.held.store(false, Ordering::SeqCst);
     state.mpv.playhead.store(f64::NAN.to_bits(), Ordering::SeqCst);
     state.mpv.request(json!(["set_property", "video-zoom", 0])).await.ok();
     // The add-on's headers for this source, or none left over from the last one.
@@ -191,7 +192,9 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
     if was.hwdec_mode() != tune.hwdec_mode() {
         #[cfg(target_os = "android")]
         let mode = tune.android_hwdec();
-        #[cfg(not(target_os = "android"))]
+        #[cfg(target_os = "ios")]
+        let mode = tune.ios_hwdec();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let mode = tune.hwdec_mode();
         mpv.request(json!(["set_property", "hwdec", mode])).await?;
     }

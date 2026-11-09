@@ -267,7 +267,11 @@ tells playing on from a jump:
 - A seek (playing): the next frame's bars from the timeline. With the lookahead on and nothing
   read there yet, playback is held (paused) until a screenshot of the frame on screen is read,
   for at most 2 s, rather than play on with the wrong crop. Without the lookahead the live
-  readings decide, as when playing.
+  readings decide, as when playing. Only a seek holds (mpv's `seeking`, or a jump back or of
+  more than 2 s; `frames::Jumps`): a short gap between two frames while playing (frames mpv
+  dropped, a slow tick) plays on (#424). The player doesn't take the hold for a pause: the
+  reader marks its `pause` changes as held, so the controls stay as they were and a watch
+  party isn't paused.
 
 **How much lands on the cut** (`lookahead::tests::with_the_lookahead_changes_land_on_their_cut`,
 an invented episode of 120 shots played through the engine's default path, cropdetect on every

@@ -13,11 +13,11 @@ async function loadWith(entries: Record<string, string>, tag: string) {
 }
 
 test("Stremio links open in Polarity on new installs, and where prefs never held the setting (#428)", async () => {
-  expect(await loadWith({}, "new")).toBe(true);
-  expect(await loadWith({ "polar.prefs": JSON.stringify({ uiSounds: false }) }, "before163")).toBe(true);
+  expect(await loadWith({}, "links-new")).toBe(true);
+  expect(await loadWith({ "polar.prefs": JSON.stringify({ uiSounds: false }) }, "links-before163")).toBe(true);
 });
 
 test("a stored choice stands (#428)", async () => {
-  expect(await loadWith({ "polar.prefs": JSON.stringify({ uiSounds: true, stremioLinks: false }) }, "off")).toBe(false);
-  expect(await loadWith({ "polar.prefs": JSON.stringify({ stremioLinks: true }) }, "on")).toBe(true);
+  expect(await loadWith({ "polar.prefs": JSON.stringify({ uiSounds: true, stremioLinks: false }) }, "links-off")).toBe(false);
+  expect(await loadWith({ "polar.prefs": JSON.stringify({ stremioLinks: true }) }, "links-on")).toBe(true);
 });

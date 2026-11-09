@@ -3,6 +3,7 @@ import { inAnyPlaylist } from "./playlistChecklist";
 import { usePlaylists } from "./playlists";
 import { useLibrary, useMeta, useProgress, useToggleLibrary } from "../net/queries";
 import type { MetaPreview, Progress } from "../types";
+import { forgetTracks } from "../playback/trackMemory";
 import { isWatched, markWatched, movieEntry, showEntries } from "./watched";
 
 /**
@@ -73,6 +74,8 @@ export function useTitleActions(item: MetaPreview, entry?: Progress) {
       const last = isSeries ? entries?.[entries.length - 1] : undefined;
       if (last) rows.splice(0, rows.length, ...rows.filter((p) => p.videoId !== last.videoId), last);
       void markWatched(rows, false);
+      // The tracks picked for its sources go with its history (#418).
+      forgetTracks(played.map((p) => p.videoId));
     },
   };
 }

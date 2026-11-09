@@ -21,7 +21,7 @@ describe("an anime season tab's Download Season (#352)", () => {
     const episodes = [
       episode(2),
       episode(1),
-      // Out, but no video to download yet.
+      // Out, but no video to download yet: listed all the same (#427), not downloaded.
       episode(3, { video: undefined }),
       // Listed, coming next week.
       episode(4, { video: undefined, upcoming: true, airDate: day(7) }),
@@ -31,7 +31,7 @@ describe("an anime season tab's Download Season (#352)", () => {
       episode(6, { video: undefined, upcoming: true, airDate: undefined }),
     ];
     const shelf = shelfEpisodes(episodes, undefined, false);
-    expect(shelf.map((v) => v.id)).toEqual(["tt0000000:2:2", "tt0000000:2:1", `${PENDING_EPISODE}4`, "tt0000000:2:5", `${PENDING_EPISODE}6`]);
+    expect(shelf.map((v) => v.id)).toEqual(["tt0000000:2:2", "tt0000000:2:1", `${PENDING_EPISODE}3`, `${PENDING_EPISODE}4`, "tt0000000:2:5", `${PENDING_EPISODE}6`]);
     const picked = partDownloads(shelf);
     expect(picked.map((v) => v.id)).toEqual(["tt0000000:2:1", "tt0000000:2:2"]);
     // The same video a single episode's Download gets: the entry's number, the episode's own name.

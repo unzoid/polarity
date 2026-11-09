@@ -6,7 +6,7 @@
  * is picked (lib/account/index.ts): connecting or removing one takes a restart. Release and
  * local builds never read it.
  */
-import { buildChannel } from "../platform/build";
+import { buildChannel, type BuildChannel } from "../platform/build";
 import { keychainStorage, type KeyStorage } from "../platform/keychain";
 
 export interface DevDatabase {
@@ -92,7 +92,17 @@ export async function saveDevDatabase(text: string, storage: KeyStorage = keycha
 
 /** Forgets the database (from the next start) and the session on it. */
 export async function removeDevDatabase(storage: KeyStorage = keychainStorage()) {
+  if (buildChannel !== "dev") return;
   await Promise.all([...SESSION, NAME].map((k) => storage.removeItem(k)));
+}
+
+/**
+ * The database the account backend uses (lib/account/index.ts): a dev build only the one its connection code
+ * named (`dev`, from `devDatabase()`), any other build only the one built in (`VITE_SUPABASE_*`), else none.
+ */
+export function accountDatabase(channel: BuildChannel, builtIn: { url?: string; key?: string }, dev: DevDatabase | null): DevDatabase | null {
+  if (channel === "dev") return dev;
+  return builtIn.url && builtIn.key ? { url: builtIn.url, key: builtIn.key } : null;
 }
 
 /** "abcdefghijklmnopqrst.supabase.co": which database, without the key. */

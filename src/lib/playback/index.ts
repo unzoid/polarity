@@ -19,6 +19,8 @@ export * from "./startLog";
 export * from "./titleLanguages";
 export * from "./titlePlayback";
 export * from "./torrent";
+export * from "./trackMemory";
 export * from "./trailers";
 export * from "./useTitlePlayback";
 export * from "./volume";
+export * from "./youtubeMenus";

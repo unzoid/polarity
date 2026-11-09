@@ -195,6 +195,49 @@ impl Frames {
     }
 }
 
+/// A jump on in `time-pos` this long (seconds) is taken for a seek even
+/// when mpv's `seeking` hasn't come yet.
+const SEEK_LIKE: f64 = 2.0;
+
+/// Whether a jump may hold playback (#424): only one mpv made by seeking
+/// (or opening the file), or one back or of more than [`SEEK_LIKE`]. A
+/// short jump on without a seek (frames mpv dropped, a slow tick) plays on:
+/// holding there paused a video that nobody had touched.
+#[derive(Debug)]
+pub struct Jumps {
+    seeking: bool,
+    sought: bool,
+    last: Option<f64>,
+}
+
+impl Default for Jumps {
+    fn default() -> Self {
+        Jumps { seeking: false, sought: true, last: None }
+    }
+}
+
+impl Jumps {
+    /// A new load: its first frame may hold.
+    pub fn reset(&mut self) {
+        *self = Jumps::default();
+    }
+
+    /// mpv's `seeking` changed.
+    pub fn seeking(&mut self, on: bool) {
+        self.seeking = on;
+        self.sought |= on;
+    }
+
+    /// The frame with `pts` is on screen: whether a jump to it may hold
+    /// playback, and the frame before it.
+    pub fn frame(&mut self, pts: f64) -> (bool, Option<f64>) {
+        let before = self.last.replace(pts);
+        let may = self.sought || self.seeking || before.is_none_or(|b| pts < b || pts - b > SEEK_LIKE);
+        self.sought = self.seeking;
+        (may, before)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,5 +491,32 @@ mod tests {
         }
         assert_eq!(sent.len(), 2, "the first zoom and one jump: {sent:?}");
         assert!(sent[1].1 > 0.0 && sent[1].2.is_some(), "{sent:?}");
+    }
+
+    #[test]
+    fn only_a_seek_or_a_long_jump_may_hold_playback() {
+        let mut j = Jumps::default();
+        assert_eq!(j.frame(10.0), (true, None), "a load's first frame");
+        assert!(!j.frame(10.04).0);
+        // Frames mpv dropped, or a slow tick: a second on, nobody sought.
+        assert!(!j.frame(11.0).0);
+        assert!(!j.frame(11.04).0);
+        // A seek: the frame it lands on may hold, the next ones don't.
+        j.seeking(true);
+        j.seeking(false);
+        assert!(j.frame(300.0).0);
+        assert!(!j.frame(300.04).0);
+        // Still seeking when the frame comes, and the frame after it.
+        j.seeking(true);
+        assert!(j.frame(500.0).0);
+        j.seeking(false);
+        assert!(j.frame(500.04).0, "sought since the last frame");
+        assert!(!j.frame(500.08).0);
+        // `seeking` not in yet: back, or far on.
+        assert!(j.frame(400.0).0);
+        assert!(!j.frame(400.04).0);
+        assert!(j.frame(403.0).0);
+        j.reset();
+        assert!(j.frame(0.0).0);
     }
 }

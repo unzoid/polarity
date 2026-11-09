@@ -14,6 +14,7 @@ export * from "./logoContrast";
 export * from "./missMargin";
 export * from "./nameWait";
 export * from "./motion";
+export * from "./pageDrag";
 export * from "./pageFocus";
 export * from "./pageMotion";
 export * from "./presence";

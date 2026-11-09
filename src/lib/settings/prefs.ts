@@ -53,10 +53,11 @@ export interface Prefs {
   /** Links meant for Stremio (`stremio://`) open in Polarity on this device (#163): its own choice, so it never syncs. */
   stremioLinks: boolean;
   /**
-   * A profile new to this device starts with the add-ons and API keys already here (#80). Off: it starts
-   * with none (its own from the account, once they sync) and Settings offers to copy a set from this device.
+   * What a profile new to this device starts with (#80, #429). "none": its own add-ons and API keys from the
+   * account, or none. "account": another profile of the same account's set on this device, if there is one, else
+   * as "none". "device": whatever add-ons and keys are on the device, whoever's they are.
    */
-  shareAddonsAndKeys: boolean;
+  shareSetup: ShareSetup;
   /** mpv: louder dialogue when surround is folded down to stereo. */
   dialogueBoost: boolean;
   /** mpv: even out loud and quiet scenes. */
@@ -150,6 +151,8 @@ export interface Prefs {
  * 1080p stream needs, so peers get back roughly what playback takes, and it stays under half of a
  * slow cable or DSL line's upload (10 Mbit/s and less), leaving room for the download's own traffic.
  */
+export type ShareSetup = "none" | "account" | "device";
+
 export const TORRENT_UPLOAD_MBPS = 4;
 
 const DEFAULTS: Prefs = {
@@ -171,7 +174,7 @@ const DEFAULTS: Prefs = {
   discordPresence: "app",
   discordJoin: "ask",
   stremioLinks: true,
-  shareAddonsAndKeys: false,
+  shareSetup: "account",
   dialogueBoost: false,
   volumeLeveling: false,
   hwdec: true,
@@ -217,12 +220,19 @@ const DEFAULTS: Prefs = {
 const STORAGE = "polar.prefs";
 
 const stored = storedJson(localStorage, STORAGE);
-/** Installs from before #80 (prefs or an account's settings stored already) keep sharing add-ons and keys. */
-const earlier = (stored !== undefined || localStorage.getItem("polar.settingsOwner") !== null) && !(isRecord(stored) && "shareAddonsAndKeys" in stored);
-let prefs: Prefs = { ...DEFAULTS, ...(earlier ? { shareAddonsAndKeys: true } : {}), ...earlierUpload(stored), ...readPrefs(stored), ...earlierCrop(stored) };
+let prefs: Prefs = { ...DEFAULTS, ...earlierShare(stored), ...earlierUpload(stored), ...readPrefs(stored), ...earlierCrop(stored) };
 const listeners = new Set<() => void>();
 
 export const getPrefs = () => prefs;
+
+/**
+ * The sharing switch from before #429: Off is "none"; On, and installs from before the switch (#80, which
+ * shared), are "account", the safer of the two choices that keep sharing.
+ */
+function earlierShare(stored: unknown): Partial<Prefs> {
+  if (!isRecord(stored) || "shareSetup" in stored) return {};
+  return stored.shareAddonsAndKeys === false ? { shareSetup: "none" } : {};
+}
 
 /** Before #137 the speed limit capped upload too: one set then keeps upload at most that low. */
 function earlierUpload(stored: unknown): Partial<Prefs> {
