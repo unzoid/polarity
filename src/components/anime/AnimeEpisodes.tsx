@@ -195,25 +195,14 @@ export function AnimeEpisodes({
 
   return (
     <section className="seasons">
-      {franchise && !picker ? (
-        // Nothing to page through: the tools share the season tabs' row, right above the episodes.
-        <>
-          <div className="seasons-bar">
-            <SeasonTabs franchise={franchise} />
-            {tools}
-          </div>
-          {pick}
-        </>
-      ) : (
-        <>
-          {franchise && <SeasonTabs franchise={franchise} />}
-          {pick}
-          <div className="seasons-bar">
-            <div className="seasons-picker">{picker}</div>
-            {tools}
-          </div>
-        </>
-      )}
+      {/* The tabs on a row of their own and the toolbar under them, whatever the season holds, so switching
+          tabs leaves the toolbar where it is (#426); the series pick under the toolbar, for the same reason. */}
+      {franchise && <SeasonTabs franchise={franchise} />}
+      <div className="seasons-bar anime-seasons-bar">
+        <div className="seasons-picker">{picker}</div>
+        {tools}
+      </div>
+      {pick}
       <EpisodeShelf
         // Downloads keyed like progress: under the id the anime plays from (test report 1, item 18).
         item={pb.meta}

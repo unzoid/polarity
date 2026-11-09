@@ -161,6 +161,21 @@ it); the IPA (a zip) holds `licenses/mpv/` with each library's licence and `BUND
 Not built: Picture in picture, background audio, lock screen controls, AirPlay on iOS (#19 is macOS), signing
 and TestFlight (the owner's Apple developer account).
 
+## iOS: five tabs, no More (#449)
+
+With Library a fifth section and Search a sixth tab (#174), an iPhone's tab bar put iOS's own More tab in
+their place: a list with an Edit button, and pages under it inside a navigation controller of its own, which
+drew a "Library" bar with a round Back above the app's header (also over the player) and took the back swipe
+out to the list. Now `native_tabs` carries the sections alone, five at most (`MAX_NATIVE_TABS` in
+`lib/navTabs.ts`), and `ios/tabs.m` has no search tab. Checked here: unit tests and the phone e2e with an
+iPhone's user agent (the tabs sent, the top bar's buttons, the edge swipe back to the Library). On an iPhone:
+1. Five tabs (four with Anime off), no More, with and without Settings → Browsing → Show the Calendar.
+2. Search and, when it's on, the Calendar are buttons in the top bar next to the profile; each opens its page.
+3. Library → a title → the swipe in from the left edge: back on the Library, never a list of tabs.
+4. No iOS navigation bar (a title and a round Back) above the app's header on any page, nor over the player
+   started from the Library.
+5. A title opened from the Library fills the whole screen (#466 may share this cause).
+
 ## iOS player and layouts (#172)
 
 The first runs (simulator and an iPhone) showed a solid blue picture with sound, the status bar over the
@@ -178,8 +193,9 @@ run on iOS here:
   Tauri's root view controller), back when it closes.
 - Safe areas: the player's bars, title, notices, Up Next, Skip and the options' close button keep clear of
   the insets on phones and tablets (e2e with an iPhone's insets, upright and sideways, and a tablet's).
-- iOS Back: a swipe in from the left edge (within 24 px) closes what's open, then leaves a pushed page or the
-  player; at a tab's own page it does nothing (Android's Back goes Home, then leaves the app).
+- iOS Back: a swipe in from the left edge (iOS's own edge recognizer, `ios/back.m`) closes what's open, then
+  leaves the player; on a pushed page with nothing over it the page follows the finger (#451, below); at a
+  tab's own page the edge is the page's (Android's Back goes Home, then leaves the app).
 - iPad: the tablet layout in every window, Slide Over and narrow Split View included; there (under 600 px
   wide) the player takes the phone's compact controls. Seen as screenshots at iPad sizes in a desktop
   browser with an iPad user agent, not on an iPad.
@@ -192,19 +208,56 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
    Sources, Skip, Up Next) visible and tappable clear of the Dynamic Island and the home indicator. Closing
    the player brings the status bar back.
 3. The player's Back button leaves the player; a swipe in from the left edge does too, closes an open sheet
-   or menu first, leaves a title page, and does nothing on a tab's own page; a vertical scroll that starts
-   at the edge still scrolls.
+   or menu first, leaves a title page (steps 24 to 26), and does nothing on a tab's own page; a vertical
+   scroll that starts at the edge still scrolls.
 4. iPad, portrait and landscape, full screen, Split View (half, a third) and Slide Over, Stage Manager
    windows resized: the tablet layout; under 600 px wide the player shows glyph-only actions and the title
    beside Back. With a keyboard and a trackpad: Escape is Back, the shortcuts work, hover shows on cards.
 
+## The space under the top bar on phones (#450)
+
+On a phone a page's title (Series, Movies, Library, Calendar, Anime without its carousel, a playlist) now
+starts 0.5rem under the top bar; before, the desktop's 1.75rem plus the heading's default margin left about
+48 px of nothing there. Home's featured card already sat right under it. The phone e2e measures the gap on
+Home, Series and Library, with and without a notch's inset, and that the bar's row starts where the
+status bar ends. Only the web layout runs here. On an iPhone (with #449's change, so no More tab):
+- Home, Series, Library: the logo sits just under the status bar, and the page's title or card just under
+  the logo's row, with no band of empty space above or below the bar.
+- If the bar itself sits lower than the status bar's height, that space comes from the safe area iOS
+  reports to the web view (the native side), not from the page: note how much and on which pages.
+
+## iOS green tint (#416)
+
+An iPhone showed video with green and purple patches. Its log (`video: decoder …; decoded …; drawn …`
+lines, `polar_player::video_path`) showed the colour tags right throughout, and the picture right once
+mpv, after a trip to the home screen, had fallen back from `videotoolbox` (frames drawn straight from
+VideoToolbox through OpenGL ES) to `videotoolbox-copy` and then to software decoding. So the fault is in
+the zero-copy path between VideoToolbox and mpv's OpenGL ES output; reading mpv's iOS interop
+(`hwdec_ios_gl.m`, NV12's planes as LUMINANCE / LUMINANCE_ALPHA textures) and its renderer didn't show
+where. What changed:
+- iOS decodes with `videotoolbox-copy` (`Tune::ios_hwdec`): VideoToolbox still decodes, its frames are
+  copied to memory and drawn as software-decoded ones are. Hardware decoding off is still `no`.
+- After the app comes back to the foreground, if VideoToolbox was decoding before and mpv has fallen back
+  to software since, hardware decoding is turned off and on again (`player::hardware_decoding_back`), so
+  the rest of the video isn't decoded in software.
+
+Nothing here runs iOS. `scripts/colour-bars.sh <dir>` makes SMPTE colour-bar clips (H.264 8-bit, HEVC
+10-bit, HEVC 10-bit PQ, AV1) and `bars.png`, how they should look. To check on an iPhone:
+- Play each clip and a real episode: no cast on the grey and white bars, colours as in `bars.png` (the PQ
+  clip dimmer, but not tinted). polar.log's `video:` lines should say `decoder videotoolbox-copy`.
+- During playback, go to the home screen for a few seconds and come back: the picture stays right, and
+  within a few seconds the log has a new `video:` line back on `videotoolbox-copy` (not `software`).
+- A 4K HEVC episode plays without dropped frames (the copy costs some battery; the log's `video:` lines
+  and the phone's warmth are worth noting).
+
 ## iOS tab bar (#174)
 
-The sections (Home, Series, Movies, Anime, Library, and Calendar when it's on) are iOS's own tab bar: a
+The sections (Home, Series, Movies, Anime, Library: five at most) are iOS's own tab bar: a
 `UITabBarController` becomes the window's root and Tauri's view controller, the web view with the video
 behind it, moves into the current tab (`ios/tabs.m`). The web app sends the tabs, the current one and
 whether the bar shows (`native_tabs`); a tab the user picks comes back as `native://tab` and opens that
-section, the current one picked again goes back to its top. The web-drawn tabs hide. CI builds with Xcode
+section, the current one picked again goes back to its top. The web-drawn tabs hide. Search and the Calendar
+(when it's on) are buttons in the top bar next to the profile, so iOS never adds its own More tab (#449). CI builds with Xcode
 26 or later, so iOS 26 draws the bar in Liquid Glass; iOS 17 to 25 get the classic bar; an iPad on iOS 18
 or later gets the tab bar that opens into a sidebar. Only the web side ran here (unit tests, the Rust for
 iOS type-checked); the Objective-C was written from Apple's documentation and is compiled only by CI.
@@ -220,7 +273,8 @@ To check on an iPhone and an iPad on iOS 26, and an iPhone on iOS 17 or 18:
 4. The bar hides while the player, Settings or a sheet is open and comes back when they close; the player's
    bottom controls sit by the home indicator, not above an empty space where the bar was (iOS 17 most of
    all).
-5. Settings → Browsing → Show the Calendar: a sixth tab; on an iPhone the bar shows More with the rest.
+5. Settings → Browsing → Show the Calendar: no sixth tab; a Calendar button appears in the top bar next to
+   Search and opens the Calendar. No More tab on any iPhone, upright or sideways (#449).
 6. iPad: the bar at the top, its sidebar button opens the sidebar with the same tabs; Split View, Slide Over
    and Stage Manager sizes; the web top bar (logo, search, profile) doesn't sit under the tab bar.
 7. VoiceOver reads the tabs and the current one; Larger Text grows the labels; Reduce Transparency turns the
@@ -263,14 +317,13 @@ doesn't show within 0.6 s, or before iOS 17.4, an action sheet comes instead. On
     the subtitle settings and the preview. Picking a track switches to it. Sources and Episodes keep the
     full-screen picker.
 
-The search tab, the back button and the sheets' detents (`ios/tabs.m`, `ios/back.m`, `native_back`,
+The back button and the sheets' detents (`ios/tabs.m`, `ios/back.m`, `native_back`,
 `components/NativeBack.tsx`, `components/Sheet.tsx`). The detents ran in the phone e2e with an iPhone's user
-agent (Chromium); the button and the search tab only as unit tests, their Objective-C compiled only by CI:
-19. The search tab: last in the bar; on iOS 26 apart from the sections, on its right; on iOS 18 to 25 the
-    system's search tab, on iOS 17 a tab like the others. Tapping it opens the search page with the field
-    in the top bar focused and the keyboard up; with nothing typed the page says what it searches. Typing
-    shows results; another tab leaves it and empties the field; tapping the search tab again focuses the
-    field again.
+agent (Chromium); the button only as unit tests, its Objective-C compiled only by CI:
+19. Search (#449): the magnifier in the top bar, left of the profile, on every page with the top bar. On an
+    iPhone it opens the search page (the field focused, the keyboard up); typing shows results; Back (the
+    edge swipe) leaves it; tapping the magnifier on the page focuses the field again. On an iPad the field
+    opens in the top bar. No search tab in the bar.
 20. On a title page (and any page opened from another): Back at the top left is the system's button, glass
     on iOS 26, a chevron before, standing exactly where the web Back was (no second chevron under it, the
     logo beside it not covered). A tap goes back one page. A long press lists the pages behind, nearest
@@ -284,6 +337,22 @@ agent (Chromium); the button and the search tab only as unit tests, their Object
     when let go past it; a flick goes as far as it was thrown; pushing the list up at half height brings
     the sheet up first; tapping the grabber toggles the two heights; VoiceOver reads the grabber as Expand
     or Collapse. Turning the phone keeps the sheet at its height. An iPad keeps the side sheet.
+
+Back on every page and the swipe that follows the finger (#451: `ios/back.m`, `native_back.rs`,
+`lib/platform/backSwipe.ts`, `lib/ui/pageDrag.ts`). The page's move ran in the phone e2e with an iPhone's user
+agent and the swipe's steps sent as the shell sends them; iOS's recognizer and the button's new place only
+compiled by CI:
+24. Every page that can go back (a title page from any section, a Library collection, a playlist, Search's
+    results, an anime's page, Settings' sections) shows the system's Back top left, with the logo beside it;
+    before, the logo moved right and no button showed (the tab bar's view covered it).
+25. On a title page, put a finger on the left edge and move it slowly right: the title page moves with it,
+    with a shadow on its left edge, and the page it came from shows under it, coming in from a little to the
+    left and brightening. Move back left: it follows. Let go before half the width: the title page slides
+    back and stays. Let go past half, or flick right from anywhere: it slides out and the page under it is
+    the page, where it was scrolled, with no second animation. Flicking back left before letting go cancels.
+26. A row that starts at the left edge (Home's shelves) scrolls sideways from the edge on a section's top
+    page; on a title page the same touch is Back. With a sheet or menu open, the swipe closes it and the page
+    doesn't move; in the player it leaves the player as before. A vertical scroll near the edge still scrolls.
 
 ## macOS release: sources of the bundled libraries
 

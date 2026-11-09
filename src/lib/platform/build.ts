@@ -11,7 +11,13 @@ export function channelOf(value: unknown): BuildChannel {
   return value === "release" || value === "dev" ? value : "local";
 }
 
-export const buildChannel: BuildChannel = channelOf(import.meta.env.VITE_POLAR_CHANNEL);
+const channel = import.meta.env.VITE_POLAR_CHANNEL;
+/**
+ * `channelOf`'s rule, written out rather than called so the bundler sees a constant: in a release build every
+ * `buildChannel === "dev"` branch, and what only it uses (the dev database, its Settings card), is
+ * left out of the bundle. scripts/releaseBundle.ts checks that it is.
+ */
+export const buildChannel: BuildChannel = channel === "release" || channel === "dev" ? channel : "local";
 /** A dev build is an app of its own next to the released one (scripts/devChannel.ts, `devConf`): its name and link scheme. */
 export const appName = buildChannel === "dev" ? "Polarity Dev" : "Polarity";
 export const linkScheme = buildChannel === "dev" ? "polarity-dev" : "polarity";

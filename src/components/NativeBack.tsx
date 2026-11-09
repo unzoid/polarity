@@ -7,6 +7,7 @@ type Holder = { el: RefObject<HTMLElement | null>; shown: boolean; history: stri
 /** Every Back that could be iOS's, in mount order: the last one showing is the one the button stands for. */
 const holders: Holder[] = [];
 let listening = false;
+let swipe = false;
 
 const top = () => holders.findLast((h) => h.shown);
 
@@ -14,7 +15,19 @@ function sync() {
   const holder = top();
   const r = holder?.el.current?.getBoundingClientRect();
   const rect = r && r.width > 0 ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
-  setNativeBack({ shown: !!rect, rect, history: holder?.history ?? [] }).catch(warnFailed("back button"));
+  setNativeBack({ shown: !!rect, rect, history: holder?.history ?? [], swipe }).catch(warnFailed("back button"));
+}
+
+/**
+ * On iOS, whether a swipe in from the left edge is Back now (lib/platform/backSwipe.ts): while it isn't, iOS leaves
+ * the edge to the page, so a row scrolled from there scrolls. Elsewhere nothing.
+ */
+export function useNativeSwipe(on: boolean) {
+  useEffect(() => {
+    if (!nativeBackAvailable || swipe === on) return;
+    swipe = on;
+    sync();
+  }, [on]);
 }
 
 /**

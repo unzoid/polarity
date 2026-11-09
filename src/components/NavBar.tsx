@@ -1,5 +1,5 @@
 import logo from "../assets/polarity-white.png";
-import { ChevronDown, Close, Search, Speed, Tv } from "./icons";
+import { Calendar, ChevronDown, Close, Search, Speed, Tv } from "./icons";
 import {
   addRecentSearch,
   clearRecentSearches,
@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { rootTab, useRouter, type TabRoute } from "../lib/router";
 import { usePrefs, useSettingsOverlay } from "../lib/settings";
 import { dismissDepth, onDismissDepth, useFormFactor, useHandFocus } from "../lib/ui";
-import { MOD_LABEL } from "../lib/platform";
+import { MOD_LABEL, nativeTabsAvailable } from "../lib/platform";
 import { useSettings } from "../lib/net";
 import { WindowControls } from "./WindowControls";
 import { ProfileMenu } from "./ProfileMenu";
@@ -76,8 +76,11 @@ export function NavBar() {
   const { data: settings } = useSettings();
   const { animeEnabled, showTvButton } = usePrefs();
   const sections = animeEnabled ? LINKS : LINKS.filter((l) => l.route.name !== "anime");
-  const links = settings?.showCalendar ? [...sections, CALENDAR] : sections;
-  useNativeTabs(links);
+  // A phone's tab bar (iOS's own or ours) holds the five sections; the Calendar is a button in the top bar there,
+  // as on an iPad with iOS's tab bar. A sixth tab would make iOS add its own More tab (#449).
+  const calendarButton = !!settings?.showCalendar && (phone || nativeTabsAvailable);
+  const links = settings?.showCalendar && !calendarButton ? [...sections, CALENDAR] : sections;
+  useNativeTabs(sections);
 
   return (
     <header className="navbar" data-scrolled={scrolled} data-tauri-drag-region>
@@ -106,6 +109,16 @@ export function NavBar() {
         <UpdatePill />
         <NavParty />
         {phone ? <SearchPageButton /> : <SearchBox />}
+        {calendarButton && (
+          <button
+            className="navbar-icon pressable"
+            aria-label="Calendar"
+            aria-current={active.name === "calendar" ? "page" : undefined}
+            onClick={() => tab(CALENDAR.route)}
+          >
+            <Calendar size={23} />
+          </button>
+        )}
         {showTvButton && tvModeAvailable && (
           <button className="navbar-icon pressable" aria-label="TV mode" title="TV mode" onClick={() => setTvMode(true)}>
             <Tv size={23} />
@@ -213,7 +226,6 @@ function NavLinks({ links, isActive, open }: { links: NavLink[]; isActive: (r: T
 /**
  * On a phone search is a page of its own, as in phone apps (screens/Search.tsx): the icon opens it, or goes
  * back to it from a title opened there. On it, the icon (and Ctrl K) brings its field into view and focuses it.
- * iOS draws a search tab of its own, so the icon hides there (shell.css).
  */
 function SearchPageButton() {
   const { stack, current, navigate, back } = useRouter();

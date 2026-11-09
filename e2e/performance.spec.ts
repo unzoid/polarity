@@ -1,6 +1,7 @@
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { inventedAnime, LONG_ANIME, longAnimeMedia, longAnimeZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
+import { mediaAnswer } from "./anilistMock";
+import { inventedAnime, LONG_ANIME, longAnimeMedia, longAnimeZip, ONE_SEASON, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // Scrolling long pages (#134). Chromium only: these read Chromium's trace and layer tree (WebView2 is Chromium).
 // Each budget sits well above what the page needs now and well below what it needed before the fix, so a
@@ -131,9 +132,11 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
 /** The invented shows' AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has their series. */
 async function answerInventedAnime(app: Page) {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    const show = inventedAnime(variables?.id ?? 0);
-    await route.fulfill({ json: { data: show ? { Media: longAnimeMedia(show) } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), (id) => {
+      const show = inventedAnime(id);
+      return show && longAnimeMedia(show);
+    });
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const show = inventedAnime(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
@@ -268,4 +271,85 @@ test("a long show's page opens at the episode you're up to and stays there while
   await app.waitForTimeout(1000);
   expect(await inRow()).toBe(true);
   expect(await page.locator(".seasons .episode-card").count()).toBeLessThanOrEqual(40);
+});
+
+test.describe("TV mode", () => {
+  test.use({ tv: true, viewport: { width: 1920, height: 1080 } });
+
+  /**
+   * Opens a show's title page by a polarity:// link, then its Episodes: how long from OK on Episodes until
+   * an episode has the focus (ms), and how many episode rows the list draws.
+   */
+  async function openEpisodes(app: Page, imdb: string) {
+    await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://title/series/${id}`), imdb);
+    const pill = app.getByRole("button", { name: "Episodes", exact: true });
+    await pill.focus();
+    const opened = await app.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const start = performance.now();
+          const look = () => (document.activeElement?.closest(".tv-episodes-list") ? resolve(performance.now() - start) : requestAnimationFrame(look));
+          requestAnimationFrame(look);
+          (document.activeElement as HTMLElement | null)?.click();
+        }),
+    );
+    const rows = await app.locator(".tv-episodes .tv-episode").count();
+    return { opened, rows };
+  }
+  const close = async (app: Page) => {
+    await app.keyboard.press("Backspace");
+    await expect(app.locator(".tv-episodes")).toHaveCount(0);
+    await app.keyboard.press("Backspace");
+  };
+
+  test("a season of 1,200 episodes opens its list as quickly as a short one, and the remote reaches its last episode (#436)", async ({ app }) => {
+    test.setTimeout(120_000);
+    await expect(app.locator(".tv-main")).toBeVisible();
+    // Each once first, so the code and the answers are loaded as they'd be after the first visit.
+    for (const id of [SHORT_ANIME.imdb, ONE_SEASON.imdb]) {
+      await openEpisodes(app, id);
+      await close(app);
+    }
+    const short = await openEpisodes(app, SHORT_ANIME.imdb);
+    await close(app);
+    const long = await openEpisodes(app, ONE_SEASON.imdb);
+    const unit = await layoutUnit(app);
+    const report = JSON.stringify({ short, long, unit });
+    expect(short.rows, report).toBe(SHORT_ANIME.episodes);
+    // Only the episodes on and near the screen are drawn.
+    expect(long.rows, report).toBeGreaterThan(0);
+    expect(long.rows, report).toBeLessThanOrEqual(40);
+    expect(long.opened, report).toBeLessThan(short.opened + Math.max(150, 40 * unit));
+
+    // The list keeps the whole season's length (each slot as tall as an episode), so the scrollbar says where you are.
+    const length = await app.locator(".tv-episodes-list").evaluate((el) => ({ all: el.scrollHeight, row: el.querySelector<HTMLElement>(".tv-episode")!.offsetHeight }));
+    expect(length.all, JSON.stringify(length)).toBeGreaterThan(length.row * ONE_SEASON.episodes);
+    // The first episode has the focus (nothing watched yet); Down walks on past the episodes drawn at first.
+    const focusedVideo = () => app.evaluate(() => document.activeElement?.closest<HTMLElement>("[data-video]")?.dataset.video);
+    await expect.poll(focusedVideo).toBe(`${ONE_SEASON.imdb}:1:1`);
+    for (let i = 0; i < 40; i++) await app.keyboard.press("ArrowDown");
+    await expect.poll(focusedVideo).toBe(`${ONE_SEASON.imdb}:1:41`);
+    // Scrolled to the end (a held remote), the last episode is drawn and takes the focus; Up goes on from it.
+    const list = app.locator(".tv-episodes-list");
+    const last = app.locator(`.tv-episode[data-video="${ONE_SEASON.imdb}:1:${ONE_SEASON.episodes}"] .tv-episode-main`);
+    for (let i = 0; i < 20 && !(await last.count()); i++) {
+      await list.evaluate((el) => el.scrollTo({ top: el.scrollHeight, behavior: "instant" }));
+      await app.waitForTimeout(100);
+    }
+    await last.focus();
+    await app.keyboard.press("ArrowUp");
+    await expect.poll(focusedVideo).toBe(`${ONE_SEASON.imdb}:1:${ONE_SEASON.episodes - 1}`);
+
+    // Halfway through episode 700: the list opens on it, in view, with the remote's focus.
+    await close(app);
+    await app.evaluate(({ id, name }) => {
+      const invoke = (window as unknown as { __TAURI_INTERNALS__: { invoke: (c: string, a?: object) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke;
+      return invoke("progress_save", {
+        progress: { metaId: id, videoId: `${id}:1:700`, type: "series", name, season: 1, episode: 700, position: 600, duration: 1440, updatedAt: Date.now() },
+      });
+    }, { id: ONE_SEASON.imdb, name: ONE_SEASON.name });
+    await openEpisodes(app, ONE_SEASON.imdb);
+    await expect.poll(focusedVideo).toBe(`${ONE_SEASON.imdb}:1:700`);
+    await expect(app.locator(`.tv-episode[data-video="${ONE_SEASON.imdb}:1:700"]`)).toBeInViewport();
+  });
 });

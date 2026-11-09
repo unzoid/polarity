@@ -48,13 +48,15 @@ const FRAMES_IN_MEMORY: bool = cfg!(any(target_os = "macos", target_os = "ios"))
 /// and VideoToolbox's frames in 8-bit NV12. mpv draws with OpenGL ES there, which can only take
 /// 8-bit frames from VideoToolbox: a 10-bit video (HEVC Main 10, HDR) left in VideoToolbox's
 /// own 10-bit format couldn't be shown, and the picture was one blue colour. VideoToolbox
-/// converts on the GPU; the colours (HDR included) are still mapped by mpv.
+/// converts on the GPU; the colours (HDR included) are still mapped by mpv. VideoToolbox's frames are
+/// copied back to memory before mpv draws them ([`Tune::ios_hwdec`]).
 pub const IOS_ARGS: &[&str] = &[
     "--demuxer-max-bytes=64MiB",
     "--demuxer-max-back-bytes=16MiB",
     "--ao=audiounit",
     "--tls-verify=yes",
     "--hwdec-image-format=nv12",
+    "--hwdec=videotoolbox-copy",
 ];
 
 #[derive(Debug, Clone, Copy, serde::Deserialize, PartialEq)]
@@ -151,6 +153,18 @@ impl Tune {
             other => other,
         }
     }
+
+    /// [`Tune::hwdec_mode`] for mpv on iPhones and iPads: VideoToolbox decodes, and its frames are
+    /// copied back to memory, never handed to OpenGL ES as they are. Drawn straight from VideoToolbox
+    /// the picture had green and purple patches on an iPhone, and was right once mpv had fallen back
+    /// to decoding in software (#416). No cropdetect there, so autocrop changes nothing.
+    pub fn ios_hwdec(&self) -> &'static str {
+        if self.hwdec {
+            "videotoolbox-copy"
+        } else {
+            "no"
+        }
+    }
 }
 
 #[cfg(test)]
@@ -227,5 +241,15 @@ mod tests {
         // iOS's OpenGL ES can't map VideoToolbox's 10-bit frames: the picture was one blue colour (#172).
         assert!(IOS_ARGS.contains(&"--hwdec-image-format=nv12"));
         assert!(IOS_ARGS.contains(&"--ao=audiounit"));
+    }
+
+    #[test]
+    fn ios_copies_videotoolbox_frames_back() {
+        // Drawn straight from VideoToolbox the picture was tinted (#416); at launch as when the setting changes.
+        let on = Tune::default();
+        assert_eq!(on.ios_hwdec(), "videotoolbox-copy");
+        assert!(IOS_ARGS.contains(&format!("--hwdec={}", on.ios_hwdec()).as_str()));
+        assert_eq!(Tune { autocrop: true, ..on }.ios_hwdec(), "videotoolbox-copy");
+        assert_eq!(Tune { hwdec: false, ..on }.ios_hwdec(), "no");
     }
 }

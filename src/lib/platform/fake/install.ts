@@ -2,6 +2,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 
 import * as fx from "./fixtures";
+import { SAGA_FILLER } from "./longAnime";
 import { fakeAccount, startSignedOut } from "./account";
 import type { Download } from "../../library/downloads";
 import type { AnimeLink } from "../../library/identity";
@@ -39,6 +40,10 @@ if (params.get("account")) (globalThis as { __polarFakeAccount?: unknown }).__po
 if (params.get("account") === "signed-out") startSignedOut();
 params.delete("account");
 params.delete("friends"); // `&friends=1`: the profile starts with Friends on (account.ts)
+// `?sources=filtered`: Settings → Sources' filters left out every source the add-ons found; `?sources=none`: no
+// add-on was asked (#435).
+const sourcesCase = params.get("sources");
+params.delete("sources");
 let settings: Settings = { ...fx.settings, ...Object.fromEntries(params) };
 
 type Args = Record<string, unknown>;
@@ -71,7 +76,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   meta: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   // TMDB title N is the fixtures' Nth movie or show here (tt9100000 + N, tt9200000 + N); from 900000 on there's no IMDb id (#208).
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
-  streams: () => fx.streams(),
+  streams: () =>
+    sourcesCase === "filtered" ? { streams: [], failed: [], hidden: 5 } : sourcesCase === "none" ? { streams: [], failed: [], asked: [] } : fx.streams(),
   subtitles: () => [],
   // `polar.fakeIntro` in localStorage: every video opens with an 80-second intro to skip (#331).
   skip_segments: () => (localStorage.getItem("polar.fakeIntro") ? { intro: { start: 0, end: 80 } } : {}),
@@ -99,6 +105,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   },
   // Open Stremio links in Polarity (#163): each change is kept for browser tests to read.
   stremio_links_set: (a) => void ((window as { __stremioLinks?: boolean[] }).__stremioLinks ??= []).push(!!a.on),
+  // What iOS's tab bar was last told to show (components/NativeTabs.tsx).
+  native_tabs: (a) => void ((window as { __nativeTabs?: unknown }).__nativeTabs = a.tabs),
   addon_catalog: (a) => fx.addonCatalog(String(a.addon), String(a.ty), String(a.id), a.extra as [string, string][]),
   addons_bundled: () => [],
   library_list: () => library,
@@ -128,7 +136,8 @@ const commands: Record<string, (a: Args) => unknown> = {
     return true;
   },
   anime_ids: () => null,
-  anime_episode_flags: () => ({ filler: [], recap: [] }),
+  // The invented two-series franchise's long series has filler (its tab's toolbar has Skip filler, #426).
+  anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),
   downloads_list: () => downloads,
   // Files on this device (#204): none opened, and the file dialog is cancelled.
@@ -230,6 +239,9 @@ mockIPC(
 
 // A tab picked in iOS's tab bar, as the native shell reports it (components/NativeTabs.tsx).
 (window as { __polarFakeNativeTab?: (id: string) => void }).__polarFakeNativeTab = (id) => void emit("native://tab", id);
+
+// A step of the swipe in from the left edge, as iOS's shell reports it (lib/platform/backSwipe.ts, #451).
+(window as { __polarFakeBackSwipe?: (swipe: object) => void }).__polarFakeBackSwipe = (swipe) => void emit("native://back-swipe", swipe);
 
 // A click on a note, as the native shell reports it (#209).
 (window as { __polarFakeNoteClick?: (payload: string) => void }).__polarFakeNoteClick = (payload) => void emit("notification://click", payload);

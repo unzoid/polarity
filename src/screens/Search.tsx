@@ -44,7 +44,7 @@ import { Search as SearchIcon } from "../components/icons";
 export function Search() {
   const text = useSearchText().trim();
   const { animeEnabled } = usePrefs();
-  const searchTab = useRouter().stack.length === 1;
+  const alone = useRouter().stack.length === 1;
   const phone = useFormFactor().form === "phone";
 
   return (
@@ -54,8 +54,8 @@ export function Search() {
         phone ? (
           <SearchStart />
         ) : (
-          // Opened by iOS's search tab (the stack's root) with nothing typed yet: say what the field above is for.
-          searchTab && <EmptyState>{animeEnabled ? "Search for movies, series and anime." : "Search for movies and series."}</EmptyState>
+          // The stack's root with nothing typed yet: say what the field above is for.
+          alone && <EmptyState>{animeEnabled ? "Search for movies, series and anime." : "Search for movies and series."}</EmptyState>
         )
       ) : text.length < searchMinLength(text) ? (
         // One Latin letter matches half the catalog: ask for another rather than show an empty page.

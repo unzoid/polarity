@@ -6,11 +6,19 @@ import { trailerSourceLabel, useFileTrailer, type TrailerRequest as Open } from 
 import { Close, Trailer as TrailerIcon } from "./icons";
 import { Button, IconButton } from "./ui/Button";
 
-/** YouTube's privacy-enhanced player for a trailer, with YouTube's clutter turned down. */
-export function youtubeEmbed(ytId: string, opts: { muted?: boolean; controls?: boolean; api?: boolean } = {}) {
+/**
+ * YouTube's privacy-enhanced player for a trailer, with YouTube's clutter turned down.
+ * `captions`: a language code to show captions in from the start (the player parameters `cc_load_policy` and
+ * `cc_lang_pref`); YouTube's player picks another where the video has none in it. Without it, its own default.
+ * `autoplay: false` loads it paused (it starts by itself otherwise).
+ */
+export function youtubeEmbed(
+  ytId: string,
+  opts: { muted?: boolean; controls?: boolean; api?: boolean; captions?: string | null; autoplay?: boolean } = {},
+) {
   const id = encodeURIComponent(ytId);
   const q = new URLSearchParams({
-    autoplay: "1",
+    autoplay: opts.autoplay === false ? "0" : "1",
     rel: "0",
     playsinline: "1",
     iv_load_policy: "3",
@@ -18,6 +26,7 @@ export function youtubeEmbed(ytId: string, opts: { muted?: boolean; controls?: b
     ...(opts.muted ? { mute: "1" } : {}),
     ...(opts.controls === false ? { controls: "0", disablekb: "1", fs: "0" } : {}),
     ...(opts.api ? { enablejsapi: "1", origin: window.location.origin } : {}),
+    ...(opts.captions ? { cc_load_policy: "1", cc_lang_pref: opts.captions } : {}),
   });
   return `https://www.youtube-nocookie.com/embed/${id}?${q}`;
 }
