@@ -58,9 +58,28 @@ jobs:
           retention-days: 14
 
   # The web build in real browsers against the fake shell (playwright.config.ts):
-  # desktop in Chromium and WebKit, TV and phone sizes in Chromium.
+  # desktop in Chromium and WebKit, TV and phone sizes in Chromium. Three jobs side by side, so none
+  # comes near the time limit on a slow runner: Chromium, WebKit, and the timing tests
+  # (e2e/performance.spec.ts) with one worker, so no other test shares the CPU while they measure.
+  # The Chromium job keeps the name the single job had.
   e2e-web:
-    name: End to end (web build)
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: End to end (web build)
+            browsers: chromium
+            projects: --project=desktop --project=phone --project=tv
+            report: e2e-report
+          - name: End to end (web build, WebKit)
+            browsers: webkit
+            projects: --project=desktop-webkit
+            report: e2e-report-webkit
+          - name: Timing (web build)
+            browsers: chromium
+            projects: --project=timing --workers=1
+            report: e2e-report-timing
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # Playwright's own image for the version in bun.lock (1.64.1), pinned by digest: the browsers'
@@ -88,16 +107,16 @@ jobs:
       - name: Install the browsers
         run: |
           for attempt in 1 2 3; do
-            timeout 300 bunx playwright install chromium webkit && exit 0
+            timeout 300 bunx playwright install ${{ matrix.browsers }} && exit 0
             echo "::warning::Installing the browsers failed or stalled (attempt $attempt of 3)"
           done
           exit 1
-      - run: bun run e2e
+      - run: bun run e2e ${{ matrix.projects }}
       - name: Keep the report, traces and screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-report
+          name: ${{ matrix.report }}
           path: |
             e2e/.report
             e2e/.results

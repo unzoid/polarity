@@ -67,7 +67,12 @@ Each crate keeps unit tests next to its code. Worth knowing:
 refuses every outside host (`media.example` answers with a silent WAV made by `e2e/media.ts`)
 and fails on any uncaught page error. Projects: `desktop` (Chromium; `desktop-webkit` too unless
 `POLAR_E2E_CHROMIUM` is set), `phone` (`phone.spec.ts`, Pixel 7) and `tv` (`tv.spec.ts`, keys
-only). One project: `bun run e2e --project=phone`. First time: `bunx playwright install chromium
+only), and `timing` (`performance.spec.ts`, Chromium: how quickly long pages open and scroll). One
+project: `bun run e2e --project=phone`. CI runs three jobs side by side: Chromium (`desktop`, `phone`,
+`tv`), WebKit (`desktop-webkit`), and `timing` with one worker, so no other test shares the runner's CPU
+while one measures. Each timing is measured three times, short and long in turn, and the quickest counts:
+a busy runner only adds time, and a real slowdown is in every run. Budgets are in units of the runner's
+speed (`layoutUnit`) with a floor in milliseconds, and sit far below what the page took before each fix. First time: `bunx playwright install chromium
 webkit`; where that can't download, `POLAR_E2E_CHROMIUM=<path to chrome>` uses another
 Chromium. Reports and traces go to `e2e/.report` and `e2e/.results` (ignored; CI keeps them when
 a test fails).

@@ -5,7 +5,8 @@ import { inventedAnime, LONG_ANIME, longAnimeMedia, longAnimeZip, ONE_SEASON, SH
 
 // Scrolling long pages (#134). Chromium only: these read Chromium's trace and layer tree (WebView2 is Chromium).
 // Each budget sits well above what the page needs now and well below what it needed before the fix, so a
-// slower runner doesn't trip it and the old problem would.
+// slower runner doesn't trip it and the old problem would. CI runs this file in a job of its own, one test at
+// a time (the `timing` project), so no other test shares the runner's CPU while one measures (#481).
 
 test.skip(({ browserName }) => browserName !== "chromium", "reads Chromium's trace and layer tree");
 
@@ -65,6 +66,17 @@ async function layoutUnit(app: Page) {
   });
 }
 
+/**
+ * The quickest of a few measurements, each field on its own: a busy runner only ever adds time, so the
+ * smallest is the closest to the page's own cost, and a real slowdown is in every one of them (#481).
+ */
+function quickest<T extends Record<string, number>>(runs: T[]): T {
+  return Object.fromEntries(Object.keys(runs[0]).map((k) => [k, Math.min(...runs.map((r) => r[k]))])) as T;
+}
+
+/** How many times each timing is measured; `quickest` keeps the best. */
+const RUNS = 3;
+
 async function layerCount(app: Page, cdp: CDPSession) {
   let layers = 0;
   const seen = new Promise<void>((resolve) =>
@@ -117,16 +129,28 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
   // has a part that doesn't scale with layout speed: where a runner lays out fast (a unit under 2 ms), the
   // same 9-10 ms frame came to more than 5 units, so the budget never goes under 15 ms (#134's frames were
   // three times today's).
+  // Measured RUNS times, scrolling back down unmeasured in between; the quickest frame and unit count.
   await app.mouse.move(720, 500);
-  const scrolling = await mainThread(cdp, async () => {
-    for (let i = 0; i < 40; i++) {
-      await app.mouse.wheel(0, -200);
-      await app.waitForTimeout(30);
+  const runs: { medianFrame: number; unit: number }[] = [];
+  for (let run = 0; run < RUNS; run++) {
+    if (run) {
+      for (let i = 0; i < 40; i++) {
+        await app.mouse.wheel(0, 200);
+        await app.waitForTimeout(30);
+      }
+      await app.waitForTimeout(500);
     }
-  });
-  const unit = await layoutUnit(app);
+    const { medianFrame } = await mainThread(cdp, async () => {
+      for (let i = 0; i < 40; i++) {
+        await app.mouse.wheel(0, -200);
+        await app.waitForTimeout(30);
+      }
+    });
+    runs.push({ medianFrame, unit: await layoutUnit(app) });
+  }
+  const { medianFrame, unit } = quickest(runs);
   const budget = Math.max(5 * unit, 15);
-  expect.soft(scrolling.medianFrame, `median frame ${scrolling.medianFrame} ms, layout unit ${unit} ms, budget ${budget} ms`).toBeLessThan(budget);
+  expect.soft(medianFrame, `median frame ${medianFrame} ms, layout unit ${unit} ms, budget ${budget} ms, runs ${JSON.stringify(runs)}`).toBeLessThan(budget);
 });
 
 /** The invented shows' AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has their series. */
@@ -201,14 +225,24 @@ test("an anime with 1,200 episodes opens as quickly as a short one (#397)", asyn
   // Each once first, so the page's code and the answers are loaded as they'd be after the first visit.
   await openAnime(app, SHORT_ANIME.anilist);
   await openAnime(app, LONG_ANIME.anilist);
-  const short = await openAnime(app, SHORT_ANIME.anilist);
-  const long = await openAnime(app, LONG_ANIME.anilist);
-  const unit = await layoutUnit(app);
-  const report = JSON.stringify({ short, long, unit });
-  expect(short.cards, report).toBe(SHORT_ANIME.episodes);
+  // Then each RUNS times, in turn, so a slow spell of the runner falls on both; the quickest of each counts.
+  const shorts = [];
+  const longs = [];
+  const units = [];
+  for (let run = 0; run < RUNS; run++) {
+    shorts.push(await openAnime(app, SHORT_ANIME.anilist));
+    longs.push(await openAnime(app, LONG_ANIME.anilist));
+    units.push(await layoutUnit(app));
+  }
+  const short = quickest(shorts);
+  const long = quickest(longs);
+  const unit = Math.min(...units);
+  const report = JSON.stringify({ shorts, longs, units });
+  // Counts are checked in every run, not only the quickest.
+  expect(shorts.every((s) => s.cards === SHORT_ANIME.episodes), report).toBe(true);
   // Of the page of 100 episodes, only the cards on and near the screen are drawn.
-  expect(long.cards, report).toBeGreaterThan(0);
-  expect(long.cards, report).toBeLessThanOrEqual(40);
+  expect(Math.min(...longs.map((l) => l.cards)), report).toBeGreaterThan(0);
+  expect(Math.max(...longs.map((l) => l.cards)), report).toBeLessThanOrEqual(40);
   // Its top, its episodes and a free main thread come about as soon as the short show's: here (the dev
   // server's React) 0.27 s against 0.25 s, where before #397 the long one took 9.7 s. The leeway is in units
   // of this machine's speed (layoutUnit), so a slower runner doesn't trip it.
@@ -310,15 +344,26 @@ test.describe("TV mode", () => {
       await openEpisodes(app, id);
       await close(app);
     }
-    const short = await openEpisodes(app, SHORT_ANIME.imdb);
-    await close(app);
-    const long = await openEpisodes(app, ONE_SEASON.imdb);
-    const unit = await layoutUnit(app);
-    const report = JSON.stringify({ short, long, unit });
-    expect(short.rows, report).toBe(SHORT_ANIME.episodes);
+    // Then each RUNS times, in turn; the quickest of each counts. The last long one stays open.
+    const shorts = [];
+    const longs = [];
+    const units = [];
+    for (let run = 0; run < RUNS; run++) {
+      if (run) await close(app);
+      shorts.push(await openEpisodes(app, SHORT_ANIME.imdb));
+      await close(app);
+      longs.push(await openEpisodes(app, ONE_SEASON.imdb));
+      units.push(await layoutUnit(app));
+    }
+    const short = quickest(shorts);
+    const long = quickest(longs);
+    const unit = Math.min(...units);
+    const report = JSON.stringify({ shorts, longs, units });
+    // Counts are checked in every run, not only the quickest.
+    expect(shorts.every((s) => s.rows === SHORT_ANIME.episodes), report).toBe(true);
     // Only the episodes on and near the screen are drawn.
-    expect(long.rows, report).toBeGreaterThan(0);
-    expect(long.rows, report).toBeLessThanOrEqual(40);
+    expect(Math.min(...longs.map((l) => l.rows)), report).toBeGreaterThan(0);
+    expect(Math.max(...longs.map((l) => l.rows)), report).toBeLessThanOrEqual(40);
     expect(long.opened, report).toBeLessThan(short.opened + Math.max(150, 40 * unit));
 
     // The list keeps the whole season's length (each slot as tall as an episode), so the scrollbar says where you are.
