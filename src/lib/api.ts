@@ -84,9 +84,9 @@ export const api = {
   torrentOpen: (stream: Stream, limits: TorrentLimits, stepId: number) => call<TorrentLink>("torrent_open", { stream, limits, stepId }),
   /** The player closed: stop the torrent and delete its files, unless the user keeps sharing. */
   torrentClose: (limits: TorrentLimits) => call<void>("torrent_close", { limits }),
-  /** The link check mpv_load runs, for the built-in player: the URL to open, or why it won't play. */
-  streamProbe: (url: string, probeId: number, headers: Record<string, string> | null = null) =>
-    call<string>("stream_probe", { url, probeId, headers }),
+  /** The link check mpv_load runs, for the built-in player: the URL to open, or why it won't play. `link`: as MpvMedia.load's. */
+  streamProbe: (url: string, probeId: number, headers: Record<string, string> | null = null, link = false) =>
+    call<string>("stream_probe", { url, probeId, headers, link }),
   /** One look at a source's link ahead of time (#21): ready to play, or why not. */
   streamReady: (url: string, headers: Record<string, string> | null = null) => call<Readiness>("stream_ready", { url, headers }),
   /** `file`: the playing stream's size and name, when its add-on gave them (subtitle add-ons match on them). */
