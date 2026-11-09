@@ -899,16 +899,19 @@ on two devices, check:
 - TV mode: the question shows and works with a remote (Play focused, Back is Not Now). There's no
   link field in TV mode.
 
-## Discord buttons and joining from Discord (#153, #154)
+## Discord buttons and joining from Discord (#153, #154, #357)
 
-Checked here: the activity's buttons and their limits (`src-tauri/src/discord.rs` tests, type-checked
-only: src-tauri doesn't link here), polarity:// link parsing (`tests/deepLink.test.ts`), the join desk
+Checked here: the activity's button and its limits, the join secret and party that replace it in a
+joinable party, the join events over a stand-in for Discord's socket (a join passed on, a request to
+join accepted only while the activity offers one, PING answered) and the launch registration's desktop
+entry and macOS command file (`src-tauri/src/discord.rs` tests: type-checked in src-tauri, which
+doesn't link here, and run in a copy of the module without Tauri), polarity:// link parsing (`tests/deepLink.test.ts`), the join desk
 and the sealed code on a simulated channel (`tests/discordJoin.test.ts`: Anyone, Ask me, decline,
 timeout, lock, busy, token rotation, a forged answer, refusal or "seen"), the website's /watch and /party pages at a
 desktop and a phone width, and end to end in the browser shell with two pages as two members (e2e:
 the host allows a request from a party link and the joiner lands in the party; a polarity://title
 link opens the title). Not run: a real Discord client, a real Realtime project, an installed build's
-link registration. Discord shows buttons only to others, never on your own profile, so this needs two
+link registration, Discord starting Polarity for a join. Discord shows buttons only to others, never on your own profile, so this needs two
 Discord accounts (A with Polarity, B to look at A's profile), and for joining a second computer with
 Polarity signed in. Check:
 1. A: Settings → Playback → Show on Discord → That you're watching. Play something: B sees "Watching
@@ -916,16 +919,27 @@ Polarity signed in. Check:
 2. A: What you're watching: B sees "Watch in Polarity". B clicks it: the browser opens
    getpolar.app/watch/…; with Polarity installed it opens on that title's page (a running Polarity comes
    to the front instead of starting again); without it, after a moment the page offers the download.
-3. A starts a watch party: B sees "Join watch party" next to it (also in "That you're watching"). A
-   locks the party: the button goes within a few seconds; unlocking brings it back.
-4. "Who can join from Discord" = Ask me: B (signed in to Polarity on the second computer) clicks Join:
-   Polarity asks "Join a watch party?" with B's profile name; Ask to Join: "Waiting for the host to let
-   you in…", A sees "<B's profile name> wants to join". Allow:
-   B's Polarity joins and plays in step. Again with Decline: B is told the host declined. No answer
-   for two minutes: declined by itself.
-5. Anyone who sees it: B is let in without A being asked. Nobody: no button.
-6. Linux: the .deb/.rpm register polarity:// on install; an AppImage registers it when it first runs.
+3. A starts a watch party: B sees Discord's own Ask to Join on A's activity (also in "That you're
+   watching"), and no Watch in Polarity. A locks the party: Ask to Join goes within a few seconds;
+   unlocking brings it back.
+4. "Who can join from Discord" = Ask me, Polarity running on B's computer: B presses Ask to Join. No
+   browser opens: B's Polarity comes to the front and asks "Join a watch party?" with B's profile
+   name (A's Discord may show Discord's own request briefly; A's Polarity accepts it there by itself).
+   Ask to Join: "Waiting for the host to let you in…", A sees "<B's profile name> wants to join".
+   Allow: B's Polarity joins and plays in step. Again with Decline: B is told the host declined. No
+   answer for two minutes: declined by itself.
+5. Again with Polarity closed on B's computer (run once before, so it registered itself with
+   Discord): pressing Ask to Join starts Polarity, and the question still comes (Discord holds the join
+   for three minutes). Where to look if not: Windows `HKEY_CURRENT_USER\Software\Classes\discord-<id>`,
+   Linux `~/.local/share/applications/discord-<id>.desktop` (`xdg-mime query default
+   x-scheme-handler/discord-<id>`), macOS `~/Library/Application Support/discord/games/<id>.json`; the
+   log says "discord: join arrived".
+6. Anyone who sees it: B sees Join instead of Ask to Join, and is let in without A being asked.
+   Nobody: neither, and Watch in Polarity is back with "What you're watching".
+7. Linux: the .deb/.rpm register polarity:// on install; an AppImage registers it when it first runs.
    Windows: the installer registers it. macOS: the app bundle does.
+8. A dev build and the released app share the Discord application: whichever started last is the one
+   Discord starts for a join.
 
 ## Browser extension: Open in Polarity, Watch together (#208)
 

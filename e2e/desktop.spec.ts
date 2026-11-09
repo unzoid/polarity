@@ -1492,7 +1492,7 @@ test("the player's episode rail shows the playing and focused cards' whole ring 
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
-  type Sent = { details: string; buttons?: { label: string; url: string }[] } | null;
+  type Sent = { details: string; buttons?: { label: string; url: string }[]; join?: { party: string; secret: string; size: [number, number]; ask: boolean } } | null;
   const sentToDiscord = (page: Page) => page.evaluate(() => ((window as { __discord?: unknown[] }).__discord ?? []) as Sent[]);
 
   async function showOnDiscord(page: Page, mode: string) {
@@ -1505,27 +1505,34 @@ test.describe("signed in, on a fresh profile", () => {
     await settings.getByRole("button", { name: "Close settings" }).click();
   }
 
-  test("someone with the Join watch party link asks, the host allows, and they're in the party (#153, #154)", async ({ app }) => {
+  test("someone pressing Join on Discord asks, the host allows, and they're in the party (#153, #154, #357)", async ({ app }) => {
     await showOnDiscord(app, "That you're watching");
     await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
     await card(app, "The Glass Orchard").click();
     await app.getByRole("button", { name: "Play", exact: true }).click();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-    // Not in a party: no join button.
+    // Not in a party: nothing to join.
     await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.details).toBe("Watching on Polarity");
     expect((await sentToDiscord(app)).at(-1)?.buttons).toBeUndefined();
+    expect((await sentToDiscord(app)).at(-1)?.join).toBeUndefined();
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
     await app.keyboard.press("Escape");
 
-    await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.buttons?.[0]?.label).toBe("Join watch party");
-    const url = new URL((await sentToDiscord(app)).at(-1)!.buttons![0].url);
-    expect(url.origin + url.pathname).toBe("https://getpolar.app/party/");
-    const token = url.searchParams.get("t")!;
+    // In the party: Discord's own Join (Ask to Join, with "Ask me") carrying the join token, and no buttons.
+    await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.join?.secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const join = (await sentToDiscord(app)).at(-1)!.join!;
+    expect((await sentToDiscord(app)).at(-1)?.buttons).toBeUndefined();
+    expect(join.ask).toBe(true);
+    expect(join.size).toEqual([1, 10]);
+    const token = join.secret;
     // The party code isn't in it.
     const code = (await app.evaluate(() => document.body.innerText)).match(/\b[A-Z0-9]{6}\b/g) ?? [];
-    for (const c of code) expect(url.href).not.toContain(c);
+    for (const c of code) {
+      expect(join.secret).not.toContain(c);
+      expect(join.party).not.toContain(c);
+    }
 
     // Someone else's Polarity, in another page of the same browser.
     const joiner = await app.context().newPage();
@@ -1533,6 +1540,7 @@ test.describe("signed in, on a fresh profile", () => {
     await serveMedia(joiner);
     await joiner.goto("/fake.html?account=1");
     await expect(joiner.locator("#root > *").first()).toBeAttached();
+    // Discord hands the join to the joiner's Polarity, which takes it as this link (src-tauri/src/deep_link.rs).
     await joiner.evaluate((t) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://party/${t}`), token);
     // Nothing is asked until the joiner says so.
     const question = joiner.getByRole("dialog", { name: "Join a watch party?" });
