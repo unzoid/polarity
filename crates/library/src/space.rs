@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
-use crate::identity::{Aliases, AnimeLink};
+use crate::identity::{is_imdb, Aliases, AnimeLink};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,9 +215,87 @@ impl Space {
             _ => {}
         }
         self.dirty_mut().links.insert(link.anilist);
-        self.links.insert(link.anilist, link);
+        self.put_link(link);
         self.rekey();
         true
+    }
+
+    /// Takes the entry's stored link back (#335): it plays from what the id lists or the title
+    /// search find again. The removal is kept as a link marked removed, so it syncs, and what the
+    /// link had moved onto its IMDb title goes back (`unkey`). Returns whether there was a link.
+    pub fn unlink_anime(&mut self, anilist: u32, at: u64) -> bool {
+        let Some(old) = self.links.get(&anilist).filter(|l| !l.removed && l.updated_at < at) else { return false };
+        let removal = AnimeLink { removed: true, updated_at: at, ..old.clone() };
+        self.dirty_mut().links.insert(anilist);
+        self.put_link(removal);
+        self.rekey();
+        true
+    }
+
+    /// Stores a link that replaces the entry's, and when the entry's IMDb title changes (another
+    /// pick, or the link removed), moves back what the old link had moved onto it. The caller re-keys.
+    pub(crate) fn put_link(&mut self, link: AnimeLink) {
+        let at = link.updated_at;
+        let target = (!link.removed).then(|| link.canonical.clone());
+        let Some(old) = self.links.insert(link.anilist, link) else { return };
+        if !old.removed && target.as_deref() != Some(old.canonical.as_str()) {
+            self.unkey(&old, at);
+        }
+    }
+
+    /// Undoes what `old` moved onto its canonical IMDb id, now that the entry's link says
+    /// something else (#335). The IMDb title's own rows stay: an IMDb id is never an alias, so
+    /// only rows that came from one of the link's other ids move, onto where those lead now.
+    /// Progress tells by its video id (`kitsu:5:3` was played under `kitsu:5`). A library item
+    /// tells by its stamp: `rekey` gives a moved item and its old id's removal the same time.
+    /// Stamps come from the link's time, so every device reaches the same rows.
+    fn unkey(&mut self, old: &AnimeLink, at: u64) {
+        let from = old.canonical.as_str();
+        if !is_imdb(from) {
+            return;
+        }
+        let ids: Vec<String> = old.aliases().into_iter().map(|(alias, _)| alias).collect();
+        let aliases = self.aliases();
+        let mut moved = Vec::new();
+        for p in self.progress.values_mut().filter(|p| p.meta_id == from) {
+            let title = video_title(&p.video_id);
+            if ids.iter().any(|i| i == title) && aliases.canonical(title) != from {
+                p.meta_id = aliases.canonical(title).to_owned();
+                moved.push(p.video_id.clone());
+            }
+        }
+        self.dirty_mut().progress.extend(moved);
+
+        let Some(item) = self.library.get(from).filter(|i| i.updated_at > 0) else { return };
+        let stamp = |id: &String| self.removed.get(id.as_str()).copied();
+        let (came_from, merged) = match ids.iter().find_map(|i| match stamp(i) {
+            Some(gone) if gone == item.updated_at => Some((i, false)),
+            Some(gone) if gone + 1 == item.updated_at => Some((i, true)),
+            _ => None,
+        }) {
+            Some(found) => found,
+            None => return,
+        };
+        let id = aliases.canonical(came_from).to_owned();
+        if id == from {
+            return;
+        }
+        let mut item = item.clone();
+        let at = at.max(item.changed_at() + 1);
+        self.dirty_mut().library.insert(id.clone());
+        // Merged with the series' own item: that one stays, the show's comes back beside it.
+        if !merged {
+            self.library.remove(from);
+            self.dirty_mut().library.insert(from.to_owned());
+            self.removed.insert(from.to_owned(), at);
+        }
+        if let Some(kept) = self.library.get(&id) {
+            item.added_at = item.added_at.min(kept.added_at);
+        }
+        item.id = id.clone();
+        item.updated_at = at;
+        self.removed.remove(&id);
+        self.library.insert(id, item);
     }
 
     /// Whether `link` has to be kept (#102). Most say only what the anime id lists already say
@@ -246,7 +324,7 @@ impl Space {
     /// and its old id is marked removed at that time so the old row is
     /// deleted there. The stamp depends only on the data, so a device that
     /// re-keys after pulling reaches exactly what the linking device pushed. When the canonical id already has an item, they
-    /// become one, added at the earlier time. An item removed under its
+    /// become one, added at the earlier time and stamped one ms later. An item removed under its
     /// canonical id after it was last changed stays removed. Progress keeps
     /// its video id and time; only its `meta_id` changes.
     pub fn rekey(&mut self) -> bool {
@@ -275,6 +353,8 @@ impl Space {
             item.id = id.clone();
             item.updated_at = at;
             if let Some(kept) = self.library.get(&id) {
+                // One ms past the old id's removal: `unkey` tells a merge from a move by it.
+                item.updated_at = at + 1;
                 item.added_at = item.added_at.min(kept.added_at);
                 if kept.changed_at() >= item.changed_at() {
                     item.name = kept.name.clone();
@@ -339,6 +419,16 @@ impl Space {
     }
 }
 
+/// The title a video id was played under: `tt1` for `tt1:1:2`, `kitsu:5` for `kitsu:5:3`.
+fn video_title(video_id: &str) -> &str {
+    let mut parts = video_id.splitn(3, ':');
+    let first = parts.next().unwrap_or_default();
+    match (first, parts.next()) {
+        ("kitsu" | "anilist" | "mal", Some(n)) => &video_id[..first.len() + 1 + n.len()],
+        _ => first,
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -366,7 +456,7 @@ pub(crate) mod tests {
     }
 
     pub fn link(anilist: u32, canonical: &str, kitsu: Option<u32>, at: u64) -> AnimeLink {
-        AnimeLink { canonical: canonical.into(), anilist, mal: None, kitsu, updated_at: at }
+        AnimeLink { canonical: canonical.into(), anilist, mal: None, kitsu, updated_at: at, removed: false }
     }
 
     #[test]
@@ -460,7 +550,7 @@ pub(crate) mod tests {
         assert!(s.link_anime(link(1, "tt9", Some(5), 40)));
         assert_eq!(s.library.len(), 1);
         let it = &s.library["tt9"];
-        assert_eq!((it.added_at, it.updated_at), (10, 40));
+        assert_eq!((it.added_at, it.updated_at), (10, 41));
         assert_eq!(s.removed["kitsu:5"], 40);
     }
 
@@ -554,6 +644,126 @@ pub(crate) mod tests {
         let b = build(&[(2, "tt9", Some(6), 2), (1, "tt9", Some(5), 1)]);
         assert_eq!(a, b);
         assert_eq!(a, vec![("tt9".to_string(), 10)]);
+    }
+
+    /// An entry Polarity plays as `kitsu:5`, kept in the library with an episode watched, and the
+    /// series `tt0000002` (another show) with its own item and episode.
+    fn kitsu_show_and_another_series() -> Space {
+        let mut s = Space::default();
+        s.library.insert("kitsu:5".into(), item("kitsu:5", 10));
+        s.progress.insert("kitsu:5:1".into(), progress("kitsu:5", "kitsu:5:1", 10, 500.0));
+        s.library.insert("tt0000002".into(), item("tt0000002", 5));
+        s.progress.insert("tt0000002:1:1".into(), progress("tt0000002", "tt0000002:1:1", 5, 300.0));
+        s
+    }
+
+    fn assert_back_on(s: &Space, id: &str) {
+        assert!(s.library.contains_key(id), "the show's item is under {id}");
+        assert_eq!(s.progress["kitsu:5:1"].meta_id, id);
+        assert_eq!(s.progress_for(id).len(), 1);
+        // The other series keeps its own item and episode, and nothing of the show.
+        assert_eq!(s.library["tt0000002"].added_at, 5);
+        assert_eq!(
+            s.progress_for("tt0000002").iter().map(|p| p.video_id.as_str()).collect::<Vec<_>>(),
+            ["tt0000002:1:1"]
+        );
+    }
+
+    #[test]
+    fn a_wrong_pick_moves_the_show_onto_the_picked_series() {
+        let mut s = Space::default();
+        s.library.insert("kitsu:5".into(), item("kitsu:5", 10));
+        s.progress.insert("kitsu:5:1".into(), progress("kitsu:5", "kitsu:5:1", 10, 500.0));
+        assert!(s.link_anime(link(1, "tt0000002", Some(5), 40)));
+        assert!(s.library.contains_key("tt0000002") && !s.library.contains_key("kitsu:5"));
+        assert_eq!(s.progress["kitsu:5:1"].meta_id, "tt0000002");
+    }
+
+    #[test]
+    fn undoing_a_wrong_pick_puts_the_show_back() {
+        let mut s = kitsu_show_and_another_series();
+        assert!(s.link_anime(link(1, "kitsu:5", None, 20)));
+        s.link_anime(link(1, "tt0000002", Some(5), 40));
+        // Undo: the link from before the pick, made again.
+        assert!(s.link_anime(link(1, "kitsu:5", None, 50)));
+        assert_back_on(&s, "kitsu:5");
+        assert_eq!(s.library["kitsu:5"].added_at, 5, "merged, the earlier time stays");
+    }
+
+    #[test]
+    fn undoing_a_wrong_pick_leaves_nothing_under_the_picked_series() {
+        let mut s = Space::default();
+        s.library.insert("kitsu:5".into(), item("kitsu:5", 10));
+        s.progress.insert("kitsu:5:1".into(), progress("kitsu:5", "kitsu:5:1", 10, 500.0));
+        s.link_anime(link(1, "tt0000002", Some(5), 40));
+        assert!(s.unlink_anime(1, 50));
+        assert_eq!(s.library.keys().collect::<Vec<_>>(), ["kitsu:5"]);
+        assert_eq!(s.library["kitsu:5"].added_at, 10);
+        assert_eq!(s.removed["tt0000002"], 50, "the moved row goes from the server too");
+        assert!(!s.removed.contains_key("kitsu:5"));
+        assert_eq!(s.progress["kitsu:5:1"].meta_id, "kitsu:5");
+        let dirty = s.dirty.as_ref().unwrap();
+        assert!(dirty.library.contains("kitsu:5") && dirty.library.contains("tt0000002"));
+        assert!(dirty.progress.contains("kitsu:5:1") && dirty.links.contains(&1));
+    }
+
+    #[test]
+    fn using_polaritys_match_after_a_wrong_pick_puts_the_show_back() {
+        let mut s = kitsu_show_and_another_series();
+        s.link_anime(link(1, "tt0000002", Some(5), 40));
+        assert!(s.unlink_anime(1, 50));
+        assert!(s.links[&1].removed);
+        assert_back_on(&s, "kitsu:5");
+        // The removed link says nothing: the show's ids lead nowhere until a new link.
+        assert_eq!(s.aliases().canonical("anilist:1"), "anilist:1");
+        assert!(!s.unlink_anime(1, 60), "nothing left to take back");
+        // The title search then finds the right series, stored as a link like any other.
+        assert!(s.link_anime(link(1, "tt0000003", Some(5), 70)));
+        assert_back_on(&s, "tt0000003");
+    }
+
+    #[test]
+    fn a_second_pick_moves_the_show_from_the_wrong_series_to_the_right_one() {
+        let mut s = kitsu_show_and_another_series();
+        s.link_anime(link(1, "tt0000002", Some(5), 40));
+        s.link_anime(link(1, "tt0000003", Some(5), 50));
+        assert_back_on(&s, "tt0000003");
+        assert!(!s.library.contains_key("kitsu:5"));
+    }
+
+    #[test]
+    fn a_wrong_pick_over_a_found_series_leaves_both_series_as_they_were() {
+        // The title search had found the right series. The IMDb ids never join: its item stays,
+        // and only the episode played under the show's Kitsu id follows the pick, and comes back.
+        let mut s = Space::default();
+        s.link_anime(link(1, "tt0000003", Some(5), 20));
+        s.library_toggle(item("tt0000003", 0), 30);
+        s.progress_save(vec![progress("tt0000003", "kitsu:5:1", 0, 500.0)], 31);
+        s.library.insert("tt0000002".into(), item("tt0000002", 5));
+        s.link_anime(link(1, "tt0000002", Some(5), 40));
+        assert_eq!(s.progress["kitsu:5:1"].meta_id, "tt0000002");
+        assert!(s.library.contains_key("tt0000003"));
+        for fix in [true, false] {
+            let mut s = s.clone();
+            if fix {
+                s.link_anime(link(1, "tt0000003", Some(5), 50));
+            } else {
+                // Played as `kitsu:5` until the title search finds the series again and links it.
+                s.unlink_anime(1, 50);
+                assert_eq!(s.progress["kitsu:5:1"].meta_id, "kitsu:5");
+                s.link_anime(link(1, "tt0000003", Some(5), 60));
+            }
+            assert!(s.library.contains_key("tt0000003") && s.library.contains_key("tt0000002"));
+            assert_eq!(s.progress["kitsu:5:1"].meta_id, "tt0000003");
+        }
+    }
+
+    #[test]
+    fn a_title_video_id_names_the_title_it_was_played_under() {
+        assert_eq!(video_title("tt0000001:1:2"), "tt0000001");
+        assert_eq!(video_title("tt0000001"), "tt0000001");
+        assert_eq!(video_title("kitsu:5:3"), "kitsu:5");
+        assert_eq!(video_title("kitsu:5"), "kitsu:5");
     }
 
     #[test]

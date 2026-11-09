@@ -55,7 +55,14 @@ fn field_names_match_contract() {
     );
     add(
         "AnimeLink",
-        keys(&AnimeLink { canonical: "tt1".into(), anilist: 1, mal: Some(1), kitsu: Some(1), updated_at: 1 }),
+        keys(&AnimeLink {
+            canonical: "tt1".into(),
+            anilist: 1,
+            mal: Some(1),
+            kitsu: Some(1),
+            updated_at: 1,
+            removed: true,
+        }),
     );
     add("Untitled", keys(&Untitled { id: "tt1".into(), ty: "series".into() }));
 

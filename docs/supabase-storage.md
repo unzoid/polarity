@@ -17,7 +17,7 @@ in §6.
 | `watch_progress` | profile, video id | meta id, type, name, background URL, poster URL, season, episode, episode title, position, duration (float8), updated ms, legacy `stream` jsonb | **every episode and movie ever started** |
 | `playlists` | id | name, titles packed in `bytea` (~4-5 B a title, `src/lib/library/playlistCodec.ts`) | playlists (≤ 100 a profile) |
 | `profile_settings` | profile | one jsonb document ≤ 16 KB | 1 a profile |
-| `anime_links` | profile, AniList id | canonical id, MAL, Kitsu, updated ms | anime opened |
+| `anime_links` | profile, AniList id | canonical id, MAL, Kitsu, deleted (#335: link taken back), updated ms | anime opened |
 
 Every per-profile table also carries `user_id` (16 B) with its own index, and a second index on
 `(profile_id, synced_at)` for pulls. Progress is by far the largest table and the only one that

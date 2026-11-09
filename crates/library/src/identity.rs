@@ -41,6 +41,10 @@ pub struct AnimeLink {
     pub kitsu: Option<u32>,
     /// ms.
     pub updated_at: u64,
+    /// The entry's stored link was taken back (#335): it plays from what the id lists or the
+    /// title search find again. Kept, with the removed link's ids, so the removal syncs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub removed: bool,
 }
 
 impl AnimeLink {
@@ -52,8 +56,8 @@ impl AnimeLink {
     /// Whether two links say the same thing about an entry, whenever they
     /// were made.
     pub fn same_target(&self, other: &AnimeLink) -> bool {
-        (self.anilist, &self.canonical, self.mal, self.kitsu)
-            == (other.anilist, &other.canonical, other.mal, other.kitsu)
+        (self.anilist, &self.canonical, self.mal, self.kitsu, self.removed)
+            == (other.anilist, &other.canonical, other.mal, other.kitsu, other.removed)
     }
 
     /// The alias → canonical pairs the link stands for.
@@ -82,9 +86,10 @@ pub struct Aliases(HashMap<String, String>);
 impl Aliases {
     /// When two links claim the same alias, the newer one wins (an AniList
     /// entry re-linked to the right show replaces the old answer). Ties go to
-    /// the larger AniList id, so every device builds the same table.
+    /// the larger AniList id, so every device builds the same table. Removed
+    /// links say nothing.
     pub fn from_links<'a>(links: impl IntoIterator<Item = &'a AnimeLink>) -> Self {
-        let mut sorted: Vec<_> = links.into_iter().filter(|l| l.is_valid()).collect();
+        let mut sorted: Vec<_> = links.into_iter().filter(|l| l.is_valid() && !l.removed).collect();
         sorted.sort_by_key(|l| (l.updated_at, l.anilist));
         let mut table = HashMap::new();
         for link in sorted {
@@ -122,7 +127,14 @@ mod tests {
     use super::*;
 
     pub fn link(anilist: u32, canonical: &str, kitsu: Option<u32>, at: u64) -> AnimeLink {
-        AnimeLink { canonical: canonical.into(), anilist, mal: Some(anilist + 1000), kitsu, updated_at: at }
+        AnimeLink {
+            canonical: canonical.into(),
+            anilist,
+            mal: Some(anilist + 1000),
+            kitsu,
+            updated_at: at,
+            removed: false,
+        }
     }
 
     #[test]
@@ -130,6 +142,8 @@ mod tests {
         assert!(link(1, "tt1", Some(2), 10).same_target(&link(1, "tt1", Some(2), 99)));
         assert!(!link(1, "tt1", Some(2), 10).same_target(&link(1, "tt1", None, 10)));
         assert!(!link(1, "tt1", None, 10).same_target(&link(1, "tt2", None, 10)));
+        let removed = AnimeLink { removed: true, ..link(1, "tt1", None, 10) };
+        assert!(!removed.same_target(&link(1, "tt1", None, 10)));
     }
 
     #[test]
@@ -165,6 +179,17 @@ mod tests {
         assert_eq!(a.canonical("anilist:1"), "tt200");
         // Even a link that names a `tt` id as its Kitsu side can't join two IMDb shows.
         assert_eq!(a.canonical("tt100"), "tt100");
+    }
+
+    #[test]
+    fn removed_links_say_nothing() {
+        let a = Aliases::from_links(&[
+            link(1, "tt100", Some(7), 10),
+            AnimeLink { removed: true, ..link(2, "tt200", Some(8), 20) },
+        ]);
+        assert_eq!(a.canonical("anilist:1"), "tt100");
+        assert_eq!(a.canonical("anilist:2"), "anilist:2");
+        assert_eq!(a.canonical("kitsu:8"), "kitsu:8");
     }
 
     #[test]
