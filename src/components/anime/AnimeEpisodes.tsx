@@ -21,15 +21,15 @@ import type { PlayRequest } from "../../lib/playback";
 import type { Video } from "../../lib/types";
 import { BatchDownload } from "../BatchDownload";
 import { Dropdown } from "../Dropdown";
-import { LayoutList, LayoutRow } from "../icons";
+import { Check, LayoutList, LayoutRow } from "../icons";
 import { Segmented } from "../Segmented";
 import { EpisodeShelf } from "../title/EpisodeShelf";
 import { SeasonPicker } from "../title/SeasonPicker";
 import { SourcePicker, useSourcePicker } from "../title/SourcePicker";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { SearchField } from "../ui/SearchField";
-import { Switch } from "../ui/Switch";
+import { ExpandingSearch } from "../ui/ExpandingSearch";
+import { Chip } from "../ui/Chip";
 import { AnimeSeriesPick } from "./AnimeSeriesPick";
 import { useAnimePlayback } from "./useAnimePlayback";
 
@@ -161,20 +161,23 @@ export function AnimeEpisodes({
   const tools = (
     <div className="anime-episodes-tools">
       {searchable && (
-        <SearchField
-          look="pill"
-          className="anime-episode-search"
-          value={query}
-          onChange={setQuery}
-          label="Find an episode by number or title"
-          placeholder="Find episode"
-        />
+        <ExpandingSearch value={query} onChange={setQuery} label="Find an episode by number or title" placeholder="Episode number or title" />
       )}
       {hasFiller && (
-        <label className="anime-toggle t-callout">
-          <Switch checked={prefs.animeSkipFiller} onChange={(on) => setPrefs({ animeSkipFiller: on })} />
-          Skip filler
-        </label>
+        <Chip
+          className="anime-filler-chip toggle-chip"
+          pressed={prefs.animeSkipFiller}
+          onClick={() => setPrefs({ animeSkipFiller: !prefs.animeSkipFiller })}
+          title={prefs.animeSkipFiller ? "Filler episodes are hidden" : "Hide filler episodes"}
+        >
+          {/* ToggleChip's motion: the fill grows in, the check slides open in front of the label. */}
+          <span className="toggle-chip-check" aria-hidden>
+            <span>
+              <Check size={16} />
+            </span>
+          </span>
+          Skip Filler
+        </Chip>
       )}
       {/* Downloads keyed like progress: under the id the anime plays from, as each episode's own. */}
       {pb.meta && <BatchDownload item={pb.meta} videos={downloads} part={anime.id} />}
