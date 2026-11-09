@@ -767,6 +767,10 @@
   /* A hint of the titles inside, not a wash of colour. */
   filter: blur(40px) saturate(120%) brightness(0.5);
   opacity: 0.45;
+  /* Clipped to the tile's own rounded shape (the tile's edges are 1/7 in from the art's): WebKit lets a
+     blurred layer past `overflow: hidden` with a radius, squaring the corners (#453). On the art, not the
+     tile, so the tile's focus ring outside it still shows. */
+  clip-path: inset(calc(100% / 7) round var(--r-lg));
 }
 @media (hover: hover) and (pointer: fine) {
   .library-tile:hover {

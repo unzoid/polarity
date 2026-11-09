@@ -19,6 +19,30 @@ test("the phone layout: tab bar at the bottom, no window buttons", async ({ app 
   expect(await fitsWidth(app)).toBe(true);
 });
 
+test("each Library card's blurred picture is cut to the card's rounded corners, all four (#453)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Library", exact: true }).tap();
+  const arts = app.locator(".library-tile-art");
+  await expect(arts.first()).toBeVisible();
+  const clips = await arts.evaluateAll((els) =>
+    els.map((art) => {
+      const tile = art.closest(".library-tile")!;
+      const [a, t] = [art.getBoundingClientRect(), tile.getBoundingClientRect()];
+      const s = getComputedStyle(art);
+      // The clip, back in page pixels: the art's box less 1/7 on each side.
+      const edges = [a.left + a.width / 7, a.top + a.height / 7, a.right - a.width / 7, a.bottom - a.height / 7];
+      return {
+        round: /round/.test(s.clipPath) && getComputedStyle(tile).borderTopLeftRadius === getComputedStyle(tile).borderBottomLeftRadius,
+        off: Math.max(...edges.map((e, i) => Math.abs(e - [t.left, t.top, t.right, t.bottom][i]))),
+      };
+    }),
+  );
+  expect(clips.length).toBeGreaterThan(0);
+  for (const c of clips) {
+    expect(c.round).toBe(true);
+    expect(c.off).toBeLessThan(1);
+  }
+});
+
 test("with the Calendar on, the tab bar keeps the five sections and the Calendar is a top bar button (#449)", async ({ app }) => {
   await app.goto("/fake.html?showCalendar=true");
   const tabs = app.getByRole("navigation", { name: "Primary" });
