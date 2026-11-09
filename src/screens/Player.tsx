@@ -71,7 +71,7 @@ import { SkipTransport } from "../components/player/SkipTransport";
 import { useTracks } from "../components/player/useTracks";
 import { useKeyboardFocus } from "../components/player/useKeyboardFocus";
 import { usePinch } from "../components/player/usePinch";
-import { pickedSpeed, pickedTrack, speedLabel, speedMenu, tracksMenu } from "../components/player/nativeMenus";
+import { pickedSpeed, speedLabel, speedMenu } from "../components/player/nativeMenus";
 import {
   DEFAULT_SUBTITLE_STYLE,
   SubtitlePreview,
@@ -128,7 +128,7 @@ import {
   useJoinDesk,
   youtubeId,
 } from "../lib/party";
-import { partyPage, watchPage } from "../lib/deepLink";
+import { watchPage } from "../lib/deepLink";
 import { setWatching } from "../lib/friends";
 import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
@@ -584,13 +584,18 @@ export function Player({
   }, [settings, tv]);
 
   // Settings → Playback → "Pause when minimized".
-  const { pauseOnMinimize, discordPresence } = usePrefs();
+  const { pauseOnMinimize, discordPresence, discordJoin } = usePrefs();
   // A file on this device stays private: its name isn't shown on Discord.
-  // Buttons (#153): this title in the viewer's own Polarity (only where the title is shown), and the party's join link.
-  const joinToken = useJoinDesk().token;
+  // The button (#153): this title in the viewer's own Polarity (only where the title is shown); in a party joinable
+  // from Discord, Discord's own Join instead (#357).
+  const { token: joinToken, party: joinParty } = useJoinDesk();
+  const partyMembers = party?.members.length ?? 0;
   const presenceLinks = useMemo(
-    () => ({ watch: (discordPresence === "title" && watchPage(type, metaId)) || undefined, party: joinToken ? partyPage(joinToken) : undefined }),
-    [discordPresence, type, metaId, joinToken],
+    () => ({
+      watch: (discordPresence === "title" && watchPage(type, metaId)) || undefined,
+      join: joinToken && joinParty ? { party: joinParty, secret: joinToken, members: Math.max(1, partyMembers), ask: discordJoin !== "anyone" } : undefined,
+    }),
+    [discordPresence, type, metaId, joinToken, joinParty, partyMembers, discordJoin],
   );
   useDiscordPresence(media, meta, videoId, local ? "off" : discordPresence, presenceLinks);
   // What friends may see playing (#135); the same rule: never a file on this device.
@@ -1000,25 +1005,15 @@ export function Player({
     setOptionsByKey(true);
     setOptions((open) => (open === o ? null : o));
   };
-  // A tap on Speed or Subtitles & Audio: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker.
+  // A tap on Speed: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker. Every other
+  // button, Subtitles & Audio included (#465), opens the app's own panel everywhere.
   const openOptions = (o: NonNullable<typeof options>, from: Element) => {
-    if (!nativeDialogsAvailable || (o !== "speed" && o !== "tracks")) return setOptions(o);
-    const menu = o === "speed" ? speedMenu(SPEEDS, rate) : tracksMenu(tracks);
+    if (!nativeDialogsAvailable || o !== "speed") return setOptions(o);
     setNativeMenu(true);
-    showNativeDialog({ ...menu, anchor: anchorOf(from) })
+    showNativeDialog({ ...speedMenu(SPEEDS, rate), anchor: anchorOf(from) })
       .then((id) => {
-        if (o === "speed") {
-          const r = pickedSpeed(id);
-          if (r != null && r !== rate) setRate(r);
-          return;
-        }
-        const pick = pickedTrack(id);
-        if (pick === "settings") {
-          setSubSettingsOpen(true);
-          setOptions("tracks");
-        } else if (pick && "audio" in pick) {
-          if (pick.audio !== tracks.audioId) tracks.selectAudio(pick.audio);
-        } else if (pick && pick.subtitle !== tracks.subId) void tracks.selectSubtitle(pick.subtitle);
+        const r = pickedSpeed(id);
+        if (r != null && r !== rate) setRate(r);
       })
       .catch(warnFailed("menu"))
       .finally(() => setNativeMenu(false));

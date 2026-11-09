@@ -40,6 +40,10 @@ France). When you sign in, it keeps:
 - **Anime links:** which anime entries count as the same show for each profile (AniList, MyAnimeList and Kitsu
   ids).
 - **Playlists:** their names and the titles in them.
+- **Friends** (see [Friends](#friends)), for each profile with Friends on: its friend code and what its friends may
+  see; who it asked, who asked it, its friends and who it blocked; and that Friends was turned on or off for it once,
+  so a profile that turned it off keeps it off. Friend codes tried that nobody has, and invites sent, are counted per
+  account for an hour, to stop guessing and flooding.
 - **Settings**, including **API keys and add-on links** you entered. These are readable by the server, so by its
   operators, **unless you set a passphrase in Settings → Account**: then they're encrypted on your device before
   they're sent, and only a device with the passphrase can read them.
@@ -78,18 +82,27 @@ These never go to the account server:
   shows only that you're watching something in Polarity, no title; in Settings → Playback → Show on Discord you can
   turn it off, or choose to show the title you're watching. What it shows appears on your Discord profile, so Discord
   and the people who can see your profile see it, under [Discord's privacy policy](https://discord.com/privacy).
-  People who see it also see up to two buttons:
-  - **Watch in Polarity** (only when it shows the title): a link to a page on getpolar.app carrying the title's
-    public id (IMDb's or Kitsu's), which opens that title in their own Polarity.
-  - **Join watch party** (only while you're in a watch party and "Who can join from Discord" isn't Nobody): a
-    link to a page on getpolar.app carrying a random join token, not your party code. A token is replaced every
-    ten minutes and stops working ten minutes after that, or when you leave the party. Someone who opens it asks
-    your Polarity to join, under the name of their Polarity profile; with "Ask me" (the default) you see that name
-    and allow or decline, with "Anyone who sees it" they're let in. Only someone let in receives the party code,
-    encrypted so that only their app can read it.
+  People who see it may also see:
+  - **Watch in Polarity** (only when it shows the title, and not in a watch party others can join from Discord):
+    a link to a page on getpolar.app carrying the title's public id (IMDb's or Kitsu's), which opens that title in
+    their own Polarity. That page only opens Polarity on the visitor's computer (or offers the download): it looks
+    nothing up about you or the title.
+  - **Discord's Join** (only while you're in a watch party and "Who can join from Discord" isn't Nobody; "Ask to
+    Join" with "Ask me"): the activity then also carries how many people are in the party, a random id for the
+    party on Discord, and a random join token, not your party code. Discord hands the token to the Polarity of a
+    friend who presses Join. A token is replaced every ten minutes and stops working ten minutes after that, or
+    when you leave the party. Their Polarity asks yours to join, under the name of their Polarity profile; with
+    "Ask me" (the default) you see that name and allow or decline, with "Anyone who sees it" they're let in.
+    Only someone let in receives the party code, encrypted so that only their app can read it. When a friend
+    asks to join through Discord, your Polarity accepts it on Discord at once, so that the decision is yours in
+    Polarity; it reads nothing about them from Discord beyond the request.
 
-  Those pages only open Polarity on the visitor's computer (or offer the download): they look nothing up about
-  you or the title. Neither button carries stream links, add-on links or anything about you.
+  Neither carries stream links, add-on links or anything about you.
+- **Starting Polarity from Discord:** so that Discord can start Polarity when you press Join on a friend's
+  profile, the desktop app registers itself with Discord as the app to start for Polarity's Discord application,
+  as Discord's own developer library does: a `discord-<application id>` link registration for your user on
+  Windows (registry) and Linux (a hidden desktop file), and a small file in Discord's own folder on macOS
+  (`~/Library/Application Support/discord/games`). It names only the Polarity program; nothing is sent anywhere.
 
 - **The browser extension "Open in Polarity"**, if you install it, runs only on the film, TV, anime and YouTube
   sites it lists. There it reads the page's address and, where that alone doesn't say which title it is, the
@@ -159,6 +172,24 @@ store them. The other members see:
   exception is a link you paste with "Watch a link": that link is sent to the members so their players can open it.
 
 Anyone with the party code can join until the host locks the party.
+
+## Friends
+
+Friends is on for a new profile until you turn it off in Settings → Account → Friends (profiles made before it became
+the default keep what they had). A profile with Friends on has a friend code; someone who has the code can send it a
+friend request, which you accept or decline. You can remove or block a friend at any time.
+
+Your friends (only those you accepted) see your profile name and avatar and, while the app is open:
+
+- **that you're online**, while "Who sees you're online" is Friends (the default). With Nobody you look offline to
+  them and nothing below is shown;
+- **the watch party you're in**, so they can join it from their list, while "Friends can join your watch party" is on
+  (the default);
+- **what you're watching** (the title and episode), only while "Who sees what you watch" is Friends. It starts at
+  Nobody.
+
+This travels over the account server's live connection and isn't stored. A friend can invite you into their watch
+party; an invite carries the party code, never what plays or a stream link.
 
 ## Your rights
 

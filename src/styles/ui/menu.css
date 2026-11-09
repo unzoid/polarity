@@ -83,8 +83,15 @@
   width: 15px;
   height: 15px;
 }
+/* Under the mouse a soft fill: the pointer already says where you are, a solid colour row following it
+   is loud. From the keyboard (data-input, lib/ui/inputModality.ts) the accent, so the row you'd pick with
+   Enter can't be missed. No transition either way: the highlight follows the hand at once. */
 .menu-item[data-highlighted],
 .menu-item[data-popup-open] {
+  background: var(--fill-3);
+  color: var(--text);
+}
+:root[data-input="keyboard"] .menu-item[data-highlighted] {
   background: var(--accent);
   color: var(--accent-fg);
 }
@@ -108,7 +115,7 @@
   margin-left: auto;
   color: rgb(255 255 255 / 0.5);
 }
-.menu-item[data-highlighted] .menu-meta {
+:root[data-input="keyboard"] .menu-item[data-highlighted] .menu-meta {
   color: rgb(255 255 255 / 0.75);
 }
 .menu-sep {
@@ -136,6 +143,10 @@
   user-select: none;
 }
 .menu-roomy-item[data-highlighted] {
+  background: var(--fill-3);
+  color: var(--text);
+}
+:root[data-input="keyboard"] .menu-roomy-item[data-highlighted] {
   background: var(--accent);
   color: var(--accent-fg);
 }

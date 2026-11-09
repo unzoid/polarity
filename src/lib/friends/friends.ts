@@ -117,7 +117,7 @@ export function createFriends(deps: FriendsDeps) {
     sent = null;
   }
 
-  /** The profile in use (`null`: none): reads whether it has Friends on, and if so starts. */
+  /** The profile in use (`null`: none): reads whether it has Friends on (turning it on for a profile that never chose, #428), and if so starts. */
   function start(profileId: string | null) {
     if (profileId === state.profileId) return;
     stop();
@@ -126,14 +126,16 @@ export function createFriends(deps: FriendsDeps) {
     emit();
     const f = deps.friends();
     if (!profileId || !f) return;
-    f.settings(profileId).then(
-      (settings) => {
-        if (mine !== epoch) return;
-        set({ checked: true, settings });
-        if (settings) begin();
-      },
-      (e) => mine === epoch && set({ checked: true, error: message(e) }),
-    );
+    f.settings(profileId)
+      .then((settings) => settings ?? (mine === epoch ? f.defaultOn(profileId) : null))
+      .then(
+        (settings) => {
+          if (mine !== epoch) return;
+          set({ checked: true, settings });
+          if (settings) begin();
+        },
+        (e) => mine === epoch && set({ checked: true, error: message(e) }),
+      );
   }
 
   /** Friends is on: listen, show this profile, read the list. */
@@ -151,7 +153,7 @@ export function createFriends(deps: FriendsDeps) {
     void refresh();
   }
 
-  /** Turn Friends on (a code, everything shown until changed) or off (the code goes; friends stay). */
+  /** Turn Friends on (a code; online and joinable, what is on hidden until changed) or off (the code goes; friends stay). */
   async function setOn(on: boolean) {
     const { f, p } = api();
     const mine = epoch;

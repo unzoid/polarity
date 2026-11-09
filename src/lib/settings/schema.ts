@@ -320,7 +320,8 @@ export const SETTINGS: SettingDef[] = [
     id: "discordJoin",
     page: "playback",
     title: "Who can join from Discord",
-    caption: "In a watch party, a Join watch party button on your Discord profile. Ask me: you allow or decline each request.",
+    caption:
+      "In a watch party, Join on your Discord profile opens the party in your friends' Polarity. Friends without Polarity can't join from Discord. Ask me: you allow or decline each request.",
     keywords: "discord watch party join invite ask friends button",
     bind: p("discordJoin"),
     control: choice([

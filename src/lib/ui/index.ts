@@ -7,6 +7,7 @@ export * from "./detents";
 export * from "./dismiss";
 export * from "./formFactor";
 export * from "./handFocus";
+export * from "./inputModality";
 export * from "./keyboard";
 export * from "./layer";
 export * from "./lazy";

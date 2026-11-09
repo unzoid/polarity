@@ -48,7 +48,7 @@ export interface Prefs {
   /** What the user's Discord profile shows while something plays: nothing, that Polarity is in use, or the title.
    * Starts at "app" (#150); a value already stored, Off included, stays as it was. */
   discordPresence: "off" | "app" | "title";
-  /** Who may join a watch party from the "Join watch party" button on the user's Discord profile (#154). */
+  /** Who may join a watch party from Join on the user's Discord profile (#154, #357). */
   discordJoin: "nobody" | "ask" | "anyone";
   /** Links meant for Stremio (`stremio://`) open in Polarity on this device (#163): its own choice, so it never syncs. */
   stremioLinks: boolean;
@@ -173,7 +173,7 @@ const DEFAULTS: Prefs = {
   pauseOnMinimize: false,
   discordPresence: "app",
   discordJoin: "ask",
-  stremioLinks: false,
+  stremioLinks: true,
   shareSetup: "account",
   dialogueBoost: false,
   volumeLeveling: false,
