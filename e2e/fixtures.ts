@@ -100,16 +100,24 @@ export const labelShowsWhole = (label: Locator, text: string) =>
 
 /**
  * Where the shown Back button is (#348): the navbar's on a page (`.navbar-back`), the player's in the player (`.player-back`),
- * rounded to the pixel, once it has stopped moving. Each must be the shared BackButton (`.back-button`).
+ * rounded to the pixel, once it has settled. Each must be the shared BackButton (`.back-button`).
  */
 export const backPlace = async (page: Page, which: "navbar" | "player") => {
   const back = page.locator(which === "navbar" ? ".navbar-back.back-button" : ".player-top > .player-back.back-button");
   await expect(back).toBeVisible();
-  const box = () => back.evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
-  const round = (r: DOMRect) => [r.x, r.y, r.width, r.height].map(Math.round).join(",");
-  // The navbar's slides in: read it until two frames agree.
+  // Read once the page has settled: after two frames have been drawn (WebKit can leave the layout where it was between
+  // reads, so two reads in a row agreed half a pixel short of where the navbar's slide-in lands), with no transition or
+  // animation running on it or anything it sits in.
+  const place = () =>
+    back.evaluate(async (el) => {
+      await new Promise((frame) => requestAnimationFrame(() => requestAnimationFrame(frame)));
+      for (let at: Element | null = el; at; at = at.parentElement) if (at.getAnimations().some((a) => a.playState === "running")) return "moving";
+      const r = el.getBoundingClientRect();
+      return [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+    });
+  // And until two reads agree, for whatever moves it without an animation (a page still laying out).
   let last = "";
-  await expect.poll(async () => (last === (last = round(await box())) ? last : "moving")).not.toBe("moving");
+  await expect.poll(async () => (last === (last = await place()) ? last : "moving")).not.toBe("moving");
   return last;
 };
 
