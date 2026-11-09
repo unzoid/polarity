@@ -519,7 +519,7 @@
 }
 /* The toolbar under the season tabs (#426): one height whatever it holds (Download Season is the
    tallest), so it stays put from tab to tab; the episode ranges keep their whole width, and the tools
-   give way instead (the search narrows, then they move under the ranges), so nothing is cut off. */
+   give way instead (they move under the ranges), so nothing is cut off. */
 @media (min-width: 601px) {
   .anime-seasons-bar {
     flex-wrap: wrap;
@@ -538,21 +538,14 @@
   .anime-seasons-bar .anime-ranges {
     padding-bottom: 0;
   }
-  /* From nothing, so the row breaks only at the tools' least width (the search at its narrowest). */
+  /* From nothing, so the row breaks only at the tools' own width (the search a circle until opened). */
   .anime-seasons-bar > .anime-episodes-tools {
     flex: 1 1 0%;
     justify-content: flex-end;
   }
-  .anime-seasons-bar .anime-episodes-tools > :not(.anime-episode-search) {
+  .anime-seasons-bar .anime-episodes-tools > * {
     flex: none;
     white-space: nowrap;
-  }
-  .anime-seasons-bar .anime-episode-search {
-    flex: 0 1 12rem;
-    width: auto;
-    min-width: 7rem;
-    /* Its field's own width doesn't hold the row open: it narrows to 7rem first. */
-    contain: inline-size;
   }
 }
 .anime-ranges {
