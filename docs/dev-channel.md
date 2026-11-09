@@ -123,7 +123,10 @@ databases, neither production nor development.
   bun scripts/devDatabaseCode.ts https://<project>.supabase.co <publishable key>
   ```
 
-- **Release builds** are unchanged and have no such setting.
+- **Release builds** are unchanged and have no such setting. Its code is not in their bundle at all:
+  `buildChannel` is a constant the bundler folds, so `buildChannel === "dev"` branches are dropped.
+  The same goes for the watch log (#424). CI checks it on every push: `bun scripts/releaseBundle.ts`
+  builds a release and a dev build and fails if the release has any of the dev-only parts' texts.
 - **CI's builds:** once `ci.yml` gives the Android and iOS builds the production settings
   (`VITE_SUPABASE_*` secrets), only builds of `master` should get them; builds of other branches,
   `dev` included, get none.

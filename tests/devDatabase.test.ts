@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { connectionCode, databaseProblem, loadDevDatabase, parseConnectionCode, devDatabase } from "../src/lib/account/devDatabase";
+import { accountDatabase, connectionCode, databaseProblem, loadDevDatabase, parseConnectionCode, devDatabase, removeDevDatabase, saveDevDatabase } from "../src/lib/account/devDatabase";
 import type { KeyStorage } from "../src/lib/platform/keychain";
 import { buildLabel, channelOf } from "../src/lib/platform/build";
 import { parseDevBuilds } from "../src/lib/updateFeed";
@@ -75,4 +75,22 @@ test("the kept builds are read from the dev feed, newest first", () => {
   expect(parseDevBuilds(feed).map((b) => b.build)).toEqual([57, 55]);
   expect(parseDevBuilds({})).toEqual([]);
   expect(parseDevBuilds(null)).toEqual([]);
+});
+
+test("a release build refuses the dev database and uses only the built-in one", async () => {
+  const storage = memory({ "polar.devdb": connectionCode(db) });
+  expect(await loadDevDatabase(storage, "release")).toBeNull();
+  expect(devDatabase()).toBeNull();
+  // Not a dev build in the tests, as in a release: a code is refused and nothing is kept or removed.
+  expect(await saveDevDatabase(connectionCode(db), storage)).toMatch(/Only dev builds/);
+  await removeDevDatabase(storage);
+  expect(storage.peek("polar.devdb")).toBe(connectionCode(db));
+
+  const builtIn = { url: "https://db.example.com", key: "sb_publishable_xxx" };
+  expect(accountDatabase("release", builtIn, db)).toEqual(builtIn);
+  expect(accountDatabase("release", {}, db)).toBeNull();
+  expect(accountDatabase("release", { url: builtIn.url }, db)).toBeNull();
+  expect(accountDatabase("local", builtIn, db)).toEqual(builtIn);
+  expect(accountDatabase("dev", builtIn, db)).toEqual(db);
+  expect(accountDatabase("dev", builtIn, null)).toBeNull();
 });

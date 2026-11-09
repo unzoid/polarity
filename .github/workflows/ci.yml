@@ -30,6 +30,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test
       - run: bun run build
+      # A release build has none of the dev-only parts (dev database, watch log), and a dev build has them all (#425).
+      - name: Release bundle leaves out dev-only parts
+        run: bun scripts/releaseBundle.ts
 
   # The browser extension (extension/, #208): its own tests, typecheck and build;
   # the Chrome and Firefox folders are kept for loading unpacked.
