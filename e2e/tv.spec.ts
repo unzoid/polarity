@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { mediaAnswer } from "./anilistMock";
 import { png } from "./media";
 import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
@@ -358,13 +359,13 @@ test("the Anime stage shows a later entry's franchise art and logo, as desktop d
   const empty = { media: [], pageInfo: { hasNextPage: false } };
   await app.route("https://graphql.anilist.co/**", async (route) => {
     const body = route.request().postData() ?? "{}";
-    const { query = "", variables } = JSON.parse(body) as { query?: string; variables?: { id?: number } };
+    const { query = "" } = JSON.parse(body) as { query?: string };
     if (query.includes("trending:")) {
       const home = Object.fromEntries(["trending", "upcoming", "top", "popular", "movies"].map((k) => [k, empty]));
       return route.fulfill({ json: { data: { ...home, season: { media: [film], pageInfo: { hasNextPage: false } } } } });
     }
-    const media = variables?.id === FRANCHISE.film.anilist ? film : franchiseMedia(variables?.id ?? 0);
-    await route.fulfill({ json: { data: media ? { Media: media } : { Page: empty } } });
+    const data = mediaAnswer(body, (id) => (id === FRANCHISE.film.anilist ? film : franchiseMedia(id)));
+    await route.fulfill({ json: { data: data ?? { Page: empty } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const id = Number(new URL(route.request().url()).searchParams.get("anilist_id"));

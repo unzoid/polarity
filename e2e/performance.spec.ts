@@ -1,5 +1,6 @@
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { mediaAnswer } from "./anilistMock";
 import { inventedAnime, LONG_ANIME, longAnimeMedia, longAnimeZip, ONE_SEASON, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // Scrolling long pages (#134). Chromium only: these read Chromium's trace and layer tree (WebView2 is Chromium).
@@ -131,9 +132,11 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
 /** The invented shows' AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has their series. */
 async function answerInventedAnime(app: Page) {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    const show = inventedAnime(variables?.id ?? 0);
-    await route.fulfill({ json: { data: show ? { Media: longAnimeMedia(show) } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), (id) => {
+      const show = inventedAnime(id);
+      return show && longAnimeMedia(show);
+    });
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const show = inventedAnime(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
