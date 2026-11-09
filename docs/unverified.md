@@ -178,8 +178,9 @@ run on iOS here:
   Tauri's root view controller), back when it closes.
 - Safe areas: the player's bars, title, notices, Up Next, Skip and the options' close button keep clear of
   the insets on phones and tablets (e2e with an iPhone's insets, upright and sideways, and a tablet's).
-- iOS Back: a swipe in from the left edge (within 24 px) closes what's open, then leaves a pushed page or the
-  player; at a tab's own page it does nothing (Android's Back goes Home, then leaves the app).
+- iOS Back: a swipe in from the left edge (iOS's own edge recognizer, `ios/back.m`) closes what's open, then
+  leaves the player; on a pushed page with nothing over it the page follows the finger (#451, below); at a
+  tab's own page the edge is the page's (Android's Back goes Home, then leaves the app).
 - iPad: the tablet layout in every window, Slide Over and narrow Split View included; there (under 600 px
   wide) the player takes the phone's compact controls. Seen as screenshots at iPad sizes in a desktop
   browser with an iPad user agent, not on an iPad.
@@ -192,8 +193,8 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
    Sources, Skip, Up Next) visible and tappable clear of the Dynamic Island and the home indicator. Closing
    the player brings the status bar back.
 3. The player's Back button leaves the player; a swipe in from the left edge does too, closes an open sheet
-   or menu first, leaves a title page, and does nothing on a tab's own page; a vertical scroll that starts
-   at the edge still scrolls.
+   or menu first, leaves a title page (steps 24 to 26), and does nothing on a tab's own page; a vertical
+   scroll that starts at the edge still scrolls.
 4. iPad, portrait and landscape, full screen, Split View (half, a third) and Slide Over, Stage Manager
    windows resized: the tablet layout; under 600 px wide the player shows glyph-only actions and the title
    beside Back. With a keyboard and a trackpad: Escape is Back, the shortcuts work, hover shows on cards.
@@ -320,6 +321,22 @@ agent (Chromium); the button and the search tab only as unit tests, their Object
     when let go past it; a flick goes as far as it was thrown; pushing the list up at half height brings
     the sheet up first; tapping the grabber toggles the two heights; VoiceOver reads the grabber as Expand
     or Collapse. Turning the phone keeps the sheet at its height. An iPad keeps the side sheet.
+
+Back on every page and the swipe that follows the finger (#451: `ios/back.m`, `native_back.rs`,
+`lib/platform/backSwipe.ts`, `lib/ui/pageDrag.ts`). The page's move ran in the phone e2e with an iPhone's user
+agent and the swipe's steps sent as the shell sends them; iOS's recognizer and the button's new place only
+compiled by CI:
+24. Every page that can go back (a title page from any section, a Library collection, a playlist, Search's
+    results, an anime's page, Settings' sections) shows the system's Back top left, with the logo beside it;
+    before, the logo moved right and no button showed (the tab bar's view covered it).
+25. On a title page, put a finger on the left edge and move it slowly right: the title page moves with it,
+    with a shadow on its left edge, and the page it came from shows under it, coming in from a little to the
+    left and brightening. Move back left: it follows. Let go before half the width: the title page slides
+    back and stays. Let go past half, or flick right from anywhere: it slides out and the page under it is
+    the page, where it was scrolled, with no second animation. Flicking back left before letting go cancels.
+26. A row that starts at the left edge (Home's shelves) scrolls sideways from the edge on a section's top
+    page; on a title page the same touch is Back. With a sheet or menu open, the swipe closes it and the page
+    doesn't move; in the player it leaves the player as before. A vertical scroll near the edge still scrolls.
 
 ## macOS release: sources of the bundled libraries
 

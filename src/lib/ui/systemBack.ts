@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { onSystemBack } from "../platform/back";
+import { onSystemBack, type BackDrag } from "../platform/back";
 import { isTextField } from "./keyboard";
 
 /**
@@ -40,14 +40,20 @@ export function pressEscape(doc: Document = document) {
   (target ?? doc.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
 }
 
-/** While mounted, the system's Back calls the latest `handler` (registered once, so Back never falls to the default in between). */
-export function useSystemBack(handler: () => void) {
-  const latest = useRef(handler);
-  latest.current = handler;
+/**
+ * While mounted, the system's Back calls the latest `handler` (registered once, so Back never falls to the default in
+ * between). `drag`, when it gives one, takes iOS's swipe as it moves (lib/ui/pageDrag.ts) instead.
+ */
+export function useSystemBack(handler: () => void, drag?: () => BackDrag | undefined) {
+  const latest = useRef({ handler, drag });
+  latest.current = { handler, drag };
   useEffect(() => {
     let off: (() => void) | undefined;
     let gone = false;
-    void onSystemBack(() => latest.current()).then((u) => (gone ? u() : (off = u)));
+    void onSystemBack(
+      () => latest.current.handler(),
+      () => latest.current.drag?.(),
+    ).then((u) => (gone ? u() : (off = u)));
     return () => {
       gone = true;
       off?.();
