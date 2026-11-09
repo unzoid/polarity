@@ -913,12 +913,16 @@ mod tests {
             }
         }
 
-        /// Runs the thread against a stand-in; joins it passes on come out of the receiver.
-        pub fn start() -> (Sender<ipc::Msg>, Discord, Receiver<String>) {
+        /// Runs the thread against a stand-in, with `queued` already waiting for it; joins it passes on
+        /// come out of the receiver.
+        pub fn start(queued: Vec<ipc::Msg>) -> (Sender<ipc::Msg>, Discord, Receiver<String>) {
             let (ours, discord) = UnixStream::pair().unwrap();
             ours.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
             let mut ours = Some(ours);
             let (tx, rx) = std::sync::mpsc::channel();
+            for m in queued {
+                tx.send(m).unwrap();
+            }
             let (joins_tx, joins) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
                 ipc::run(rx, || ours.take().and_then(|c| ipc::handshake(c, "123")), move |s| joins_tx.send(s).unwrap())
@@ -930,9 +934,11 @@ mod tests {
     #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
     #[test]
     fn sends_the_latest_activity_and_keeps_to_the_rate() {
-        let (tx, mut discord, _) = stand_in::start();
-        tx.send(ipc::Msg::Show(Some(Box::new(Activity { state: Some("Paused".into()), ..activity() })))).unwrap();
-        tx.send(ipc::Msg::Show(Some(Box::new(activity())))).unwrap();
+        // Both queued before the thread starts, so it can only ever see them together.
+        let (tx, mut discord, _) = stand_in::start(vec![
+            ipc::Msg::Show(Some(Box::new(Activity { state: Some("Paused".into()), ..activity() }))),
+            ipc::Msg::Show(Some(Box::new(activity()))),
+        ]);
         discord.greet();
         let (op, msg) = discord.read();
         assert_eq!((op, msg["cmd"].as_str()), (1, Some("SET_ACTIVITY")));
@@ -950,7 +956,7 @@ mod tests {
     #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
     #[test]
     fn a_join_from_discord_is_passed_on_also_with_nothing_shown() {
-        let (tx, mut discord, joins) = stand_in::start();
+        let (tx, mut discord, joins) = stand_in::start(Vec::new());
         // Started by Discord for a join: it connects without an activity.
         tx.send(ipc::Msg::Listen).unwrap();
         discord.greet();
@@ -969,7 +975,7 @@ mod tests {
     #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
     #[test]
     fn a_request_to_join_is_accepted_only_while_the_activity_offers_a_join() {
-        let (tx, mut discord, _) = stand_in::start();
+        let (tx, mut discord, _) = stand_in::start(Vec::new());
         tx.send(ipc::Msg::Show(Some(Box::new(activity())))).unwrap();
         discord.greet();
         let (_, msg) = discord.read();
