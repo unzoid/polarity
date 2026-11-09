@@ -338,6 +338,33 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
   await expect(app.locator(".sheet")).toBeVisible();
 });
 
+test("a phone on its side: each player panel starts under its X, nothing under it (#464)", async ({ app }) => {
+  await app.setViewportSize({ width: 915, height: 412 });
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const name of ["Subtitles & Audio", "Sources"]) {
+    const button = app.getByRole("button", { name, exact: true });
+    // The controls may have hidden: a tap on the picture brings them back.
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 450, y: 200 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    const close = overlay.locator(".options-close");
+    await expect(close).toBeVisible();
+    const x = (await close.boundingBox())!;
+    const columns = await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    expect(columns.length).toBeGreaterThan(0);
+    for (const c of columns) {
+      const apart = c.right <= x.x || c.left >= x.x + x.width || c.bottom <= x.y || c.top >= x.y + x.height;
+      expect(apart, `${name}: a column at ${c.left},${c.top} under the X at ${x.x},${x.y}`).toBe(true);
+      expect(c.bottom).toBeLessThanOrEqual(412);
+    }
+    await close.tap();
+    await expect(overlay).toHaveCount(0);
+  }
+});
+
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
