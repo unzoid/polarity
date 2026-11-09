@@ -533,34 +533,44 @@ export const ONE_ENTRY_MAX = 512;
 /** Watched past the start (crates/library space.rs `Progress::started`): what Continue Watching counts. */
 const STARTED_S = 30;
 
+/** What a one-entry server's row for a title holds (toProgressRows): its newest started entry, then the resets since, newest first. */
+function oneEntryRow(list: Progress[]): Progress[] {
+  const started = list.filter((p) => p.position > STARTED_S).reduce<Progress | undefined>((a, b) => (!a || b.updatedAt > a.updatedAt ? b : a), undefined);
+  const resets = list.filter((p) => p.position === 0 && p.updatedAt > (started?.updatedAt ?? -1)).sort((a, b) => b.updatedAt - a.updatedAt);
+  return started ? [started, ...resets] : resets;
+}
+
 /**
- * Progress as `progress` rows, one per title. Unless `everyEpisode`, a row holds only the title's
- * newest entry watched past the start (what Continue Watching needs), so a few seconds of another
- * episode never take the place of the one being watched (test report 1, item 4); a title with no
- * such entry sends nothing. Other episodes stay on this device. A title whose entries can't be
- * packed is left out and listed in `unsent`, so it never holds back the others (#94). A title the
- * server would refuse (its id, or one entry past ONE_ENTRY_MAX: #110) stays on this device.
+ * Progress as `progress` rows, one per title. Unless `everyEpisode`, a row holds the title's newest
+ * entry watched past the start (what Continue Watching needs), so a few seconds of another episode
+ * never take the place of the one being watched (test report 1, item 4), and the entries taken back
+ * to the start since then (a reset or Mark as Unwatched, #468), newest first, as many as fit in
+ * ONE_ENTRY_MAX. A title with neither sends nothing. Other episodes stay on this device. A title
+ * whose entries can't be packed is left out and listed in `unsent`, so it never holds back the
+ * others (#94). A title the server would refuse (its id, or a row past ONE_ENTRY_MAX: #110) stays
+ * on this device.
  */
 export function toProgressRows(profileId: string, progress: Progress[], everyEpisode: boolean) {
   const titles = new Map<string, Progress[]>();
   for (const p of progress) {
-    if (!syncableId(p.metaId)) continue;
-    if (everyEpisode || p.position > STARTED_S) titles.set(p.metaId, [...(titles.get(p.metaId) ?? []), p]);
+    if (syncableId(p.metaId)) titles.set(p.metaId, [...(titles.get(p.metaId) ?? []), p]);
   }
   const rows = [];
   const unsent: string[] = [];
   for (const [metaId, list] of titles) {
-    const newest = list.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
-    const entries: EntryToPack[] = (everyEpisode ? list : [newest]).map((p) => ({
-      videoId: p.videoId,
-      season: p.season,
-      episode: p.episode,
-      position: p.position,
-      duration: p.duration,
-      updatedAt: p.updatedAt,
-    }));
+    const sent = everyEpisode ? list : oneEntryRow(list);
+    if (!sent.length) continue;
+    const newest = sent.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
+    const toPack = (ps: Progress[]): EntryToPack[] =>
+      ps.map((p) => ({ videoId: p.videoId, season: p.season, episode: p.episode, position: p.position, duration: p.duration, updatedAt: p.updatedAt }));
+    let entries = toPack(sent);
     try {
-      const packed = encodeEntries(metaId, entries);
+      let packed = encodeEntries(metaId, entries);
+      // Too much for a one-entry server: the oldest resets give way (`sent` keeps the started entry first).
+      for (let n = sent.length - 1; !everyEpisode && packed.length > ONE_ENTRY_MAX && n > 0; n--) {
+        entries = toPack(sent.slice(0, n));
+        packed = encodeEntries(metaId, entries);
+      }
       if (!everyEpisode && packed.length > ONE_ENTRY_MAX) continue;
       rows.push({
         profile_id: profileId,
