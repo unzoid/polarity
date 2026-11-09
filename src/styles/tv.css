@@ -1430,6 +1430,13 @@
 .tv .options-column[data-size="wide"] {
   width: min(38rem, 52vw);
 }
+/* A panel beside YouTube's player (the party's, Captions, Speed: #384, #434) is as wide as the panel, whatever the column's size. */
+.tv .options-overlay[data-place="beside"] .options-columns {
+  width: 100%;
+}
+.tv .options-overlay[data-place="beside"] .options-column {
+  width: auto;
+}
 /* Episodes (EpisodeRail.tsx) as tvOS lays them out: low on the screen, the rail running to both of
    its edges (cards start at the gutter and are cut by the screen, not the column), and focus the
    same lift and ring as the cards at home. No play glyph or Download on every card: the focused

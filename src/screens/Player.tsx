@@ -1251,6 +1251,8 @@ export function Player({
     const ytMenuColumns: OptionColumn[] =
       ytMenu === "tracks"
         ? [
+            // What stays in YouTube's player, above the long list where it's seen.
+            { title: "What stays in YouTube's player", titleHidden: true, size: "medium", options: [], onSelect: () => {}, content: <p className="party-lede">{CAPTIONS_NOTE}</p> },
             {
               title: "Captions",
               value: ytEmbed.captions ?? CAPTIONS_OFF,
@@ -1264,7 +1266,6 @@ export function Player({
                 setYtEmbed({ captions, autoplay });
               },
             },
-            { title: "In YouTube's player", size: "medium", options: [], onSelect: () => {}, content: <p className="party-lede">{CAPTIONS_NOTE}</p> },
           ]
         : [
             {
