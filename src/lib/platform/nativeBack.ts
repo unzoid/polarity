@@ -15,6 +15,8 @@ export type NativeBackState = {
   rect: { x: number; y: number; width: number; height: number } | null;
   /** The pages behind, nearest first. */
   history: string[];
+  /** Whether a swipe in from the left edge is Back now (lib/platform/backSwipe.ts): iOS leaves the edge to the page otherwise. */
+  swipe: boolean;
 };
 
 export function setNativeBack(state: NativeBackState): Promise<void> {

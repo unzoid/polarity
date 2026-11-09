@@ -371,6 +371,65 @@ test.describe("on an iPhone", () => {
   });
 });
 
+test.describe("on an iPhone, Back by swiping", () => {
+  test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("a title page follows the finger off the page under it, and stays when let go early (#451)", async ({ app }) => {
+    const swipe = (phase: string, x: number, velocity = 0) =>
+      app.evaluate(([phase, x, velocity]) => {
+        const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+        send({ phase, x, width: window.innerWidth, velocity });
+      }, [phase, x, velocity] as const);
+    const width = app.viewportSize()!.width;
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    const title = app.getByRole("heading", { level: 1, name: "The Glass Orchard" });
+    await expect(title).toBeVisible();
+    const top = app.locator(".page[data-active='true']");
+    const under = app.locator(".page[data-active='false']");
+    const shift = (l: typeof top) => l.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
+
+    // Moving: the title page goes with the finger, Movies shows under it coming in from the left.
+    await swipe("begin", 4);
+    await swipe("move", 120);
+    await expect(top).toHaveAttribute("data-drag", "top");
+    await expect.poll(() => shift(top)).toBe(120);
+    await expect(under).toHaveCSS("visibility", "visible");
+    expect(await shift(under)).toBeLessThan(0);
+
+    // Let go before half the width, slowly: both slide back and the title page stays.
+    await swipe("end", 120);
+    await expect(top).not.toHaveAttribute("data-drag", /./);
+    expect(await shift(top)).toBe(0);
+    await expect(under).toHaveCSS("visibility", "hidden");
+    await expect(title).toBeVisible();
+
+    // Past half: it slides out and Movies is the page, with no page change played over it.
+    await swipe("begin", 4);
+    await swipe("move", width * 0.6);
+    await swipe("end", width * 0.6);
+    await expect(app.locator(".page")).toHaveCount(1);
+    await expect(app.locator(".page").first()).not.toHaveAttribute("data-motion", /./);
+    expect(await shift(app.locator(".page").first())).toBe(0);
+    await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
+  });
+
+  test("over a sheet the swipe closes the sheet and leaves the page where it is (#451)", async ({ app }) => {
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Choose source", exact: true }).tap();
+    await expect(app.locator(".sheet")).toBeVisible();
+    for (const [phase, x] of [["begin", 4], ["move", 260], ["end", 260]] as const)
+      await app.evaluate(
+        ([phase, x]) => (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe({ phase, x, width: window.innerWidth, velocity: 0 }),
+        [phase, x] as const,
+      );
+    await expect(app.locator(".sheet")).toHaveCount(0);
+    await expect(app.locator(".page[data-drag]")).toHaveCount(0);
+    await expect(app.getByRole("heading", { level: 1, name: "The Glass Orchard" })).toBeVisible();
+  });
+});
+
 test("on mobile data a torrent source doesn't start and says why, until the setting allows it (#207)", async ({ app }) => {
   await app.addInitScript(() => {
     localStorage.setItem("polar.fakeTorrents", "1");
