@@ -376,6 +376,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building polar")
         .run(|app, event| {
+            // iOS takes the hardware decoder away in the background: back in the foreground, it's asked for again.
+            #[cfg(target_os = "ios")]
+            if let tauri::RunEvent::WindowEvent { event, .. } = &event {
+                match event {
+                    tauri::WindowEvent::Suspended => player::note_decoder(app),
+                    tauri::WindowEvent::Resumed => player::hardware_decoding_back(app),
+                    _ => {}
+                }
+            }
             // Never leave an orphaned mpv behind, nor a change unwritten, nor a torrent cache.
             if let tauri::RunEvent::Exit = event {
                 let state = app.state::<AppState>();

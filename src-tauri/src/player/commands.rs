@@ -192,7 +192,9 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
     if was.hwdec_mode() != tune.hwdec_mode() {
         #[cfg(target_os = "android")]
         let mode = tune.android_hwdec();
-        #[cfg(not(target_os = "android"))]
+        #[cfg(target_os = "ios")]
+        let mode = tune.ios_hwdec();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let mode = tune.hwdec_mode();
         mpv.request(json!(["set_property", "hwdec", mode])).await?;
     }
