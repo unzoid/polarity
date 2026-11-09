@@ -491,7 +491,7 @@ export function Player({
       // fetching the opening of a network stream only to seek away from it.
       const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
       resumed.current = true;
-      v.load(source.state.url, start, requestHeaders(source.state.stream));
+      v.load(source.state.url, start, requestHeaders(source.state.stream), !!link);
     } else if (v instanceof YouTubeMedia) {
       resumed.current = true;
       v.load(partyPosition(videoId) ?? null);
@@ -508,7 +508,7 @@ export function Player({
       const id = nextProbeId();
       const unlisten = listenProbe(id, (e) => logStep(...probeStep(e)));
       api
-        .streamProbe(url, id, requestHeaders(source.state.stream))
+        .streamProbe(url, id, requestHeaders(source.state.stream), !!link)
         .then(
           (final) => !cancelled && play(final),
           (e) => {

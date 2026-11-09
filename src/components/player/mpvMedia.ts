@@ -143,8 +143,11 @@ export class MpvMedia extends EventTarget implements MediaLike {
     return next;
   }
 
-  /** Load and play. `start` avoids fetching the opening of a stream we'd seek past; `headers` are the add-on's (requestHeaders). */
-  load(url: string, start?: number, headers: Record<string, string> | null = null) {
+  /**
+   * Load and play. `start` avoids fetching the opening of a stream we'd seek past; `headers` are the add-on's (requestHeaders);
+   * `link`: a link the user chose (Watch a Link), where a short video isn't taken for a "not ready" clip (#474).
+   */
+  load(url: string, start?: number, headers: Record<string, string> | null = null, link = false) {
     this.loaded = false;
     this.isEnded = false;
     this.seekTarget = null;
@@ -163,7 +166,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
       await this.listening; // never load before we can hear mpv's answers
       const unlisten = await listenProbe(probeId, (e) => this.step(...probeStep(e)));
       try {
-        await call("mpv_load", { url, start, probeId, headers });
+        await call("mpv_load", { url, start, probeId, headers, link });
       } finally {
         unlisten();
       }

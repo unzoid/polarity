@@ -2000,6 +2000,18 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column:has(.srcf:not(.srcf-tv)) {
   height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
 }
+/* Sources on a phone (#462). Upright the stack took its widest content's width (a long name, the filter bar on one
+   line) and ran off the right: it is the screen's width, and a name wraps instead. The filters get their own rows
+   under the title (sheet.css lays them out: quality, then the add-on picker beside Filters), not a squeeze beside it. */
+:root[data-compact="true"] :is(.options-columns, .options-columns > .options-column) {
+  min-width: 0;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .options-head .srcf-bar {
+  flex-basis: 100%;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .options-label {
+  overflow-wrap: anywhere;
+}
 
 /* --- Episodes (EpisodeRail.tsx): the season dropdown, then the season's episodes side by side,
    each a still, "3. Title" with Download beside it, its length and synopsis. The one playing has

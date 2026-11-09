@@ -20,14 +20,16 @@ struct Step<'a> {
 
 /// The URL the player should open, or why this source won't play.
 /// With `id`, every step is reported to the webview. `headers` are the ones
-/// the player sends (`polar_player::headers::playback_headers`).
+/// the player sends (`polar_player::headers::playback_headers`). `link`: a link the user chose
+/// (Watch a Link), not an add-on's stream, so a short video isn't taken for a placeholder (#474).
 pub async fn prepare(
     app: &AppHandle,
     url: &str,
     headers: Vec<(String, String)>,
     id: Option<u32>,
+    link: bool,
 ) -> Result<String, CmdError> {
-    probe::prepare(url, headers, |event| {
+    probe::prepare(url, headers, !link, |event| {
         if let Some(id) = id {
             let _ = app.emit("player://probe", Step { id, event: &event });
         }
@@ -45,13 +47,14 @@ pub async fn stream_probe(
     url: String,
     probe_id: Option<u32>,
     headers: Option<HashMap<String, String>>,
+    link: Option<bool>,
 ) -> Result<String, CmdError> {
     // The torrent engine's own link needs no check.
     if !polar_player::allow::is_web_url(&url) || crate::torrent::owns(&app, &url) {
         return Ok(url);
     }
     let headers = polar_player::headers::playback_headers(&headers.unwrap_or_default());
-    prepare(&app, &url, headers, probe_id).await
+    prepare(&app, &url, headers, probe_id, link.unwrap_or(false)).await
 }
 
 /// Whether a source's link would start now (#21): one look ahead of time, for the source lists.
