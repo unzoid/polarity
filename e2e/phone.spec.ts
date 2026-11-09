@@ -19,6 +19,16 @@ test("the phone layout: tab bar at the bottom, no window buttons", async ({ app 
   expect(await fitsWidth(app)).toBe(true);
 });
 
+test("with the Calendar on, the tab bar keeps the five sections and the Calendar is a top bar button (#449)", async ({ app }) => {
+  await app.goto("/fake.html?showCalendar=true");
+  const tabs = app.getByRole("navigation", { name: "Primary" });
+  await expect(tabs.getByRole("button", { name: "Library", exact: true })).toBeVisible();
+  await expect(tabs.locator(".navbar-link:not([data-overflow])")).toHaveText(["Home", "Series", "Movies", "Anime", "Library"]);
+  await expect(tabs.getByRole("button", { name: "Calendar", exact: true })).toHaveCount(0);
+  await app.locator(".navbar-actions").getByRole("button", { name: "Calendar", exact: true }).tap();
+  await expect(app.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
+});
+
 test("tabs, a title page and the player by touch", async ({ app }) => {
   const tabs = app.getByRole("navigation", { name: "Primary" });
   await tabs.getByRole("button", { name: "Series", exact: true }).tap();
@@ -331,9 +341,37 @@ test.describe("signed in, on a fresh profile", () => {
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
 
+  test("five tabs in iOS's bar, no More; Search and the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {
+    // The Calendar turned on (Settings → Browsing): it stays out of the bar, as a sixth tab is what makes iOS add More.
+    await app.goto("/fake.html?showCalendar=true");
+    const nativeTabs = () => app.evaluate(() => (window as { __nativeTabs?: { tabs: { id: string }[]; hidden: boolean } }).__nativeTabs);
+    await expect(app.locator("html")).toHaveAttribute("data-native-tabs", "true");
+    await expect.poll(async () => (await nativeTabs())?.tabs.map((t) => t.id)).toEqual(["home", "discover:series", "discover:movie", "anime", "library"]);
+    expect((await nativeTabs())?.hidden).toBe(false);
+
+    const header = app.locator(".navbar-actions");
+    await header.getByRole("button", { name: "Calendar", exact: true }).tap();
+    await expect(app.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
+    await expect(header.getByRole("button", { name: "Calendar", exact: true })).toHaveAttribute("aria-current", "page");
+    await header.getByRole("button", { name: "Search", exact: true }).tap();
+    await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
+
+    // A title opened from the Library goes back to it with the swipe in from the left edge.
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("library"));
+    await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
+    await card(app, "Low Water Station").tap();
+    await expect(app.getByRole("heading", { level: 1, name: "Low Water Station" })).toBeVisible();
+    await app.evaluate(() => {
+      const touch = (x: number) => [new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 400 })];
+      document.body.dispatchEvent(new TouchEvent("touchstart", { touches: touch(5), bubbles: true }));
+      document.body.dispatchEvent(new TouchEvent("touchmove", { touches: touch(150), bubbles: true }));
+      document.body.dispatchEvent(new TouchEvent("touchend", { changedTouches: touch(200), bubbles: true }));
+    });
+    await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
+  });
+
   test("a sheet opens at half the screen, expands and closes like iOS's own (#174)", async ({ app }) => {
-    // Search is iOS's own tab here (the top bar's icon steps aside for it).
-    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("search"));
+    await app.locator(".navbar-actions").getByRole("button", { name: "Search", exact: true }).tap();
     await app.getByRole("searchbox", { name: "Search" }).fill("glass orchard");
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Choose source", exact: true }).tap();

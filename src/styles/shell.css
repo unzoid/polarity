@@ -562,9 +562,8 @@ html[data-os="mac"] {
   }
 }
 /* iOS draws the tabs itself (components/NativeTabs.tsx): its tab bar is part of the safe area, so pages
-   pad by that alone. */
-:root[data-native-tabs] .navbar-links,
-:root[data-native-tabs] .navbar-search-page {
+   pad by that alone. Search stays the top bar's button (#449). */
+:root[data-native-tabs] .navbar-links {
   display: none;
 }
 :root[data-native-tabs][data-form="phone"] {

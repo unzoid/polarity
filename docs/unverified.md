@@ -161,6 +161,21 @@ it); the IPA (a zip) holds `licenses/mpv/` with each library's licence and `BUND
 Not built: Picture in picture, background audio, lock screen controls, AirPlay on iOS (#19 is macOS), signing
 and TestFlight (the owner's Apple developer account).
 
+## iOS: five tabs, no More (#449)
+
+With Library a fifth section and Search a sixth tab (#174), an iPhone's tab bar put iOS's own More tab in
+their place: a list with an Edit button, and pages under it inside a navigation controller of its own, which
+drew a "Library" bar with a round Back above the app's header (also over the player) and took the back swipe
+out to the list. Now `native_tabs` carries the sections alone, five at most (`MAX_NATIVE_TABS` in
+`lib/navTabs.ts`), and `ios/tabs.m` has no search tab. Checked here: unit tests and the phone e2e with an
+iPhone's user agent (the tabs sent, the top bar's buttons, the edge swipe back to the Library). On an iPhone:
+1. Five tabs (four with Anime off), no More, with and without Settings → Browsing → Show the Calendar.
+2. Search and, when it's on, the Calendar are buttons in the top bar next to the profile; each opens its page.
+3. Library → a title → the swipe in from the left edge: back on the Library, never a list of tabs.
+4. No iOS navigation bar (a title and a round Back) above the app's header on any page, nor over the player
+   started from the Library.
+5. A title opened from the Library fills the whole screen (#466 may share this cause).
+
 ## iOS player and layouts (#172)
 
 The first runs (simulator and an iPhone) showed a solid blue picture with sound, the status bar over the
@@ -200,11 +215,12 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
 
 ## iOS tab bar (#174)
 
-The sections (Home, Series, Movies, Anime, Library, and Calendar when it's on) are iOS's own tab bar: a
+The sections (Home, Series, Movies, Anime, Library: five at most) are iOS's own tab bar: a
 `UITabBarController` becomes the window's root and Tauri's view controller, the web view with the video
 behind it, moves into the current tab (`ios/tabs.m`). The web app sends the tabs, the current one and
 whether the bar shows (`native_tabs`); a tab the user picks comes back as `native://tab` and opens that
-section, the current one picked again goes back to its top. The web-drawn tabs hide. CI builds with Xcode
+section, the current one picked again goes back to its top. The web-drawn tabs hide. Search and the Calendar
+(when it's on) are buttons in the top bar next to the profile, so iOS never adds its own More tab (#449). CI builds with Xcode
 26 or later, so iOS 26 draws the bar in Liquid Glass; iOS 17 to 25 get the classic bar; an iPad on iOS 18
 or later gets the tab bar that opens into a sidebar. Only the web side ran here (unit tests, the Rust for
 iOS type-checked); the Objective-C was written from Apple's documentation and is compiled only by CI.
@@ -220,7 +236,8 @@ To check on an iPhone and an iPad on iOS 26, and an iPhone on iOS 17 or 18:
 4. The bar hides while the player, Settings or a sheet is open and comes back when they close; the player's
    bottom controls sit by the home indicator, not above an empty space where the bar was (iOS 17 most of
    all).
-5. Settings → Browsing → Show the Calendar: a sixth tab; on an iPhone the bar shows More with the rest.
+5. Settings → Browsing → Show the Calendar: no sixth tab; a Calendar button appears in the top bar next to
+   Search and opens the Calendar. No More tab on any iPhone, upright or sideways (#449).
 6. iPad: the bar at the top, its sidebar button opens the sidebar with the same tabs; Split View, Slide Over
    and Stage Manager sizes; the web top bar (logo, search, profile) doesn't sit under the tab bar.
 7. VoiceOver reads the tabs and the current one; Larger Text grows the labels; Reduce Transparency turns the
@@ -263,14 +280,13 @@ doesn't show within 0.6 s, or before iOS 17.4, an action sheet comes instead. On
     the subtitle settings and the preview. Picking a track switches to it. Sources and Episodes keep the
     full-screen picker.
 
-The search tab, the back button and the sheets' detents (`ios/tabs.m`, `ios/back.m`, `native_back`,
+The back button and the sheets' detents (`ios/tabs.m`, `ios/back.m`, `native_back`,
 `components/NativeBack.tsx`, `components/Sheet.tsx`). The detents ran in the phone e2e with an iPhone's user
-agent (Chromium); the button and the search tab only as unit tests, their Objective-C compiled only by CI:
-19. The search tab: last in the bar; on iOS 26 apart from the sections, on its right; on iOS 18 to 25 the
-    system's search tab, on iOS 17 a tab like the others. Tapping it opens the search page with the field
-    in the top bar focused and the keyboard up; with nothing typed the page says what it searches. Typing
-    shows results; another tab leaves it and empties the field; tapping the search tab again focuses the
-    field again.
+agent (Chromium); the button only as unit tests, its Objective-C compiled only by CI:
+19. Search (#449): the magnifier in the top bar, left of the profile, on every page with the top bar. On an
+    iPhone it opens the search page (the field focused, the keyboard up); typing shows results; Back (the
+    edge swipe) leaves it; tapping the magnifier on the page focuses the field again. On an iPad the field
+    opens in the top bar. No search tab in the bar.
 20. On a title page (and any page opened from another): Back at the top left is the system's button, glass
     on iOS 26, a chevron before, standing exactly where the web Back was (no second chevron under it, the
     logo beside it not covered). A tap goes back one page. A long press lists the pages behind, nearest
