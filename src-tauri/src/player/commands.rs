@@ -90,7 +90,11 @@ pub async fn mpv_load(
     // A link that's not ready yet, or a placeholder clip in place of the video.
     let headers =
         if local { Vec::new() } else { polar_player::headers::playback_headers(&headers.unwrap_or_default()) };
-    let url = if local { url } else { crate::streamcheck::prepare(&app, &url, headers.clone(), probe_id, link.unwrap_or(false)).await? };
+    let url = if local {
+        url
+    } else {
+        crate::streamcheck::prepare(&app, &url, headers.clone(), probe_id, link.unwrap_or(false)).await?
+    };
     // Where the check ended up must still be a web link (it refuses redirects off the web itself).
     if !local && !is_web_url(&url) {
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));
