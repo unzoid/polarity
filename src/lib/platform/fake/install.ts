@@ -5,6 +5,7 @@ import * as fx from "./fixtures";
 import { SAGA_FILLER } from "./longAnime";
 import { fakeAccount, startSignedOut } from "./account";
 import type { Download } from "../../library/downloads";
+import type { NativeDialog } from "../nativeDialogs";
 import type { AnimeLink } from "../../library/identity";
 import type { LibraryItem, MetaPreview, Progress, Settings } from "../../types";
 
@@ -141,6 +142,15 @@ const commands: Record<string, (a: Args) => unknown> = {
   anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),
   downloads_list: () => downloads,
+  // iOS's own menus and sheets (nativeDialogs.ts): the action a test named in __polarFakeDialogPick is tapped, once;
+  // otherwise the dialog goes away untouched.
+  native_dialog: (a) => {
+    const w = window as { __polarFakeDialogPick?: string };
+    const pick = w.__polarFakeDialogPick;
+    w.__polarFakeDialogPick = undefined;
+    const all = (a.dialog as NativeDialog).actions.flatMap((x) => [x, ...(x.children ?? [])]);
+    return all.find((x) => x.label === pick)?.id ?? null;
+  },
   // Files on this device (#204): none opened, and the file dialog is cancelled.
   local_recent: () => [],
   local_pick: () => [],

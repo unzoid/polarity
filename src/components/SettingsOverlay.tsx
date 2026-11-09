@@ -4,7 +4,7 @@ import { Avatar } from "./Avatar";
 import { ChevronLeft, ChevronRight, Close, Reset, SignOut } from "./icons";
 import { iconButtonClass } from "./ui/Button";
 import { useNativeBack } from "./NativeBack";
-import { dismissDepth, onDismissDepth, useFormFactor } from "../lib/ui";
+import { dismissDepth, isTextField, onDismissDepth, useFormFactor } from "../lib/ui";
 import { tvModeAvailable } from "../tv/tvMode";
 import { SearchField } from "./ui/SearchField";
 import { useAccount } from "../lib/account";
@@ -81,7 +81,32 @@ export function SettingsOverlay() {
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
   const backButton = useRef<HTMLButtonElement>(null);
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers === 0, ["Settings"], () => setView("list"));
+  // The layers Settings rose over (the profile sheet it opens from stays open below it): only those opened on it cover it.
+  const [below, setBelow] = useState(0);
+  useEffect(() => {
+    if (open) setBelow(dismissDepth());
+  }, [open]);
+  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], () => setView("list"));
+  // Back on a phone's page goes to the list; on the list it closes Settings (#455). The system's Back (iOS's swipe,
+  // Android's button and gesture) arrives as Escape (lib/ui/systemBack.ts), so Escape is taken here, before the
+  // dialog would close on it (or the sheet below would). A menu open on the page closes first, as it always does.
+  useEffect(() => {
+    if (!open || !phone) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || dismissDepth() > below) return;
+      // A menu's popup (outside the sheet) holding the focus is what Escape closes first.
+      const at = document.activeElement;
+      if (at && at !== document.body && !at.closest(".t3s")) return;
+      // A search with something in it clears itself first.
+      if (isTextField(at) && "value" in at && at.value) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (view === "page") setView("list");
+      else closeSettings();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, phone, view, below]);
 
   // Each opening lands on the requested page (or where it was left, unless that was Account), search cleared.
   useEffect(() => {
@@ -146,10 +171,8 @@ export function SettingsOverlay() {
   return (
     <Dialog.Root
       open={open}
-      onOpenChange={(o, details) => {
-        if (o) return;
-        if (phone && view === "page" && details.reason === "escape-key") return setView("list");
-        closeSettings();
+      onOpenChange={(o) => {
+        if (!o) closeSettings();
       }}
     >
       <Dialog.Portal>
@@ -251,6 +274,15 @@ export function SettingsOverlay() {
               )}
             </div>
 
+            {/* A phone's list of sections: the device's defaults back, once there's something to restore (#455). */}
+            {phone && prefsCustomized(prefs) && (
+              <div className="t3s-group">
+                <button className="t3s-nav-item" onClick={resetPrefs} title="Interface sounds and controller notices on this device">
+                  <Reset size={16} strokeWidth={2} />
+                  <span>Restore device defaults</span>
+                </button>
+              </div>
+            )}
             {!account.enabled && buildChannel === "dev" && (
               <div className="t3s-sidebar-foot">
                 <button className="t3s-nav-item" onClick={() => go("advanced")}>
@@ -302,15 +334,19 @@ export function SettingsOverlay() {
                 <span className="t3s-crumb-page">{current.label}</span>
               </Dialog.Title>
               <div className="t3s-header-actions">
-                <button
-                  className="t3s-ghost"
-                  disabled={!prefsCustomized(prefs)}
-                  onClick={resetPrefs}
-                  title="Interface sounds and controller notices on this device"
-                >
-                  <Reset size={14} strokeWidth={2.2} />
-                  <span className="t3s-ghost-label">Restore device defaults</span>
-                </button>
+                {/* On a phone its label doesn't fit here, and its arrow alone read as a Back that did nothing (#455):
+                    it's at the foot of the list of sections there. */}
+                {!phone && (
+                  <button
+                    className="t3s-ghost"
+                    disabled={!prefsCustomized(prefs)}
+                    onClick={resetPrefs}
+                    title="Interface sounds and controller notices on this device"
+                  >
+                    <Reset size={14} strokeWidth={2.2} />
+                    <span className="t3s-ghost-label">Restore device defaults</span>
+                  </button>
+                )}
                 <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">
                   <Close size={16} strokeWidth={2.2} />
                 </Dialog.Close>

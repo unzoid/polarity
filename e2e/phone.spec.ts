@@ -176,6 +176,29 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(profiles).toBeVisible();
 });
 
+/** Settings from the profile menu (iOS's own menu on an iPhone, picked through the fake shell), on the page `section`. */
+async function openSettingsPage(app: Page, section: string, { iPhone = false } = {}) {
+  if (iPhone) await app.evaluate(() => ((window as unknown as { __polarFakeDialogPick?: string }).__polarFakeDialogPick = "Settings"));
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  if (!iPhone) await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: section, exact: true }).tap();
+  await expect(settings).toHaveAccessibleName(section);
+  return settings;
+}
+
+test("a settings page on a phone: no arrow beside the X, and Back goes to the list, then closes (#455)", async ({ app }) => {
+  const settings = await openSettingsPage(app, "Appearance");
+  // Restore device defaults' arrow, alone and greyed, read as a Back that did nothing: not in a phone's header.
+  await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
+  // Android's back button and gesture arrive as Escape (lib/ui/systemBack.ts).
+  await app.keyboard.press("Escape");
+  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible();
+  await expect(settings).toHaveAccessibleName(/^Settings/);
+  await app.keyboard.press("Escape");
+  await expect(settings).toHaveCount(0);
+});
+
 test("an add-on's long name and description, unbroken words and a link among them, wrap inside Settings (#456)", async ({ app }) => {
   await app.goto("/fake.html?worst=1");
   await app.getByRole("button", { name: /^Profile/ }).tap();
@@ -384,6 +407,24 @@ test.describe("signed in, on a fresh profile", () => {
 
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("the back swipe on a settings page goes to the list; on the list it closes Settings (#455)", async ({ app }) => {
+    const swipe = () =>
+      app.evaluate(() => {
+        const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+        const width = window.innerWidth;
+        send({ phase: "begin", x: 4, width, velocity: 0 });
+        send({ phase: "move", x: width * 0.6, width, velocity: 0 });
+        send({ phase: "end", x: width * 0.6, width, velocity: 0 });
+      });
+    const settings = await openSettingsPage(app, "Add-ons", { iPhone: true });
+    await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
+    await swipe();
+    await expect(settings.getByRole("button", { name: "Add-ons", exact: true })).toBeVisible();
+    await expect(settings).toHaveAccessibleName(/^Settings/);
+    await swipe();
+    await expect(settings).toHaveCount(0);
+  });
 
   test("Subtitles & Audio opens the app's own panel, fitted to the phone, not an iOS menu (#465)", async ({ app }) => {
     await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
