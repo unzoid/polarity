@@ -50,6 +50,12 @@ import {
   useResetAutoplayOnInput,
   useSourceFilters,
   useTitleSettings,
+  CAPTIONS_NOTE,
+  CAPTIONS_OFF,
+  SPEED_ONE_NOTE,
+  SPEED_PARTY_NOTE,
+  captionChoices,
+  speedChoices,
 } from "../lib/playback";
 import { downloadedStream, episodeState, isLocalFile, nextVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
@@ -79,6 +85,7 @@ import { createFrameStepper, DEFAULT_FPS, measureFps, stepFrame } from "../compo
 import { useStepping } from "../components/player/useStepping";
 import { createWindowPin } from "../components/player/windowPin";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
+import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
 import {
@@ -151,7 +158,7 @@ const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-/** What Subtitles & Audio and Speed say for a YouTube video: they're YouTube's own controls there (#384). */
+/** What Subtitles & Audio and Speed say for a YouTube video outside TV mode: they're YouTube's own controls there (#384). TV mode has menus for them (#434). */
 const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
 const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
 /** How long the party's hold lasts before YouTube's bar comes out to say so: longer than over a picture (400 ms), as the bar moves YouTube's. */
@@ -211,6 +218,10 @@ export function Player({
   const yt = useMemo(() => new YouTubeMedia(), []);
   const [ytFrame, setYtFrame] = useState<HTMLIFrameElement | null>(null);
   useEffect(() => (ytFrame ? yt.attach(ytFrame) : undefined), [yt, ytFrame]);
+  // TV's Captions menu (#434): the language YouTube's embed loads with captions on (null for its own default),
+  // and whether it starts by itself: loaded again while paused, it stays paused.
+  const [ytEmbed, setYtEmbed] = useState<{ captions: string | null; autoplay: boolean }>({ captions: null, autoplay: true });
+  const ytSpeed = useYouTubeSpeed(yt);
   // Watch party: signed-in profiles only. Joining the room's video, look for the file it's on.
   const { profile } = useAccount();
   const canParty = partyAvailable() && !!profile;
@@ -1073,8 +1084,9 @@ export function Player({
           return true;
         case "tracks":
         case "speed":
-          // YouTube's player has them in its own controls, and nothing may open over it (#384).
-          if (ytFramed) {
+          // YouTube's player has them in its own controls, and nothing may open over it (#384). A remote
+          // can't reach those: TV mode has its own menus, beside the player (#434).
+          if (ytFramed && !tv) {
             flashNotice(action === "tracks" ? YT_CAPTIONS : YT_SPEED, 4000);
             return true;
           }
@@ -1233,13 +1245,44 @@ export function Player({
   // A YouTube video in the app (#384): YouTube's player with its own controls, a bar above it and the party panel
   // beside it. Nothing of ours is drawn over the frame; the loading screen only until YouTube's player is up.
   if (ytFramed) {
+    // TV's Captions and Speed menus (#434), beside the player as the party's panel is.
+    const ytMenu = tv && (options === "tracks" || options === "speed") ? options : null;
+    const ytSpeeds = speedChoices(ytSpeed.speeds, SPEEDS);
+    const ytMenuColumns: OptionColumn[] =
+      ytMenu === "tracks"
+        ? [
+            // What stays in YouTube's player, above the long list where it's seen.
+            { title: "What stays in YouTube's player", titleHidden: true, size: "medium", options: [], onSelect: () => {}, content: <p className="party-lede">{CAPTIONS_NOTE}</p> },
+            {
+              title: "Captions",
+              value: ytEmbed.captions ?? CAPTIONS_OFF,
+              options: captionChoices(settings?.subtitleLanguage),
+              onSelect: (id) => {
+                const captions = id === CAPTIONS_OFF ? null : id;
+                if (captions === ytEmbed.captions) return;
+                // The embed loads again with the new parameters, and goes on where it was.
+                const autoplay = !yt.paused;
+                yt.reload();
+                setYtEmbed({ captions, autoplay });
+              },
+            },
+          ]
+        : [
+            {
+              title: "Playback Speed",
+              value: String(ytSpeed.rate),
+              options: party || ytSpeeds.length < 2 ? [] : ytSpeeds.map((r) => ({ id: String(r), label: speedLabel(r) })),
+              empty: party ? SPEED_PARTY_NOTE : SPEED_ONE_NOTE,
+              onSelect: (id) => setRate(Number(id)),
+            },
+          ];
     const latestNote = party?.notes.at(-1);
     const message =
       notice ??
       partyHold ??
       (latestNote ? (latestNote.system || !latestNote.who ? latestNote.text : `${latestNote.who.name} ${latestNote.text}`) : null);
     // Out until it plays; then it collapses to a strip along the top edge, and the pointer there, a key or a message brings it back.
-    const barShown = !ytPlayed || chrome.visible || options === "party" || !!message;
+    const barShown = !ytPlayed || chrome.visible || options === "party" || !!ytMenu || !!message;
     const failed = !ready && (!!error || source.state.status === "failed");
     return (
       <div
@@ -1247,7 +1290,7 @@ export function Player({
         data-engine="youtube"
         data-chrome={barShown}
         data-key-focus={keyFocus || undefined}
-        data-options={options === "party"}
+        data-options={options === "party" || !!ytMenu}
         data-started={started}
         data-buffering={frameSteps.spinner && ready}
         onPointerMove={() => poke()}
@@ -1265,6 +1308,19 @@ export function Player({
             <p className="player-yt-message t-callout" role="status" aria-live="polite" data-tauri-drag-region={pinned ? undefined : true}>
               {message}
             </p>
+            {/* A remote reaches these, not YouTube's own controls (#434). */}
+            {tv && (
+              <>
+                <IconButton variant="player" label="Captions" title="Captions" aria-pressed={ytMenu === "tracks"} onClick={() => toggleOptions("tracks")}>
+                  <Captions size={22} />
+                </IconButton>
+                {!party && (
+                  <IconButton variant="player" label={`Speed (${ytSpeed.rate}x)`} title="Speed" aria-pressed={ytMenu === "speed"} onClick={() => toggleOptions("speed")}>
+                    <Speed size={22} />
+                  </IconButton>
+                )}
+              </>
+            )}
             {party && <PartyBadge party={party} onOpen={() => setOptions((o) => (o === "party" ? null : "party"))} />}
             {!fullscreen && !tv && <WindowControls pinned={pinned} />}
           </div>
@@ -1272,7 +1328,7 @@ export function Player({
             ref={setYtFrame}
             className="player-youtube"
             data-hidden={failed || undefined}
-            src={youtubeEmbed(ytId, { api: true })}
+            src={youtubeEmbed(ytId, { api: true, ...ytEmbed })}
             title={title}
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen
@@ -1296,6 +1352,7 @@ export function Player({
           </AnimatePresence>
         </div>
         {canParty && <OptionsOverlay beside open={options === "party"} onClose={() => setOptions(null)} media={media} columns={partyColumns} />}
+        {tv && <OptionsOverlay beside open={!!ytMenu} onClose={() => setOptions(null)} media={media} columns={ytMenuColumns} />}
       </div>
     );
   }
