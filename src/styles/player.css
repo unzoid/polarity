@@ -1955,6 +1955,18 @@ img.load-mark-base[data-logo-look^="halo"] {
   top: calc(0.75rem + var(--safe-top));
   left: 0.75rem;
 }
+/* A phone on its side (#464): centred at up to 80% of a short screen, a panel's heading came up under the
+   close button. The panels get the screen under the button's band (its top, its 44px and a gap) instead. */
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) {
+  --options-band: calc(1rem + var(--safe-top) + 44px + 0.5rem);
+  padding: var(--options-band) 0 calc(0.75rem + var(--safe-bottom));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column {
+  max-height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column:has(.srcf:not(.srcf-tv)) {
+  height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+}
 
 /* --- Episodes (EpisodeRail.tsx): the season dropdown, then the season's episodes side by side,
    each a still, "3. Title" with Download beside it, its length and synopsis. The one playing has
