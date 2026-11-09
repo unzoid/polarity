@@ -69,6 +69,8 @@ pub fn player_system_bars(hidden: bool) {
 /// `polar_player::headers` passes reach the link check and mpv. `link`: a link the user chose
 /// (Watch a Link), checked without the placeholder rule for add-on streams (#474).
 #[tauri::command]
+// The webview's arguments, plus the three Tauri hands in.
+#[allow(clippy::too_many_arguments)]
 pub async fn mpv_load(
     app: AppHandle,
     window: WebviewWindow,
