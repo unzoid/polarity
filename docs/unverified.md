@@ -200,20 +200,27 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
 
 ## iOS green tint (#416)
 
-An iPhone showed video with a green tint over the whole picture. A cast over everything usually means the
-chroma plane is read wrongly between VideoToolbox and mpv's OpenGL ES output (mpv maps NV12's planes as
-LUMINANCE / LUMINANCE_ALPHA textures on iOS), but the cause isn't known yet. Nothing here runs iOS. To find
-it:
-- Each time the picture's format changes, the log has one line `video: decoder …; decoded …; drawn …`
-  (`polar_player::video_path`): the decoder (`videotoolbox` or `software`), the frames'
-  pixel format, colour matrix, range, primaries and transfer as decoded, and what mpv draws from.
-- `scripts/colour-bars.sh <dir>` makes SMPTE colour-bar clips (H.264 8-bit, HEVC 10-bit, HEVC 10-bit PQ,
-  AV1) and `bars.png`, how they should look. All four decode to those bars in software on Linux.
+An iPhone showed video with green and purple patches. Its log (`video: decoder …; decoded …; drawn …`
+lines, `polar_player::video_path`) showed the colour tags right throughout, and the picture right once
+mpv, after a trip to the home screen, had fallen back from `videotoolbox` (frames drawn straight from
+VideoToolbox through OpenGL ES) to `videotoolbox-copy` and then to software decoding. So the fault is in
+the zero-copy path between VideoToolbox and mpv's OpenGL ES output; reading mpv's iOS interop
+(`hwdec_ios_gl.m`, NV12's planes as LUMINANCE / LUMINANCE_ALPHA textures) and its renderer didn't show
+where. What changed:
+- iOS decodes with `videotoolbox-copy` (`Tune::ios_hwdec`): VideoToolbox still decodes, its frames are
+  copied to memory and drawn as software-decoded ones are. Hardware decoding off is still `no`.
+- After the app comes back to the foreground, if VideoToolbox was decoding before and mpv has fallen back
+  to software since, hardware decoding is turned off and on again (`player::hardware_decoding_back`), so
+  the rest of the video isn't decoded in software.
 
-To check on an iPhone: play each clip twice, once as set by default (hardware decoding) and once with
-Settings → Advanced → Video → hardware decoding off. The grey and white bars should have no cast, and the
-colours should match `bars.png` (the PQ clip dimmer, but not tinted). Note which are tinted and send
-polar.log's `video:` lines.
+Nothing here runs iOS. `scripts/colour-bars.sh <dir>` makes SMPTE colour-bar clips (H.264 8-bit, HEVC
+10-bit, HEVC 10-bit PQ, AV1) and `bars.png`, how they should look. To check on an iPhone:
+- Play each clip and a real episode: no cast on the grey and white bars, colours as in `bars.png` (the PQ
+  clip dimmer, but not tinted). polar.log's `video:` lines should say `decoder videotoolbox-copy`.
+- During playback, go to the home screen for a few seconds and come back: the picture stays right, and
+  within a few seconds the log has a new `video:` line back on `videotoolbox-copy` (not `software`).
+- A 4K HEVC episode plays without dropped frames (the copy costs some battery; the log's `video:` lines
+  and the phone's warmth are worth noting).
 
 ## iOS tab bar (#174)
 

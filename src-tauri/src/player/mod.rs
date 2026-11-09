@@ -590,6 +590,55 @@ async fn web_view(window: &WebviewWindow) -> Result<usize, String> {
     rx.await.map_err(|_| "the web view went away".to_owned())
 }
 
+/// Whether VideoToolbox was decoding when the app last left the foreground ([`hardware_decoding_back`]).
+#[cfg(target_os = "ios")]
+static DECODING_IN_HARDWARE: AtomicBool = AtomicBool::new(false);
+
+/// What mpv decodes with: `hwdec-current`, "no" for software. None: nothing playing, or no mpv.
+#[cfg(target_os = "ios")]
+async fn decoder_now(mpv: &Mpv) -> Option<String> {
+    mpv.request(json!(["get_property", "hwdec-current"])).await.ok()?.as_str().map(str::to_owned)
+}
+
+/// The app is leaving the foreground (the window's Suspended event, applicationWillResignActive): note whether VideoToolbox decodes.
+#[cfg(target_os = "ios")]
+pub fn note_decoder(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let hardware = decoder_now(&app.state::<AppState>().mpv).await.is_some_and(|d| d != "no");
+        DECODING_IN_HARDWARE.store(hardware, Ordering::Relaxed);
+    });
+}
+
+/// iOS takes VideoToolbox away from an app in the background: mpv then falls back to decoding in
+/// software, and stays there for the rest of the video (#416). Back in the foreground (the window's Resumed event, applicationWillEnterForeground),
+/// hardware decoding is asked for again if it was in use before and mpv has fallen back since. Turned
+/// off and on, as setting the same value again isn't sure to restart the decoder.
+#[cfg(target_os = "ios")]
+pub fn hardware_decoding_back(app: &AppHandle) {
+    if !DECODING_IN_HARDWARE.swap(false, Ordering::Relaxed) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mpv = &app.state::<AppState>().mpv;
+        // mpv notices the decoder is gone only when it next decodes: a few looks, then leave it.
+        for wait in [1, 2, 4] {
+            tokio::time::sleep(Duration::from_secs(wait)).await;
+            let mode = mpv.tuned.locked().ios_hwdec();
+            let Some(decoder) = decoder_now(mpv).await else { return };
+            if mode == "no" {
+                return;
+            }
+            if decoder == "no" {
+                let _ = mpv.request(json!(["set_property", "hwdec", "no"])).await;
+                let _ = mpv.request(json!(["set_property", "hwdec", mode])).await;
+                return;
+            }
+        }
+    });
+}
+
 /// Android: libmpv in-process, drawing into the surface behind the webview ([`android`]).
 #[cfg(target_os = "android")]
 async fn start_engine(window: &WebviewWindow, base: Vec<String>, pipe: &str) -> Result<(Engine, IpcStream), String> {
