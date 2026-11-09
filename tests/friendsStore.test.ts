@@ -29,6 +29,8 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 /** The fake server: one settings row per profile, the list, and what was tracked, followed and called. */
 let settings: Record<string, FriendSettings | null>;
+/** Profiles that never had Friends turned on or off (#428). */
+let fresh: Set<string>;
 let list: FriendEntry[];
 let tracked: (FriendPresence | null)[];
 let followed: string[][];
@@ -38,9 +40,18 @@ let closed: number;
 
 const server: AccountBackend["friends"] = {
   settings: async (p) => settings[p] ?? null,
-  on: async (p) => (settings[p] ??= { code: "ABCD2345", online: true, watching: true, join: true }),
+  on: async (p) => {
+    fresh.delete(p);
+    return (settings[p] ??= { code: "ABCD2345", online: true, watching: false, join: true });
+  },
+  defaultOn: async (p) => {
+    calls.push(`defaultOn ${p}`);
+    if (!fresh.delete(p)) return null;
+    return (settings[p] ??= { code: "ABCD2345", online: true, watching: false, join: true });
+  },
   off: async (p) => {
     calls.push(`off ${p}`);
+    fresh.delete(p);
     settings[p] = null;
   },
   resetCode: async () => "WXYZ6789",
@@ -83,6 +94,7 @@ beforeEach(() => {
   now = 1_000_000;
   timers = [];
   settings = {};
+  fresh = new Set();
   list = [
     { id: SAM, name: "Sam", avatar: "lagoon", state: "accepted", incoming: false },
     { id: ALEX, name: "Alex", avatar: "coral", state: "pending", incoming: true },
@@ -104,6 +116,43 @@ test("off until the profile turns it on: nothing shown, nobody listened to", asy
   // Opening the panel while off reads nothing.
   await f.refresh();
   expect(f.get().entries).toEqual([]);
+});
+
+test("a profile that never chose gets Friends on: online and joinable, what's on hidden (#428)", async () => {
+  fresh.add(ME);
+  const f = make();
+  f.start(ME);
+  await flush();
+  await flush();
+  expect(f.get()).toMatchObject({ checked: true, settings: { code: "ABCD2345", online: true, watching: false, join: true } });
+  expect(handlers).not.toBeNull();
+  expect(followed.at(-1)).toEqual([SAM]);
+});
+
+test("a profile that turned Friends off keeps it off on its next start (#428)", async () => {
+  fresh.add(ME);
+  const first = make();
+  first.start(ME);
+  await flush();
+  await flush();
+  await first.setOn(false);
+  const next = make();
+  next.start(ME);
+  await flush();
+  await flush();
+  expect(next.get()).toMatchObject({ checked: true, settings: null });
+  expect(calls.filter((c) => c.startsWith("defaultOn"))).toEqual([`defaultOn ${ME}`, `defaultOn ${ME}`]);
+});
+
+test("a profile left before its settings came back isn't turned on (#428)", async () => {
+  fresh.add(ME);
+  const f = make();
+  f.start(ME);
+  f.start(OTHER_PROFILE);
+  await flush();
+  await flush();
+  expect(calls).toEqual([`defaultOn ${OTHER_PROFILE}`]);
+  expect(fresh.has(ME)).toBe(true);
 });
 
 test("turned on: a code, the list, friends listened to, this profile shown", async () => {
