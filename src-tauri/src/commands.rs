@@ -464,11 +464,21 @@ pub async fn link_anime(state: State<'_, AppState>, mut link: AnimeLink) -> Resu
     Ok(changed)
 }
 
-/// The anime links of the active space.
+/// Takes back the link stored for an anime (#335, "Use Polarity's match"): it plays from what the
+/// id lists or the title search find again, and what the link moved goes back. The removal syncs.
+/// Returns whether there was a link to take back.
+#[tauri::command]
+pub async fn unlink_anime(state: State<'_, AppState>, anilist: u32) -> Result<bool> {
+    let mut changed = false;
+    state.persist(|d| changed = d.space_mut().unlink_anime(anilist, now()))?;
+    Ok(changed)
+}
+
+/// The anime links of the active space; removed ones say nothing, so they're left out.
 #[tauri::command]
 pub fn anime_links(state: State<'_, AppState>) -> Vec<AnimeLink> {
     let store = state.store.locked();
-    store.data.space().map(|s| s.links.values().cloned().collect()).unwrap_or_default()
+    store.data.space().map(|s| s.links.values().filter(|l| !l.removed).cloned().collect()).unwrap_or_default()
 }
 
 // --- Settings ------------------------------------------------------------

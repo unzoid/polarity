@@ -30,13 +30,14 @@ import {
   usePageFocus,
   usePageMotion,
   useSystemBack,
+  watchInputModality,
 } from "./lib/ui";
 import { CardMenuHost } from "./components/CardMenu";
 import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
 import { UpdateToast, WhatsNewSheet } from "./components/Updates";
 import { startUpdateChecks } from "./lib/updater";
-import { appWindow, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
+import { appWindow, guardTaps, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
 import { PartyHost } from "./components/party/PartyHost";
 import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
@@ -45,6 +46,7 @@ import { SignOutDialog } from "./components/SignOutDialog";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
+import { SeriesPickToast } from "./components/anime/SeriesPickToast";
 import { Skeleton } from "./components/ui/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
@@ -254,6 +256,8 @@ function MainApp() {
 
   // iOS sends no contextmenu for a finger held down: a long press on a title opens its options all the same.
   useEffect(() => (longPressMenus ? onLongPress((held) => openContextMenu(held)) : undefined), []);
+  // A touch that scrolled, or stopped a list gliding after a fling, opens nothing (#459).
+  useEffect(() => guardTaps(), []);
 
   // Switching modes works from anywhere, the player included (Settings → Controls to rebind).
   useEffect(() => {
@@ -310,6 +314,8 @@ function DesktopApp() {
   // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
   const motion = usePageMotion(pages, useFormFactor().form === "phone" && !playing);
   const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
+  // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
+  useEffect(watchInputModality, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -392,6 +398,7 @@ function DesktopApp() {
           </section>
         ))}
         <ControllerToast tv={false} />
+        <SeriesPickToast />
         <UpdateToast hidden={!!playing} />
       </main>
       <WhatsNewSheet />

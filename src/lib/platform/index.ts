@@ -16,5 +16,6 @@ export * from "./nativeButtons";
 export * from "./nativeDialogs";
 export * from "./nativeTabs";
 export * from "./notifications";
+export * from "./tapGuard";
 export * from "./updates";
 export * from "./window";

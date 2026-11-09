@@ -388,6 +388,10 @@
 .anime-pick .search-field {
   margin: 0 0.25rem 0.375rem;
 }
+/* "Use Polarity's match" (#335): above the search, apart from the results. */
+.anime-pick-automatic {
+  margin-bottom: 0.375rem;
+}
 .anime-pick-item {
   gap: 0.75rem;
 }
@@ -483,48 +487,27 @@
 .anime-no-episodes {
   padding: 0 var(--gutter) 3rem var(--content-start);
 }
+/* The actions are 38px glass pills (the search's circle, Skip Filler, Download
+   Season); the layout switch beside them is a view option, so it stays bare. */
 .anime-episodes-tools {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.625rem;
   flex: none;
 }
-/* The toolbar under the season tabs (#426): one height whatever it holds (Download Season is the
-   tallest), so it stays put from tab to tab; the episode ranges keep their whole width, and the tools
-   give way instead (the search narrows, then they move under the ranges), so nothing is cut off. */
-@media (min-width: 601px) {
-  .anime-seasons-bar {
-    flex-wrap: wrap;
-    row-gap: 0.75rem;
-  }
-  .anime-seasons-bar > .seasons-picker,
-  .anime-seasons-bar > .anime-episodes-tools {
-    min-height: 2.75rem;
-  }
-  .anime-seasons-bar > .seasons-picker {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    overflow: visible;
-  }
-  .anime-seasons-bar .anime-ranges {
-    padding-bottom: 0;
-  }
-  /* From nothing, so the row breaks only at the tools' least width (the search at its narrowest). */
-  .anime-seasons-bar > .anime-episodes-tools {
-    flex: 1 1 0%;
-    justify-content: flex-end;
-  }
-  .anime-seasons-bar .anime-episodes-tools > :not(.anime-episode-search) {
-    flex: none;
-    white-space: nowrap;
-  }
-  .anime-seasons-bar .anime-episode-search {
-    flex: 0 1 12rem;
-    width: auto;
-    min-width: 7rem;
-    /* Its field's own width doesn't hold the row open: it narrows to 7rem first. */
-    contain: inline-size;
+.anime-episodes-tools .btn {
+  min-width: 0;
+  height: 38px;
+  padding: 0 1rem 0 0.875rem;
+  gap: 0.4375rem;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
+  font-size: var(--fs-md);
+}
+@media (hover: hover) and (pointer: fine) {
+  .anime-episodes-tools .btn:not(:disabled):hover {
+    background: var(--glass-control-hover);
   }
 }
 .anime-episodes-tools .segmented {
@@ -538,11 +521,37 @@
 .anime-episodes-tools .segmented-active .segmented-item {
   color: var(--text);
 }
-/* Skip filler, the size of the episode ranges beside it. */
-.anime-episodes-tools .toggle-chip {
-  height: 2rem;
-  padding: 0 0.75rem;
-  font-size: var(--fs-sm);
+/* The toolbar under the season tabs (#426): one height whatever it holds (Download Season is the
+   tallest), so it stays put from tab to tab; the episode ranges keep their whole width, and the tools
+   give way instead (they move under the ranges), so nothing is cut off. */
+@media (min-width: 601px) {
+  .anime-seasons-bar {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+  /* Exactly, not at least: whatever a season's tab adds (the search, Skip Filler) centres in it. */
+  .anime-seasons-bar > .seasons-picker,
+  .anime-seasons-bar > .anime-episodes-tools {
+    height: 2.75rem;
+  }
+  .anime-seasons-bar > .seasons-picker {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    overflow: visible;
+  }
+  .anime-seasons-bar .anime-ranges {
+    padding-bottom: 0;
+  }
+  /* From nothing, so the row breaks only at the tools' own width (the search a circle until opened). */
+  .anime-seasons-bar > .anime-episodes-tools {
+    flex: 1 1 0%;
+    justify-content: flex-end;
+  }
+  .anime-seasons-bar .anime-episodes-tools > * {
+    flex: none;
+    white-space: nowrap;
+  }
 }
 .anime-ranges {
   display: flex;
@@ -563,6 +572,45 @@
 .anime-range[aria-checked="true"] {
   background: var(--pill-light);
   color: var(--text-on-light);
+}
+/* Skip Filler: a toggle chip at the toolbar's height, moving as ToggleChip does
+   (chip.css): the light pill grows in under the label from a ::before while the
+   check's track opens and the label slides over; the tick lands 40ms after.
+   Off is quicker than on. The glass stays underneath in both states, so only
+   the fill changes. */
+.genre-chip.anime-filler-chip {
+  position: relative;
+  isolation: isolate;
+  gap: 0;
+  height: 38px;
+  padding: 0 1rem;
+  border: 0;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
+  color: var(--text);
+  font-size: var(--fs-md);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.genre-chip.anime-filler-chip[aria-pressed="true"] {
+  background: var(--glass);
+  color: var(--text-on-light);
+  transition-duration: var(--dur-press), var(--dur-base);
+}
+.genre-chip.anime-filler-chip:active {
+  transform: scale(0.97);
+}
+.anime-filler-chip.toggle-chip::before {
+  background: var(--text);
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .genre-chip.anime-filler-chip:not([aria-pressed="true"]):hover {
+    background: var(--glass-control-hover);
+    color: var(--text);
+  }
 }
 
 /* Characters: the character on the left, their voice on the right, like AniList. */
@@ -705,10 +753,7 @@
   }
 }
 
-/* Long shows: find an episode, and the capped list's way to the rest. */
-.anime-episode-search {
-  width: 12rem;
-}
+/* Long shows: the capped list's way to the rest. */
 .anime-show-all {
   display: flex;
   margin: 1.25rem auto 0;

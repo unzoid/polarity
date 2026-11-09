@@ -68,6 +68,13 @@
 .toast-text span {
   color: var(--text-2);
 }
+/* Which series an anime plays from (SeriesPickToast, #335): a long name stays on one line. */
+.toast[data-kind="series-pick"] strong {
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .toast[data-kind="disconnected"] .toast-icon {
   color: var(--text-3);
 }

@@ -32,7 +32,7 @@
   touch-action: pan-y;
   box-shadow:
     0 0 0 1px var(--fill-2),
-    0 30px 60px -30px rgb(0 0 0 / 0.8);
+    0 20px 40px -24px rgb(0 0 0 / 0.35);
 }
 .hero-placeholder {
   display: block;
@@ -88,26 +88,27 @@
     object-position: left 22%;
   }
 }
-/* Static blur (rendered once); only opacity changes when the art does. */
+/* The art's main colour, strongest at the top of the window and fading into
+   the page; only opacity changes when the art does. */
 .hero-ambient {
   position: absolute;
-  inset: 0 0 -30rem;
+  inset: 0 0 -20rem;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
-  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.4) 35%, transparent 80%);
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.4) 35%, transparent 80%);
 }
-/* A 4×3 pixel copy of the art, stretched: one smooth wash of its colours. The
-   blur and tone are drawn into the canvas once where the browser can (AmbientWash). */
+/* A one-pixel copy of the art, stretched: an even tint of its main colour,
+   deepened and dimmed so bright art doesn't flood the page. The tone is drawn
+   into the canvas once where the browser can (AmbientWash). */
 .hero-ambient canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  --wash: blur(40px) saturate(1.5) brightness(0.75);
+  --wash: saturate(1.4) brightness(0.6);
   filter: var(--wash);
-  transform: scale(1.15); /* hide the blur's soft edges */
   transition:
     opacity 600ms var(--ease-std),
     visibility 600ms;
@@ -236,6 +237,18 @@
   bottom: calc(var(--hero-pad) + 1.25rem);
   display: flex;
   gap: 0.5rem;
+}
+/* With a mouse they wait for it: the dots already say there's more, so at rest the card shows only the
+   title and its actions. Keyboard focus brings them back; touch screens keep them. */
+@media (hover: hover) and (pointer: fine) {
+  .hero-steps {
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-std);
+  }
+  .hero-card:hover .hero-steps,
+  .hero-steps:focus-within {
+    opacity: 1;
+  }
 }
 .hero-pager {
   position: absolute;

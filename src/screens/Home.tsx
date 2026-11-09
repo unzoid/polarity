@@ -172,14 +172,15 @@ export function HeroCarousel({
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colours: on a phone its most prominent one glowing in
-          from the top right corner (Netflix's), elsewhere a heavily blurred copy of each backdrop, cross-fading with it. */}
+      {/* The page around the card takes on the art's colour: on a phone its most prominent one glowing in from the
+          top right corner (Netflix's); elsewhere its main colour, one dimmed tint per backdrop, fading down from the
+          top and cross-fading with it. */}
       {phone ? (
         <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} />
       ) : (
         <div className="hero-ambient" aria-hidden>
           {items.map((it, i) => (
-            <AmbientWash key={it.id} src={it.background} current={i === index} />
+            <AmbientWash key={it.id} src={it.background} current={i === index} flat />
           ))}
         </div>
       )}

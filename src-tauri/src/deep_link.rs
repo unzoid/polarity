@@ -10,6 +10,10 @@
 //! isn't lost before the page listens; each arrival is also announced with a `deep-link` event.
 //! The webview reads them as untrusted input (src/lib/deepLink): nothing here acts on one.
 //!
+//! A join from Discord's own Join button (#357) arrives as a `polarity://party/…` link too
+//! ([`from_discord`]); `polarity://discord-join`, which Discord opens to start Polarity for one,
+//! only has Polarity connect to Discord (discord.rs) and never reaches the webview.
+//!
 //! Links meant for Stremio (`stremio://…`, #163) wait here too, when the user lets them come to
 //! Polarity (stremio_links.rs). The plugin only reads the schemes in tauri.conf.json from a launch's
 //! arguments, so Windows and Linux hand those over through [`from_args`].
@@ -72,7 +76,17 @@ pub fn init<R: tauri::Runtime>(app: &tauri::App<R>) {
 fn arrived<'a, R: tauri::Runtime>(handle: &tauri::AppHandle<R>, urls: impl Iterator<Item = &'a str>) {
     use tauri::{Emitter, Manager};
 
-    let kept = urls.filter(|u| keep(u)).count();
+    // Discord started (or reached) Polarity for a join (#357): it comes over Discord's connection, not as a link.
+    let kept = urls
+        .filter(|u| {
+            let for_discord =
+                u.strip_prefix(SCHEME).and_then(|r| r.strip_prefix("://")) == Some(crate::discord::LAUNCH_PATH);
+            if for_discord {
+                crate::discord::listen();
+            }
+            !for_discord && keep(u)
+        })
+        .count();
     if kept > 0 {
         tracing::info!("deep link: {kept} arrived");
         let _ = handle.emit("deep-link", ());
@@ -81,6 +95,19 @@ fn arrived<'a, R: tauri::Runtime>(handle: &tauri::AppHandle<R>, urls: impl Itera
             let _ = w.set_focus();
         }
     }
+}
+
+/// A join Discord handed over (#357): its secret is a join token, taken like a party link.
+#[cfg(desktop)]
+pub fn from_discord<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, secret: &str) {
+    if crate::discord::is_join_token(secret) {
+        arrived(handle, std::iter::once(party_link(secret).as_str()));
+    }
+}
+
+/// The link a join token from Discord becomes: the website's /party page opens the same.
+fn party_link(token: &str) -> String {
+    format!("{SCHEME}://party/{token}")
 }
 
 /// A `stremio://` link that started Polarity, or that a second launch handed over: Windows and

@@ -176,6 +176,46 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(profiles).toBeVisible();
 });
 
+/** Settings from the profile menu (iOS's own menu on an iPhone, picked through the fake shell), on the page `section`. */
+async function openSettingsPage(app: Page, section: string, { iPhone = false } = {}) {
+  if (iPhone) await app.evaluate(() => ((window as unknown as { __polarFakeDialogPick?: string }).__polarFakeDialogPick = "Settings"));
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  if (!iPhone) await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: section, exact: true }).tap();
+  await expect(settings).toHaveAccessibleName(section);
+  return settings;
+}
+
+test("a settings page on a phone: no arrow beside the X, and Back goes to the list, then closes (#455)", async ({ app }) => {
+  const settings = await openSettingsPage(app, "Appearance");
+  // Restore device defaults' arrow, alone and greyed, read as a Back that did nothing: not in a phone's header.
+  await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
+  // Android's back button and gesture arrive as Escape (lib/ui/systemBack.ts).
+  await app.keyboard.press("Escape");
+  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible();
+  await expect(settings).toHaveAccessibleName(/^Settings/);
+  await app.keyboard.press("Escape");
+  await expect(settings).toHaveCount(0);
+});
+
+test("an add-on's long name and description, unbroken words and a link among them, wrap inside Settings (#456)", async ({ app }) => {
+  await app.goto("/fake.html?worst=1");
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: "Add-ons", exact: true }).tap();
+  const row = settings.getByRole("button", { name: /^Community Archive of Restored Public-Domain Cinema/ });
+  await row.tap();
+  const description = settings.getByText(/ExampleProvider1\/ExampleProvider2/);
+  await expect(description).toBeVisible();
+  expect(await fitsWidth(app)).toBe(true);
+  // The description itself stays on the screen: its words wrap rather than run off the right.
+  const box = await description.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(app.viewportSize()!.width);
+  expect(await description.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
 /** A notched phone's insets (in CSS px), set on the page as the webview would report them. */
 async function insets(page: Page, i: { top: number; right: number; bottom: number; left: number }) {
   await page.evaluate((i) => {
@@ -321,6 +361,74 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
   await expect(app.locator(".sheet")).toBeVisible();
 });
 
+test("a phone on its side: each player panel starts under its X, nothing under it (#464)", async ({ app }) => {
+  await app.setViewportSize({ width: 915, height: 412 });
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const name of ["Subtitles & Audio", "Sources"]) {
+    const button = app.getByRole("button", { name, exact: true });
+    // The controls may have hidden: a tap on the picture brings them back.
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 450, y: 200 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    const close = overlay.locator(".options-close");
+    await expect(close).toBeVisible();
+    const x = (await close.boundingBox())!;
+    const columns = await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    expect(columns.length).toBeGreaterThan(0);
+    for (const c of columns) {
+      const apart = c.right <= x.x || c.left >= x.x + x.width || c.bottom <= x.y || c.top >= x.y + x.height;
+      expect(apart, `${name}: a column at ${c.left},${c.top} under the X at ${x.x},${x.y}`).toBe(true);
+      expect(c.bottom).toBeLessThanOrEqual(412);
+    }
+    await close.tap();
+    await expect(overlay).toHaveCount(0);
+  }
+});
+
+test("the player's Sources panel fits a phone upright and sideways, add-on picker and all (#462)", async ({ app }) => {
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const [width, height] of [
+    [412, 915],
+    [915, 412],
+  ]) {
+    await app.setViewportSize({ width, height });
+    const button = app.getByRole("button", { name: "Sources", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: width / 2, y: height / 2 } });
+    await button.tap();
+    const column = app.locator('.options-overlay[data-open="true"] .options-column');
+    // The fake add-ons are two: the picker shows, as the issue asks.
+    await expect(column.locator(".srcf-addon")).toBeVisible();
+    const box = async (sel: string) => (await column.locator(sel).first().boundingBox())!;
+    const col = (await column.boundingBox())!;
+    const [title, head, list] = [await box(".options-title"), await box(".options-head"), await box(".options-list")];
+    const at = `${width}×${height}`;
+    expect(col.x, at).toBeGreaterThanOrEqual(0);
+    expect(col.x + col.width, at).toBeLessThanOrEqual(width);
+    expect(col.y + col.height, at).toBeLessThanOrEqual(height);
+    // The filters sit under the title, not squeezed beside it.
+    for (const sel of [".srcf-bar > :first-child", ".srcf-addon", ".srcf-filters"]) {
+      const b = await box(sel);
+      expect(b.y, `${at}: ${sel} under the title`).toBeGreaterThanOrEqual(title.y + title.height);
+      expect(b.x + b.width, `${at}: ${sel} inside the panel`).toBeLessThanOrEqual(col.x + col.width + 1);
+    }
+    // Every row is the panel's width at most, and the list starts under the filters (its fade reaches 12px up).
+    const rows = await column.locator(".options-item").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const right of rows) expect(right, at).toBeLessThanOrEqual(col.x + col.width + 1);
+    expect(list.y + 12, at).toBeGreaterThanOrEqual(head.y + head.height);
+    expect(list.height, `${at}: room for the list`).toBeGreaterThan(80);
+    expect(await fitsWidth(app)).toBe(true);
+    await app.locator('.options-overlay[data-open="true"] .options-close').tap();
+    await expect(column).toHaveCount(0);
+  }
+});
+
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
@@ -340,6 +448,43 @@ test.describe("signed in, on a fresh profile", () => {
 
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("the back swipe on a settings page goes to the list; on the list it closes Settings (#455)", async ({ app }) => {
+    const swipe = () =>
+      app.evaluate(() => {
+        const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+        const width = window.innerWidth;
+        send({ phase: "begin", x: 4, width, velocity: 0 });
+        send({ phase: "move", x: width * 0.6, width, velocity: 0 });
+        send({ phase: "end", x: width * 0.6, width, velocity: 0 });
+      });
+    const settings = await openSettingsPage(app, "Add-ons", { iPhone: true });
+    await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
+    await swipe();
+    await expect(settings.getByRole("button", { name: "Add-ons", exact: true })).toBeVisible();
+    await expect(settings).toHaveAccessibleName(/^Settings/);
+    await swipe();
+    await expect(settings).toHaveCount(0);
+  });
+
+  test("Subtitles & Audio opens the app's own panel, fitted to the phone, not an iOS menu (#465)", async ({ app }) => {
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Play", exact: true }).tap();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    const button = app.getByRole("button", { name: "Subtitles & Audio", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 200, y: 300 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    await expect(overlay).toBeVisible();
+    await expect(overlay.locator(".options-column").first()).toBeVisible();
+    const width = app.viewportSize()!.width;
+    for (const box of await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect))) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+    }
+    expect(await fitsWidth(app)).toBe(true);
+  });
 
   test("five tabs in iOS's bar, no More; Search and the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {
     // The Calendar turned on (Settings → Browsing): it stays out of the bar, as a sixth tab is what makes iOS add More.

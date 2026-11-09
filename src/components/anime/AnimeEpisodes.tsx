@@ -17,20 +17,19 @@ import {
   useEpisodeFlags,
 } from "../../lib/anime";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../../lib/settings";
-import { useFormFactor } from "../../lib/ui";
 import type { PlayRequest } from "../../lib/playback";
 import type { Video } from "../../lib/types";
 import { BatchDownload } from "../BatchDownload";
 import { Dropdown } from "../Dropdown";
-import { LayoutList, LayoutRow, Search } from "../icons";
+import { Check, LayoutList, LayoutRow } from "../icons";
 import { Segmented } from "../Segmented";
 import { EpisodeShelf } from "../title/EpisodeShelf";
 import { SeasonPicker } from "../title/SeasonPicker";
 import { SourcePicker, useSourcePicker } from "../title/SourcePicker";
-import { Button, IconButton } from "../ui/Button";
-import { ToggleChip } from "../ui/Chip";
+import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { SearchField } from "../ui/SearchField";
+import { ExpandingSearch } from "../ui/ExpandingSearch";
+import { Chip } from "../ui/Chip";
 import { AnimeSeriesPick } from "./AnimeSeriesPick";
 import { useAnimePlayback } from "./useAnimePlayback";
 
@@ -63,10 +62,7 @@ export function AnimeEpisodes({
   // A grouped page's series pick is the selected part's, under its tabs (#327).
   const pick = franchise && <PartPick anime={anime} pb={pb} />;
   const { data: flags } = useEpisodeFlags(pb.malId, [anime.title.english, anime.title.romaji]);
-  const [chosenLayout, setLayout] = useEpisodeLayout();
-  // A phone lists the episodes down the page, as phone apps do; the row/list choice is the larger screens'.
-  const phone = useFormFactor().form === "phone";
-  const layout = phone ? "list" : chosenLayout;
+  const [layout, setLayout] = useEpisodeLayout();
   const sources = useSourcePicker();
   useFranchiseStills(franchise ? franchise.seasons.map((s) => s.card.id) : [anime.id], pb.metaId, pb.meta?.videos);
 
@@ -164,22 +160,36 @@ export function AnimeEpisodes({
   );
   const tools = (
     <div className="anime-episodes-tools">
-      {searchable && <EpisodeSearch value={query} onChange={setQuery} />}
-      {/* An on/off chip, like the other filters: a switch said "setting", and took a row's worth of room. */}
-      {hasFiller && <ToggleChip on={prefs.animeSkipFiller} label="Skip filler" onToggle={() => setPrefs({ animeSkipFiller: !prefs.animeSkipFiller })} />}
+      {searchable && (
+        <ExpandingSearch value={query} onChange={setQuery} label="Find an episode by number or title" placeholder="Episode number or title" />
+      )}
+      {hasFiller && (
+        <Chip
+          className="anime-filler-chip toggle-chip"
+          pressed={prefs.animeSkipFiller}
+          onClick={() => setPrefs({ animeSkipFiller: !prefs.animeSkipFiller })}
+          title={prefs.animeSkipFiller ? "Filler episodes are hidden" : "Hide filler episodes"}
+        >
+          {/* ToggleChip's motion: the fill grows in, the check slides open in front of the label. */}
+          <span className="toggle-chip-check" aria-hidden>
+            <span>
+              <Check size={16} />
+            </span>
+          </span>
+          Skip Filler
+        </Chip>
+      )}
       {/* Downloads keyed like progress: under the id the anime plays from, as each episode's own. */}
       {pb.meta && <BatchDownload item={pb.meta} videos={downloads} part={anime.id} />}
-      {!phone && (
-        <Segmented
-          label="Episode layout"
-          value={layout}
-          onChange={setLayout}
-          options={[
-            { id: "row", label: "Row", icon: <LayoutRow size={18} /> },
-            { id: "list", label: "List", icon: <LayoutList size={18} /> },
-          ]}
-        />
-      )}
+      <Segmented
+        label="Episode layout"
+        value={layout}
+        onChange={setLayout}
+        options={[
+          { id: "row", label: "Row", icon: <LayoutRow size={18} /> },
+          { id: "list", label: "List", icon: <LayoutList size={18} /> },
+        ]}
+      />
     </div>
   );
 
@@ -220,41 +230,6 @@ export function AnimeEpisodes({
       )}
       <SourcePicker picker={sources} />
     </section>
-  );
-}
-
-/**
- * Finding an episode by number or title: a search button until it's used, then the field, focused. Left empty it
- * folds back to the button, so it takes the toolbar's room only while someone's searching.
- */
-function EpisodeSearch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
-  if (!open && !value)
-    return (
-      <IconButton variant="glass" className="anime-episode-search-open pressable" label="Find an episode" title="Find an episode" onClick={() => setOpen(true)}>
-        <Search size={17} />
-      </IconButton>
-    );
-  return (
-    <SearchField
-      look="pill"
-      className="anime-episode-search"
-      value={value}
-      onChange={onChange}
-      label="Find an episode by number or title"
-      placeholder="Number or title"
-      autoFocus={open}
-      onBlur={() => {
-        if (value.trim()) return;
-        onChange("");
-        setOpen(false);
-      }}
-      onKeyDown={(e) => {
-        if (e.key !== "Escape" || value) return;
-        e.preventDefault();
-        setOpen(false);
-      }}
-    />
   );
 }
 

@@ -210,6 +210,44 @@ describe("pulled rows (critique M9)", () => {
     expect(toProgressRows("p1", list, true).rows.map((r) => r.meta_id)).toEqual(["tt2", "tt4"]);
   });
 
+  test("progress: a reset reaches the account, so other devices and a new sign-in see it reset (#468)", () => {
+    // Watched up to S1E4, then Reset Show Progress: every played episode back to 0, the last one newest.
+    const before = [watched("tt2:1:3", 1, 3, 99), watched("tt2:1:4", 1, 4, 120)];
+    const reset = [{ ...before[0], position: 0, updatedAt: 300 }, { ...before[1], position: 0, updatedAt: 301 }];
+    const row = toProgressRows("p1", reset, false).rows[0];
+    expect([row.meta_id, row.updated_at]).toEqual(["tt2", 301]);
+    // What another device (or this account signed in afresh) pulls: both episodes at the start, newer
+    // than the progress it holds, so its merge (crates/library sync.rs) takes them.
+    const pulled = fromProgressRow(row)!;
+    expect(pulled.map((p) => [p.videoId, p.position, p.updatedAt])).toEqual([
+      ["tt2:1:3", 0, 300],
+      ["tt2:1:4", 0, 301],
+    ]);
+    for (const p of pulled) expect(p.updatedAt).toBeGreaterThan(before.find((b) => b.videoId === p.videoId)!.updatedAt);
+  });
+
+  test("progress: Mark as Unwatched goes with the episode still being watched; a short stop doesn't replace it (#468)", () => {
+    const list = [watched("tt2:1:5", 1, 5, 200), { ...watched("tt2:1:2", 1, 2, 250), position: 0 }, { ...watched("tt2:1:1", 1, 1, 150), position: 0 }];
+    const row = toProgressRows("p1", list, false).rows[0];
+    // The started episode first; only resets newer than it (S1E1's is older, and stays here).
+    expect(fromProgressRow(row)!.map((p) => [p.videoId, p.position])).toEqual([
+      ["tt2:1:2", 0],
+      ["tt2:1:5", 312],
+    ]);
+  });
+
+  test("progress: on a one-entry server the oldest resets give way to the size limit; the started entry stays (#468, #110)", () => {
+    const started = watched("tt2:1:1", 1, 1, 100);
+    const resets = Array.from({ length: 200 }, (_, i) => ({ ...watched(`tt2:2:${i + 1}`, 2, i + 1, 1000 + i), position: 0 }));
+    const row = toProgressRows("p1", [started, ...resets], false).rows[0];
+    expect(row.entries.length / 2 - 1).toBeLessThanOrEqual(512);
+    const pulled = fromProgressRow(row)!;
+    expect(pulled.some((p) => p.videoId === "tt2:1:1" && p.position === 312)).toBe(true);
+    // The newest reset made it; the oldest didn't.
+    expect(pulled.some((p) => p.videoId === "tt2:2:200")).toBe(true);
+    expect(pulled.some((p) => p.videoId === "tt2:2:1")).toBe(false);
+  });
+
   test("progress: films as the native store gives them (season, episode null) push and come back as films (#94)", () => {
     const film = { ...watched("tt3", undefined, undefined, 5), metaId: "tt3", type: "movie" as const, season: null, episode: null } as unknown as Progress;
     const { rows, unsent } = toProgressRows("p1", [watched("tt2:1:3", 1, 3, 99), film], false);

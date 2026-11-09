@@ -222,10 +222,7 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
   const episodes = meta.videos.filter((v) => v.season === current);
   const map = useMemo(() => progressMap(progress), [progress]);
 
-  const [chosenLayout, setLayout] = useEpisodeLayout();
-  // A phone lists the episodes down the page, as phone apps do; the row/list choice is the larger screens'.
-  const phone = useFormFactor().form === "phone";
-  const layout = phone ? "list" : chosenLayout;
+  const [layout, setLayout] = useEpisodeLayout();
   // A started episode keeps its file.
   const request = (v: Video): PlayRequest => ({
     type: "series",
@@ -249,17 +246,15 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
           <SeasonPicker value={current} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: seasonLabel(s) }))} />
         </div>
         <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} season={current} />
-        {!phone && (
-          <Segmented
-            label="Episode layout"
-            value={layout}
-            onChange={setLayout}
-            options={[
-              { id: "row", label: "Row", icon: <LayoutRow size={18} /> },
-              { id: "list", label: "List", icon: <LayoutList size={18} /> },
-            ]}
-          />
-        )}
+        <Segmented
+          label="Episode layout"
+          value={layout}
+          onChange={setLayout}
+          options={[
+            { id: "row", label: "Row", icon: <LayoutRow size={18} /> },
+            { id: "list", label: "List", icon: <LayoutList size={18} /> },
+          ]}
+        />
       </div>
       <EpisodeShelf
         item={meta}
