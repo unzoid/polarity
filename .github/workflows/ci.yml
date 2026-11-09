@@ -15,9 +15,12 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
+# ui/mobile-polish (temporary): only the iOS build runs there, for a test IPA; drop this before merging.
+
 jobs:
   frontend:
     name: Frontend (typecheck, tests, build)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -38,6 +41,7 @@ jobs:
   # the Chrome and Firefox folders are kept for loading unpacked.
   extension:
     name: Browser extension (tests, typecheck, build)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -64,6 +68,7 @@ jobs:
   # desktop in Chromium and WebKit, TV and phone sizes in Chromium.
   e2e-web:
     name: End to end (web build)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # Playwright's own image for the version in bun.lock (1.64.1), pinned by digest: the browsers'
@@ -108,6 +113,7 @@ jobs:
 
   rust:
     name: Rust tests (${{ matrix.os }})
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     strategy:
       fail-fast: false
       matrix:
@@ -172,6 +178,7 @@ jobs:
   # the sources they're built from are kept with the APK.
   android:
     name: Android build (debug and unsigned release)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -337,6 +344,7 @@ jobs:
 
   fmt:
     name: Rust formatting
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

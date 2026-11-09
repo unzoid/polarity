@@ -7,7 +7,7 @@ name: Windows mpv
 # scripts/windows-mpv.sh, its lock, the image's Dockerfile or this workflow.
 on:
   push:
-    branches: ['**']
+    branches: ['**', '!ui/mobile-polish']
   pull_request:
     paths:
       - 'scripts/windows-mpv*'
