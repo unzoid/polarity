@@ -409,6 +409,65 @@ test.describe("on an iPhone", () => {
   });
 });
 
+test.describe("on an iPhone, Back by swiping", () => {
+  test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("a title page follows the finger off the page under it, and stays when let go early (#451)", async ({ app }) => {
+    const swipe = (phase: string, x: number, velocity = 0) =>
+      app.evaluate(([phase, x, velocity]) => {
+        const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+        send({ phase, x, width: window.innerWidth, velocity });
+      }, [phase, x, velocity] as const);
+    const width = app.viewportSize()!.width;
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    const title = app.getByRole("heading", { level: 1, name: "The Glass Orchard" });
+    await expect(title).toBeVisible();
+    const top = app.locator(".page[data-active='true']");
+    const under = app.locator(".page[data-active='false']");
+    const shift = (l: typeof top) => l.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
+
+    // Moving: the title page goes with the finger, Movies shows under it coming in from the left.
+    await swipe("begin", 4);
+    await swipe("move", 120);
+    await expect(top).toHaveAttribute("data-drag", "top");
+    await expect.poll(() => shift(top)).toBe(120);
+    await expect(under).toHaveCSS("visibility", "visible");
+    expect(await shift(under)).toBeLessThan(0);
+
+    // Let go before half the width, slowly: both slide back and the title page stays.
+    await swipe("end", 120);
+    await expect(top).not.toHaveAttribute("data-drag", /./);
+    expect(await shift(top)).toBe(0);
+    await expect(under).toHaveCSS("visibility", "hidden");
+    await expect(title).toBeVisible();
+
+    // Past half: it slides out and Movies is the page, with no page change played over it.
+    await swipe("begin", 4);
+    await swipe("move", width * 0.6);
+    await swipe("end", width * 0.6);
+    await expect(app.locator(".page")).toHaveCount(1);
+    await expect(app.locator(".page").first()).not.toHaveAttribute("data-motion", /./);
+    expect(await shift(app.locator(".page").first())).toBe(0);
+    await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
+  });
+
+  test("over a sheet the swipe closes the sheet and leaves the page where it is (#451)", async ({ app }) => {
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Choose source", exact: true }).tap();
+    await expect(app.locator(".sheet")).toBeVisible();
+    for (const [phase, x] of [["begin", 4], ["move", 260], ["end", 260]] as const)
+      await app.evaluate(
+        ([phase, x]) => (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe({ phase, x, width: window.innerWidth, velocity: 0 }),
+        [phase, x] as const,
+      );
+    await expect(app.locator(".sheet")).toHaveCount(0);
+    await expect(app.locator(".page[data-drag]")).toHaveCount(0);
+    await expect(app.getByRole("heading", { level: 1, name: "The Glass Orchard" })).toBeVisible();
+  });
+});
+
 test("on mobile data a torrent source doesn't start and says why, until the setting allows it (#207)", async ({ app }) => {
   await app.addInitScript(() => {
     localStorage.setItem("polar.fakeTorrents", "1");
@@ -441,4 +500,38 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
   // Allowed: the torrent goes on (to the one-time notice first).
   await play();
   await expect(app.getByRole("dialog", { name: "Torrent playback" })).toBeVisible();
+});
+
+test("each page starts right under the top bar, which sits right under the status bar, with or without a notch (#450)", async ({ app }) => {
+  const tabs = app.getByRole("navigation", { name: "Primary" });
+  for (const top of [0, 59]) {
+    await insets(app, { top, right: 0, bottom: top ? 34 : 0, left: 0 });
+    for (const [tab, first] of [
+      ["Home", ".hero-card"],
+      ["Series", ".screen-header h1"],
+      ["Library", ".screen-header h1"],
+    ] as const) {
+      await tabs.getByRole("button", { name: tab, exact: true }).tap();
+      const content = app.locator(first).first();
+      await expect(content).toBeVisible();
+      const [bar, logo, page] = await Promise.all([
+        app.locator(".navbar").boundingBox(),
+        app.locator(".brand-logo").boundingBox(),
+        content.boundingBox(),
+      ]);
+      // The bar's row begins where the status bar ends, the logo centred in it.
+      expect(Math.round(logo!.y + logo!.height / 2), `${tab}, inset ${top}`).toBe(Math.round(top + (bar!.height - top) / 2));
+      const gap = page!.y - (bar!.y + bar!.height);
+      expect(gap, `${tab}, inset ${top}`).toBeGreaterThanOrEqual(0);
+      expect(gap, `${tab}, inset ${top}`).toBeLessThanOrEqual(12);
+    }
+  }
+  // Anime with AniList not answering: its message stays clear of the bar too.
+  await app.route("https://graphql.anilist.co/**", (route) => route.fulfill({ status: 503, body: "" }));
+  await tabs.getByRole("button", { name: "Anime", exact: true }).tap();
+  const note = app.locator(".anime-unreachable");
+  await expect(note).toBeVisible({ timeout: 15_000 });
+  const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
+  // The text's own top, once the page has slid in.
+  await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
 });

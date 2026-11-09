@@ -42,6 +42,37 @@
   overflow-x: hidden;
   padding-bottom: 4rem;
 }
+/* iOS's Back following the finger (lib/ui/pageDrag.ts, #451): the page on top slides right with it over the
+   one under it, which shows for this and comes in from a little to the left, dimmed less as it comes. Each
+   is its own layer for the move, below the navbar. */
+.page[data-drag] {
+  z-index: 0;
+  isolation: isolate;
+  will-change: transform;
+}
+.page[data-drag="top"] {
+  background: var(--bg);
+  box-shadow: -10px 0 28px rgb(0 0 0 / 0.45);
+}
+.page[data-drag="under"] {
+  visibility: visible;
+  content-visibility: visible;
+}
+.page[data-drag="under"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+  opacity: calc(0.35 * (1 - var(--drag-in, 0)));
+  pointer-events: none;
+}
+.page[data-drag-settle] {
+  transition: transform 280ms var(--ease-out);
+}
+.page[data-drag-settle]::after {
+  transition: opacity 280ms var(--ease-out);
+}
 /* Pushed pages (detail) get one short entrance; tab switches get none. */
 .page-pushed {
   animation: page-in var(--dur-base) var(--ease-out);
@@ -582,6 +613,22 @@ html[data-os="mac"] {
    go under it and scroll sideways rather than run off the edge. */
 :root[data-form="phone"] .screen-header {
   flex-wrap: wrap;
+  /* The page starts right under the top bar, as a phone app's large title does (#450): the desktop's
+     1.75rem plus the heading's default margin left a band of nothing under the status bar and the bar. */
+  padding-top: calc(var(--nav-h) + 0.5rem);
+}
+:root[data-form="phone"] .screen-header h1 {
+  margin: 0;
+}
+:root[data-form="phone"] :is(.playlist-view, .anime[data-hero="false"] .anime-nav, .anime[data-hero="false"] .home-rows) {
+  padding-top: calc(var(--nav-h) + 0.5rem);
+}
+:root[data-form="phone"] .anime[data-hero="false"] .anime-nav + .home-rows {
+  padding-top: 0;
+}
+/* The phone's empty-state padding would otherwise put AniList's "didn't answer" under the top bar. */
+:root[data-form="phone"] .empty-state.anime-unreachable {
+  padding-top: calc(var(--nav-h) + 3rem);
 }
 :root[data-form="phone"] .discover-controls {
   max-width: 100%;
