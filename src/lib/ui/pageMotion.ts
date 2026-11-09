@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Entry, TabRoute } from "../router";
-import { SEARCH_TAB, tabId } from "../navTabs";
+import { tabId } from "../navTabs";
 
-/** The sections in the order the tab bars show them (NavBar's links, then iOS's search tab). */
-const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", SEARCH_TAB.id];
+/** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
+const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
 
 /** How long a change's pages keep their motion: the entrance (shell.css), and a frame to spare. */
 const SETTLE = 300;
