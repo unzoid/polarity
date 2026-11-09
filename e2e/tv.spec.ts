@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { mediaAnswer } from "./anilistMock";
 import { png } from "./media";
 import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
@@ -358,13 +359,13 @@ test("the Anime stage shows a later entry's franchise art and logo, as desktop d
   const empty = { media: [], pageInfo: { hasNextPage: false } };
   await app.route("https://graphql.anilist.co/**", async (route) => {
     const body = route.request().postData() ?? "{}";
-    const { query = "", variables } = JSON.parse(body) as { query?: string; variables?: { id?: number } };
+    const { query = "" } = JSON.parse(body) as { query?: string };
     if (query.includes("trending:")) {
       const home = Object.fromEntries(["trending", "upcoming", "top", "popular", "movies"].map((k) => [k, empty]));
       return route.fulfill({ json: { data: { ...home, season: { media: [film], pageInfo: { hasNextPage: false } } } } });
     }
-    const media = variables?.id === FRANCHISE.film.anilist ? film : franchiseMedia(variables?.id ?? 0);
-    await route.fulfill({ json: { data: media ? { Media: media } : { Page: empty } } });
+    const data = mediaAnswer(body, (id) => (id === FRANCHISE.film.anilist ? film : franchiseMedia(id)));
+    await route.fulfill({ json: { data: data ?? { Page: empty } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const id = Number(new URL(route.request().url()).searchParams.get("anilist_id"));
@@ -400,4 +401,111 @@ test("a typed genre's rows come in desktop's order: its popular movies and serie
   await expect(titles.filter({ hasText: "Popular Action Anime" })).toBeVisible();
   const shown = (await titles.allTextContents()).map((t) => t.trim());
   expect(shown.slice(0, 3)).toEqual(["Popular Action Movies", "Popular Action Series", "Popular Action Anime"]);
+});
+
+test.describe("signed in (a YouTube video comes to TV mode in a watch party)", () => {
+  test.use({ account: true });
+
+  test("a YouTube video's captions and speed are set from TV's own menus, beside YouTube's player, never over it (#434)", async ({ app }) => {
+    // A stand-in for YouTube's embed that speaks its IFrame Player API messages: no request leaves the machine.
+    // It has the speeds 0.25 to 2, rounds an asked speed toward 1 as YouTube's player does, and notes each load's address.
+    const loads: string[] = [];
+    const commands: unknown[][] = [];
+    await app.exposeFunction("ytCommand", (c: unknown[]) => void commands.push(c));
+    await app.route("https://www.youtube-nocookie.com/**", (route) => {
+      loads.push(route.request().url());
+      return route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><body style="background:#123"><script>
+          let host = null;
+          const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+          const say = (event, info) => host.postMessage(JSON.stringify({ event, info, id: 1 }), "*");
+          addEventListener("message", (e) => {
+            const m = JSON.parse(e.data);
+            if (m.event === "listening" && !host) {
+              host = e.source;
+              say("onReady");
+              say("infoDelivery", { availablePlaybackRates: speeds, playbackRate: 1 });
+            }
+            if (m.event !== "command") return;
+            window.ytCommand?.([m.func, ...(m.args || [])]);
+            if (m.func === "playVideo") say("infoDelivery", { playerState: 1, currentTime: 0, duration: 600, videoData: { title: "An Open Film" } });
+            if (m.func === "setPlaybackRate") say("onPlaybackRateChange", speeds.filter((r) => r <= m.args[0]).at(-1));
+          });
+        </script></body>`,
+      });
+    });
+    await expect(focused(app)).toHaveAccessibleName("The Understudies");
+    await app.evaluate(() =>
+      (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink("polarity://together?u=https%3A%2F%2Fyoutu.be%2Fabc-DEF_123&n=An%20open%20film"),
+    );
+    await app.getByRole("dialog", { name: "Watch together?" }).getByRole("button", { name: "Watch Together" }).focus();
+    await press(app, "Enter");
+    const player = app.locator(".player");
+    const frame = app.locator("iframe.player-youtube");
+    await expect(player).toHaveAttribute("data-engine", "youtube");
+    await expect(player).toHaveAttribute("data-started", "true");
+    expect(new URL(loads[0]!).searchParams.has("cc_load_policy")).toBe(false);
+    const panel = app.locator('.options-overlay[data-place="beside"]');
+    const outside = async () => {
+      const f = (await frame.boundingBox())!;
+      const p = (await panel.boundingBox())!;
+      expect(p.x).toBeGreaterThanOrEqual(f.x + f.width - 0.5);
+    };
+
+    // Captions: the bar's button opens the menu beside the player, which narrows to make room.
+    const bar = app.locator(".player-yt-bar");
+    await bar.getByRole("button", { name: "Captions" }).focus();
+    await press(app, "Enter");
+    await expect(panel.getByRole("heading", { name: "Captions" })).toBeVisible();
+    await outside();
+    await expect(panel).toContainText("a remote can't reach");
+    // The focus starts on what's chosen: Off. Down picks the first language, which loads YouTube's player again with it.
+    await expect(focused(app)).toHaveAccessibleName(/^Off/);
+    // A moment in, so where it goes on from isn't the start.
+    await app.waitForTimeout(1500);
+    const sent = commands.length;
+    await press(app, "ArrowDown", "Enter");
+    await expect.poll(() => loads.length).toBe(2);
+    const reloaded = new URL(loads[1]!).searchParams;
+    expect(reloaded.get("cc_load_policy")).toBe("1");
+    expect(reloaded.get("cc_lang_pref")).toBe("en");
+    // It was playing, so the new player starts by itself too.
+    expect(reloaded.get("autoplay")).toBe("1");
+    // The new player goes on where the old one was.
+    await expect.poll(() => commands.slice(sent).find((c) => c[0] === "seekTo")?.[1]).toBeGreaterThan(1);
+    await press(app, "Backspace");
+    await expect(panel).toHaveCount(0);
+    await expect(player).toBeVisible();
+
+    // Speed, from the key the remote's speed button sends. In the party everyone plays at 1x, and the menu says so.
+    await press(app, "r");
+    await expect(panel.getByRole("heading", { name: "Playback Speed" })).toBeVisible();
+    await outside();
+    await expect(panel).toContainText("A watch party plays at 1x for everyone.");
+    await expect(panel.getByRole("radio")).toHaveCount(0);
+    await press(app, "Backspace");
+    await expect(panel).toHaveCount(0);
+
+    // The party over, the video goes on alone: the menu has the speeds YouTube's player has for it.
+    await bar.locator(".party-badge").focus();
+    await press(app, "Enter");
+    await panel.getByRole("button", { name: "End Party" }).focus();
+    await press(app, "Enter");
+    await expect(focused(app)).toHaveAccessibleName("End for Everyone?");
+    await press(app, "Enter");
+    await expect(bar.locator(".party-badge")).toHaveCount(0);
+    await expect(player).toBeVisible();
+    await press(app, "r");
+    await expect(panel.getByRole("radio")).toHaveCount(8);
+    await panel.getByRole("radio", { name: /^1\.5x/ }).focus();
+    await press(app, "Enter");
+    await expect.poll(() => commands.findLast((c) => c[0] === "setPlaybackRate")).toEqual(["setPlaybackRate", 1.5]);
+    await expect(bar.getByRole("button", { name: "Speed (1.5x)" })).toBeVisible();
+    await press(app, "Backspace");
+    await expect(panel).toHaveCount(0);
+    // With no panel up, Back leaves the player.
+    await press(app, "Backspace");
+    await expect(player).toHaveCount(0);
+  });
 });

@@ -1,5 +1,6 @@
 import { deflateRawSync } from "node:zlib";
 import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { mediaAnswer } from "./anilistMock";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
 import { FRANCHISE, franchiseMedia, franchiseZip, GAP_ANIME, longAnimeMedia, longAnimeZip, SAGA, sagaMedia, sagaZip, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
@@ -932,9 +933,8 @@ test("Download Season downloads every released episode of the season, then says 
 /** The invented franchise's AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has its series and film. */
 async function answerFranchise(app: Page) {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    const media = franchiseMedia(variables?.id ?? 0);
-    await route.fulfill({ json: { data: media ? { Media: media } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), franchiseMedia);
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const zip = franchiseZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
@@ -981,9 +981,8 @@ test("an anime season tab downloads its released episodes; a film's tab shows th
 
 test("the season toolbar stays where it is whichever tab is chosen, and nothing in it is cut off at the least window width (#426)", async ({ app }) => {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    const media = sagaMedia(variables?.id ?? 0);
-    await route.fulfill({ json: { data: media ? { Media: media } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), sagaMedia);
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) => {
     const zip = sagaZip(Number(new URL(route.request().url()).searchParams.get("anilist_id")));
@@ -1042,8 +1041,8 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
 
 test("a long anime lists the episodes its series' catalog skips, between their neighbours, and plays them by the entry's Kitsu id (#427)", async ({ app }) => {
   await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { id?: number } };
-    await route.fulfill({ json: { data: variables?.id === GAP_ANIME.anilist ? { Media: longAnimeMedia(GAP_ANIME) } : { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
+    const data = mediaAnswer(route.request().postData(), (id) => (id === GAP_ANIME.anilist ? longAnimeMedia(GAP_ANIME) : undefined));
+    await route.fulfill({ json: { data: data ?? { Page: { media: [], pageInfo: { hasNextPage: false } } } } });
   });
   await app.route("https://api.ani.zip/**", (route) =>
     Number(new URL(route.request().url()).searchParams.get("anilist_id")) === GAP_ANIME.anilist ? route.fulfill({ json: longAnimeZip(GAP_ANIME) }) : route.fulfill({ status: 404, json: {} }),
