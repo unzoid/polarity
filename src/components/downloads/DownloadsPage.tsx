@@ -137,7 +137,7 @@ export function DownloadsPage() {
   const shownIds = [...shownActive, ...shownTitles.flatMap((t) => t.items)].map((d) => d.id);
 
   return (
-    <div className="downloads">
+    <div className="downloads" data-selecting={selected ? "" : undefined}>
       <StorageSummary list={all} />
       <div className="downloads-toolbar" data-nav-row data-nav-group>
         <Segmented
@@ -152,32 +152,43 @@ export function DownloadsPage() {
         <Dropdown label="Sort by" value={view.sort} onChange={(sort) => update({ sort })} options={DOWNLOAD_SORTS} />
         <span className="downloads-toolbar-gap" />
         {!selected && allWatched.length > 0 && <BulkDelete ids={allWatched} label={`Delete All Watched (${allWatched.length})`} />}
-        <Button className="downloads-select" onClick={() => setSelected(selected ? null : new Set())} aria-pressed={!!selected}>
+        <Button
+          variant={selected ? "primary" : "plain"}
+          className="downloads-select"
+          onClick={() => setSelected(selected ? null : new Set())}
+          aria-pressed={!!selected}
+        >
           {selected ? "Done" : "Select"}
         </Button>
       </div>
-      {selected && (
-        <div className="downloads-selectbar" role="region" aria-label="Selection" data-nav-row>
-          <span className="t-callout tabular">{selected.size ? `${plural(selected.size, "download")} selected` : "Select downloads to delete"}</span>
-          <Button onClick={() => setSelected(selected.size === shownIds.length ? new Set() : new Set(shownIds))}>
-            {selected.size === shownIds.length && shownIds.length ? "Select None" : "Select All"}
-          </Button>
-          {selected.size > 0 && <BulkDelete ids={[...selected]} label={`Delete Selected (${selected.size})`} onDone={() => setSelected(new Set())} />}
-        </div>
-      )}
 
       {shownActive.length > 0 && <ActiveSection list={shownActive} selection={selection} />}
 
       {shownTitles.length > 0 && (
         <section className="downloads-library" aria-label="Downloaded">
           {shownActive.length > 0 && <h2 className="downloads-heading t-title3">Downloaded</h2>}
-          {shownTitles.map((t) => (
-            <TitleGroup key={t.key} title={t} watched={watched} open={view.open} onToggle={toggleOpen} selection={selection} />
-          ))}
+          <div className="downloads-panel">
+            {shownTitles.map((t) => (
+              <TitleGroup key={t.key} title={t} watched={watched} open={view.open} onToggle={toggleOpen} selection={selection} />
+            ))}
+          </div>
         </section>
       )}
       {!shownActive.length && !shownTitles.length && (
         <EmptyState>{view.filter === "active" && !query ? "Nothing is downloading." : "No downloads match."}</EmptyState>
+      )}
+
+      {/* While selecting, the actions float over the list at the bottom of the window, as in Photos. */}
+      {selected && (
+        <div className="downloads-selectbar" role="region" aria-label="Selection" data-nav-row>
+          <Button onClick={() => setSelected(selected.size === shownIds.length ? new Set() : new Set(shownIds))}>
+            {selected.size === shownIds.length && shownIds.length ? "Select None" : "Select All"}
+          </Button>
+          <span className="downloads-selectbar-count t-callout tabular" aria-live="polite">
+            {selected.size ? `${selected.size} selected` : "Select downloads"}
+          </span>
+          <BulkDelete ids={[...selected]} label="Delete" disabled={!selected.size} onDone={() => setSelected(new Set())} />
+        </div>
       )}
     </div>
   );
@@ -223,7 +234,7 @@ function ActiveSection({ list, selection }: { list: DownloadRecord[]; selection:
           </span>
         )}
       </div>
-      <ul className="download-rows">
+      <ul className="download-rows downloads-panel">
         {list.map((d) => (
           <DownloadRow key={d.id} d={d} series={d.type === "series"} watched={false} selection={selection} showTitle />
         ))}
@@ -288,8 +299,8 @@ const TitleGroup = memo(function TitleGroup({
         </div>
         <Fold open={isOpen} id={bodyId}>
           <div className="download-title-actions" data-nav-row>
-            {watchedHere.length > 0 && <BulkDelete ids={watchedHere} label={`Delete Watched (${watchedHere.length})`} />}
-            <BulkDelete ids={ids} label="Delete All" />
+            {watchedHere.length > 0 && <BulkDelete ids={watchedHere} label={`Delete Watched (${watchedHere.length})`} small />}
+            <BulkDelete ids={ids} label="Delete All" small />
           </div>
           {title.seasons.length ? (
             title.seasons.map((s) => <SeasonGroup key={s.key} season={s} watched={watched} open={open} onToggle={onToggle} selection={selection} />)
@@ -394,7 +405,19 @@ function SelectBox({ ids, selection, label }: { ids: string[]; selection: NonNul
 }
 
 /** A text button that deletes several at once: the first click arms it (red, the bin's lid open), the second deletes. */
-function BulkDelete({ ids, label, small = false, onDone }: { ids: string[]; label: string; small?: boolean; onDone?: () => void }) {
+function BulkDelete({
+  ids,
+  label,
+  small = false,
+  disabled = false,
+  onDone,
+}: {
+  ids: string[];
+  label: string;
+  small?: boolean;
+  disabled?: boolean;
+  onDone?: () => void;
+}) {
   const { armed, props } = useConfirmDelete(() => {
     void removeDownloads(ids).then(onDone);
   }, label);
@@ -402,6 +425,7 @@ function BulkDelete({ ids, label, small = false, onDone }: { ids: string[]; labe
     <button
       type="button"
       className={buttonClass("plain", false, `confirm-delete downloads-bulk${small ? " downloads-bulk-sm" : ""}`)}
+      disabled={disabled}
       {...props}
       aria-label={armed ? `Click again: ${label}` : label}
     >

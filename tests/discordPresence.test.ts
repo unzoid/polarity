@@ -37,19 +37,30 @@ describe("Discord Rich Presence (#31)", () => {
     expect(discordActivity("app", { ...episode, paused: true }, now)).toEqual({ details: "Watching on Polarity", state: "Paused" });
   });
 
-  test("buttons (#153): Watch in Polarity only where the title is shown, Join watch party in either", () => {
-    const links = { watch: "https://getpolar.app/watch?type=series&id=tt0000000", party: "https://getpolar.app/party?t=xxx" };
-    expect(discordActivity("title", episode, now, links)?.buttons).toEqual([
-      { label: "Watch in Polarity", url: links.watch },
-      { label: "Join watch party", url: links.party },
-    ]);
-    expect(discordActivity("app", episode, now, links)?.buttons).toEqual([{ label: "Join watch party", url: links.party }]);
-    expect(discordActivity("app", episode, now, { watch: links.watch })?.buttons).toBeUndefined();
+  test("Watch in Polarity (#153) only where the title is shown", () => {
+    const links = { watch: "https://getpolar.app/watch?type=series&id=tt0000000" };
+    expect(discordActivity("title", episode, now, links)?.buttons).toEqual([{ label: "Watch in Polarity", url: links.watch }]);
+    expect(discordActivity("app", episode, now, links)?.buttons).toBeUndefined();
     expect(discordActivity("title", episode, now)?.buttons).toBeUndefined();
-    // A new join link is news; the same one isn't.
+    expect(discordActivity("title", episode, now, links)?.join).toBeUndefined();
+  });
+
+  test("in a party joinable from Discord (#357): Discord's own Join with the join token, instead of the buttons", () => {
+    const join = { party: "0f8e2c4a-1b2c-4d5e-8f90-123456789abc", secret: "A".repeat(43), members: 2, ask: true };
+    const links = { watch: "https://getpolar.app/watch?type=series&id=tt0000000", join };
+    for (const mode of ["title", "app"] as const) {
+      const a = discordActivity(mode, episode, now, links);
+      expect(a?.join).toEqual({ party: join.party, secret: join.secret, size: [2, 10], ask: true });
+      expect(a?.buttons).toBeUndefined();
+    }
+    // Room for one more past the usual figure; "Anyone who sees it": Join without asking.
+    expect(discordActivity("app", episode, now, { join: { ...join, members: 12, ask: false } })?.join).toEqual({ party: join.party, secret: join.secret, size: [12, 13], ask: false });
+    // A new token or another member is news; the same join isn't.
     const a = discordActivity("app", episode, now, links);
-    expect(sameActivity(a, discordActivity("app", episode, now, { ...links }))).toBe(true);
-    expect(sameActivity(a, discordActivity("app", episode, now, { party: "https://getpolar.app/party?t=yyy" }))).toBe(false);
+    expect(sameActivity(a, discordActivity("app", episode, now, { join: { ...join } }))).toBe(true);
+    expect(sameActivity(a, discordActivity("app", episode, now, { join: { ...join, secret: "B".repeat(43) } }))).toBe(false);
+    expect(sameActivity(a, discordActivity("app", episode, now, { join: { ...join, members: 3 } }))).toBe(false);
+    expect(sameActivity(a, discordActivity("app", episode, now, { join: { ...join, ask: false } }))).toBe(false);
     expect(sameActivity(a, discordActivity("app", episode, now))).toBe(false);
   });
 
