@@ -46,6 +46,7 @@ import { SignOutDialog } from "./components/SignOutDialog";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
+import { SeriesPickToast } from "./components/anime/SeriesPickToast";
 import { Skeleton } from "./components/ui/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
@@ -395,6 +396,7 @@ function DesktopApp() {
           </section>
         ))}
         <ControllerToast tv={false} />
+        <SeriesPickToast />
         <UpdateToast hidden={!!playing} />
       </main>
       <WhatsNewSheet />

@@ -1689,6 +1689,16 @@ test.describe("signed in, on a fresh profile", () => {
     await app.locator('[data-setting="friendsJoin"]').getByRole("switch").isChecked().then((on) => expect(on).toBe(false));
   });
 
+  test("a profile that never chose has Friends on: seen online, joinable, what's on hidden (#428)", async ({ app }) => {
+    await app.goto("/fake.html?account=1&friends=new");
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Account" }).click();
+    await expect(app.locator('[data-setting="friendsEnabled"]').getByRole("switch")).toBeChecked();
+    await expect(app.locator('[data-setting="friendsOnline"]').getByRole("combobox")).toContainText("Friends");
+    await expect(app.locator('[data-setting="friendsWatching"]').getByRole("combobox")).toContainText("Nobody");
+    await expect(app.locator('[data-setting="friendsJoin"]').getByRole("switch")).toBeChecked();
+  });
+
   test("a link watched from the Join a Watch Party dialog closes the dialog before the player's panel opens (#247)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
     await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
@@ -1967,21 +1977,37 @@ test.describe("stremio:// links (#163)", () => {
   const installs = (app: Page) => app.evaluate(() => (window as { __addonInstalls?: string[] }).__addonInstalls ?? []);
   const note = (app: Page) => app.locator('.toast[data-kind="link-note"]');
 
-  test("off by default: a link only says how to turn them on; on, each kind of link does its own thing", async ({ app }) => {
+  test("an install that had them off keeps them off: a link only says how to turn them on (#428)", async ({ app }) => {
+    await app.evaluate(() => localStorage.setItem("polar.prefs", JSON.stringify({ stremioLinks: false })));
+    await app.reload();
+    await open(app, "stremio://addon.example.com/c0nf1g/manifest.json");
+    await expect(note(app)).toContainText("Open Stremio links in Polarity");
+    await expect(app.getByTestId("addon-offer")).toHaveCount(0);
+    await expect.poll(() => app.evaluate(() => (window as { __stremioLinks?: boolean[] }).__stremioLinks)).toEqual([false]);
+  });
+
+  test("on by default (#428); turned off a link only says how to turn them on; each kind of link does its own thing", async ({ app }) => {
+    // The app's start registers the handler.
+    await expect.poll(() => app.evaluate(() => (window as { __stremioLinks?: boolean[] }).__stremioLinks)).toEqual([true]);
+    await app.getByRole("button", { name: /^Profile/ }).click();
+    await app.getByRole("menuitem", { name: "Settings" }).click();
+    const settings = app.getByRole("dialog", { name: /^Settings/ });
+    await settings.getByRole("button", { name: "Add-ons", exact: true }).click();
+    const toggle = settings.getByRole("switch", { name: /^Open Stremio links in Polarity/ });
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await settings.getByRole("button", { name: "Close settings" }).click();
     await open(app, "stremio://addon.example.com/c0nf1g/manifest.json");
     await expect(note(app)).toContainText("Open Stremio links in Polarity");
     await expect(app.getByTestId("addon-offer")).toHaveCount(0);
 
     await app.getByRole("button", { name: /^Profile/ }).click();
     await app.getByRole("menuitem", { name: "Settings" }).click();
-    const settings = app.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("button", { name: "Add-ons", exact: true }).click();
-    const toggle = settings.getByRole("switch", { name: /^Open Stremio links in Polarity/ });
-    await expect(toggle).not.toBeChecked();
     await toggle.click();
     await expect(toggle).toBeChecked();
-    // Turning it on registers the handler; the app's start had made sure it was off.
-    await expect.poll(() => app.evaluate(() => (window as { __stremioLinks?: boolean[] }).__stremioLinks)).toEqual([false, true]);
+    await expect.poll(() => app.evaluate(() => (window as { __stremioLinks?: boolean[] }).__stremioLinks)).toEqual([true, false, true]);
     await settings.getByRole("button", { name: "Close settings" }).click();
 
     // An install link asks, and Cancel installs nothing.

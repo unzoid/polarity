@@ -35,7 +35,7 @@ const PULL_OVERLAP_MS = 10_000;
 /** Only the user's own data travels: ids, times, where they stopped; never names or pictures (docs/supabase-storage.md §3). */
 const LIBRARY_COLUMNS = "meta_id, kind, added_at, updated_at, synced_at";
 const PROGRESS_COLUMNS = "meta_id, kind, entries, updated_at, synced_at";
-const LINK_COLUMNS = "anilist, canonical, mal, kitsu, updated_at, synced_at";
+const LINK_COLUMNS = "anilist, canonical, mal, kitsu, deleted, updated_at, synced_at";
 /** How long the server's answer to "do you keep every episode?" holds before a push asks again. */
 const EVERY_EPISODE_TTL_MS = 10 * 60_000;
 /** Party channels being taken down, by topic: a new one on the same topic waits for its removal. */
@@ -161,6 +161,14 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
         const settings = listOf(rows, toFriendSettings)[0];
         if (!settings) throw new AccountError("unknown", "Friends didn't turn on. Try again.");
         return settings;
+      },
+      async defaultOn(p) {
+        const { data, error } = await db.rpc("friend_default_on", { p });
+        if (error && isMissingFunction(error)) return null;
+        if (error) throw dbError(error);
+        if (typeof data !== "string") return null;
+        const rows = await call<unknown[]>("friend_settings", { p });
+        return listOf(rows, toFriendSettings)[0] ?? null;
       },
       off: (p) => call<void>("friend_off", { p }),
       resetCode: (p) => call<string>("friend_code_reset", { p }),
@@ -355,12 +363,12 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
       async push(profileId, { library, progress, links }) {
         // A kind the account has no room left for (#110) is refused alone: the others still go.
         let full: PushResult["full"];
-        /** Upserts in chunks; false when the server has no `anime_links` table yet. */
+        /** Upserts in chunks; false when the server has no `anime_links` table yet, or one from before #335. */
         const send = async (kind: keyof SyncChanges, table: string, rows: object[], onConflict: string) => {
           for (const part of chunks(rows, 500)) {
             const { error } = await db.from(table).upsert(part, { onConflict });
             if (!error) continue;
-            if (table === "anime_links" && isMissingTable(error)) return false;
+            if (table === "anime_links" && (isMissingTable(error) || isMissingColumn(error))) return false;
             const e = dbError(error);
             if (!isLimit(e)) throw e;
             full = { kinds: [...(full?.kinds ?? []), kind], error: full?.error ?? e };
@@ -421,7 +429,7 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
     },
   };
 
-  /** `null` when the table isn't on the server yet (a schema older than this app). */
+  /** `null` when the table, or a column of it, isn't on the server yet (a schema older than this app). */
   async function unlessMissing<T>(rows: Promise<T[]>): Promise<T[] | null> {
     try {
       return await rows;
@@ -602,6 +610,7 @@ export const toLinkRow = (profileId: string, l: AnimeLink) => ({
   canonical: l.canonical,
   mal: l.mal ?? null,
   kitsu: l.kitsu ?? null,
+  deleted: l.removed === true,
   updated_at: l.updatedAt,
 });
 
@@ -610,7 +619,7 @@ export function fromLinkRow(r: unknown): AnimeLink | undefined {
   if (!isRecord(r)) return;
   const [canonical, anilist, mal, kitsu, updatedAt] = [str(r.canonical), count(r.anilist), count(r.mal), count(r.kitsu), count(r.updated_at)];
   if (!canonical || anilist === undefined || updatedAt === undefined) return;
-  return { canonical, anilist, ...(mal !== undefined && { mal }), ...(kitsu !== undefined && { kitsu }), updatedAt };
+  return { canonical, anilist, ...(mal !== undefined && { mal }), ...(kitsu !== undefined && { kitsu }), updatedAt, ...(r.deleted === true && { removed: true }) };
 }
 
 /** A `playlists` row; `items` is the packed list as Postgres hex (`\x…`). */
@@ -629,6 +638,8 @@ function* chunks<T>(items: T[], size: number) {
 
 /** A table this version expects hasn't been migrated onto the server yet. */
 const isMissingTable = (e: PostgrestError) => e.code === "PGRST205" || e.code === "42P01";
+/** A column this version expects isn't on the server yet (e.g. `anime_links.deleted`, #335). */
+const isMissingColumn = (e: PostgrestError) => e.code === "PGRST204" || e.code === "42703";
 const isMissingFunction = (e: { code: string }) => e.code === "PGRST202" || e.code === "42883";
 
 /**
@@ -749,7 +760,7 @@ export function dbError(e: PostgrestError): AccountError {
   if (e.code === "23514" && /profile_settings/.test(e.message)) {
     return new AccountError("settings_too_large", "This profile's settings are too large to sync.");
   }
-  if (isMissingTable(e)) {
+  if (isMissingTable(e) || isMissingColumn(e)) {
     return new AccountError("not_set_up", e.message);
   }
   // The server answers every error with a code; postgrest-js reports a request that never got an answer with none.

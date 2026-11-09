@@ -49,7 +49,7 @@ describe("turning Friends on and off", () => {
     const c = await code(PA);
     expect(c).toMatch(/^[2-9A-HJ-NP-Z]{8}$/);
     expect(await code(PA)).toBe(c);
-    expect((await db.query(`select * from friend_settings('${PA}')`)).rows).toEqual([{ code: c, show_online: true, show_watching: true, joinable: true }]);
+    expect((await db.query(`select * from friend_settings('${PA}')`)).rows).toEqual([{ code: c, show_online: true, show_watching: false, joinable: true }]);
   });
 
   test("what friends see is kept per profile, and only while Friends is on", async () => {

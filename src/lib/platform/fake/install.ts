@@ -135,6 +135,7 @@ const commands: Record<string, (a: Args) => unknown> = {
     animeLinks.set(link.anilist, { ...link, updatedAt: Date.now() });
     return true;
   },
+  unlink_anime: (a) => animeLinks.delete((a as { anilist: number }).anilist),
   anime_ids: () => null,
   // The invented two-series franchise's long series has filler (its tab's toolbar has Skip filler, #426).
   anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),

@@ -180,7 +180,7 @@ const STREMIO_LINKS_ON: Record<Os, string> = {
   ios: "",
 };
 
-/** Settings → Add-ons → Open Stremio links in Polarity (#163): this device's choice, off until the user turns it on. */
+/** Settings → Add-ons → Open Stremio links in Polarity (#163): this device's choice, on until the user turns it off (#428). */
 function StremioLinksCard() {
   const os = stremioLinksOs();
   const [error, setError] = useState<string | null>(null);
