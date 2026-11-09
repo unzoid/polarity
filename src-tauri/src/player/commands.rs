@@ -66,8 +66,11 @@ pub fn player_system_bars(hidden: bool) {
 /// Load `url` (optionally starting at `start` seconds) and play. With `probe_id`,
 /// the link check reports its steps as `player://probe` events. `headers` are
 /// the stream's `behaviorHints.proxyHeaders.request`; only those
-/// `polar_player::headers` passes reach the link check and mpv.
+/// `polar_player::headers` passes reach the link check and mpv. `link`: a link the user chose
+/// (Watch a Link), checked without the placeholder rule for add-on streams (#474).
 #[tauri::command]
+// The webview's arguments, plus the three Tauri hands in.
+#[allow(clippy::too_many_arguments)]
 pub async fn mpv_load(
     app: AppHandle,
     window: WebviewWindow,
@@ -76,6 +79,7 @@ pub async fn mpv_load(
     start: Option<f64>,
     probe_id: Option<u32>,
     headers: Option<std::collections::HashMap<String, String>>,
+    link: Option<bool>,
 ) -> Result<(), CmdError> {
     // Web streams, a finished download, or a file the user opened - never any other path on disk.
     let downloaded = app.state::<Arc<crate::downloads::Downloads>>().owns(&url);
@@ -88,7 +92,11 @@ pub async fn mpv_load(
     // A link that's not ready yet, or a placeholder clip in place of the video.
     let headers =
         if local { Vec::new() } else { polar_player::headers::playback_headers(&headers.unwrap_or_default()) };
-    let url = if local { url } else { crate::streamcheck::prepare(&app, &url, headers.clone(), probe_id).await? };
+    let url = if local {
+        url
+    } else {
+        crate::streamcheck::prepare(&app, &url, headers.clone(), probe_id, link.unwrap_or(false)).await?
+    };
     // Where the check ended up must still be a web link (it refuses redirects off the web itself).
     if !local && !is_web_url(&url) {
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));

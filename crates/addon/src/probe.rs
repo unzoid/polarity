@@ -57,6 +57,9 @@ pub struct Probe {
     pub deadline: Duration,
     /// Sent with every request, redirects included (`polar_player::headers` picks them).
     pub headers: Vec<(String, String)>,
+    /// Whether a small video counts as a "not ready yet" clip: yes for an add-on's stream for a title,
+    /// no for a link the user chose (Watch a Link), which may well be a short video (#474).
+    pub placeholders: bool,
 }
 
 impl Default for Probe {
@@ -68,6 +71,7 @@ impl Default for Probe {
             timeout: Duration::from_secs(20),
             deadline: Duration::from_secs(25),
             headers: Vec::new(),
+            placeholders: true,
         }
     }
 }
@@ -99,6 +103,7 @@ pub async fn readiness(url: &str, headers: Vec<(String, String)>) -> Readiness {
         timeout: READY_DEADLINE,
         deadline: READY_DEADLINE,
         headers,
+        placeholders: true,
     };
     probe.readiness(url).await
 }
@@ -157,9 +162,14 @@ const PLACEHOLDER_MAX_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 10;
 
 /// The URL the player should open, or why this source won't play (in plain words).
-/// `headers` are the add-on's, as the player will send them.
-pub async fn prepare(url: &str, headers: Vec<(String, String)>, on: impl FnMut(ProbeEvent)) -> Result<String, String> {
-    Probe { headers, ..Probe::default() }.run(url, on).await
+/// `headers` are the add-on's, as the player will send them; `placeholders`: see [`Probe::placeholders`].
+pub async fn prepare(
+    url: &str,
+    headers: Vec<(String, String)>,
+    placeholders: bool,
+    on: impl FnMut(ProbeEvent),
+) -> Result<String, String> {
+    Probe { headers, placeholders, ..Probe::default() }.run(url, on).await
 }
 
 impl Probe {
@@ -260,7 +270,7 @@ impl Probe {
                 ms: took,
             });
             if status.is_success() {
-                if is_placeholder(&res) {
+                if self.placeholders && is_placeholder(&res) {
                     return Err(
                         "This source isn't ready (it sent a placeholder clip instead of the video). Choose another source."
                             .into(),
@@ -601,6 +611,22 @@ mod tests {
     }
 
     #[test]
+    fn a_short_video_the_user_chose_plays() {
+        block(async {
+            let base = serve(|_, _| {
+                answer(
+                    "206 Partial Content",
+                    &[("Content-Type", "video/mp4"), ("Content-Range", "bytes 0-1023/136909")],
+                )
+            })
+            .await;
+            let url = format!("{base}/clip");
+            let link = Probe { placeholders: false, ..quick() };
+            assert_eq!(link.check(Url::parse(&url).unwrap(), &mut |_| {}).await, Ok(url.clone()));
+        })
+    }
+
+    #[test]
     fn readiness_ready_placeholder_error_page_and_silence() {
         block(async {
             let base = serve(|path, _| match path {
@@ -659,8 +685,14 @@ mod tests {
                 }
             });
             let short = Duration::from_millis(200);
-            let probe =
-                Probe { retry_after: vec![], connect_timeout: short, timeout: short, deadline: short, headers: vec![] };
+            let probe = Probe {
+                retry_after: vec![],
+                connect_timeout: short,
+                timeout: short,
+                deadline: short,
+                headers: vec![],
+                placeholders: true,
+            };
             // Slow, not dead: a server that opens the file on demand can take this long for its first byte.
             assert!(matches!(probe.readiness(&url).await, Readiness::Slow { .. }));
         })
@@ -822,7 +854,7 @@ mod tests {
     fn a_server_on_this_machine_is_not_checked() {
         block(async {
             let mut events = vec![];
-            let r = prepare("http://127.0.0.1:7878/file.mp4", Vec::new(), |e| events.push(e)).await;
+            let r = prepare("http://127.0.0.1:7878/file.mp4", Vec::new(), true, |e| events.push(e)).await;
             assert_eq!(r.unwrap(), "http://127.0.0.1:7878/file.mp4");
             assert!(matches!(events[..], [ProbeEvent::Skipped { .. }]));
         })
