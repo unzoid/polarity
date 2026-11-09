@@ -121,6 +121,30 @@
   opacity: 0;
   visibility: hidden;
 }
+/* A phone's page behind the card (HeroGlow.tsx): the art's colour shining in from the top right corner, as
+   Netflix's, tinting the top of the page and fading into it by the card's foot. One element, two gradients;
+   the colour is a registered property, so a new title's eases in rather than cutting. */
+@property --glow {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: rgb(0 0 0 / 0);
+}
+.hero-glow {
+  position: absolute;
+  inset: 0 0 -12rem;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 70% at 100% 0%, var(--glow) 0%, color-mix(in srgb, var(--glow) 55%, transparent) 38%, transparent 72%),
+    linear-gradient(to bottom, color-mix(in srgb, var(--glow) 45%, transparent), transparent 85%);
+  opacity: 0;
+  transition:
+    --glow 900ms var(--ease-std),
+    opacity 600ms var(--ease-std);
+}
+.hero-glow[data-shown="true"] {
+  opacity: 1;
+}
 .hero-art {
   position: absolute;
   inset: 0;

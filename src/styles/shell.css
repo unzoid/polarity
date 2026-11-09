@@ -343,8 +343,10 @@ html[data-os="mac"] {
   opacity: 0;
   pointer-events: none;
 }
-/* On iOS the system draws Back over this one (NativeBack.tsx): it keeps its place, unseen. */
-[data-native-back] {
+/* On iOS the system draws Back (NativeBack.tsx), or a button (NativeButtons.tsx), over this one: it keeps its
+   place, unseen. */
+[data-native-back],
+[data-native-button] {
   visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -601,7 +603,23 @@ html[data-os="mac"] {
   --tabbar-h: var(--safe-bottom);
 }
 :root[data-form="phone"] .brand-logo {
-  height: 30px;
+  height: 40px;
+}
+/* The Search page's large title, where the wordmark stands on the other pages (NavBar). Its own search
+   button goes: the field is right under it. The button stays mounted, for the search shortcut. */
+.navbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0.5rem;
+  font-size: 2.125rem;
+  line-height: 44px;
+  letter-spacing: -0.022em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+:root[data-form="phone"] .navbar-search-page[aria-current="page"] {
+  display: none;
 }
 :root[data-form="phone"] .scroll {
   padding-bottom: calc(4rem + var(--tabbar-h));

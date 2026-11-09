@@ -14,13 +14,6 @@
   gap: 0.75rem;
   padding: 0 var(--gutter) 1.5rem;
 }
-.search-head-title {
-  margin: 0;
-  font-size: 2.125rem;
-  line-height: 1.1;
-  letter-spacing: -0.022em;
-  font-weight: 700;
-}
 .search-start {
   display: flex;
   flex-direction: column;
@@ -92,7 +85,7 @@
   padding: 0.75rem 0.875rem;
   overflow: hidden;
   border-radius: var(--r-md);
-  background: linear-gradient(140deg, hsl(var(--tile-hue) 70% 48%), hsl(calc(var(--tile-hue) + 40) 65% 22%));
+  background: linear-gradient(150deg, hsl(var(--tile-a) 80% 52%), hsl(var(--tile-b) 75% 34%));
   color: #fff;
   font-size: 1.0625rem;
   font-weight: 650;
@@ -100,26 +93,44 @@
   text-align: left;
   -webkit-touch-callout: none;
 }
+/* The picture in two colours (a duotone, as Apple TV's tiles): in grey, then multiplied by the genre's
+   gradient, which paints its light parts from one hue across to the other, then lightened to a deep shade
+   of the second, which takes its shadows. Until the picture's in, the gradient alone. */
 .genre-tile > img {
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: -3;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: grayscale(1) contrast(1.15);
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
 }
 .genre-tile > img[data-loaded="true"] {
   opacity: 1;
 }
-/* The tint keeps each tile its genre's colour, and its name legible over any art. */
-.genre-tile::before {
+.genre-tile::before,
+.genre-tile::after {
   content: "";
   position: absolute;
   inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.genre-tile::before {
+  z-index: -2;
+  background: linear-gradient(150deg, hsl(var(--tile-a) 95% 62%), hsl(var(--tile-b) 90% 58%));
+  mix-blend-mode: multiply;
+}
+.genre-tile::after {
   z-index: -1;
-  background: linear-gradient(160deg, hsl(var(--tile-hue) 70% 45% / 0.35), hsl(var(--tile-hue) 65% 10% / 0.85));
+  background: linear-gradient(150deg, hsl(var(--tile-a) 70% 16%), hsl(var(--tile-b) 75% 12%));
+  mix-blend-mode: lighten;
+}
+.genre-tile:has(> img[data-loaded="true"])::before,
+.genre-tile:has(> img[data-loaded="true"])::after {
+  opacity: 1;
 }
 .genre-tile > span {
   text-shadow: 0 1px 8px rgb(0 0 0 / 0.4);

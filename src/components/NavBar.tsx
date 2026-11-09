@@ -101,9 +101,14 @@ export function NavBar() {
         tabIndex={canGoBack ? 0 : -1}
         disabled={!canGoBack}
       />
-      <button className="navbar-brand" onClick={() => tab({ name: "home" })} aria-label="Polarity home">
-        <img className="brand-logo" src={logo} alt="Polarity" draggable={false} />
-      </button>
+      {/* A phone's Search page names itself in the bar, as a phone app's large title does, instead of the wordmark. */}
+      {phone && current.name === "search" ? (
+        <h1 className="navbar-title">Search</h1>
+      ) : (
+        <button className="navbar-brand" onClick={() => tab({ name: "home" })} aria-label="Polarity home">
+          <img className="brand-logo" src={logo} alt="Polarity" draggable={false} />
+        </button>
+      )}
       <NavLinks links={links} isActive={isActive} open={tab} />
       <div className="navbar-actions">
         <UpdatePill />

@@ -67,7 +67,7 @@ export function Search() {
   );
 }
 
-/** The phone's large title and field. The field is the page's own, so leaving the page empties it. */
+/** The phone's field (its large title is the top bar's: NavBar). The field is the page's own, so leaving the page empties it. */
 function SearchHeader() {
   const text = useSearchText();
   const { animeEnabled } = usePrefs();
@@ -90,7 +90,6 @@ function SearchHeader() {
 
   return (
     <header className="search-head">
-      <h1 className="search-head-title">Search</h1>
       <SearchField
         ref={input}
         look="large"
@@ -158,22 +157,25 @@ function SearchStart() {
   );
 }
 
-/** Each tile's tint, so a grid of them reads as a set rather than one colour repeated. */
-const TILE_HUES: Record<string, number> = {
-  Action: 18,
-  Comedy: 45,
-  Drama: 215,
-  Horror: 350,
-  "Sci-Fi": 190,
-  Thriller: 265,
-  Romance: 330,
-  Documentary: 150,
-  Isekai: 200,
-  Shounen: 25,
-  "Slice of Life": 95,
-  Mecha: 230,
-  Iyashikei: 165,
-  Psychological: 285,
+/**
+ * Each tile's two hues, as Apple TV's genre tiles: the picture's light parts take the first, shading across to the
+ * second, and its shadows a deep shade of the second, so every tile is a pair of opposing colours of its own.
+ */
+const TILE_HUES: Record<string, [number, number]> = {
+  Action: [32, 345],
+  Comedy: [95, 185],
+  Drama: [200, 250],
+  Horror: [0, 285],
+  "Sci-Fi": [175, 225],
+  Thriller: [280, 210],
+  Romance: [330, 15],
+  Documentary: [140, 45],
+  Isekai: [195, 300],
+  Shounen: [20, 50],
+  "Slice of Life": [85, 330],
+  Mecha: [220, 165],
+  Iyashikei: [160, 95],
+  Psychological: [265, 320],
 };
 
 /**
@@ -185,11 +187,12 @@ function MovieGenreTile({ genre }: { genre: string }) {
   return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} />;
 }
 
-/** A genre to search by: its name over its picture, under the genre's tint (the tint alone until the picture's in). */
+/** A genre to search by: its name over its picture in the genre's two colours (the colours alone until the picture's in). */
 function GenreTile({ genre, image }: { genre: string; image?: string }) {
   const [loaded, setLoaded] = useState(false);
+  const [a, b] = TILE_HUES[genre] ?? [220, 280];
   return (
-    <button className="genre-tile pressable" style={{ "--tile-hue": TILE_HUES[genre] ?? 220 } as CSSProperties} onClick={() => setSearchText(genre)}>
+    <button className="genre-tile pressable" style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
       {image && <img src={image} alt="" loading="lazy" decoding="async" draggable={false} data-loaded={loaded} onLoad={() => setLoaded(true)} />}
       <span>{genre}</span>
     </button>

@@ -15,6 +15,7 @@ mod locks;
 mod logging;
 mod mal;
 mod native_back;
+mod native_buttons;
 mod native_dialogs;
 mod native_tabs;
 mod notifications;
@@ -365,6 +366,7 @@ pub fn run() {
             player::player_system_bars,
             native_tabs::native_tabs,
             native_back::native_back,
+            native_buttons::native_buttons,
             native_dialogs::native_dialog,
             native_dialogs::native_share,
             notifications::notifications_permission,

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { AmbientWash } from "../components/AmbientWash";
+import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
@@ -19,7 +20,7 @@ import {
   useRecommend,
   useSettings,
 } from "../lib/net";
-import { prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
+import { dismissDepth, onDismissDepth, prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
 import { useRouter } from "../lib/router";
 import {
   catalogKey,
@@ -40,7 +41,9 @@ import {
 import { cardMenu } from "../components/CardMenu";
 import type { MetaPreview, Progress } from "../lib/types";
 import { Button, IconButton } from "../components/ui/Button";
-import { LibraryButton } from "../components/title/LibraryButton";
+import { LibraryButton, useLibraryToggle } from "../components/title/LibraryButton";
+import { useNativeButtons } from "../components/NativeButtons";
+import { useSettingsOverlay } from "../lib/settings";
 import { Skeleton } from "../components/ui/Skeleton";
 
 /**
@@ -115,6 +118,7 @@ export function HeroCarousel({
   handlers?: (item: MetaPreview) => { onClick: () => void; onContextMenu: (e: React.MouseEvent<HTMLElement>) => void };
 }) {
   const { navigate } = useRouter();
+  const phone = useFormFactor().form === "phone";
   const [paused, setPaused] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const count = items?.length ?? 0;
@@ -168,13 +172,17 @@ export function HeroCarousel({
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colours: a heavily
-          blurred copy of each backdrop, cross-fading with it. */}
-      <div className="hero-ambient" aria-hidden>
-        {items.map((it, i) => (
-          <AmbientWash key={it.id} src={it.background} current={i === index} />
-        ))}
-      </div>
+      {/* The page around the card takes on the art's colours: on a phone its most prominent one glowing in
+          from the top right corner (Netflix's), elsewhere a heavily blurred copy of each backdrop, cross-fading with it. */}
+      {phone ? (
+        <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} />
+      ) : (
+        <div className="hero-ambient" aria-hidden>
+          {items.map((it, i) => (
+            <AmbientWash key={it.id} src={it.background} current={i === index} />
+          ))}
+        </div>
+      )}
       <div className="hero-stage">
       {count > 1 && <HeroPeek item={items[(index - 1 + count) % count]} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />}
       <div
@@ -301,11 +309,32 @@ function HeroPeek({ item, side, onClick }: { item: MetaPreview; side: "prev" | "
 }
 
 function HeroContent({ item }: { item: MetaPreview }) {
-  const { navigate } = useRouter();
+  const { navigate, current } = useRouter();
   const intent = useIntent(item);
   const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
   const phone = useFormFactor().form === "phone";
+
+  // On an iPhone the two are iOS's own (Liquid Glass), while Home shows and nothing covers it (NativeButtons.tsx).
+  const watch = useRef<HTMLButtonElement>(null);
+  const save = useRef<HTMLButtonElement>(null);
+  const library = useLibraryToggle(item);
+  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
+  const settingsOpen = useSettingsOverlay().open;
+  const native = useNativeButtons(
+    [
+      { id: "hero-watch", el: watch, title: "Watch Now", symbol: "play.fill", prominent: true, onPress: open },
+      {
+        id: "hero-save",
+        el: save,
+        title: library.inLibrary ? "Saved" : "Save",
+        symbol: library.inLibrary ? "checkmark" : "plus",
+        label: library.label,
+        onPress: library.toggle,
+      },
+    ],
+    phone && current.name === "home" && layers === 0 && !settingsOpen,
+  );
 
   return (
     <div className="hero-content">
@@ -313,10 +342,10 @@ function HeroContent({ item }: { item: MetaPreview }) {
       <p className="hero-kind t-callout">{joinFacts(kindFacts(item))}</p>
       <p className="hero-description t-body">{item.description}</p>
       <div className="hero-actions">
-        <Button variant="primary" onClick={open} {...intent}>
+        <Button ref={watch} variant="primary" onClick={open} data-native-button={native || undefined} {...intent}>
           <Play size={18} fill="currentColor" /> Watch Now
         </Button>
-        <LibraryButton item={item} labelled={phone} />
+        <LibraryButton ref={save} item={item} labelled={phone} native={native} />
       </div>
     </div>
   );

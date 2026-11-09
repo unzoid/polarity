@@ -1005,13 +1005,13 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   const first = await place();
   // The long series' tab adds the episode ranges, the search and Skip filler.
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
-  await expect(tools.locator(".anime-episode-search")).toBeVisible({ timeout: 15_000 });
+  await expect(tools.locator(".anime-episode-search-open")).toBeVisible({ timeout: 15_000 });
   await expect(tools.getByText("Skip filler")).toBeVisible();
   await expect(download).toBeVisible();
   expect((await place()).download[1]).toBe(first.download[1]);
   expect((await place()).layout[1]).toBe(first.layout[1]);
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "Season 1" }).click();
-  await expect(tools.locator(".anime-episode-search")).toHaveCount(0, { timeout: 15_000 });
+  await expect(tools.locator(".anime-episode-search-open")).toHaveCount(0, { timeout: 15_000 });
   expect(await place()).toEqual(first);
 
   // The least window width (tauri.conf.json), less a Windows scrollbar (17 px), on the long series' last range, the longest label.
@@ -1023,7 +1023,9 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   await app.getByRole("option", { name: "Episodes 1101–1200" }).click();
   await expect(ranges).toContainText("Episodes 1101–1200");
   // Each control whole: inside the window, and not clipped by anything around it.
-  const controls = [ranges, tools.locator(".anime-episode-search"), tools.locator(".anime-toggle"), download, layout];
+  // The search opened, at its widest.
+  await tools.getByRole("button", { name: "Find an episode" }).click();
+  const controls = [ranges, tools.locator(".anime-episode-search"), tools.locator(".toggle-chip"), download, layout];
   for (const control of controls) {
     const cut = await control.evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -1051,6 +1053,8 @@ test("a long anime lists the episodes its series' catalog skips, between their n
   await app.evaluate((id) => (window as unknown as { __polarFakeDeepLink: (u: string) => void }).__polarFakeDeepLink(`polarity://anime/anilist/${id}`), GAP_ANIME.anilist);
   const page = app.locator(`.anime-detail[data-anime="${GAP_ANIME.anilist}"]`).last();
   const find = page.getByRole("searchbox", { name: "Find an episode by number or title" });
+  // The search is a button until it's opened.
+  await page.getByRole("button", { name: "Find an episode" }).click();
   // 99 and 102 are the catalog's own episodes; 100 and 101 aren't in it.
   for (const [n, id] of [
     [99, `${GAP_ANIME.imdb}:2:49`],

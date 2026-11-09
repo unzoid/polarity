@@ -538,6 +538,12 @@
 .anime-episodes-tools .segmented-active .segmented-item {
   color: var(--text);
 }
+/* Skip filler, the size of the episode ranges beside it. */
+.anime-episodes-tools .toggle-chip {
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: var(--fs-sm);
+}
 .anime-ranges {
   display: flex;
   gap: 0.375rem;
@@ -557,13 +563,6 @@
 .anime-range[aria-checked="true"] {
   background: var(--pill-light);
   color: var(--text-on-light);
-}
-.anime-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  color: var(--text-2);
-  cursor: pointer;
 }
 
 /* Characters: the character on the left, their voice on the right, like AniList. */
