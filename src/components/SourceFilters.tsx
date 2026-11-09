@@ -1,4 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useContext, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useFormFactor } from "../lib/ui";
+import { SheetHeaderSlot } from "./Sheet";
 import { SORTS, type SourceFilters } from "../lib/playback";
 import type { SourceSort } from "../lib/types";
 import { Close, Filters } from "./icons";
@@ -139,6 +142,25 @@ function activeFilters(f: SourceFilters) {
 function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
   const { filter, facets } = f;
   const active = activeFilters(f);
+  // On a phone Filters is its glyph alone, beside the heading: in a sheet's header (here), or the player's
+  // column head (player.css), leaving the row to the picture choice.
+  const slot = useContext(SheetHeaderSlot);
+  const phone = useFormFactor().form === "phone";
+  const filters = (
+    <PopoverRoot>
+      <PopoverTrigger className="srcf-filters pressable" aria-label={active.length ? `Filters, ${active.length} on` : "Filters"}>
+        <Filters size={16} strokeWidth={2} />
+        <span className="srcf-filters-label">Filters</span>
+        {active.length > 0 && <span className="srcf-filters-count tabular">{active.length}</span>}
+      </PopoverTrigger>
+      <PopoverPopup className="srcf-popover" sideOffset={8} align="end">
+        {sections(f, false).map((s) => (
+          <ChipRow key={s.label} {...s} collapsible />
+        ))}
+        {note && <p className="srcf-popover-note">{note}</p>}
+      </PopoverPopup>
+    </PopoverRoot>
+  );
   return (
     <div className="srcf">
       <div className="srcf-bar">
@@ -168,19 +190,7 @@ function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
           />
           </span>
         )}
-        <PopoverRoot>
-          <PopoverTrigger className="srcf-filters pressable" aria-label={active.length ? `Filters, ${active.length} on` : "Filters"}>
-            <Filters size={16} strokeWidth={2} />
-            Filters
-            {active.length > 0 && <span className="srcf-filters-count tabular">{active.length}</span>}
-          </PopoverTrigger>
-          <PopoverPopup className="srcf-popover" sideOffset={8} align="end">
-            {sections(f, false).map((s) => (
-              <ChipRow key={s.label} {...s} collapsible />
-            ))}
-            {note && <p className="srcf-popover-note">{note}</p>}
-          </PopoverPopup>
-        </PopoverRoot>
+        {phone && slot ? createPortal(filters, slot) : filters}
       </div>
       {active.length > 0 && (
         <div className="srcf-active" role="group" aria-label="Filters on">

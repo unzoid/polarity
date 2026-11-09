@@ -480,6 +480,27 @@
   max-width: none;
   margin-left: 0;
 }
+/* Filters is its glyph alone on a phone, beside the heading: in the sheet's header (Sheet.tsx's slot), level
+   with "Sources", or the player's column head (player.css). */
+:root[data-form="phone"] .srcf-filters {
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+}
+:root[data-form="phone"] .srcf-filters-label {
+  display: none;
+}
+.sheet-header > div:not(.sheet-grabber, .sheet-header-slot) {
+  min-width: 0;
+}
+.sheet-header-slot {
+  flex: none;
+  align-self: flex-start;
+  cursor: auto;
+}
+.sheet-header-slot:empty {
+  display: none;
+}
 /* Without an add-on choice, Filters starts the row. */
 :root[data-form="phone"] .srcf-bar > .srcf-filters:nth-child(2) {
   justify-self: start;

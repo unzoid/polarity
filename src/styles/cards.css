@@ -135,9 +135,11 @@
   inset: 0 0 -12rem;
   z-index: -1;
   pointer-events: none;
+  /* The colour is already a dark shade (heroGlow.ts): full at the corner, the whole top of the page tinted with
+     it, dark by the card's foot. */
   background:
-    radial-gradient(130% 70% at 100% 0%, var(--glow) 0%, color-mix(in srgb, var(--glow) 55%, transparent) 38%, transparent 72%),
-    linear-gradient(to bottom, color-mix(in srgb, var(--glow) 45%, transparent), transparent 85%);
+    radial-gradient(140% 75% at 100% 0%, var(--glow) 0%, color-mix(in srgb, var(--glow) 60%, transparent) 40%, transparent 75%),
+    linear-gradient(to bottom, color-mix(in srgb, var(--glow) 75%, transparent), color-mix(in srgb, var(--glow) 30%, transparent) 55%, transparent 90%);
   opacity: 0;
   transition:
     --glow 900ms var(--ease-std),

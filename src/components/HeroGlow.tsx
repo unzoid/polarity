@@ -5,13 +5,21 @@ import { loadReadable, pixelsOf } from "./TitleLogo";
 /** Each picture's colour, measured once: null when it can't be read. */
 const colours = new Map<string, Promise<Rgb | null>>();
 
+/** Pixels across the part measured: plenty for a colour. */
+const SAMPLE_W = 24;
+/**
+ * The part of a backdrop a phone's featured card shows (cards.css): the middle third or so across, all the way
+ * down. The colour comes from what's seen, not from the sides the card crops away.
+ */
+const SHOWN = { x0: 0.32, y0: 0, x1: 0.68, y1: 1, scrim: 0 };
+
 function measure(src: string): Promise<Rgb | null> {
   let c = colours.get(src);
   if (!c) {
     c = loadReadable(src)
       .then((img) => {
-        const px = img && pixelsOf(img, 48);
-        return px ? glowColor(px) : null;
+        const px = img && pixelsOf(img, SAMPLE_W, SHOWN);
+        return px ? glowColor(px, SAMPLE_W) : null;
       })
       .catch(() => null);
     colours.set(src, c);

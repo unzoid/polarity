@@ -1,6 +1,7 @@
-// Hooks and helpers for the DOM: the art gate (logos wait for their art), sheet detents, the Escape/Back stack (dismiss, layer, the system Back), lazy screens, form factor, the wait for a title's logo before its name, the miss margin around panels, the on-screen keyboard, motion, viewport, fold snapping, score tones, title logo contrast, the hero glow's colour.
+// Hooks and helpers for the DOM: the art gate (logos wait for their art), sheet detents, the Escape/Back stack (dismiss, layer, the system Back), lazy screens, form factor, the wait for a title's logo before its name, the miss margin around panels, the on-screen keyboard, motion, viewport, fold snapping, score tones, title logo contrast, the hero glow's colour, where a picture's subject is.
 // Its public surface: code outside src/lib imports this folder, code inside src/lib imports the file.
 
+export * from "./artFocus";
 export * from "./artGate";
 export * from "./cardIntent";
 export * from "./detents";

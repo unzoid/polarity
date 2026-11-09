@@ -29,6 +29,8 @@ import {
   useFormFactor,
   usePageFocus,
   usePageMotion,
+  cardMotionVars,
+  watchCardTaps,
   useSystemBack,
   watchInputModality,
 } from "./lib/ui";
@@ -316,6 +318,7 @@ function DesktopApp() {
   const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
+  useEffect(watchCardTaps, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -387,7 +390,13 @@ function DesktopApp() {
             data-motion={motion?.enter === entry.key ? "enter" : motion?.leave === entry.key ? "leave" : undefined}
             // A page on its way out is still drawn for a moment, but no longer read out.
             aria-hidden={(motion?.leave === entry.key && entry !== topPage) || undefined}
-            style={motion ? ({ "--page-dir": motion.dir } as CSSProperties) : undefined}
+            // A title's page out of its card, and back into it (shell.css).
+            data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
+            style={
+              motion
+                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
+                : undefined
+            }
             data-under-player={(entry === topPage && !!player) || undefined}
             data-page-key={entry.key}
             inert={entry !== topPage || !!playing}

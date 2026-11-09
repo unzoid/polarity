@@ -37,6 +37,7 @@ import {
 import { useMeta, useProgressOf } from "../lib/net";
 import { usePrefs } from "../lib/settings";
 import { useFoldSnap, useFormFactor } from "../lib/ui";
+import { DetailArt } from "../components/DetailArt";
 
 /**
  * An anime's page, built from AniList with ani.zip filling in episode titles,
@@ -151,12 +152,12 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };
   const backdrop = (
-    <div className="detail-bg" aria-hidden>
+    <DetailArt src={art.background}>
       <Img src={art.background} alt="" loading="eager" className="detail-bg-sharp" />
       {trailer.node}
       <Img src={art.background} alt="" loading="eager" className="detail-bg-blur" />
       <div className="detail-bg-scrim" />
-    </div>
+    </DetailArt>
   );
 
   return (

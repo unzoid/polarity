@@ -358,7 +358,10 @@ function HeroContent({ item }: { item: MetaPreview }) {
 const MIN_FRESH = 6;
 
 function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
-  const { title, shape } = shelf;
+  const { title } = shelf;
+  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
+  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
+  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);

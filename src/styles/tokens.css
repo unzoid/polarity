@@ -166,10 +166,11 @@
   --tabbar-h: calc(56px + var(--safe-bottom));
   /* In landscape the content stays clear of the camera cutout, on either side. */
   --gutter: max(1rem, var(--safe-left), var(--safe-right));
-  /* About three posters across a 390px screen, the rest peeking in. */
-  --poster-w: calc(112px * var(--card-scale));
-  --landscape-w: calc(232px * var(--card-scale));
-  --episode-w: calc(260px * var(--card-scale));
+  /* A phone's cards start from the small size (Settings → Appearance → Card size still scales them): three and
+     a half posters across a 390px screen, as phone apps show them. */
+  --poster-w: calc(96px * var(--card-scale));
+  --landscape-w: calc(196px * var(--card-scale));
+  --episode-w: calc(232px * var(--card-scale));
 }
 :root[data-touch="true"] {
   --hit: 44px;

@@ -112,6 +112,68 @@
     transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.5));
   }
 }
+/* A title opened from a card (pageMotion.ts `card`): its page grows out of the card, from the card's own place
+   and shape to the whole screen, while the page behind sinks back, blurred and dimmed. Back plays it the other
+   way: the page goes back into its card and the one behind comes into focus. The page is drawn at the card's
+   width (--card-s) with its corner at the card's (--card-x/y), cut to the card's height (--card-cut) and
+   corners (--card-r); it has faded in before it has grown much, so the card seems to lift and open. */
+:root[data-form="phone"] .page[data-card] {
+  --card-ease: cubic-bezier(0.3, 0.9, 0.25, 1);
+}
+:root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
+:root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
+  background: var(--bg);
+  transform-origin: 0 0;
+  will-change: transform, clip-path;
+}
+:root[data-form="phone"] .page[data-card="open"][data-motion="enter"] {
+  animation: card-open 460ms var(--card-ease) both;
+}
+:root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
+  animation: card-close 380ms var(--card-ease) forwards;
+}
+:root[data-form="phone"] .page[data-card="open"][data-motion="leave"] {
+  animation: card-behind 460ms var(--ease-out) forwards;
+}
+:root[data-form="phone"] .page[data-card="close"][data-motion="enter"] {
+  animation: card-behind 380ms var(--ease-out) reverse both;
+}
+@keyframes card-open {
+  from {
+    opacity: 0;
+    transform: translate(var(--card-x), var(--card-y)) scale(var(--card-s));
+    clip-path: inset(0 0 var(--card-cut) 0 round var(--card-r));
+  }
+  22% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0 round 0px);
+  }
+}
+@keyframes card-close {
+  from {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0 round 0px);
+  }
+  75% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--card-x), var(--card-y)) scale(var(--card-s));
+    clip-path: inset(0 0 var(--card-cut) 0 round var(--card-r));
+  }
+}
+@keyframes card-behind {
+  to {
+    filter: blur(14px) brightness(0.45);
+    transform: scale(0.96);
+  }
+}
 /* Less motion: the pair crossfades in place. */
 @media (prefers-reduced-motion: reduce) {
   :root[data-form="phone"] .page {
@@ -648,16 +710,28 @@ html[data-os="mac"] {
 :root[data-form="phone"] .empty-state.anime-unreachable {
   padding-top: calc(var(--nav-h) + 3rem);
 }
+/* Discover's controls on a phone: the pickers on one row, the catalogs (six of them, wider than the screen) on
+   the next. That row scrolls from one screen edge to the other, past the page's margins, so the control runs
+   off the edge of the glass as a row of chips does instead of being cut short of it. */
 :root[data-form="phone"] .discover-controls {
-  max-width: 100%;
-  padding: 2px 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 :root[data-form="phone"] .discover-controls > * {
   flex: none;
 }
-:root[data-form="phone"] .discover-controls::-webkit-scrollbar {
+:root[data-form="phone"] .discover-catalogs {
+  display: flex;
+  order: 1;
+  flex: none;
+  width: calc(100% + var(--content-start) + var(--gutter));
+  margin: 0 calc(-1 * var(--gutter)) 0 calc(-1 * var(--content-start));
+  padding: 2px var(--gutter) 2px var(--content-start);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+:root[data-form="phone"] .discover-catalogs::-webkit-scrollbar {
   display: none;
 }
 /* Touch: the bar's icons grow to a finger's size. */
@@ -884,6 +958,9 @@ html[data-os="mac"] {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+.discover-catalogs {
+  display: contents;
 }
 /* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
 .discover-controls .select-trigger,

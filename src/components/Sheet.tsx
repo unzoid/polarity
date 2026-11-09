@@ -1,5 +1,5 @@
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, type PanInfo } from "motion/react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { os } from "../lib/platform";
 import { type Detent, ease, mediumOffset, missMargin, prefersReducedMotion, project, restingDetent, springs, useFormFactor, useLayer } from "../lib/ui";
 
@@ -18,6 +18,12 @@ import { type Detent, ease, mediumOffset, missMargin, prefersReducedMotion, proj
  *   the screen, its header pulls it up to nearly all of it or down to close, scrolling the list expands it, and
  *   the grabber toggles between the two.
  */
+/**
+ * The place beside a sheet's title, for what's inside the sheet to put a control in (a portal): on a phone the
+ * source list's Filters button sits there, next to "Sources", rather than on a row of its own.
+ */
+export const SheetHeaderSlot = createContext<HTMLElement | null>(null);
+
 export function Sheet({
   open,
   onClose,
@@ -46,6 +52,7 @@ export function Sheet({
   const y = useMotionValue(detents ? window.innerHeight : 0);
   const [detent, setDetent] = useState<Detent>("medium");
   const touchY = useRef(0);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   /** The sheet's large height and its medium offset, measured when it opens and when the window resizes. */
   const [stops, setStops] = useState({ height: window.innerHeight, medium: 0, measured: false });
   // With less motion Motion drops the slide; a fade keeps it from popping in and out.
@@ -148,6 +155,8 @@ export function Sheet({
                 <h2 className="t-title2">{title}</h2>
                 {subtitle && <p className="t-caption muted">{subtitle}</p>}
               </div>
+              {/* A control here is pressed, not a handle to pull the sheet by. */}
+              <div className="sheet-header-slot" ref={setSlot} onPointerDown={(e) => e.stopPropagation()} />
             </header>
             <div
               className="sheet-body"
@@ -156,7 +165,7 @@ export function Sheet({
               onTouchStart={medium ? (e) => (touchY.current = e.touches[0].clientY) : undefined}
               onTouchMove={medium ? (e) => touchY.current - e.touches[0].clientY > 10 && rest("large") : undefined}
             >
-              {children}
+              <SheetHeaderSlot.Provider value={slot}>{children}</SheetHeaderSlot.Provider>
             </div>
           </motion.aside>
         </>

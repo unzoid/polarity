@@ -26,6 +26,7 @@ import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
 import { BatchDownload } from "../components/BatchDownload";
 import { Skeleton } from "../components/ui/Skeleton";
+import { DetailArt } from "../components/DetailArt";
 import { errorMessage } from "../lib/errors";
 
 /**
@@ -62,13 +63,13 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   if (!shown) return <Skeleton className="detail-loading" />;
 
   const art = (
-    <div className="detail-bg" aria-hidden>
+    <DetailArt src={shown.background}>
       <Img src={shown.background} alt="" loading="eager" className="detail-bg-sharp" />
       {trailer.node}
       {/* No backdrop (or it fails): the poster, blurred, rather than plain black. */}
       <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
       <div className="detail-bg-scrim" />
-    </div>
+    </DetailArt>
   );
 
   return (
