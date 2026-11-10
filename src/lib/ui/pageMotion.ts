@@ -36,6 +36,11 @@ let tapped: { rect: CardRect; at: number } | undefined;
 /** The card each open title page came from, by the page's key, for Back to return it there. */
 const origins = new Map<number, CardRect>();
 
+/** The card the title page `key` grew out of, while it's open, for iOS's swipe to take it back there (pageDrag.ts). */
+export function cardOrigin(key: number): CardRect | undefined {
+  return prefersReducedMotion() ? undefined : origins.get(key);
+}
+
 /** Notes the card a click lands on (its art, not the caption under it), for the page it opens to grow out of. */
 export function watchCardTaps() {
   const onClick = (e: MouseEvent) => {

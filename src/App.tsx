@@ -30,6 +30,7 @@ import {
   usePageFocus,
   usePageMotion,
   cardMotionVars,
+  cardOrigin,
   watchCardTaps,
   useSystemBack,
   watchInputModality,
@@ -349,7 +350,8 @@ function DesktopApp() {
           const at = (e: Entry | undefined) => e && main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${e.key}"]`);
           const top = at(pages[pages.length - 1]);
           const under = pages.length > 1 && at(pages[pages.length - 2]);
-          return top && under ? { top, under } : null;
+          // A title page that grew out of a card goes back into it with the finger (pageDrag.ts).
+          return top && under ? { top, under, card: cardOrigin(pages[pages.length - 1].key) } : null;
         },
         () => now.current.back(),
       ),

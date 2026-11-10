@@ -54,6 +54,14 @@
   background: var(--bg);
   box-shadow: -10px 0 28px rgb(0 0 0 / 0.45);
 }
+/* A title page from a card going back with the finger (pageDrag.ts): it shrinks with its corners rounding, over the
+   page under it, which stays in place and brightens. */
+.page[data-drag="card"] {
+  z-index: 2;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: 0 18px 60px rgb(0 0 0 / 0.55);
+}
 .page[data-drag="under"] {
   visibility: visible;
   content-visibility: visible;
@@ -164,8 +172,15 @@
     transform: none;
   }
 }
+/* Back: the last stretch fades the page (the card's picture by then) out over the card itself, so the card comes
+   back as it is, its corners, rim and rating with it, instead of the copy being swapped for it at the end. */
 @keyframes card-page-back {
+  0%,
+  78% {
+    opacity: 1;
+  }
   to {
+    opacity: 0;
     transform: var(--card-at);
   }
 }

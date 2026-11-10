@@ -150,16 +150,19 @@ export function FriendsBody({ inDialog = true }: { inDialog?: boolean }) {
         </Section>
       )}
       <JoiningNote />
-      <button
-        type="button"
-        className="friends-settings-link"
-        onClick={() => {
-          setFriendsOpen(false);
-          openSettings("account");
-        }}
-      >
-        What friends see: Settings → Account
-      </button>
+      {/* The dialog's pointer to what friends see; a phone's sheet leaves it out (Account is a row of its list). */}
+      {inDialog && (
+        <button
+          type="button"
+          className="friends-settings-link"
+          onClick={() => {
+            setFriendsOpen(false);
+            openSettings("account");
+          }}
+        >
+          What friends see: Settings → Account
+        </button>
+      )}
     </div>
   );
 }
