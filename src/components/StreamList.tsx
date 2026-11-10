@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AlertCircle, Check, Info, Instant } from "./icons";
+import { AlertCircle, Check, Filters, Info, Instant, Puzzle } from "./icons";
 import { useRouter } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, useStreams } from "../lib/net";
@@ -73,10 +73,12 @@ export function StreamList({
         </p>
         {hidden ? (
           <Button variant="glass" onClick={() => showSettings("sources")}>
+            <Filters size={18} />
             Source Filters
           </Button>
         ) : (
           <Button variant="glass" onClick={() => showSettings("addons")}>
+            <Puzzle size={18} />
             Manage Add-ons
           </Button>
         )}

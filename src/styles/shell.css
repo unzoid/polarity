@@ -804,6 +804,17 @@ html[data-os="mac"] {
 :root[data-native-tabs][data-form="phone"] {
   --tabbar-h: var(--safe-bottom);
 }
+/* A phone's tab bar floats over the page: the page darkens towards the bottom edge under it, as Netflix's does,
+   so the bar reads over bright posters instead of sitting on them. Over every page; the player is above it. */
+:root[data-form="phone"] .main::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 5;
+  height: calc(var(--tabbar-h, var(--safe-bottom)) + 3.5rem);
+  background: linear-gradient(to top, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.55) 45%, transparent);
+  pointer-events: none;
+}
 :root[data-form="phone"] .brand-logo {
   height: 40px;
 }

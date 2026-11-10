@@ -1281,6 +1281,10 @@
 :root[data-form="phone"] .seasons-bar {
   padding-bottom: 0.5rem;
 }
+/* One line: the season, Download Season's glyph beside it (BatchDownload.tsx), the row/list switch at the end. */
+:root[data-form="phone"] .seasons-bar > .seasons-picker {
+  flex: 0 1 auto;
+}
 :root[data-form="phone"] .anime-episodes-tools {
   flex: 1 1 100%;
   flex-wrap: wrap;
