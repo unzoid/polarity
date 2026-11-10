@@ -4,7 +4,8 @@ import { useRouter } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, useStreams } from "../lib/net";
 import { runtimeSeconds } from "../lib/format";
-import { airedAt, READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
+import { airedAt, NO_TORRENT_ENGINE, READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
+import { torrentsPlayHere } from "../lib/platform";
 import type { ContentType, RankedStream, Readiness } from "../lib/types";
 import { SourceFilterBar } from "./SourceFilters";
 import { Button } from "./ui/Button";
@@ -191,8 +192,10 @@ function StreamRow({
 }) {
   const row = sourceRow(s);
   const tags = tagsOf(s).filter((t) => ROW_TAGS.has(t));
-  const isReady = readiness?.state === "ready";
-  const note = readiness && readinessNote(readiness);
+  // No torrent engine here (iOS, #458): the row says so, whatever a check found.
+  const unplayable = !!s.stream.infoHash && !torrentsPlayHere;
+  const isReady = !unplayable && readiness?.state === "ready";
+  const note = unplayable ? { short: "Can't play on this device", long: NO_TORRENT_ENGINE } : readiness && readinessNote(readiness);
   // The release name is for the curious: on hover, not in the row.
   const release = s.stream.title ?? s.stream.description;
   const ref = useRef<HTMLButtonElement>(null);
@@ -203,7 +206,7 @@ function StreamRow({
       className="stream-row pressable"
       data-featured={featured}
       data-current={current}
-      data-ready={readiness?.state === "ready" ? "yes" : readiness?.state === "notReady" ? "no" : undefined}
+      data-ready={isReady ? "yes" : unplayable || readiness?.state === "notReady" ? "no" : undefined}
       onClick={() => onPick(s)}
       {...press}
       title={[note?.long, release].filter(Boolean).join("\n") || undefined}

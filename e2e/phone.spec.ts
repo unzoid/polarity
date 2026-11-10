@@ -447,8 +447,38 @@ test.describe("signed in, on a fresh profile", () => {
   });
 });
 
+/** Movies → The Glass Orchard → Play, every source a made-up torrent. `nativeTabs`: iOS's own tab bar takes the tab. */
+async function playTorrentFilm(app: Page, nativeTabs = false) {
+  await app.addInitScript(() => localStorage.setItem("polar.fakeTorrents", "1"));
+  await app.reload();
+  if (nativeTabs) await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+  else await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+}
+
+test("the torrent notice fits a phone: the upload limit and both buttons inside the screen (#458)", async ({ app }) => {
+  await playTorrentFilm(app);
+  const notice = app.getByRole("dialog", { name: "Torrent playback" });
+  await expect(notice).toBeVisible();
+  const width = app.viewportSize()!.width;
+  for (const part of [notice.locator(".torrent-notice-card"), notice.getByRole("textbox", { name: "Upload limit" }), notice.getByRole("button", { name: "Cancel" }), notice.getByRole("button", { name: "Play", exact: true })]) {
+    const box = await part.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  }
+  expect(await fitsWidth(app)).toBe(true);
+});
+
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("a torrent source can't play here: no notice, the player says so, nothing is opened (#458)", async ({ app }) => {
+    await playTorrentFilm(app, true);
+    await expect(app.getByText("Torrent sources can't play on this device.").first()).toBeVisible({ timeout: 15_000 });
+    await expect(app.getByRole("dialog", { name: "Torrent playback" })).toHaveCount(0);
+    expect(await app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0)).toBe(0);
+  });
 
   test("the back swipe on a settings page goes to the list; on the list it leaves Settings for the profiles (#455)", async ({ app }) => {
     const swipe = () =>
