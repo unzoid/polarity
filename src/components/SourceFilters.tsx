@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { SORTS, type SourceFilters } from "../lib/playback";
 import type { SourceSort } from "../lib/types";
-import { Close, Filters } from "./icons";
+import { Close, Filters, Search } from "./icons";
+import { IconButton } from "./ui/Button";
 import { Segmented } from "./Segmented";
 import { Dropdown } from "./Dropdown";
 import { Chip } from "./ui/Chip";
@@ -316,6 +317,7 @@ const SEARCH_FROM = 10;
 function ChipRow({ label, chips, collapsible = false }: Section & { collapsible?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
   const [folds, setFolds] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const q = query.trim().toLowerCase();
@@ -346,16 +348,24 @@ function ChipRow({ label, chips, collapsible = false }: Section & { collapsible?
     <div className="srcf-chiprow" role="group" aria-label={label}>
       <div className="srcf-chiprow-head">
         <span className="srcf-chiprow-label">{label}</span>
-        {searchable && (
-          <SearchField
-            look="mini"
-            className="srcf-chiprow-search"
-            value={query}
-            onChange={setQuery}
-            label={`Search ${label.toLowerCase()}`}
-            placeholder="Search"
-          />
-        )}
+        {/* A search glyph that opens into the field when it's wanted, and folds back once left empty. */}
+        {searchable &&
+          (searching || q ? (
+            <SearchField
+              look="mini"
+              className="srcf-chiprow-search"
+              value={query}
+              onChange={setQuery}
+              onBlur={() => !query.trim() && setSearching(false)}
+              label={`Search ${label.toLowerCase()}`}
+              placeholder="Search"
+              autoFocus
+            />
+          ) : (
+            <IconButton className="srcf-chiprow-search-open" label={`Search ${label.toLowerCase()}`} onClick={() => setSearching(true)}>
+              <Search size={17} />
+            </IconButton>
+          ))}
       </div>
       <div className="srcf-chips" ref={box} data-folded={folded || undefined}>
         {shown.map((c) => (

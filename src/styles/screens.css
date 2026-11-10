@@ -1863,6 +1863,10 @@
     color: var(--text);
   }
 }
+/* A phone's top bar already has Back (NavBar); a second one over the title only repeats it. */
+:root[data-form="phone"] .playlist-back {
+  display: none;
+}
 .playlist-view-title {
   display: flex;
   align-items: center;

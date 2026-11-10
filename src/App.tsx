@@ -392,7 +392,7 @@ function DesktopApp() {
             aria-hidden={(motion?.leave === entry.key && entry !== topPage) || undefined}
             // A title's page out of its card, and back into it (shell.css).
             data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
-            // The pair moves once the new page is drawn with its pictures in (pageMotion.ts `go`).
+            // The pair moves once the new page is laid out (pageMotion.ts `go`).
             data-go={motion?.go || undefined}
             style={
               motion
@@ -441,6 +441,11 @@ function LazySettingsOverlay() {
   const { open } = useSettingsOverlay();
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
+  // Fetched once the app has settled, so the first Settings opens as quickly as the rest.
+  useEffect(() => {
+    const later = window.setTimeout(() => void import("./components/SettingsOverlay").catch(() => {}), 2000);
+    return () => window.clearTimeout(later);
+  }, []);
   if (!opened) return null;
   return (
     <Suspense fallback={null}>

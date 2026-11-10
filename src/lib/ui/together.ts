@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** How far past the window's top and bottom a picture still counts as on screen: the browser loads those too. */
 const NEAR = 200;
@@ -58,6 +58,45 @@ export function placingSettled(root: Element, cap: number): Promise<void> {
     watch.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-placing"] });
     const timer = window.setTimeout(done, cap);
   });
+}
+
+/** How long a page waits for its pictures before it shows anyway, once its data is in. */
+const PAGE_CAP = 1600;
+
+/**
+ * A whole page that comes in at once (a title's page on a phone): `ready` stays false, and the page shows its
+ * placeholders, until its data is in (`dataIn`) and every picture on screen in it has loaded and been placed on
+ * its subject (DetailArt.tsx), or PAGE_CAP after the data (CAP_EMPTY without it) at the latest. Then it's true
+ * for good, and everything shows together. A page whose data and pictures are already there is ready from its
+ * first frame (`state` "at-once", set before anything is drawn), with no placeholder and no fade.
+ */
+export function usePageTogether<T extends HTMLElement = HTMLDivElement>(dataIn: boolean) {
+  const [state, setState] = useState<"pending" | "ready" | "at-once">("pending");
+  const el = useRef<T | null>(null);
+  const ref = useCallback((node: T | null) => {
+    el.current = node;
+  }, []);
+
+  const ready = state !== "pending";
+  useLayoutEffect(() => {
+    const node = el.current;
+    if (ready || !node) return;
+    if (dataIn && !pendingImages(node).length && !node.querySelector("[data-placing]")) return setState("at-once");
+    let live = true;
+    const finish = () => live && setState("ready");
+    const cap = window.setTimeout(finish, dataIn ? PAGE_CAP : CAP_EMPTY);
+    // A frame for what the data brought (the logo, the episodes' stills) to be in the page before it's judged.
+    const frame = dataIn
+      ? requestAnimationFrame(() => void Promise.all([imagesSettled(node, PAGE_CAP), placingSettled(node, PAGE_CAP)]).then(finish))
+      : 0;
+    return () => {
+      live = false;
+      window.clearTimeout(cap);
+      cancelAnimationFrame(frame);
+    };
+  }, [dataIn, ready]);
+
+  return { ref, ready, state };
 }
 
 /** Once pictures are there, how long the group waits for the slowest of them. */

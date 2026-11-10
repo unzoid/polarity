@@ -219,8 +219,12 @@
 .skip-transport > * {
   grid-area: 1 / 1;
 }
+.skip-transport {
+  /* How far past the circle's edge the count comes to rest. */
+  --skip-out: 12px;
+}
 .skip-arrow {
-  transition: transform var(--dur-slow) var(--ease-out);
+  transition: transform 380ms var(--ease-out);
 }
 .skip-num,
 .skip-total {
@@ -229,8 +233,8 @@
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
   pointer-events: none;
   transition:
-    transform var(--dur-base) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-out);
+    transform 340ms var(--ease-out),
+    opacity 220ms var(--ease-out);
 }
 .skip-num {
   /* The 8-unit figure of the old 24-unit glyph, at 56px. In px like the circle: in rem it outgrew
@@ -257,7 +261,12 @@
 }
 .skip-transport[data-out="true"] .skip-total {
   opacity: 1;
-  transform: translateX(0);
+}
+.skip-transport[data-dir="forward"][data-out="true"] .skip-total {
+  transform: translateX(var(--skip-out));
+}
+.skip-transport[data-dir="back"][data-out="true"] .skip-total {
+  transform: translateX(calc(-1 * var(--skip-out)));
 }
 .skip-transport[data-out="true"] .skip-num {
   opacity: 0;
@@ -506,8 +515,11 @@
 :root[data-form="phone"] .skip-transport[data-dir="back"] .skip-total {
   transform: translateX(32px);
 }
-:root[data-form="phone"] .skip-transport[data-out="true"] .skip-total {
-  transform: translateX(0);
+:root[data-form="phone"] .skip-transport[data-dir="forward"][data-out="true"] .skip-total {
+  transform: translateX(var(--skip-out));
+}
+:root[data-form="phone"] .skip-transport[data-dir="back"][data-out="true"] .skip-total {
+  transform: translateX(calc(-1 * var(--skip-out)));
 }
 :root[data-form="phone"] .player-remaining {
   font-size: var(--fs-md);
@@ -2345,15 +2357,19 @@ img.load-mark-base[data-logo-look^="halo"] {
   min-height: 44px;
   margin-bottom: 0.625rem;
 }
-/* The season stays at the top with Close; the episodes sit in the middle of the screen under it, not
-   hard up against the season with the bottom half of the screen empty. The list's bottom padding is the
-   head's height, so the rail centres on the screen rather than on what's left under the head. */
+/* The season stays at the top with Close; the episodes sit in the middle of the room under it, not hard up
+   against the season with the bottom of the screen empty. The column takes the whole height (not the 86vh a
+   big screen's has), and the rail is centred in what the head leaves by auto margins, which, unlike centring,
+   never push a rail taller than that up under the head. */
 :root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column[data-size="full"] {
   height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+  max-height: none;
 }
-:root[data-form="phone"]:not([data-compact="true"]) .options-column[data-size="full"] .options-list {
-  justify-content: center;
-  padding-bottom: calc(44px + 0.625rem);
+:root[data-form="phone"]:not([data-compact="true"]) .options-column[data-size="full"] .options-list > :first-child {
+  margin-top: auto;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-column[data-size="full"] .options-list > :last-child {
+  margin-bottom: auto;
 }
 :root[data-form="phone"] .episode-rail-head .select-trigger[data-size="large"] {
   font-size: var(--fs-xl);

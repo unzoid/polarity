@@ -36,7 +36,8 @@ import {
 } from "../lib/anime";
 import { useMeta, useProgressOf } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { useFoldSnap, useFormFactor } from "../lib/ui";
+import { useFoldSnap, useFormFactor, usePageTogether } from "../lib/ui";
+import { DetailSkeleton } from "../components/title/DetailSkeleton";
 import { DetailArt } from "../components/DetailArt";
 
 /**
@@ -146,8 +147,18 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
     !!franchiseImdb?.startsWith("tt"),
   );
 
+  // On a phone the page comes in whole, as a show's does (Detail.tsx).
+  const together = usePageTogether(!!anime || isError);
+
   if (isError && !shown) return <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>;
-  if (!shown) return <Skeleton className="detail-loading" />;
+  if (!shown)
+    return phone ? (
+      <div className="detail anime-detail" ref={together.ref} data-ready={together.state}>
+        <DetailSkeleton />
+      </div>
+    ) : (
+      <Skeleton className="detail-loading" />
+    );
 
   const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };
@@ -164,10 +175,15 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
     <div
       className="detail anime-detail"
       data-anime={id}
-      ref={root}
+      ref={(node) => {
+        root.current = node;
+        together.ref(node);
+      }}
       data-trailer={trailer.visible}
+      data-ready={phone ? together.state : undefined}
       style={{ "--cover": shown.coverImage.color ?? undefined } as React.CSSProperties}
     >
+      {phone && <DetailSkeleton />}
       {!phone && backdrop}
       <div
         className="scroll detail-scroll"

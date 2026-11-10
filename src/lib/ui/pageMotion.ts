@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { Entry, TabRoute } from "../router";
 import { tabId } from "../navTabs";
 import { prefersReducedMotion } from "./reducedMotion";
-import { imagesSettled, placingSettled } from "./together";
 
 /** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
 const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
@@ -11,15 +10,6 @@ const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", 
 const SETTLE = 300;
 /** The same for a title's page growing out of its card (shell.css: 620ms out, 540ms back), which takes longer. */
 const SETTLE_CARD = 660;
-
-/**
- * How long a page coming in may wait for its pictures before it moves anyway. The change plays once the new page
- * is drawn and its pictures are in, so it's seen whole and every frame of it is seen; started with the tap it
- * played while the page was still being built, and was over, or stuttering, by the time anything showed.
- */
-const READY_CAP = 320;
-/** The same for a title page's art being put on its subject (DetailArt.tsx), which asks the system on iOS. */
-const PLACING_CAP = 600;
 
 /** A card's place on the screen, in CSS pixels, and the picture on it. */
 export type CardRect = { x: number; y: number; w: number; h: number; src?: string };
@@ -36,7 +26,7 @@ export type PageMotion = {
   dir: -1 | 0 | 1;
   leaving?: Entry;
   card?: CardRect;
-  /** The new page is drawn and its pictures are in: the pair moves. Until then the old page stays as it is. */
+  /** The new page is laid out: the pair moves. Until then (a frame) the old page stays as it is. */
   go?: boolean;
 };
 
@@ -105,7 +95,8 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
     setSeen(now); // during render: this render already draws the change with its motion
   }
 
-  // The pair waits for the new page: two frames for it to be laid out and drawn (unseen), then its pictures.
+  // The pair moves on the next frame, once the new page is laid out: the change answers the tap at once. What the
+  // new page is still loading comes in together afterwards, behind its placeholders (together.ts, Detail.tsx).
   const [gone, setGone] = useState<Seen>();
   useEffect(() => {
     const motion = seen.motion;
@@ -117,13 +108,7 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
       setGone(seen);
       timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), motion.card ? SETTLE_CARD : SETTLE);
     };
-    const frames = requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const page = document.querySelector(`.page[data-page-key="${motion.enter}"]`);
-        if (page) void Promise.all([imagesSettled(page, READY_CAP), placingSettled(page, PLACING_CAP)]).then(start);
-        else start();
-      }),
-    );
+    const frames = requestAnimationFrame(start);
     return () => {
       live = false;
       cancelAnimationFrame(frames);

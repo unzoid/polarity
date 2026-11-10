@@ -91,8 +91,8 @@
 :root[data-form="phone"] .page-pushed {
   animation: none;
 }
-/* Neither moves until the new page is drawn with its pictures in (`data-go`, pageMotion.ts): it waits unseen,
-   the old one stays as it was, and then the whole change is seen, every frame of it. */
+/* Neither moves until the new page is laid out (`data-go`, pageMotion.ts, the next frame): it waits unseen for
+   that frame, the old one stays as it was, and then the whole change is seen, every frame of it. */
 :root[data-form="phone"] .page[data-motion="enter"]:not([data-go]) {
   opacity: 0;
   pointer-events: none;
@@ -522,6 +522,14 @@ html[data-os="mac"] {
   margin-left: calc(0px - var(--back-box) - 0.5rem);
   opacity: 0;
   pointer-events: none;
+}
+/* On a phone, Back comes and goes on the page change's own clock (the card's, the longer of the two), so it and
+   the wordmark making room for it move with the page rather than jumping ahead of it. */
+:root[data-form="phone"] .navbar-back {
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    opacity 400ms var(--ease-std),
+    margin-left 620ms cubic-bezier(0.3, 0.8, 0.2, 1);
 }
 /* On iOS the system draws Back (NativeBack.tsx), or a button (NativeButtons.tsx), over this one: it keeps its
    place, unseen. */

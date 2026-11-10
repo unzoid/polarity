@@ -104,6 +104,66 @@ static UIMenu *history_menu(NSArray *history) {
     return items.count ? [UIMenu menuWithChildren:items] : nil;
 }
 
+// The button comes and goes with the page change, on its clock (shell.css: the card's 620ms, its curve): it slides
+// in from the left as the wordmark makes room for it, and back out the same way, rather than appearing in place.
+static const NSTimeInterval MOTION = 0.62;
+static BOOL wanted;
+
+static void move(NSTimeInterval duration, void (^changes)(void), void (^done)(void)) {
+    UICubicTimingParameters *curve = [[UICubicTimingParameters alloc] initWithControlPoint1:CGPointMake(0.3, 0.8)
+                                                                              controlPoint2:CGPointMake(0.2, 1)];
+    UIViewPropertyAnimator *animator = [[UIViewPropertyAnimator alloc] initWithDuration:duration timingParameters:curve];
+    [animator addAnimations:changes];
+    if (done) [animator addCompletion:^(UIViewAnimatingPosition at) { done(); }];
+    [animator startAnimation];
+}
+
+/// Off to the left by its own width, where the web app's Back folds away to (shell.css `.navbar-back`).
+static CGAffineTransform away(void) {
+    return UIAccessibilityIsReduceMotionEnabled() ? CGAffineTransformIdentity
+                                                  : CGAffineTransformMakeTranslation(-(button.bounds.size.width + 8), 0);
+}
+
+static void show_button(CGRect target) {
+    CGPoint center = CGPointMake(CGRectGetMidX(target), CGRectGetMidY(target));
+    CGRect bounds = CGRectMake(0, 0, target.size.width, target.size.height);
+    BOOL appearing = !wanted || button.hidden;
+    wanted = YES;
+    if (appearing) {
+        // Called back while still sliding out, it turns round from where it is (UIKit's animations add up).
+        button.bounds = bounds;
+        button.center = center;
+        if (button.hidden) {
+            button.alpha = 0;
+            button.transform = away();
+        }
+        button.hidden = NO;
+        move(MOTION, ^{
+            button.alpha = 1;
+            button.transform = CGAffineTransformIdentity;
+        }, nil);
+    } else if (!CGPointEqualToPoint(button.center, center) || !CGRectEqualToRect(button.bounds, bounds)) {
+        move(MOTION, ^{
+            button.bounds = bounds;
+            button.center = center;
+        }, nil);
+    }
+}
+
+static void hide_button(void) {
+    if (!wanted) return;
+    wanted = NO;
+    move(MOTION * 0.6, ^{
+        button.alpha = 0;
+        button.transform = away();
+    }, ^{
+        // Shown again meanwhile: it stays.
+        if (wanted) return;
+        button.hidden = YES;
+        button.transform = CGAffineTransformIdentity;
+    });
+}
+
 static void apply(NSDictionary *state) {
     UIWindow *window = polar_app_window();
     UIView *root = window.rootViewController.view;
@@ -119,16 +179,16 @@ static void apply(NSDictionary *state) {
     BOOL shown = [state[@"shown"] isKindOfClass:NSNumber.class] && [state[@"shown"] boolValue];
     NSDictionary *rect = [state[@"rect"] isKindOfClass:NSDictionary.class] ? state[@"rect"] : nil;
     if (!shown || !rect) {
-        button.hidden = YES;
+        hide_button();
         return;
     }
-    // CSS pixels are the web view's points.
+    // CSS pixels are the web view's points. The rect is where the web app's Back comes to rest (NativeBack.tsx).
     CGRect frame = CGRectMake(number(rect[@"x"]), number(rect[@"y"]), number(rect[@"width"]), number(rect[@"height"]));
     UIView *web = polar_web_view();
-    button.frame = web ? [web convertRect:frame toView:root] : frame;
+    CGRect target = web ? [web convertRect:frame toView:root] : frame;
     NSArray *history = [state[@"history"] isKindOfClass:NSArray.class] ? state[@"history"] : @[];
     button.menu = history_menu(history);
-    button.hidden = NO;
+    show_button(target);
 }
 
 /// Show, move or hide the button as `json` (native_back.rs's `Back`) says. Any thread.

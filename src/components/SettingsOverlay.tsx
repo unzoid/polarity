@@ -78,6 +78,8 @@ export function SettingsOverlay() {
   // sections first, as a phone's own Settings app does. Back (or Escape) goes from a page to the list.
   const phone = useFormFactor().form === "phone";
   const [view, setView] = useState<"list" | "page">("list");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
   const backButton = useRef<HTMLButtonElement>(null);
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
@@ -170,7 +172,9 @@ export function SettingsOverlay() {
 
   return (
     <Dialog.Root
-      open={open}
+      // Drawn closed first: a dialog that's open from its first render (the first time Settings is asked for,
+      // before App.tsx has it loaded) shows without its opening motion.
+      open={open && mounted}
       onOpenChange={(o) => {
         if (!o) closeSettings();
       }}
