@@ -49,6 +49,8 @@ export const WEIGHTS = {
   audioLanguage: 8,
   /** Multi-audio: usually has it, but doesn't say. */
   audioMulti: 5,
+  /** Says which audio it has, and that's only other languages (a dub): it would play in a language you don't want. */
+  audioOtherLanguage: -15,
   /** Each preferred tag (Remux, Atmos, 10-bit…) it has. */
   preferredTag: 3,
   /** The first preferred release group, then each next one less, never below the last. */
@@ -92,6 +94,7 @@ export const FACTOR_LABELS: Record<Factor, string> = {
   softwareDecode: "Software decoding",
   audioLanguage: "Audio language",
   audioMulti: "Multi-audio",
+  audioOtherLanguage: "Audio in another language",
   preferredTag: "Preferred tags",
   preferredGroup: "Preferred release group",
   failRate: "Failed here before",
@@ -141,6 +144,11 @@ export interface MatchContext {
   runtimeSec: number | null;
   /** Settings → Subtitles & Audio's audio language ("" = the file's own). */
   audioLanguage: string;
+  /**
+   * What "the file's own" (`audioLanguage` "") stands for: the language the title was made in when its details
+   * say, else this device's. A file that's only a dub into another language isn't the file's own track.
+   */
+  ownLanguage?: { code: string; from: "title" | "device" };
   /** Settings → Sources' tags (sources.ts' TAG_LABELS keys). */
   preferredTags: string[];
   /** Settings → Anime's release groups, most preferred first. */
@@ -279,11 +287,18 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
   else if (codec === false) add("softwareDecode", `${q.codec} without hardware decoding here`, W.softwareDecode * ((h ?? 0) >= 2160 ? 2 : 1));
 
   // Preferences.
-  const pref = ctx.audioLanguage;
+  const own = ctx.audioLanguage ? null : ctx.ownLanguage;
+  const pref = ctx.audioLanguage || own?.code;
   if (pref) {
     const langs = q.languages ?? [];
-    if (langs.some((l) => langMatches(l, pref))) add("audioLanguage", `Audio in ${languageName(pref) ?? pref}, your language`, W.audioLanguage);
-    else if (langs.includes("multi")) add("audioMulti", "Multi-audio, may have your language", W.audioMulti);
+    const name = languageName(pref) ?? pref;
+    const whose = !own ? "your language" : own.from === "title" ? "the title's own" : "this device's language";
+    if (langs.some((l) => langMatches(l, pref))) add("audioLanguage", `Audio in ${name}, ${whose}`, W.audioLanguage);
+    else if (langs.includes("multi")) add("audioMulti", `Multi-audio, may have ${own ? name : "your language"}`, W.audioMulti);
+    else if (langs.length) {
+      const other = langs.map((l) => languageName(l) ?? l).join(", ");
+      add("audioOtherLanguage", `Audio in ${other}, not ${name}`, W.audioOtherLanguage);
+    }
   }
   const tags = groupTags(r);
   for (const t of ctx.preferredTags) if (tags.includes(t)) add("preferredTag", `${TAG_NAMES[t] ?? t}, which you prefer`, W.preferredTag);

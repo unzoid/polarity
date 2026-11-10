@@ -946,7 +946,7 @@ export function Player({
   // title page. Ids stay the index into the ranked list, so selection works
   // regardless of the view. Kept for this show while the player stays open,
   // through picking a source or moving to another episode (each rebuilds it).
-  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
+  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   const hiddenSources = streams.data?.hidden ?? 0;
   // The first few sources get a look ahead of time while the panel is open (#21).
   const readiness = useReadiness(

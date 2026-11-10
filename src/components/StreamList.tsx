@@ -39,7 +39,7 @@ export function StreamList({
   const { settings } = useTitleSettings(type, videoId);
   // The title's length, for Best Match's bitrates: its meta is usually already loaded (the page behind this list).
   const { data: meta } = useMeta(type, videoId.replace(/:\d+:\d+$/, ""));
-  const f = useSourceFilters(data?.streams, settings, undefined, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
+  const f = useSourceFilters(data?.streams, settings, undefined, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   // The first few sources in view get a look ahead of time (#21).
   const ready = useReadiness(f.view.slice(0, Math.min(f.matched, READY_CHECKS)).map(({ r }) => r));
   // A source's "i" panel (#229); on TV, the row's menu that leads to it.

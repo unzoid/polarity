@@ -959,6 +959,83 @@
 :root[data-form="phone"] .t3s-page {
   padding-top: 0.5rem;
 }
+/* Each section's glyph on a tile of its own colour, as a phone's own Settings: the list reads at a glance, and
+   it's warmer than a column of white glyphs. Rows without a section (Restore, the account rows) take grey. */
+:root[data-form="phone"] .t3s-nav-item {
+  gap: 0.875rem;
+}
+:root[data-form="phone"] .t3s-group > .t3s-nav-item,
+:root[data-form="phone"] .t3s-sidebar-foot .t3s-nav-item {
+  height: 54px;
+  padding-left: 0.75rem;
+}
+:root[data-form="phone"] .t3s-nav-item > svg:first-child {
+  flex: none;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--tile, #636366);
+  color: #fff;
+}
+.t3s-nav-item[data-page="playback"] { --tile: #30d158; }
+.t3s-nav-item[data-page="subtitles"] { --tile: #0a84ff; }
+.t3s-nav-item[data-page="appearance"] { --tile: #5e5ce6; }
+.t3s-nav-item[data-page="browsing"] { --tile: #ff9f0a; }
+.t3s-nav-item[data-page="anime"] { --tile: #ff375f; }
+.t3s-nav-item[data-page="notifications"] { --tile: #ff453a; }
+.t3s-nav-item[data-page="controls"] { --tile: #32ade6; }
+.t3s-nav-item[data-page="controller"] { --tile: #bf5af2; }
+.t3s-nav-item[data-page="sources"] { --tile: #30b0c7; }
+.t3s-nav-item[data-page="marketplace"] { --tile: #ff9500; }
+.t3s-nav-item[data-page="addons"] { --tile: #64d2ff; }
+.t3s-nav-item[data-page="services"] { --tile: #a2845e; }
+
+/* A section's page in the list's own look: the same filled cards, corners and inset as the list, and its groups
+   named the way the list names its own (small, grey, above the card) rather than with big white headings. The
+   captions run the card's width instead of being balanced into short lines. */
+:root[data-form="phone"] .t3s-page {
+  gap: 1.75rem;
+  padding: 0.5rem 1rem 3rem;
+}
+:root[data-form="phone"] .t3s .settings-group {
+  gap: 0;
+}
+:root[data-form="phone"] .t3s .settings-group-title {
+  min-height: 0;
+  padding: 0 0.25rem 0.5rem;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--t3-muted-fg);
+}
+:root[data-form="phone"] .t3s .settings-card {
+  border: 0;
+  border-radius: 14px;
+  background: var(--t3-card);
+}
+:root[data-form="phone"] .t3s .settings-card > :first-child {
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+}
+:root[data-form="phone"] .t3s .settings-card > :last-child {
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+:root[data-form="phone"] .t3s .settings-row {
+  padding: 0.875rem 1rem;
+}
+:root[data-form="phone"] .t3s .settings-row-caption {
+  font-size: 13px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+:root[data-form="phone"] .t3s .settings-row:active:is(.settings-row-button) {
+  background: var(--t3-selected);
+}
+
 /* Dropdowns a finger's height (menu.css sizes their lists), with room above them. */
 :root[data-form="phone"] .t3s .settings-row .select-trigger {
   margin-top: 0.25rem;

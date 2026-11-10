@@ -382,7 +382,7 @@ function NavItem({
   onClick: () => void;
 }) {
   return (
-    <button className="t3s-nav-item" data-active={active} aria-current={active ? "page" : undefined} onClick={onClick}>
+    <button className="t3s-nav-item" data-page={page.id} data-active={active} aria-current={active ? "page" : undefined} onClick={onClick}>
       <page.icon size={16} strokeWidth={2} />
       <span>{page.label}</span>
       {chevron && <ChevronRight size={18} className="t3s-nav-chevron" aria-hidden />}
