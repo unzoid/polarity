@@ -23,7 +23,6 @@ fn main() {
             "src/ios/tabs.m",
             "src/ios/dialogs.m",
             "src/ios/back.m",
-            "src/ios/buttons.m",
             "src/ios/focus.m",
             "src/ios/keys.m",
             "src/apple/notes.m",

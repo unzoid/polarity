@@ -383,6 +383,22 @@
   --solid: 0%;
   --end: 44%;
 }
+/* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
+   the stacked blurs. Four masked blurs taken again on every frame of a scroll are more than a phone's web view
+   keeps up with over moving art; one unmasked layer is cheap. */
+:root[data-form="phone"] .navbar-fade {
+  height: var(--nav-h);
+}
+:root[data-form="phone"] .navbar-fade i {
+  display: none;
+}
+:root[data-form="phone"] .navbar-fade::before {
+  -webkit-mask-image: none;
+  mask-image: none;
+  background: rgb(18 18 18 / 0.8);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+}
 .navbar-brand {
   flex: none;
   display: flex;
@@ -531,10 +547,8 @@ html[data-os="mac"] {
     opacity 400ms var(--ease-std),
     margin-left 620ms cubic-bezier(0.3, 0.8, 0.2, 1);
 }
-/* On iOS the system draws Back (NativeBack.tsx), or a button (NativeButtons.tsx), over this one: it keeps its
-   place, unseen. */
-[data-native-back],
-[data-native-button] {
+/* On iOS the system draws Back (NativeBack.tsx) over this one: it keeps its place, unseen. */
+[data-native-back] {
   visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {

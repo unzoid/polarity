@@ -88,7 +88,7 @@
   /* WebKit lets the blended layers below out past the rounded corners until it has drawn them once (the tiles
      with a picture showed square): a clip path cuts them from the first frame. */
   clip-path: inset(0 round var(--r-md));
-  background: linear-gradient(150deg, hsl(var(--tile-a) 80% 52%), hsl(var(--tile-b) 75% 34%));
+  background: var(--surface-1);
   color: #fff;
   font-size: 1.0625rem;
   font-weight: 650;
@@ -141,6 +141,29 @@
 }
 .genre-tile > span {
   text-shadow: 0 1px 8px rgb(0 0 0 / 0.4);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+/* No picture to be had: the genre's two colours alone. */
+.genre-tile[data-art="none"] {
+  background: linear-gradient(150deg, hsl(var(--tile-a) 80% 52%), hsl(var(--tile-b) 75% 34%));
+}
+/* A placeholder (as .skeleton, ui/skeleton.css) until its picture is in, and, while the set is still coming in
+   (Search.tsx `useTogether`), until every tile's is: the tiles come in together, picture, colours and name at
+   once, never colour first and the picture after. */
+.genre-tile[data-art="loading"],
+[data-together="pending"] .genre-tile {
+  background: linear-gradient(100deg, var(--surface-1) 40%, var(--surface-2) 50%, var(--surface-1) 60%) 0 0 / 300% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+:is(.genre-tile[data-art="loading"], [data-together="pending"] .genre-tile) > :is(img, span),
+:is(.genre-tile[data-art="loading"], [data-together="pending"] .genre-tile)::before,
+:is(.genre-tile[data-art="loading"], [data-together="pending"] .genre-tile)::after {
+  opacity: 0 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .genre-tile {
+    animation: none !important;
+  }
 }
 
 /* --- Settings pages (drawn in the settings overlay): options sit in bordered cards with hairline rows.

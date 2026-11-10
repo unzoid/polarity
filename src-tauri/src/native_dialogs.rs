@@ -24,6 +24,9 @@ pub struct Action {
     /// A menu's section: consecutive actions with the same group sit together.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<u32>,
+    /// A menu item's glyph: an SF Symbol's name (iOS draws it beside the label).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
     /// A submenu (a second sheet where the menu is a sheet); the answer is a child's id.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Action>,

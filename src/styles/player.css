@@ -2071,6 +2071,17 @@ img.load-mark-base[data-logo-look^="halo"] {
   height: auto;
   max-height: none;
 }
+/* Stacked, the columns shrank in proportion to their lists: a long Subtitles list crushed Audio's two or three
+   rows to a sliver under its heading. The ones above keep their height (scrolling past 38% of the screen), and
+   the last takes what's left, scrolling on its own. */
+:root[data-compact="true"] .options-columns > .options-column:not(:last-child) {
+  flex: 0 0 auto;
+  max-height: 38dvh;
+}
+:root[data-compact="true"] .options-columns > .options-column:last-child {
+  flex: 1 1 0;
+  min-height: 0;
+}
 /* The source list fills the screen even when filtered down, so the bar above it stays put. */
 :root[data-compact="true"] .options-columns > .options-column:has(.srcf:not(.srcf-tv)) {
   flex: 1 1 0;

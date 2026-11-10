@@ -111,24 +111,34 @@ static PolarTabs *controller;
 }
 
 - (void)setItems:(NSArray *)items {
-    NSMutableArray<PolarTabPage *> *list = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *valid = [NSMutableArray array];
     NSMutableString *signature = [NSMutableString string];
     for (id item in items) {
         if (![item isKindOfClass:NSDictionary.class]) continue;
         NSString *tabId = item[@"id"], *title = item[@"title"], *icon = item[@"icon"];
         if (![tabId isKindOfClass:NSString.class] || ![title isKindOfClass:NSString.class] || ![icon isKindOfClass:NSString.class]) continue;
         [signature appendFormat:@"%@\t%@\t%@\n", tabId, title, icon];
-        PolarTabPage *page = self.pages[tabId] ?: [PolarTabPage new];
+        [valid addObject:item];
+    }
+    if ([signature isEqualToString:self.signature]) return;
+    self.signature = signature;
+    // A new set of tabs (Anime turned on or off) gets pages of its own: a page the old tabs still hold can't be
+    // handed to a new one (UIKit stops the app over a view controller with two parents). The web app moves into
+    // the new page that shows (apply:, hostIn:).
+    NSMutableArray<PolarTabPage *> *list = [NSMutableArray array];
+    NSMutableDictionary<NSString *, PolarTabPage *> *pages = [NSMutableDictionary dictionary];
+    for (NSDictionary *item in valid) {
+        NSString *tabId = item[@"id"], *title = item[@"title"], *icon = item[@"icon"];
+        PolarTabPage *page = [PolarTabPage new];
         page.tabId = tabId;
         page.title = title;
-        self.pages[tabId] = page;
+        pages[tabId] = page;
         UIImage *image = [UIImage systemImageNamed:icon];
         UIImage *selected = [UIImage systemImageNamed:[icon stringByAppendingString:@".fill"]] ?: image;
         page.tabBarItem = [[UITabBarItem alloc] initWithTitle:title image:image selectedImage:selected];
         [list addObject:page];
     }
-    if ([signature isEqualToString:self.signature]) return;
-    self.signature = signature;
+    self.pages = pages;
     if (@available(iOS 18.0, *)) {
         NSMutableArray<UITab *> *tabs = [NSMutableArray array];
         for (PolarTabPage *page in list) {

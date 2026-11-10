@@ -108,8 +108,6 @@ const commands: Record<string, (a: Args) => unknown> = {
   stremio_links_set: (a) => void ((window as { __stremioLinks?: boolean[] }).__stremioLinks ??= []).push(!!a.on),
   // What iOS's tab bar was last told to show (components/NativeTabs.tsx).
   native_tabs: (a) => void ((window as { __nativeTabs?: unknown }).__nativeTabs = a.tabs),
-  // What iOS was last told to draw of the web app's buttons (components/NativeButtons.tsx).
-  native_buttons: (a) => void ((window as { __nativeButtons?: unknown }).__nativeButtons = a.buttons),
   addon_catalog: (a) => fx.addonCatalog(String(a.addon), String(a.ty), String(a.id), a.extra as [string, string][]),
   addons_bundled: () => [],
   library_list: () => library,
@@ -253,8 +251,6 @@ mockIPC(
 // A tab picked in iOS's tab bar, as the native shell reports it (components/NativeTabs.tsx).
 (window as { __polarFakeNativeTab?: (id: string) => void }).__polarFakeNativeTab = (id) => void emit("native://tab", id);
 
-// A tap on one of iOS's own buttons, as the native shell reports it (components/NativeButtons.tsx).
-(window as { __polarFakeNativeButton?: (id: string) => void }).__polarFakeNativeButton = (id) => void emit("native://button", id);
 
 // A step of the swipe in from the left edge, as iOS's shell reports it (lib/platform/backSwipe.ts, #451).
 (window as { __polarFakeBackSwipe?: (swipe: object) => void }).__polarFakeBackSwipe = (swipe) => void emit("native://back-swipe", swipe);

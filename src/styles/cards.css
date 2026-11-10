@@ -136,13 +136,15 @@
   z-index: -1;
   pointer-events: none;
   /* The colour is already a dark shade (heroGlow.ts). It comes from the top right corner, as a light there would:
-     brightest in the corner, falling away towards the left and down the page; the rest of the top keeps only a
-     faint tint of it, so the corner reads as the source. */
+     brightest in the corner (lifted towards white there, mixed in OKLCH so it keeps its hue rather than going
+     pastel), falling away towards the left and down the page; the rest of the top keeps only a faint tint of it,
+     so the corner reads as the source. */
   background:
     radial-gradient(
       125% 62% at 100% 0%,
-      color-mix(in srgb, var(--glow), white 14%) 0%,
-      var(--glow) 22%,
+      color-mix(in oklch, var(--glow), white 34%) 0%,
+      color-mix(in oklch, var(--glow), white 14%) 14%,
+      var(--glow) 28%,
       color-mix(in srgb, var(--glow) 45%, transparent) 50%,
       transparent 78%
     ),

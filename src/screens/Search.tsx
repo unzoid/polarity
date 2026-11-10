@@ -114,7 +114,7 @@ function SearchHeader() {
 function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
-  const { data: animeArt } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
+  const { data: animeArt, isPending: animeArtPending } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
   // The tiles come in as one, pictures and colours together (lib/ui/together.ts), not colour first and a
   // picture here and there after.
   const together = useTogether();
@@ -151,7 +151,7 @@ function SearchStart() {
           <h2 className="t-title2">Anime</h2>
           <div className="genre-tiles">
             {SEARCH_ANIME.map((g) => (
-              <GenreTile key={g} genre={g} image={animeArt?.[g]} />
+              <GenreTile key={g} genre={g} image={animeArt?.[g]} pending={animeArtPending} />
             ))}
           </div>
         </section>
@@ -186,17 +186,33 @@ const TILE_HUES: Record<string, [number, number]> = {
  * with, so a tap finds them already loaded.
  */
 function MovieGenreTile({ genre }: { genre: string }) {
-  const { data } = useGenreRow("movie", genre);
-  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} />;
+  const { data, isPending } = useGenreRow("movie", genre);
+  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} pending={isPending} />;
 }
 
-/** A genre to search by: its name over its picture in the genre's two colours (the colours alone until the picture's in). */
-function GenreTile({ genre, image }: { genre: string; image?: string }) {
-  const [loaded, setLoaded] = useState(false);
+/**
+ * A genre to search by: its name over its picture in the genre's two colours. Until its picture is in (and the
+ * set's, screens.css) it's a placeholder; a genre with no picture to be had shows its two colours alone.
+ */
+function GenreTile({ genre, image, pending }: { genre: string; image?: string; pending: boolean }) {
+  const [loaded, setLoaded] = useState<string>();
+  const [failed, setFailed] = useState<string>();
   const [a, b] = TILE_HUES[genre] ?? [220, 280];
+  const art = image && failed !== image ? (loaded === image ? "ready" : "loading") : pending ? "loading" : "none";
   return (
-    <button className="genre-tile together-wait pressable" style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
-      {image && <img src={image} alt="" loading="lazy" decoding="async" draggable={false} data-loaded={loaded} onLoad={() => setLoaded(true)} />}
+    <button className="genre-tile pressable" data-art={art} style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
+      {image && failed !== image && (
+        <img
+          src={image}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          data-loaded={loaded === image}
+          onLoad={() => setLoaded(image)}
+          onError={() => setFailed(image)}
+        />
+      )}
       <span>{genre}</span>
     </button>
   );

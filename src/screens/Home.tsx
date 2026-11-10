@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { AmbientWash } from "../components/AmbientWash";
 import { HeroGlow } from "../components/HeroGlow";
@@ -20,7 +20,7 @@ import {
   useRecommend,
   useSettings,
 } from "../lib/net";
-import { dismissDepth, onDismissDepth, prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
+import { prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
 import { useRouter } from "../lib/router";
 import {
   catalogKey,
@@ -41,9 +41,7 @@ import {
 import { cardMenu } from "../components/CardMenu";
 import type { MetaPreview, Progress } from "../lib/types";
 import { Button, IconButton } from "../components/ui/Button";
-import { LibraryButton, useLibraryToggle } from "../components/title/LibraryButton";
-import { useNativeButtons } from "../components/NativeButtons";
-import { useSettingsOverlay } from "../lib/settings";
+import { LibraryButton } from "../components/title/LibraryButton";
 import { Skeleton } from "../components/ui/Skeleton";
 
 /**
@@ -310,32 +308,11 @@ function HeroPeek({ item, side, onClick }: { item: MetaPreview; side: "prev" | "
 }
 
 function HeroContent({ item }: { item: MetaPreview }) {
-  const { navigate, current } = useRouter();
+  const { navigate } = useRouter();
   const intent = useIntent(item);
   const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
   const phone = useFormFactor().form === "phone";
-
-  // On an iPhone the two are iOS's own (Liquid Glass), while Home shows and nothing covers it (NativeButtons.tsx).
-  const watch = useRef<HTMLButtonElement>(null);
-  const save = useRef<HTMLButtonElement>(null);
-  const library = useLibraryToggle(item);
-  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  const settingsOpen = useSettingsOverlay().open;
-  const native = useNativeButtons(
-    [
-      { id: "hero-watch", el: watch, title: "Watch Now", symbol: "play.fill", prominent: true, onPress: open },
-      {
-        id: "hero-save",
-        el: save,
-        title: library.inLibrary ? "Saved" : "Save",
-        symbol: library.inLibrary ? "checkmark" : "plus",
-        label: library.label,
-        onPress: library.toggle,
-      },
-    ],
-    phone && current.name === "home" && layers === 0 && !settingsOpen,
-  );
 
   return (
     <div className="hero-content">
@@ -343,10 +320,10 @@ function HeroContent({ item }: { item: MetaPreview }) {
       <p className="hero-kind t-callout">{joinFacts(kindFacts(item))}</p>
       <p className="hero-description t-body">{item.description}</p>
       <div className="hero-actions">
-        <Button ref={watch} variant="primary" onClick={open} data-native-button={native || undefined} {...intent}>
+        <Button variant="primary" onClick={open} {...intent}>
           <Play size={18} fill="currentColor" /> Watch Now
         </Button>
-        <LibraryButton ref={save} item={item} labelled={phone} native={native} />
+        <LibraryButton item={item} labelled={phone} />
       </div>
     </div>
   );

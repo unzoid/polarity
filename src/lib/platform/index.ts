@@ -12,7 +12,6 @@ export * from "./formFactor";
 export * from "./keychain";
 export * from "./longPress";
 export * from "./nativeBack";
-export * from "./nativeButtons";
 export * from "./artFocus";
 export * from "./nativeDialogs";
 export * from "./nativeTabs";

@@ -354,19 +354,6 @@ compiled by CI:
     page; on a title page the same touch is Back. With a sheet or menu open, the swipe closes it and the page
     doesn't move; in the player it leaves the player as before. A vertical scroll near the edge still scrolls.
 
-The featured card's buttons on an iPhone (`ios/buttons.m`, `native_buttons.rs`, `components/NativeButtons.tsx`).
-Only the web side ran (the fake shell records what it would draw); the Objective-C only compiled by CI:
-27. Home on an iPhone: Watch Now and Save on the featured card are the system's, Liquid Glass on iOS 26 (Watch
-    Now the light, prominent kind), filled and grey before, standing exactly where the web buttons were, with
-    no second pair under them.
-28. Scroll Home slowly and fast, and pull it past the top: the buttons move with the card, without lagging or
-    shaking, and are cut off cleanly under the top bar rather than drawn over it. Taps anywhere else on the
-    page (the card, the shelves, the dots) still reach the page.
-29. Watch Now opens the title; Save adds it to the Library and turns into Saved with a tick, and back. VoiceOver
-    reads Save as Add to Library. The card turning to the next title doesn't make the buttons flicker.
-30. They go away while another tab, a title page, a sheet, a menu, Settings or the player shows, and come back
-    once Home is showing again (the web buttons stand in while it slides back in).
-
 ## macOS release: sources of the bundled libraries
 
 `scripts/macSources.ts` was tested only against a stand-in `brew` (`tests/macSources.test.ts`); Homebrew itself
