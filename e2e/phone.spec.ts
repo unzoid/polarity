@@ -157,7 +157,7 @@ test("the season dropdown shows a name's descenders and accents whole (#353)", a
 
 test("settings on a phone: the sections, then one section with a way back", async ({ app }) => {
   await app.getByRole("button", { name: /^Profile/ }).tap();
-  // The profile menu is a sheet on a phone; Settings rises over it.
+  // The profile menu is a sheet on a phone; Settings is its next view, in the same sheet.
   const profiles = app.locator(".sheet");
   await profiles.getByRole("button", { name: "Settings" }).tap();
   // Not by name: on a phone the header shows only the open section, and that names the dialog ("Browsing").
@@ -169,26 +169,25 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(settings.getByRole("switch", { name: /^Show the Calendar/ })).toBeVisible();
   await expect(settings).toHaveAccessibleName("Browsing");
   await expect(browsing).toBeHidden();
-  await settings.getByRole("button", { name: "All settings" }).tap();
+  // The sheet's Back: from the section to the list of sections, then from the list back to the profiles.
+  await profiles.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(browsing).toBeVisible();
-  await settings.getByRole("button", { name: "Close settings" }).tap();
+  await profiles.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(settings).toHaveCount(0);
-  // Closing Settings leaves the profile sheet it rose over.
-  await expect(profiles).toBeVisible();
+  await expect(profiles.getByRole("button", { name: "Settings" })).toBeVisible();
 });
 
-/** Settings from the profile menu (iOS's own menu on an iPhone, picked through the fake shell), on the page `section`. */
-async function openSettingsPage(app: Page, section: string, { iPhone = false } = {}) {
-  if (iPhone) await app.evaluate(() => ((window as unknown as { __polarFakeDialogPick?: string }).__polarFakeDialogPick = "Settings"));
+/** Settings from the profile sheet (an iPhone's too), on the page `section`. */
+async function openSettingsPage(app: Page, section: string) {
   await app.getByRole("button", { name: /^Profile/ }).tap();
-  if (!iPhone) await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
   const settings = app.locator(".t3s");
   await settings.getByRole("button", { name: section, exact: true }).tap();
   await expect(settings).toHaveAccessibleName(section);
   return settings;
 }
 
-test("a settings page on a phone: no arrow beside the X, and Back goes to the list, then closes (#455)", async ({ app }) => {
+test("a settings page on a phone: no stray arrow in its header, and Back goes to the list, then to the profiles (#455)", async ({ app }) => {
   const settings = await openSettingsPage(app, "Appearance");
   // Restore device defaults' arrow, alone and greyed, read as a Back that did nothing: not in a phone's header.
   await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
@@ -198,6 +197,7 @@ test("a settings page on a phone: no arrow beside the X, and Back goes to the li
   await expect(settings).toHaveAccessibleName(/^Settings/);
   await app.keyboard.press("Escape");
   await expect(settings).toHaveCount(0);
+  await expect(app.locator(".sheet").getByRole("button", { name: "Settings" })).toBeVisible();
 });
 
 test("an add-on's long name and description, unbroken words and a link among them, wrap inside Settings (#456)", async ({ app }) => {
@@ -450,7 +450,7 @@ test.describe("signed in, on a fresh profile", () => {
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
 
-  test("the back swipe on a settings page goes to the list; on the list it closes Settings (#455)", async ({ app }) => {
+  test("the back swipe on a settings page goes to the list; on the list it leaves Settings for the profiles (#455)", async ({ app }) => {
     const swipe = () =>
       app.evaluate(() => {
         const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
@@ -459,7 +459,7 @@ test.describe("on an iPhone", () => {
         send({ phase: "move", x: width * 0.6, width, velocity: 0 });
         send({ phase: "end", x: width * 0.6, width, velocity: 0 });
       });
-    const settings = await openSettingsPage(app, "Add-ons", { iPhone: true });
+    const settings = await openSettingsPage(app, "Add-ons");
     await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
     await swipe();
     await expect(settings.getByRole("button", { name: "Add-ons", exact: true })).toBeVisible();

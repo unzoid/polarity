@@ -446,7 +446,9 @@ function LazySettingsOverlay() {
     const later = window.setTimeout(() => void import("./components/SettingsOverlay").catch(() => {}), 2000);
     return () => window.clearTimeout(later);
   }, []);
-  if (!opened) return null;
+  // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
+  const phone = useFormFactor().form === "phone";
+  if (!opened || phone) return null;
   return (
     <Suspense fallback={null}>
       <SettingsOverlay />

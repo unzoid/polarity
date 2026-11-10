@@ -539,6 +539,10 @@
   justify-content: center;
   gap: clamp(0.25rem, 2.5vw, 1.75rem);
   margin-top: 0;
+  /* Down in the home indicator's strip the screen's corners curve in: the row keeps clear of them, so with many
+     actions (a party's, Next Episode) the last isn't cut by the corner. Past that, the words go and the glyphs
+     stay (useBarFit measures the row's own width). */
+  padding-inline: 2rem;
 }
 /* The bar sits at the bottom of the screen, as Netflix's does: its last row reaches into the home indicator's
    strip (the indicator is a thin line in the middle; the words either side of it stay clear), rather than a
