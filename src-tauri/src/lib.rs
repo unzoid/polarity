@@ -369,6 +369,7 @@ pub fn run() {
             player::mpv_stop,
             player::mpv_snapshot,
             player::player_system_bars,
+            player::player_keep_awake,
             native_tabs::native_tabs,
             native_back::native_back,
             native_buttons::native_buttons,

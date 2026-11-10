@@ -20,7 +20,7 @@ import {
 } from "../components/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { ease, useFormFactor } from "../lib/ui";
-import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
+import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, keepScreenOn, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
@@ -262,6 +262,13 @@ export function Player({
   const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state });
   useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
   useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
+  // A phone or tablet doesn't dim and lock while the video plays; paused, it does in its own time.
+  const playingNow = started && !paused;
+  useEffect(() => {
+    if (!playingNow) return;
+    keepScreenOn(true);
+    return () => keepScreenOn(false);
+  }, [playingNow]);
 
   // --- AirPlay (#19) ----------------------------------------------------------
   const playingUrl = source.state.status === "ready" && started ? source.state : undefined;

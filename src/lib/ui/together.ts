@@ -42,6 +42,24 @@ export function imagesSettled(root: Element, cap: number): Promise<void> {
   });
 }
 
+/**
+ * Resolves once nothing inside `root` is marked `data-placing` (a picture still being put on its subject,
+ * DetailArt.tsx), or `cap` ms have passed; at once when nothing is.
+ */
+export function placingSettled(root: Element, cap: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (!root.querySelector("[data-placing]")) return resolve();
+    const done = () => {
+      watch.disconnect();
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const watch = new MutationObserver(() => !root.querySelector("[data-placing]") && done());
+    watch.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-placing"] });
+    const timer = window.setTimeout(done, cap);
+  });
+}
+
 /** Once pictures are there, how long the group waits for the slowest of them. */
 const CAP = 1400;
 /** With no picture yet (the list itself is still loading), how long before the group stops holding anything back. */

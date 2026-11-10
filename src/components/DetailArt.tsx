@@ -51,30 +51,38 @@ function measure(src: string) {
  * picture's subject rather than its middle, which often cuts the subject in half. `--art-x` for the art's
  * `object-position`, while `on`; the middle until the picture is measured, or when it can't be.
  */
-export function useArtFocus(src: string | undefined, on: boolean): CSSProperties | undefined {
-  const [x, setX] = useState<number | null>(null);
+export function useArtFocus(src: string | undefined, on: boolean): { style?: CSSProperties; placing: boolean } {
+  // `at`: the picture the place was worked out for, so a new picture reads as still placing from its first render.
+  const [placed, setPlaced] = useState<{ at: string; x: number | null }>();
   useEffect(() => {
-    setX(null);
     if (!src || !on) return;
     let live = true;
     void measure(src).then((m) => {
-      if (!live || !m) return;
+      if (!live) return;
       // The art box: the screen's width, `--art-h` (min(64svh, 150vw)) tall.
       const boxAspect = window.innerWidth / Math.min(window.innerHeight * 0.64, window.innerWidth * 1.5);
-      setX(focusPosition(m.focus, boxAspect / m.aspect));
+      setPlaced({ at: src, x: m ? focusPosition(m.focus, boxAspect / m.aspect) : null });
     });
     return () => {
       live = false;
     };
   }, [src, on]);
-  return x === null ? undefined : ({ "--art-x": `${Math.round(x * 100)}%` } as CSSProperties);
+  const x = placed && placed.at === src ? placed.x : null;
+  return {
+    style: x === null ? undefined : ({ "--art-x": `${Math.round(x * 100)}%` } as CSSProperties),
+    placing: !!src && on && placed?.at !== src,
+  };
 }
 
-/** A title page's art box (`.detail-bg`), its art placed on `src`'s subject on a phone (useArtFocus). */
+/**
+ * A title page's art box (`.detail-bg`), its art placed on `src`'s subject on a phone (useArtFocus). While that's
+ * being worked out it's marked `data-placing`, and the page's entrance waits for it (pageMotion.ts), so the art
+ * doesn't shift sideways once the page is already in.
+ */
 export function DetailArt({ src, children }: { src: string | undefined; children: ReactNode }) {
-  const style = useArtFocus(src, useFormFactor().form === "phone");
+  const { style, placing } = useArtFocus(src, useFormFactor().form === "phone");
   return (
-    <div className="detail-bg" aria-hidden style={style}>
+    <div className="detail-bg" aria-hidden style={style} data-placing={placing || undefined}>
       {children}
     </div>
   );

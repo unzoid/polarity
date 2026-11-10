@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import type { Entry, TabRoute } from "../router";
 import { tabId } from "../navTabs";
 import { prefersReducedMotion } from "./reducedMotion";
-import { imagesSettled } from "./together";
+import { imagesSettled, placingSettled } from "./together";
 
 /** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
 const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
 
 /** How long a change's pages keep their motion: the entrance (shell.css), and a frame to spare. */
 const SETTLE = 300;
-/** The same for a title's page growing out of its card, which takes longer. */
-const SETTLE_CARD = 520;
+/** The same for a title's page growing out of its card (shell.css: 620ms out, 540ms back), which takes longer. */
+const SETTLE_CARD = 660;
 
 /**
  * How long a page coming in may wait for its pictures before it moves anyway. The change plays once the new page
@@ -18,6 +18,8 @@ const SETTLE_CARD = 520;
  * played while the page was still being built, and was over, or stuttering, by the time anything showed.
  */
 const READY_CAP = 320;
+/** The same for a title page's art being put on its subject (DetailArt.tsx), which asks the system on iOS. */
+const PLACING_CAP = 600;
 
 /** A card's place on the screen, in CSS pixels, and the picture on it. */
 export type CardRect = { x: number; y: number; w: number; h: number; src?: string };
@@ -61,18 +63,19 @@ export function watchCardTaps() {
 const isTitlePage = (e: Entry) => e.route.name === "detail" || e.route.name === "anime-detail";
 
 /**
- * What shell.css needs to play a card's motion on a page `width` across: where the page's top left corner is at
- * the card, how small the page is there (its width the card's), the card's shape (height over width) for the
- * copy of its picture that grows with the page, and the corner radius that looks like the card's at that size.
+ * What shell.css needs to play a card's motion on a page `width` × `height`: where the page's top left corner is
+ * at the card, how much smaller the page is there across and down (exactly the card's box), and the corner radius
+ * that looks like the card's at that size.
  */
-export function cardMotionVars(card: CardRect, width: number): Record<string, string> {
-  const scale = card.w / width;
+export function cardMotionVars(card: CardRect, width: number, height: number): Record<string, string> {
+  const sx = card.w / width;
+  const sy = card.h / height;
   return {
     "--card-x": `${card.x}px`,
     "--card-y": `${card.y}px`,
-    "--card-s": String(scale),
-    "--card-shape": String(card.h / card.w),
-    "--card-r": `${8 / scale}px`,
+    "--card-sx": String(sx),
+    "--card-sy": String(sy),
+    "--card-r": `${8 / sx}px / ${8 / sy}px`,
   };
 }
 
@@ -117,7 +120,7 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
     const frames = requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const page = document.querySelector(`.page[data-page-key="${motion.enter}"]`);
-        if (page) void imagesSettled(page, READY_CAP).then(start);
+        if (page) void Promise.all([imagesSettled(page, READY_CAP), placingSettled(page, PLACING_CAP)]).then(start);
         else start();
       }),
     );

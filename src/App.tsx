@@ -395,7 +395,9 @@ function DesktopApp() {
             // The pair moves once the new page is drawn with its pictures in (pageMotion.ts `go`).
             data-go={motion?.go || undefined}
             style={
-              motion ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth)) } as CSSProperties) : undefined
+              motion
+                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
+                : undefined
             }
             data-under-player={(entry === topPage && !!player) || undefined}
             data-page-key={entry.key}
@@ -404,22 +406,18 @@ function DesktopApp() {
             <ErrorBoundary where={`page ${entry.route.name}`}>
               <Screen route={entry.route} />
             </ErrorBoundary>
+            {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
+                the same box, so they move as one piece (shell.css). */}
+            {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
+              <div className="card-ghost" aria-hidden>
+                <img className="card-ghost-soft" src={motion.card.src} alt="" draggable={false} />
+                <img className="card-ghost-sharp" src={motion.card.src} alt="" draggable={false} />
+              </div>
+            )}
           </section>
         ))}
-        {/* The card's own picture, lifting off the page and growing with the title's page as it opens, and
-            coming back down onto the card as it closes (shell.css). */}
-        {motion?.card?.src && (
-          <img
-            className="card-ghost"
-            src={motion.card.src}
-            alt=""
-            aria-hidden
-            draggable={false}
-            data-card={motion.dir === 1 ? "open" : "close"}
-            data-go={motion.go || undefined}
-            style={cardMotionVars(motion.card, window.innerWidth) as CSSProperties}
-          />
-        )}
+        {/* Between the title's page and the one behind it: dims and softens what's behind as the card opens. */}
+        {motion?.card && <div className="card-scrim" aria-hidden data-card={motion.dir === 1 ? "open" : "close"} data-go={motion.go || undefined} />}
         <ControllerToast tv={false} />
         <SeriesPickToast />
         <UpdateToast hidden={!!playing} />

@@ -1046,6 +1046,8 @@
 /* The strip of a wide backdrop a phone shows sits on the picture's subject, not its middle (DetailArt.tsx). */
 :root[data-form="phone"] .detail-bg img {
   object-position: var(--art-x, 50%) 20%;
+  /* The page waits for the place (pageMotion.ts); when that took too long, the art eases over instead of jumping. */
+  transition: object-position 420ms var(--ease-out);
 }
 :root[data-form="phone"] .detail-bg-blur,
 :root[data-form="phone"] .detail-fold {

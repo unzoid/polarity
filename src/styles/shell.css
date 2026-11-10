@@ -122,120 +122,174 @@
     transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.5));
   }
 }
-/* A title opened from a card (pageMotion.ts `card`): the card itself opens into the page. A copy of the card's
-   picture (.card-ghost, App.tsx) starts exactly on the card and grows to the screen's width at its top, where the
-   page's art is; the page grows with it, as one piece (the same move: its corner at the card's, --card-x/y, its
-   width the card's, --card-s), fading in under the picture, which then fades away to leave the page. The page
-   behind sinks back, blurred and dimmed. Back plays it the other way, ending on the card. Only transforms and
-   opacity move, so the compositor plays it whatever the page is busy with; the corners (--card-r, the card's at
-   that size) don't change. */
-:root[data-form="phone"] :is(.page[data-card], .card-ghost) {
-  --card-ease: cubic-bezier(0.32, 0.72, 0, 1);
-  --card-at: translate(var(--card-x), var(--card-y)) scale(var(--card-s));
+/* A title opened from a card (pageMotion.ts `card`), as one piece on one clock: the title's page starts as exactly
+   the card's box (--card-x/y, --card-sx/sy) and grows to the screen. Riding on it, the card's own picture
+   (.card-ghost, App.tsx) covers it at first, sharp, then softened and dark, and gives way to the page as it
+   settles. What's behind dims and softens under it (.card-scrim). Back plays it the other way and ends on the
+   card. Everything shares the duration and curve, and only transforms and opacity move (the scrim's blur is
+   fixed; its opacity carries it), so the compositor plays every frame whatever the pages are doing. The page is
+   scaled unevenly only while the picture covers it; by the time it shows it's within a hair of its own shape. */
+:root[data-form="phone"] :is(.page[data-card], .card-scrim) {
+  --card-ease: cubic-bezier(0.3, 0.8, 0.2, 1);
+  --card-open: 620ms;
+  --card-close: 540ms;
+  --card-at: translate(var(--card-x), var(--card-y)) scale(var(--card-sx), var(--card-sy));
 }
 :root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
 :root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
+  z-index: 2;
   background: var(--bg);
   transform-origin: 0 0;
   border-radius: var(--card-r);
   overflow: hidden;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 :root[data-form="phone"] .page[data-card="open"][data-motion="enter"][data-go] {
-  animation: card-page-open 440ms var(--card-ease) both;
+  animation: card-page var(--card-open) var(--card-ease) both;
 }
 :root[data-form="phone"] .page[data-card="close"][data-motion="leave"][data-go] {
-  animation: card-page-close 360ms var(--card-ease) forwards;
+  animation: card-page-back var(--card-close) var(--card-ease) forwards;
 }
-:root[data-form="phone"] .page[data-card="open"][data-motion="leave"][data-go] {
-  animation: card-behind 440ms var(--ease-out) forwards;
-}
+/* The page behind holds still under the scrim; the scrim is all that changes over it. */
+:root[data-form="phone"] .page[data-card="open"][data-motion="leave"][data-go],
 :root[data-form="phone"] .page[data-card="close"][data-motion="enter"][data-go] {
-  animation: card-behind 360ms var(--ease-out) reverse both;
+  animation: none;
+  opacity: 1;
 }
+@keyframes card-page {
+  from {
+    transform: var(--card-at);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes card-page-back {
+  to {
+    transform: var(--card-at);
+  }
+}
+
 .card-ghost {
   position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1;
-  width: 100%;
-  height: calc(100vw * var(--card-shape));
-  object-fit: cover;
-  border-radius: var(--card-r);
-  transform-origin: 0 0;
-  transform: var(--card-at);
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
   pointer-events: none;
-  will-change: transform, opacity;
 }
-/* Closing, it isn't there until the page starts back. */
-.card-ghost[data-card="close"]:not([data-go]) {
+/* The picture fills the page's box, so at the card's box it's the card's picture exactly. */
+.card-ghost img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
   opacity: 0;
 }
-.card-ghost[data-card="open"][data-go] {
-  animation: card-ghost-open 440ms var(--card-ease) both;
+/* Softened once, not per frame: only its opacity moves. Scaled past the edges so the blur's rim never shows. */
+.card-ghost-soft {
+  filter: blur(18px) brightness(0.45);
+  transform: scale(1.15);
 }
-.card-ghost[data-card="close"][data-go] {
-  animation: card-ghost-close 360ms var(--card-ease) both;
+[data-card="open"][data-go] > .card-ghost .card-ghost-sharp {
+  animation: card-ghost-sharp-open var(--card-open) linear both;
 }
-@keyframes card-page-open {
+[data-card="open"][data-go] > .card-ghost .card-ghost-soft {
+  animation: card-ghost-soft-open var(--card-open) linear both;
+}
+[data-card="close"][data-go] > .card-ghost .card-ghost-sharp {
+  animation: card-ghost-sharp-close var(--card-close) linear both;
+}
+[data-card="close"][data-go] > .card-ghost .card-ghost-soft {
+  animation: card-ghost-soft-close var(--card-close) linear both;
+}
+@keyframes card-ghost-sharp-open {
+  from {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes card-ghost-soft-open {
+  from {
+    opacity: 1;
+  }
+  22% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* Back: the page is covered before it has shrunk enough to look squeezed, then the card's picture sharpens in. */
+@keyframes card-ghost-soft-close {
   from {
     opacity: 0;
-    transform: var(--card-at);
   }
-  45% {
+  20% {
     opacity: 1;
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
-@keyframes card-page-close {
+@keyframes card-ghost-sharp-close {
   from {
-    opacity: 1;
-    transform: none;
+    opacity: 0;
   }
   35% {
+    opacity: 0;
+  }
+  75% {
     opacity: 1;
   }
-  85% {
+  to {
+    opacity: 1;
+  }
+}
+
+.card-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgb(0 0 0 / 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+}
+.card-scrim[data-card="open"][data-go] {
+  animation: card-scrim var(--card-open) var(--card-ease) both;
+}
+/* Back: over the page coming back until it moves, then clearing with the card's return. */
+.card-scrim[data-card="close"] {
+  opacity: 1;
+}
+.card-scrim[data-card="close"][data-go] {
+  animation: card-scrim-out var(--card-close) var(--card-ease) both;
+}
+@keyframes card-scrim {
+  from {
     opacity: 0;
   }
   to {
-    opacity: 0;
-    transform: var(--card-at);
+    opacity: 1;
   }
 }
-@keyframes card-ghost-open {
+@keyframes card-scrim-out {
   from {
     opacity: 1;
-    transform: var(--card-at);
-  }
-  45% {
-    opacity: 1;
   }
   to {
     opacity: 0;
-    transform: none;
-  }
-}
-@keyframes card-ghost-close {
-  from {
-    opacity: 0;
-    transform: none;
-  }
-  50% {
-    opacity: 1;
-  }
-  to {
-    opacity: 1;
-    transform: var(--card-at);
-  }
-}
-@keyframes card-behind {
-  to {
-    filter: blur(14px) brightness(0.45);
-    transform: scale(0.96);
   }
 }
 /* Less motion: the pair crossfades in place. */

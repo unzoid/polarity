@@ -42,6 +42,30 @@
 .player[data-instant="true"] .player-bottom {
   transition: none;
 }
+/* On a phone or tablet the whole picture dims while the controls are up, as video apps do there, so the
+   controls over the middle of a bright scene read; the bars' own gradients darken the edges further. Under
+   the subtitles and everything else on the video; it fades with the controls. */
+:root[data-touch="true"] .player::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+:root[data-touch="true"] .player[data-chrome="false"]::before {
+  opacity: 0;
+}
+:root[data-touch="true"] .player[data-instant="true"]::before {
+  transition: none;
+}
+:root[data-touch="true"] .player-top {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0.3) 55%, transparent);
+}
+:root[data-touch="true"] .player-bottom {
+  background: linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 55%, transparent);
+}
 
 /* The focus ring only for focus moved by the keyboard (#329, useKeyboardFocus): never after a click,
    nor for a shortcut pressed while a clicked button keeps the focus. It fades in quickly and fades
@@ -2189,6 +2213,11 @@ img.load-mark-base[data-logo-look^="halo"] {
 .episode-rail-card[aria-current] .episode-rail-still {
   box-shadow: 0 0 0 2px var(--text);
 }
+/* On a touch screen nothing moves a focus through the rail, so the ring reads as a stray border:
+   the Playing badge marks the episode on its own. */
+:root[data-touch="true"] .episode-rail-card[aria-current] .episode-rail-still {
+  box-shadow: none;
+}
 .episode-rail-play {
   position: absolute;
   inset: 0;
@@ -2315,6 +2344,16 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root[data-form="phone"] .options-column[data-size="full"] .options-head {
   min-height: 44px;
   margin-bottom: 0.625rem;
+}
+/* The season stays at the top with Close; the episodes sit in the middle of the screen under it, not
+   hard up against the season with the bottom half of the screen empty. The list's bottom padding is the
+   head's height, so the rail centres on the screen rather than on what's left under the head. */
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column[data-size="full"] {
+  height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-column[data-size="full"] .options-list {
+  justify-content: center;
+  padding-bottom: calc(44px + 0.625rem);
 }
 :root[data-form="phone"] .episode-rail-head .select-trigger[data-size="large"] {
   font-size: var(--fs-xl);

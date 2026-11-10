@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { leaveApp, setImmersive } from "../src/lib/platform/back";
+import { keepScreenOn, leaveApp, setImmersive } from "../src/lib/platform/back";
 
 describe("leaving the app at the root (Android Back)", () => {
   test("the activity goes to the background through the bridge; the process isn't ended", async () => {
@@ -26,6 +26,19 @@ test("the player asks Android for immersive mode and gives the bars back (#178)"
   // No bridge (desktop, iOS) or an older shell without the call: nothing happens.
   expect(() => setImmersive(true, {})).not.toThrow();
   expect(() => setImmersive(true, { polarDevice: {} })).not.toThrow();
+});
+
+test("a playing video keeps an Android screen on, and lets it go after", () => {
+  const posted: string[] = [];
+  keepScreenOn(true, { polarActions: { postMessage: (m: string) => void posted.push(m) } });
+  keepScreenOn(false, { polarActions: { postMessage: (m: string) => void posted.push(m) } });
+  expect(posted).toEqual(["awake:on", "awake:off"]);
+  const calls: boolean[] = [];
+  keepScreenOn(true, { polarDevice: { keepAwake: (on) => calls.push(on) } });
+  expect(calls).toEqual([true]);
+  // No bridge, or an older shell without the call: nothing happens.
+  expect(() => keepScreenOn(true, {})).not.toThrow();
+  expect(() => keepScreenOn(true, { polarDevice: {} })).not.toThrow();
 });
 
 describe("window changes go to the app's own message channel when the shell has one", () => {
