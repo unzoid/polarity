@@ -1,6 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 import { reveal } from "../lib/reveal";
 import { Ref } from "./Footnotes";
+import { Seg } from "./Seg";
 
 // Screenshots follow AGENTS.md: no unblurred posters, key art or title logos.
 const scenes: {
@@ -57,15 +58,7 @@ export function Showcase() {
 
       <figure class="mt-12 md:mt-16">
         <figcaption class="grid gap-5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center md:gap-10">
-          <div class="seg" role="group" aria-label="Screenshot">
-            <For each={scenes}>
-              {(s, i) => (
-                <button type="button" aria-pressed={i() === current()} onClick={() => setCurrent(i())}>
-                  {s.label}
-                </button>
-              )}
-            </For>
-          </div>
+          <Seg label="Screenshot" items={scenes.map((s) => s.label)} value={current()} onChange={setCurrent} />
           <p class="max-w-[36em] text-[17px]">
             {scene().body}
             <Show when={scene().note}>{(n) => <Ref n={n()} />}</Show>
