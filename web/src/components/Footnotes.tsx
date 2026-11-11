@@ -12,11 +12,11 @@ const NOTES = [
 
 export function Ref(props: { n: 1 | 2 | 3 }) {
   return (
-    <sup class="ml-0.5 text-[0.65em] font-medium">
+    <sup class="ml-0.5 text-[0.6em] font-bold">
       <a
         href={`#note-${props.n}`}
         aria-label={`Source note ${props.n}`}
-        class="text-faint no-underline hover:text-icon"
+        class="link opacity-70 hover:opacity-100"
       >
         {props.n}
       </a>
@@ -26,8 +26,8 @@ export function Ref(props: { n: 1 | 2 | 3 }) {
 
 export function Footnotes() {
   return (
-    <section aria-label="Notes" class="mx-auto mt-32 max-w-[1080px] px-6 sm:mt-40">
-      <ol class="space-y-2 border-t border-hair pt-8 text-xs leading-relaxed text-faint">
+    <section aria-label="Notes" class="mt-16 mb-10">
+      <ol class="space-y-2 text-[13px] leading-relaxed text-faint">
         <For each={NOTES}>
           {(text, i) => (
             <li id={`note-${i() + 1}`} class="flex max-w-[52rem] gap-2 scroll-mt-24">
