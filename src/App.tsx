@@ -280,9 +280,15 @@ function MainApp() {
       ) : (
         <DesktopApp />
       )}
-      <PartyHost />
-      <DeepLinks tv={tv} />
-      <FriendsHost />
+      <ErrorBoundary where="party host" quiet>
+        <PartyHost />
+      </ErrorBoundary>
+      <ErrorBoundary where="deep links" quiet>
+        <DeepLinks tv={tv} />
+      </ErrorBoundary>
+      <ErrorBoundary where="friends host" quiet>
+        <FriendsHost />
+      </ErrorBoundary>
     </>
   );
 }
@@ -378,7 +384,9 @@ function DesktopApp() {
       data-player-leaving={leaving}
     >
       <main className="main" ref={main}>
-        <NavBar />
+        <ErrorBoundary where="top bar">
+          <NavBar />
+        </ErrorBoundary>
         {shown.map((entry) => (
           <section
             key={entry.key}
@@ -397,20 +405,32 @@ function DesktopApp() {
             </ErrorBoundary>
           </section>
         ))}
-        <ControllerToast tv={false} />
-        <SeriesPickToast />
-        <UpdateToast hidden={!!playing} />
+        <ErrorBoundary where="toasts" quiet>
+          <ControllerToast tv={false} />
+          <SeriesPickToast />
+          <UpdateToast hidden={!!playing} />
+        </ErrorBoundary>
       </main>
-      <WhatsNewSheet />
+      <ErrorBoundary where="what's new" quiet>
+        <WhatsNewSheet />
+      </ErrorBoundary>
       <PlayerLayer player={player} leaving={leaving} />
       <LazySettingsOverlay />
       {/* After Settings: it reports changes made there too, so it must never be under it or inert with the page. */}
-      <StoreProblemToast tv={false} />
-      <AccountFullToast tv={false} />
-      <SecretsSyncToast tv={false} />
-      {!playing && <CardMenuHost />}
-      <TrailerHost />
-      <OpenFilesHost />
+      <ErrorBoundary where="notices" quiet>
+        <StoreProblemToast tv={false} />
+        <AccountFullToast tv={false} />
+        <SecretsSyncToast tv={false} />
+      </ErrorBoundary>
+      <ErrorBoundary where="card menu" quiet>
+        {!playing && <CardMenuHost />}
+      </ErrorBoundary>
+      <ErrorBoundary where="trailer" quiet>
+        <TrailerHost />
+      </ErrorBoundary>
+      <ErrorBoundary where="open files" quiet>
+        <OpenFilesHost />
+      </ErrorBoundary>
     </div>
   );
 }
