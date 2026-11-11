@@ -231,6 +231,16 @@ input {
 .img-fade[data-loaded="true"] {
   opacity: 1;
 }
+/* --- Pictures that come in together (lib/ui/together.ts): a shelf's, a grid's, a set of tiles'. While the group
+   is pending its pictures stay unseen, loaded or not, with what's drawn on them (logos, a tile's colours); once
+   it's ready they fade in as one. */
+.together-wait {
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+[data-together="pending"] :is(.img-fade, .together-wait, .art-after) {
+  opacity: 0 !important;
+  animation: none !important;
+}
 /* --- A title logo or name waits for the art it sits on (#173, lib/ui/artGate.ts): hidden while the art is
    pending, then it fades in with the art. Art that's in view and still not in after a short wait (1.2 s)
    lets it in anyway; a logo still loading keeps waiting for itself. An element inside a ready gate (a card on a

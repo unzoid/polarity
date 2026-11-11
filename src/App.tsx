@@ -29,6 +29,9 @@ import {
   useFormFactor,
   usePageFocus,
   usePageMotion,
+  cardMotionVars,
+  cardOrigin,
+  watchCardTaps,
   useSystemBack,
   watchInputModality,
 } from "./lib/ui";
@@ -316,6 +319,7 @@ function DesktopApp() {
   const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
+  useEffect(watchCardTaps, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -346,7 +350,8 @@ function DesktopApp() {
           const at = (e: Entry | undefined) => e && main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${e.key}"]`);
           const top = at(pages[pages.length - 1]);
           const under = pages.length > 1 && at(pages[pages.length - 2]);
-          return top && under ? { top, under } : null;
+          // A title page that grew out of a card goes back into it with the finger (pageDrag.ts).
+          return top && under ? { top, under, card: cardOrigin(pages[pages.length - 1].key) } : null;
         },
         () => now.current.back(),
       ),
@@ -387,7 +392,15 @@ function DesktopApp() {
             data-motion={motion?.enter === entry.key ? "enter" : motion?.leave === entry.key ? "leave" : undefined}
             // A page on its way out is still drawn for a moment, but no longer read out.
             aria-hidden={(motion?.leave === entry.key && entry !== topPage) || undefined}
-            style={motion ? ({ "--page-dir": motion.dir } as CSSProperties) : undefined}
+            // A title's page out of its card, and back into it (shell.css).
+            data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
+            // The pair moves once the new page is laid out (pageMotion.ts `go`).
+            data-go={motion?.go || undefined}
+            style={
+              motion
+                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
+                : undefined
+            }
             data-under-player={(entry === topPage && !!player) || undefined}
             data-page-key={entry.key}
             inert={entry !== topPage || !!playing}
@@ -395,8 +408,18 @@ function DesktopApp() {
             <ErrorBoundary where={`page ${entry.route.name}`}>
               <Screen route={entry.route} />
             </ErrorBoundary>
+            {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
+                the same box, so they move as one piece (shell.css). */}
+            {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
+              <div className="card-ghost" aria-hidden>
+                <img className="card-ghost-soft" src={motion.card.src} alt="" draggable={false} />
+                <img className="card-ghost-sharp" src={motion.card.src} alt="" draggable={false} />
+              </div>
+            )}
           </section>
         ))}
+        {/* Between the title's page and the one behind it: dims and softens what's behind as the card opens. */}
+        {motion?.card && <div className="card-scrim" aria-hidden data-card={motion.dir === 1 ? "open" : "close"} data-go={motion.go || undefined} />}
         <ControllerToast tv={false} />
         <SeriesPickToast />
         <UpdateToast hidden={!!playing} />
@@ -420,7 +443,14 @@ function LazySettingsOverlay() {
   const { open } = useSettingsOverlay();
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
-  if (!opened) return null;
+  // Fetched once the app has settled, so the first Settings opens as quickly as the rest.
+  useEffect(() => {
+    const later = window.setTimeout(() => void import("./components/SettingsOverlay").catch(() => {}), 2000);
+    return () => window.clearTimeout(later);
+  }, []);
+  // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
+  const phone = useFormFactor().form === "phone";
+  if (!opened || phone) return null;
   return (
     <Suspense fallback={null}>
       <SettingsOverlay />

@@ -93,7 +93,7 @@ const LOAD_TIMEOUT = 8000;
  * Loads a picture for measuring, so its pixels can be read: by a CORS request, or when the host refuses that
  * (no CORS headers), through the app (#354). Null when neither gets it.
  */
-async function loadReadable(src: string): Promise<HTMLImageElement | null> {
+export async function loadReadable(src: string): Promise<HTMLImageElement | null> {
   return (await load(src)) ?? (await loadThroughApp(src));
 }
 
@@ -150,7 +150,7 @@ function load(src: string, plain = false): Promise<HTMLImageElement | null> {
 }
 
 /** Draws `img` (or the part of it in `spot`) `w` px wide and reads its pixels; null when the canvas is tainted. */
-function pixelsOf(img: HTMLImageElement, w: number, spot?: LogoSpot) {
+export function pixelsOf(img: HTMLImageElement, w: number, spot?: LogoSpot) {
   try {
     const sx = spot ? spot.x0 * img.naturalWidth : 0;
     const sy = spot ? spot.y0 * img.naturalHeight : 0;

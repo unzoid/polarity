@@ -76,3 +76,33 @@ test("let go early, both pages slide back and nothing goes back; nothing under, 
   );
   expect(none.begin()).toBe(false);
 });
+
+test("a title page from a card shrinks with the finger, and goes back into the card once let go", () => {
+  const p = { ...pages(), card: { x: 20, y: 300, w: 120, h: 180, src: "https://media.example.com/poster.jpg" } };
+  p.top.getBoundingClientRect = () => ({ width: 400, height: 800 }) as DOMRect;
+  const t = clock();
+  let backs = 0;
+  const drag = pageDrag(
+    () => p,
+    () => backs++,
+    t.later,
+  );
+  expect(drag.begin()).toBe(true);
+  expect(p.top.dataset.drag).toBe("card");
+  expect(p.top.style.transformOrigin).toBe("0 0");
+  // Half way: shrunk by half of 30% about its middle, moved half as far as the finger, corners half rounded.
+  drag.move(200, 400);
+  expect(p.top.style.transform).toBe("translate(130px, 60px) scale(0.85, 0.85)");
+  expect(p.top.style.borderRadius).toBe("14px");
+  // The page under stays where it is and brightens.
+  expect(p.under.style.transform).toBe("");
+  expect(p.under.style.getPropertyValue("--drag-in")).toBe("0.5");
+
+  drag.end(true);
+  expect(backs).toBe(0);
+  t.run();
+  expect(backs).toBe(1);
+  t.run();
+  expect(p.top.dataset.drag).toBeUndefined();
+  expect(p.top.style.transform).toBe("");
+});

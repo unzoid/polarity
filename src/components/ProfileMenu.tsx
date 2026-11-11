@@ -1,25 +1,31 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Calendar, ChevronLeft, ChevronRight, Edit, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Calendar, Check, ChevronLeft, ChevronRight, Edit, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { canOpenFiles, setOpenFilesOpen } from "../lib/localFiles";
 import { closePartySurface, getParty, leaveParty, partyAvailable, setJoinPartyOpen, usePartySurface } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
 import { useRouter } from "../lib/router";
 import { useAccount } from "../lib/account";
-import { openSettings, useSettingsOverlay } from "../lib/settings";
+import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { FriendsBody } from "./friends/FriendsPanel";
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
-import { useFormFactor } from "../lib/ui";
+import { lazyNamed, useFormFactor } from "../lib/ui";
+import type { SettingsHead } from "./SettingsOverlay";
+import { Spinner } from "./Spinner";
+import { ProfileEditSheet } from "./ProfileEditSheet";
 import { Avatar } from "./Avatar";
 import { Sheet } from "./Sheet";
 import { MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "./ui/Menu";
 import { anchorOf, buildChannel, nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
 
+/** Settings, as the profile sheet's next view on a phone: loaded when it's first opened, as the window is (App.tsx). */
+const SettingsOverlay = lazyNamed(() => import("./SettingsOverlay"), "SettingsOverlay");
+
 /** Used for the template profile when nobody's signed in. */
 const GUEST_AVATAR = "guest";
 
-/** `stay`: on a phone the profile sheet stays open (Friends and Join open as views inside it, Settings over it). */
+/** `stay`: on a phone the profile sheet stays open (Friends, Join and Settings open as views inside it). */
 type Choice = { id: string; label: string; icon: ReactNode; run: () => void; stay?: boolean };
 
 /**
@@ -28,7 +34,7 @@ type Choice = { id: string; label: string; icon: ReactNode; run: () => void; sta
  * Without an account it's a template "Guest" profile (Settings, Sign In);
  * signed in it adds switching profiles, managing them, the account and
  * signing out. The same choices three ways: a menu under the avatar, a sheet
- * from the bottom edge on a phone (in reach of a thumb), and on iOS the
+ * from the bottom edge on a phone (in reach of a thumb), and on an iPad the
  * system's own menu.
  */
 export function ProfileMenu() {
@@ -67,7 +73,8 @@ export function ProfileMenu() {
         ? [{ id: "connect-database", label: "Connect a Database…", icon: <Profile />, run: () => openSettings("advanced"), stay: true }]
         : [];
 
-  if (nativeDialogsAvailable) {
+  // An iPad gets iOS's own menu under the avatar; a phone, iPhones too, the sheet below.
+  if (nativeDialogsAvailable && !phone) {
     // The web menu below, as groups of choices (a separator between groups).
     const groups = [[...profiles, ...manage], actions, session];
     const choices = groups.flat();
@@ -138,12 +145,13 @@ export function ProfileMenu() {
 
 /**
  * On a phone: a sheet from the bottom edge. Who's watching first (the profile, then the others to switch to, a
- * tap each), then the rest as rows in cards. Friends and Join Watch Party open as views inside it, with a Back to
- * the list; the sheet's height follows the view. Settings and Account rise over it, and close back to it. Any
- * other choice closes it as it runs.
+ * tap each), then the rest as rows in cards. Friends, Join Watch Party and Settings (Account too, a page of it) open
+ * as views inside it, with a Back to the list; the sheet's height follows the view, up to nearly the screen's for
+ * Settings. Any other choice closes it as it runs.
  *
- * The views are the party surfaces' (lib/party/surface.ts): opened from anywhere else (a friend's request, a
- * notice), the sheet comes up at that view, and the player coming up closes them as it closes the dialogs.
+ * The views are the party surfaces' (lib/party/surface.ts) and Settings' (lib/settings openSettings): opened from
+ * anywhere else (a friend's request, a notice, Manage Add-ons), the sheet comes up at that view, and the player
+ * coming up closes the party ones as it closes the dialogs.
  */
 function ProfileSheet({
   name,
@@ -156,16 +164,28 @@ function ProfileSheet({
 }: {
   name: string;
   avatar: string;
-  me: { name: string; avatar: string } | null;
+  me: { id: string; name: string; avatar: string } | null;
   email?: string;
   profiles: Choice[];
   manage?: Choice;
   groups: Choice[][];
 }) {
   const [listed, setListed] = useState(false);
+  // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
+  const [managing, setManaging] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   const surface = usePartySurface();
-  const view: "list" | "friends" | "join" = surface === "friends" ? "friends" : surface === "join" && me ? "join" : "list";
-  const open = listed || view !== "list";
+  const settingsOpen = useSettingsOverlay().open;
+  const view: "list" | "friends" | "join" | "settings" | "edit" = settingsOpen
+    ? "settings"
+    : surface === "friends"
+      ? "friends"
+      : surface === "join" && me
+        ? "join"
+        : editing
+          ? "edit"
+          : "list";
+  const open = listed || (view !== "list" && view !== "edit");
   // Only a change of view inside the open sheet slides; on opening the sheet's own rise is the entrance.
   const [seen, setSeen] = useState({ open, view, slide: false });
   const slide = seen.open === open && seen.view === view ? seen.slide : seen.open && open && seen.view !== view;
@@ -175,13 +195,8 @@ function ProfileSheet({
     if (current.name === "player") setListed(false);
   }, [current.name]);
 
-  // Settings over the sheet takes Escape and Back first: they close it, not the sheet under it. Read from the last
-  // render, so the Escape that closes Settings doesn't see it closed already and close the sheet too.
-  const settingsOpen = useSettingsOverlay().open;
-  const covered = useRef(settingsOpen);
-  useEffect(() => {
-    covered.current = settingsOpen;
-  }, [settingsOpen]);
+  // What Settings says its view is (its name, and where its Back goes), for the sheet's header.
+  const [settingsHead, setSettingsHead] = useState<SettingsHead>();
 
   const leaveView = () => {
     // Closed while waiting for a friend's host: that's giving up on joining.
@@ -190,14 +205,22 @@ function ProfileSheet({
     closePartySurface("join");
   };
   const close = () => {
-    if (covered.current) return;
     leaveView();
+    closeSettings();
     setListed(false);
+    setManaging(false);
+    setEditing(null);
   };
   const back = () => {
     leaveView();
+    setEditing(null);
     setListed(true);
   };
+  // Settings' own list goes back to the profiles, however Settings was opened.
+  const leaveSettings = useCallback(() => {
+    closeSettings();
+    setListed(true);
+  }, []);
   const done = () => {
     closePartySurface("friends");
     closePartySurface("join");
@@ -213,10 +236,21 @@ function ProfileSheet({
       "Profiles"
     ) : (
       <span className="profile-sheet-title">
-        <button className="profile-sheet-back pressable" aria-label="Back" onPointerDown={(e) => e.stopPropagation()} onClick={back}>
+        <button
+          className="profile-sheet-back pressable"
+          aria-label="Back"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={view === "settings" ? (settingsHead?.back ?? leaveSettings) : back}
+        >
           <ChevronLeft size={22} strokeWidth={2.25} />
         </button>
-        {view === "friends" ? "Friends" : "Join a Watch Party"}
+        {view === "friends"
+          ? "Friends"
+          : view === "join"
+            ? "Join a Watch Party"
+            : view === "edit"
+              ? "Edit Profile"
+              : (settingsHead?.label ?? "Settings")}
       </span>
     );
 
@@ -225,7 +259,7 @@ function ProfileSheet({
       <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => setListed(true)}>
         <Avatar id={avatar} />
       </button>
-      <Sheet open={open} onClose={close} title={title}>
+      <Sheet open={open} onClose={close} title={title} fit>
         <FitHeight>
           <div key={view} className="profile-sheet" data-view={view} data-slide={slide || undefined}>
             {view === "friends" && <FriendsBody inDialog={false} />}
@@ -239,8 +273,32 @@ function ProfileSheet({
                 <LinkForm me={me} onDone={done} />
               </div>
             )}
+            {view === "settings" && (
+              <Suspense
+                fallback={
+                  <div className="profile-sheet-loading">
+                    <Spinner size={22} />
+                  </div>
+                }
+              >
+                <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
+              </Suspense>
+            )}
+            {view === "edit" && editing && <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />}
             {view === "list" && (
-              <ProfileList name={name} avatar={avatar} email={email} profiles={profiles} manage={manage} groups={groups} pick={pick} />
+              <ProfileList
+                name={name}
+                avatar={avatar}
+                email={email}
+                profiles={profiles}
+                manage={manage}
+                groups={groups}
+                pick={pick}
+                managing={managing}
+                onManage={() => setManaging((m) => !m)}
+                onEdit={(id) => setEditing(id)}
+                meId={me?.id}
+              />
             )}
           </div>
         </FitHeight>
@@ -277,6 +335,10 @@ function ProfileList({
   manage,
   groups,
   pick,
+  managing,
+  onManage,
+  onEdit,
+  meId,
 }: {
   name: string;
   avatar: string;
@@ -285,32 +347,49 @@ function ProfileList({
   manage?: Choice;
   groups: Choice[][];
   pick: (c: Choice) => void;
+  managing: boolean;
+  onManage: () => void;
+  onEdit: (id: string) => void;
+  meId?: string;
 }) {
+  // Managing, a tap on a profile opens its page instead of switching to it.
+  const Me = managing && meId ? "button" : "div";
   return (
-    <>
-      <div className="profile-sheet-me">
-            <Avatar id={avatar} />
-            <strong>{name}</strong>
-            <span>{email ?? "Not signed in"}</span>
-          </div>
-          {(profiles.length > 0 || manage) && (
-            <div className="profile-sheet-others">
-              {profiles.map((c) => (
-                <button key={c.id} className="profile-sheet-other pressable" onClick={() => pick(c)}>
-                  {c.icon}
-                  <span>{c.label}</span>
-                </button>
-              ))}
-              {manage && (
-                <button className="profile-sheet-other pressable" onClick={() => pick(manage)}>
-                  <span className="profile-sheet-manage" aria-hidden>
-                    <Edit size={22} />
-                  </span>
-                  <span>Manage</span>
-                </button>
-              )}
-            </div>
+    <div className="profile-sheet-profiles" data-managing={managing || undefined}>
+      <Me className="profile-sheet-me" {...(Me === "button" ? { type: "button" as const, onClick: () => onEdit(meId!), "aria-label": `Edit ${name}` } : {})}>
+        <span className="profile-sheet-face">
+          <Avatar id={avatar} />
+          <EditMark />
+        </span>
+        <strong>{name}</strong>
+        <span>{email ?? "Not signed in"}</span>
+      </Me>
+      {(profiles.length > 0 || manage) && (
+        <div className="profile-sheet-others">
+          {profiles.map((c) => (
+            <button
+              key={c.id}
+              className="profile-sheet-other pressable"
+              aria-label={managing ? `Edit ${c.label}` : undefined}
+              onClick={() => (managing ? onEdit(c.id.replace(/^profile:/, "")) : pick(c))}
+            >
+              <span className="profile-sheet-face">
+                {c.icon}
+                <EditMark />
+              </span>
+              <span>{c.label}</span>
+            </button>
+          ))}
+          {manage && (
+            <button className="profile-sheet-other pressable" aria-pressed={managing} onClick={onManage}>
+              <span className="profile-sheet-manage" aria-hidden>
+                {managing ? <Check size={22} /> : <Edit size={22} />}
+              </span>
+              <span>{managing ? "Done" : "Manage"}</span>
+            </button>
           )}
+        </div>
+      )}
           {groups
             .filter((g) => g.length)
             .map((g) => (
@@ -324,6 +403,15 @@ function ProfileList({
                 ))}
               </div>
             ))}
-    </>
+    </div>
+  );
+}
+
+/** A profile's pencil while the list is managed: it fades in over the picture (account.css). */
+function EditMark() {
+  return (
+    <span className="profile-sheet-edit" aria-hidden>
+      <Edit size={20} />
+    </span>
   );
 }

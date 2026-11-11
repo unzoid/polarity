@@ -143,13 +143,16 @@ static NSArray<UIMenuElement *> *menu_elements(NSArray *actions, uint64_t reques
             section = [NSMutableArray array];
         }
         group = a[@"group"];
+        // Its glyph, an SF Symbol by name; one the system doesn't have is left out.
+        NSString *symbol = string(a[@"symbol"]);
+        UIImage *image = symbol ? [UIImage systemImageNamed:symbol] : nil;
         NSArray *children = list(a[@"children"]);
         if (children.count) {
-            [section addObject:[UIMenu menuWithTitle:label children:menu_elements(children, request, NO)]];
+            [section addObject:[UIMenu menuWithTitle:label image:image identifier:nil options:0 children:menu_elements(children, request, NO)]];
             continue;
         }
         UIAction *action = [UIAction actionWithTitle:label
-                                               image:nil
+                                               image:image
                                           identifier:nil
                                              handler:^(UIAction *picked) { polar_dialog_done(request, actionId.UTF8String); }];
         if ([style isEqualToString:@"destructive"]) action.attributes = UIMenuElementAttributesDestructive;

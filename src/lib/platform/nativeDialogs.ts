@@ -16,6 +16,8 @@ export type DialogAction = {
   checked?: boolean;
   /** A menu's section: consecutive actions with the same group sit together. */
   group?: number;
+  /** A menu item's glyph: an SF Symbol's name, drawn beside its label. */
+  symbol?: string;
   /** A submenu (a second sheet where the menu is a sheet); the answer is a child's id. */
   children?: DialogAction[];
 };

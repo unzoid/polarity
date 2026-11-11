@@ -41,6 +41,8 @@ import {
 import { episodeCode, formatBytes } from "../../lib/format";
 import { useProgressOf } from "../../lib/net";
 import { useRouter } from "../../lib/router";
+import { os } from "../../lib/platform";
+import { useFormFactor } from "../../lib/ui";
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 const seasonName = (s: number) => (s === 0 ? "Specials" : `Season ${s}`);
@@ -63,7 +65,11 @@ export function DownloadsPage() {
     return m;
   }, [progress]);
 
-  const [view, setView] = useState<DownloadsView>(readDownloadsView);
+  // A phone's page is the list and little else: no Movies / Shows / In Progress switch (what's coming down has
+  // its own section at the top already), so everything shows whatever this device's last choice was.
+  const phone = useFormFactor().form === "phone";
+  const [stored, setView] = useState<DownloadsView>(readDownloadsView);
+  const view = useMemo((): DownloadsView => (phone ? { ...stored, filter: "all" } : stored), [stored, phone]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const update = (patch: Partial<DownloadsView>) =>
@@ -140,12 +146,14 @@ export function DownloadsPage() {
     <div className="downloads" data-selecting={selected ? "" : undefined}>
       <StorageSummary list={all} />
       <div className="downloads-toolbar" data-nav-row data-nav-group>
-        <Segmented
-          label="Show"
-          options={DOWNLOAD_FILTERS.map((f) => ({ id: f.value, label: f.label }))}
-          value={view.filter}
-          onChange={(filter) => update({ filter })}
-        />
+        {!phone && (
+          <Segmented
+            label="Show"
+            options={DOWNLOAD_FILTERS.map((f) => ({ id: f.value, label: f.label }))}
+            value={view.filter}
+            onChange={(filter) => update({ filter })}
+          />
+        )}
         {finished.length + new Set(active.map((d) => d.metaId)).size > SEARCH_FROM && (
           <SearchField look="pill" label="Search downloads" placeholder="Search" value={query} onChange={setQuery} className="downloads-search" />
         )}
@@ -204,7 +212,8 @@ function StorageSummary({ list }: { list: DownloadRecord[] }) {
   return (
     <div className="downloads-summary">
       <p className="t-headline tabular">{parts.filter(Boolean).join(" · ")}</p>
-      {storage?.dir && (
+      {/* A phone's app keeps its files in its own container: a path there is nothing anyone can go to. */}
+      {storage?.dir && os !== "ios" && os !== "android" && (
         <p className="t-caption faint downloads-folder" title={storage.dir}>
           Saved in {storage.dir}
         </p>

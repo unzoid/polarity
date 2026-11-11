@@ -18,6 +18,7 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.WindowManager
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -184,7 +185,7 @@ open class PolarDevice(private val context: Context, private val tv: Boolean) {
 
 /**
  * The window and app changes, as messages from the app's own pages (src/lib/platform/back.ts, deepLinks.ts):
- * `leave`, `immersive:on|off`, `links-ready`, `stremio-links:on|off`, and notifications' `notes:…` (NotesWorker.kt).
+ * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, and notifications' `notes:…` (NotesWorker.kt).
  */
 class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessageListener {
   override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
@@ -194,6 +195,8 @@ class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessa
       "leave" -> leave(activity)
       "immersive:on" -> immersive(activity, true)
       "immersive:off" -> immersive(activity, false)
+      "awake:on" -> keepAwake(activity, true)
+      "awake:off" -> keepAwake(activity, false)
       "links-ready" -> linksReady(activity)
       "stremio-links:on" -> setStremioLinks(activity, true)
       "stremio-links:off" -> setStremioLinks(activity, false)
@@ -209,6 +212,9 @@ class PolarDeviceWithActions(private val activity: Activity, tv: Boolean) : Pola
 
   @JavascriptInterface
   fun immersive(on: Boolean) = immersive(activity, on)
+
+  @JavascriptInterface
+  fun keepAwake(on: Boolean) = keepAwake(activity, on)
 
   @JavascriptInterface
   fun linksReady() = linksReady(activity)
@@ -231,6 +237,15 @@ private fun immersive(activity: Activity, on: Boolean) {
     val bars = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
     bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     if (on) bars.hide(WindowInsetsCompat.Type.systemBars()) else bars.show(WindowInsetsCompat.Type.systemBars())
+  }
+}
+
+// A video playing (src/lib/platform/back.ts): the screen stays on, as it does in other video apps. Paused or
+// closed, it dims and locks on its own again.
+private fun keepAwake(activity: Activity, on: Boolean) {
+  activity.runOnUiThread {
+    if (on) activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   }
 }
 

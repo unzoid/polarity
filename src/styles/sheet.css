@@ -463,29 +463,34 @@
 /* A phone: the quality switch has the first row; the add-on dropdown and Filters share the
    second, the dropdown taking what Filters leaves, rather than drifting to the right on their own. */
 :root[data-form="phone"] .srcf-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 0.625rem;
 }
 :root[data-form="phone"] .srcf-bar > :first-child {
-  grid-column: 1 / -1;
-  justify-self: start;
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 36px - 0.625rem);
 }
 :root[data-form="phone"] .srcf-bar > :first-child:empty {
   display: none;
 }
+:root[data-form="phone"] .srcf-bar > .srcf-filters {
+  order: 1;
+}
+/* The add-on picker follows them where there's room (the player, held sideways), else takes the next row. */
 :root[data-form="phone"] .srcf-addon {
-  min-width: 0;
-  max-width: none;
+  order: 2;
   margin-left: 0;
 }
-/* Without an add-on choice, Filters starts the row. */
-:root[data-form="phone"] .srcf-bar > .srcf-filters:nth-child(2) {
-  justify-self: start;
+/* Filters is its glyph alone on a phone, right after the quality switch on its row. */
+:root[data-form="phone"] .srcf-filters {
+  justify-content: center;
+  width: 36px;
+  padding: 0;
 }
-:root[data-form="phone"] .srcf-bar > .srcf-active {
-  grid-column: 1 / -1;
+:root[data-form="phone"] .srcf-filters-label {
+  display: none;
 }
 /* As wide as its label (up to a point), never so narrow "All add-ons" is cut. */
 .srcf-addon {
@@ -649,6 +654,21 @@
 }
 .srcf-chiprow-search {
   width: 9.5rem;
+  animation: srcf-search-open var(--dur-base) var(--ease-out);
+}
+@keyframes srcf-search-open {
+  from {
+    opacity: 0;
+    transform: scaleX(0.6);
+    transform-origin: right center;
+  }
+}
+/* Folded into its glyph, the row's head keeps the field's height, so opening it moves nothing under it. */
+.srcf-chiprow-search-open {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: -0.25rem -0.25rem -0.25rem 0;
+  color: var(--text-2);
 }
 /* Past three rows: the rest folds away, fading out at the cut. */
 .srcf-chips[data-folded] {
@@ -765,12 +785,16 @@
   gap: 0.5em;
 }
 
+/* Nothing to list: the message and what to do about it in the middle of the sheet, not tucked in its corner. */
 .stream-empty {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: min(22rem, 45dvh);
   padding: 1rem 0.625rem;
+  text-align: center;
 }
 .stream-empty p {
   margin: 0;

@@ -1039,9 +1039,84 @@
 :root[data-form="phone"] .detail {
   --art-h: min(64svh, 150vw);
 }
+/* The page comes in whole (usePageTogether, Detail.tsx): its outline until everything is there, then the page
+   over it in one fade, the outline going as it comes. A page that's all there already shows at once. */
+:root[data-form="phone"] .detail[data-ready="pending"] .detail-scroll {
+  opacity: 0;
+}
+:root[data-form="phone"] .detail[data-ready="ready"] .detail-scroll {
+  animation: detail-together 320ms var(--ease-out);
+}
+@keyframes detail-together {
+  from {
+    opacity: 0;
+  }
+}
+.detail-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 320ms var(--ease-out);
+}
+.detail:not([data-ready="pending"]) .detail-skeleton {
+  opacity: 0;
+}
+/* Gone, it holds still: the shimmer would repaint every frame for nothing. */
+.detail:not([data-ready="pending"]) .detail-skeleton .skeleton {
+  animation: none;
+}
+.detail-skeleton-art {
+  height: var(--art-h);
+  -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent);
+  mask-image: linear-gradient(to bottom, black 55%, transparent);
+}
+/* Where the hero puts each part (.detail-hero on a phone, below). */
+.detail-skeleton-hero {
+  position: absolute;
+  inset: calc(var(--art-h) - 9rem) 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0 var(--gutter);
+}
+.detail-skeleton-logo {
+  width: 60%;
+  height: 4.5rem;
+  border-radius: var(--r-md);
+}
+.detail-skeleton-play {
+  width: 100%;
+  height: 3rem;
+  margin-top: 0.25rem;
+  border-radius: var(--r-pill);
+}
+.detail-skeleton-buttons {
+  display: flex;
+  gap: 1.5rem;
+}
+.detail-skeleton-button {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-round);
+}
+.detail-skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-self: stretch;
+  margin-top: 0.5rem;
+}
 :root[data-form="phone"] .detail-bg {
   inset: 0 0 auto 0;
   height: var(--art-h);
+}
+/* The strip of a wide backdrop a phone shows sits on the picture's subject, not its middle (DetailArt.tsx). */
+:root[data-form="phone"] .detail-bg img {
+  object-position: var(--art-x, 50%) 20%;
+  /* The page waits for the place (pageMotion.ts); when that took too long, the art eases over instead of jumping. */
+  transition: object-position 420ms var(--ease-out);
 }
 :root[data-form="phone"] .detail-bg-blur,
 :root[data-form="phone"] .detail-fold {
@@ -1180,4 +1255,125 @@
     left: auto;
     right: calc(0.25rem + 68px);
   }
+}
+
+/* The number before a listed episode's title: a phone's, which has no number column. */
+.episode-title-num {
+  display: none;
+}
+
+/* --- A phone's seasons, as phone apps lay them out (Netflix, Disney+): the season a compact menu button
+   in the controls' size, the tools one row of controls under it that wraps rather than running off the
+   edge, and the episodes down the page (EpisodeShelf's list on a phone): the still with the number, title
+   and air date beside it, the synopsis under both. */
+:root[data-form="phone"] :is(.seasons-picker, .seasons-tabs) .select-trigger[data-size="large"] {
+  max-width: 100%;
+  min-height: 2.25rem;
+  padding: 0 0.625rem 0 0.875rem;
+  gap: 0.375rem;
+  border-radius: var(--r-sm);
+  background: var(--fill-4);
+  color: var(--text);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+:root[data-form="phone"] .seasons-bar {
+  padding-bottom: 0.5rem;
+}
+/* One line: the season, Download Season's glyph beside it (BatchDownload.tsx), the row/list switch at the end. */
+:root[data-form="phone"] .seasons-bar > .seasons-picker {
+  flex: 0 1 auto;
+}
+:root[data-form="phone"] .anime-episodes-tools {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+:root[data-form="phone"] .anime-episode-search {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+:root[data-form="phone"] .episode-list {
+  padding-top: 0;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] {
+  border-bottom: none;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main,
+:root[data-form="phone"] .episode-card[data-layout="list"]:has(.download-reveal) .episode-card-main {
+  /* The rows around the text share what the still leaves, so the text sits in the middle beside it. */
+  grid-template-columns: 8.5rem minmax(0, 1fr) var(--episode-buttons, 4rem);
+  grid-template-rows: 1fr auto auto auto 1fr auto;
+  grid-template-areas:
+    "still . ."
+    "still kicker ."
+    "still title ."
+    "still meta ."
+    "still . ."
+    "over over over";
+  align-items: start;
+  column-gap: 0.875rem;
+  row-gap: 0.125rem;
+  /* Up next's fill reaches a little past the still and the synopsis; the still stays where the buttons expect it. */
+  margin: 0 -0.5rem;
+  padding: 0.75rem 0.5rem 0.75rem 0.75rem;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-text {
+  display: contents;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-number {
+  display: none;
+}
+:root[data-form="phone"] .episode-title-num {
+  display: inline;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-kicker {
+  grid-area: kicker;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-title {
+  grid-area: title;
+  font-size: var(--fs-base);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-text > .t-caption {
+  grid-area: meta;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-overview {
+  grid-area: over;
+  margin: 0.5rem 0 0;
+  -webkit-line-clamp: 3;
+}
+/* Download and Sources stand to the right of the title, level with the still's middle: plain glyphs on the
+   page, not chips on the picture. The text column gives them their room (more with Show in Folder there too). */
+:root[data-form="phone"] .episode-card[data-layout="list"]:has(.download-reveal) {
+  --episode-buttons: 6.25rem;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download) {
+  top: calc(0.75rem + 8.5rem * 9 / 32 - 18px);
+  left: auto;
+  width: 36px;
+  height: 36px;
+  margin-top: 0;
+  color: var(--text-2);
+  background: none;
+  backdrop-filter: none;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download):active {
+  background: var(--fill-3);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download) svg {
+  filter: none;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-sources {
+  right: -0.25rem;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-download {
+  right: calc(36px - 0.25rem);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon.episode-download.download-reveal {
+  right: calc(72px - 0.25rem);
 }

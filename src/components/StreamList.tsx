@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AlertCircle, Check, Info, Instant } from "./icons";
+import { AlertCircle, Check, Filters, Info, Instant, Puzzle } from "./icons";
 import { useRouter } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, useStreams } from "../lib/net";
@@ -40,7 +40,7 @@ export function StreamList({
   const { settings } = useTitleSettings(type, videoId);
   // The title's length, for Best Match's bitrates: its meta is usually already loaded (the page behind this list).
   const { data: meta } = useMeta(type, videoId.replace(/:\d+:\d+$/, ""));
-  const f = useSourceFilters(data?.streams, settings, undefined, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
+  const f = useSourceFilters(data?.streams, settings, undefined, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   // The first few sources in view get a look ahead of time (#21).
   const ready = useReadiness(f.view.slice(0, Math.min(f.matched, READY_CHECKS)).map(({ r }) => r));
   // A source's "i" panel (#229); on TV, the row's menu that leads to it.
@@ -74,10 +74,12 @@ export function StreamList({
         </p>
         {hidden ? (
           <Button variant="glass" onClick={() => showSettings("sources")}>
+            <Filters size={18} />
             Source Filters
           </Button>
         ) : (
           <Button variant="glass" onClick={() => showSettings("addons")}>
+            <Puzzle size={18} />
             Manage Add-ons
           </Button>
         )}

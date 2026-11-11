@@ -42,6 +42,30 @@
 .player[data-instant="true"] .player-bottom {
   transition: none;
 }
+/* On a phone or tablet the whole picture dims while the controls are up, as video apps do there, so the
+   controls over the middle of a bright scene read; the bars' own gradients darken the edges further. Under
+   the subtitles and everything else on the video; it fades with the controls. */
+:root[data-touch="true"] .player::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+:root[data-touch="true"] .player[data-chrome="false"]::before {
+  opacity: 0;
+}
+:root[data-touch="true"] .player[data-instant="true"]::before {
+  transition: none;
+}
+:root[data-touch="true"] .player-top {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0.3) 55%, transparent);
+}
+:root[data-touch="true"] .player-bottom {
+  background: linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 55%, transparent);
+}
 
 /* The focus ring only for focus moved by the keyboard (#329, useKeyboardFocus): never after a click,
    nor for a shortcut pressed while a clicked button keeps the focus. It fades in quickly and fades
@@ -195,18 +219,22 @@
 .skip-transport > * {
   grid-area: 1 / 1;
 }
+.skip-transport {
+  /* How far past the circle's edge the count comes to rest. */
+  --skip-out: 12px;
+}
 .skip-arrow {
-  transition: transform var(--dur-slow) var(--ease-out);
+  transition: transform 380ms var(--ease-out);
 }
 .skip-num,
 .skip-total {
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
   pointer-events: none;
   transition:
-    transform var(--dur-base) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-out);
+    transform 340ms var(--ease-out),
+    opacity 220ms var(--ease-out);
 }
 .skip-num {
   /* The 8-unit figure of the old 24-unit glyph, at 56px. In px like the circle: in rem it outgrew
@@ -233,7 +261,12 @@
 }
 .skip-transport[data-out="true"] .skip-total {
   opacity: 1;
-  transform: translateX(0);
+}
+.skip-transport[data-dir="forward"][data-out="true"] .skip-total {
+  transform: translateX(var(--skip-out));
+}
+.skip-transport[data-dir="back"][data-out="true"] .skip-total {
+  transform: translateX(calc(-1 * var(--skip-out)));
 }
 .skip-transport[data-out="true"] .skip-num {
   opacity: 0;
@@ -446,14 +479,88 @@
   padding-left: max(1.25rem, var(--safe-left));
   padding-right: max(1.25rem, var(--safe-right));
 }
+/* A phone held sideways, in Netflix's proportions: the centre glyphs smaller and set wider apart, the clock
+   and the actions a size down, and the actions (each its glyph and word on one line) gathered in the middle
+   rather than spread from edge to edge. Upright (compact) they stay the glyphs alone, spread out. */
+:root[data-form="phone"] .player-center {
+  gap: clamp(3rem, 16vw, 9rem);
+}
+:root[data-form="phone"] .player-transport {
+  width: 64px;
+  height: 64px;
+}
+:root[data-form="phone"] .player-transport-main {
+  width: 72px;
+  height: 72px;
+}
+:root[data-form="phone"] .player-transport-main > svg {
+  width: 46px;
+  height: 46px;
+}
+:root[data-form="phone"] .skip-arrow {
+  width: 46px;
+  height: 46px;
+}
+:root[data-form="phone"] .skip-num {
+  font-size: 15px;
+  padding-top: 1px;
+}
+:root[data-form="phone"] .skip-total {
+  font-size: 1.125rem;
+}
+/* The count starts in the middle of the circle: half the 64px button in. */
+:root[data-form="phone"] .skip-transport[data-dir="forward"] .skip-total {
+  transform: translateX(-32px);
+}
+:root[data-form="phone"] .skip-transport[data-dir="back"] .skip-total {
+  transform: translateX(32px);
+}
+:root[data-form="phone"] .skip-transport[data-dir="forward"][data-out="true"] .skip-total {
+  transform: translateX(var(--skip-out));
+}
+:root[data-form="phone"] .skip-transport[data-dir="back"][data-out="true"] .skip-total {
+  transform: translateX(calc(-1 * var(--skip-out)));
+}
+:root[data-form="phone"] .player-remaining {
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
 :root[data-form="phone"] .player-action {
-  flex-direction: column;
-  gap: 0.25rem;
-  height: auto;
-  min-height: var(--hit);
-  padding: 0.25rem 0.5rem;
-  font-size: var(--fs-xs);
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  font-size: var(--fs-md);
   white-space: nowrap;
+}
+:root[data-form="phone"] .player-action > svg {
+  width: 20px;
+  height: 20px;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .player-actions {
+  justify-content: center;
+  gap: clamp(0.25rem, 2.5vw, 1.75rem);
+  margin-top: 0;
+  /* Down in the home indicator's strip the screen's corners curve in: the row keeps clear of them, so with many
+     actions (a party's, Next Episode) the last isn't cut by the corner. Past that, the words go and the glyphs
+     stay (useBarFit measures the row's own width). */
+  padding-inline: 2rem;
+}
+/* The bar sits at the bottom of the screen, as Netflix's does: its last row reaches into the home indicator's
+   strip (the indicator is a thin line in the middle; the words either side of it stay clear), rather than a
+   full inset and a margin above it. Skip Intro follows it down, just above the timeline. */
+:root[data-form="phone"] .player-bottom {
+  --bar-bottom: max(0.25rem, calc(var(--safe-bottom) - 0.75rem));
+  padding-top: 3.5rem;
+  padding-bottom: var(--bar-bottom);
+}
+:root[data-form="phone"] .player-action {
+  height: 38px;
+}
+:root[data-form="phone"] .skip-button {
+  right: max(1.25rem, var(--safe-right));
+  bottom: calc(6.25rem + max(0.25rem, calc(var(--safe-bottom) - 0.75rem)));
+  height: 2.5rem;
+  padding: 0 1rem 0 1.125rem;
+  font-size: var(--fs-md);
 }
 
 /* Volume: slider fill painted from a per-element custom property (one element,
@@ -1980,6 +2087,17 @@ img.load-mark-base[data-logo-look^="halo"] {
   height: auto;
   max-height: none;
 }
+/* Stacked, the columns shrank in proportion to their lists: a long Subtitles list crushed Audio's two or three
+   rows to a sliver under its heading. The ones above keep their height (scrolling past 38% of the screen), and
+   the last takes what's left, scrolling on its own. */
+:root[data-compact="true"] .options-columns > .options-column:not(:last-child) {
+  flex: 0 0 auto;
+  max-height: 38dvh;
+}
+:root[data-compact="true"] .options-columns > .options-column:last-child {
+  flex: 1 1 0;
+  min-height: 0;
+}
 /* The source list fills the screen even when filtered down, so the bar above it stays put. */
 :root[data-compact="true"] .options-columns > .options-column:has(.srcf:not(.srcf-tv)) {
   flex: 1 1 0;
@@ -2134,6 +2252,11 @@ img.load-mark-base[data-logo-look^="halo"] {
 .episode-rail-card[aria-current] .episode-rail-still {
   box-shadow: 0 0 0 2px var(--text);
 }
+/* On a touch screen nothing moves a focus through the rail, so the ring reads as a stray border:
+   the Playing badge marks the episode on its own. */
+:root[data-touch="true"] .episode-rail-card[aria-current] .episode-rail-still {
+  box-shadow: none;
+}
 .episode-rail-play {
   position: absolute;
   inset: 0;
@@ -2244,6 +2367,60 @@ img.load-mark-base[data-logo-look^="halo"] {
 /* A compact window (a phone held upright): a card most of the screen wide, the next one peeking in. */
 :root[data-compact="true"] .episode-rail {
   grid-auto-columns: min(78vw, 340px);
+}
+/* A phone's overlays, as Netflix's: nearly black over the picture, so the lists read as their own screen
+   rather than text over a bright frame. */
+:root[data-form="phone"] .options-shade {
+  background: rgb(0 0 0 / 0.86);
+}
+/* Episodes on a phone held sideways. Close is at the top right there, so the season sits on its line at the
+   top left instead of under its band, a size down; the cards are tighter, so each one's synopsis is on the
+   screen rather than off its bottom. */
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:has(.options-column[data-size="full"]):not([data-place="beside"]) {
+  --options-band: calc(0.75rem + var(--safe-top));
+  place-items: start center;
+}
+:root[data-form="phone"] .options-column[data-size="full"] .options-head {
+  min-height: 44px;
+  margin-bottom: 0.625rem;
+}
+/* The season stays at the top with Close; the episodes sit in the middle of the room under it, not hard up
+   against the season with the bottom of the screen empty. The column takes the whole height (not the 86vh a
+   big screen's has), and the rail is centred in what the head leaves by auto margins, which, unlike centring,
+   never push a rail taller than that up under the head. */
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column[data-size="full"] {
+  height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+  max-height: none;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-column[data-size="full"] .options-list > :first-child {
+  margin-top: auto;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-column[data-size="full"] .options-list > :last-child {
+  margin-bottom: auto;
+}
+:root[data-form="phone"] .episode-rail-head .select-trigger[data-size="large"] {
+  font-size: var(--fs-xl);
+}
+:root[data-form="phone"]:not([data-compact="true"]) .episode-rail-viewport {
+  --rail-card-w: clamp(180px, 23vw, 240px);
+}
+:root[data-form="phone"] .episode-rail {
+  gap: 0.875rem;
+}
+:root[data-form="phone"] .episode-rail-main {
+  gap: 0.375rem;
+}
+:root[data-form="phone"] .episode-rail-title {
+  font-size: var(--fs-md);
+}
+:root[data-form="phone"] .episode-rail-meta {
+  margin: 0.125rem 0;
+}
+:root[data-form="phone"] .episode-rail-card .episode-rail-download {
+  top: calc(100cqw * 9 / 16 - 0.125rem);
+}
+:root[data-form="phone"]:not([data-compact="true"]) .episode-rail-overview {
+  -webkit-line-clamp: 4;
 }
 
 /* --- A YouTube video (#384): YouTube's player with its own controls, and nothing of ours over it (YouTube's
