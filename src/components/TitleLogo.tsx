@@ -1,7 +1,20 @@
 import { useEffect, useState } from "react";
 import { Img, type ImgProps } from "./Img";
 import { api } from "../lib/api";
-import { backdropLuminance, chooseLogo, clearShare, DARK_PAGE, measureInk, type Ink, type LogoLook, type LogoShape, type LogoSpot } from "../lib/ui";
+import {
+  backdropLuminance,
+  chooseLogo,
+  clearShare,
+  DARK_PAGE,
+  imageBroken,
+  imageLoaded,
+  measureInk,
+  scrimLevel,
+  type Ink,
+  type LogoLook,
+  type LogoShape,
+  type LogoSpot,
+} from "../lib/ui";
 
 type TitleLogoProps = ImgProps & {
   src?: string;
@@ -23,17 +36,53 @@ type TitleLogoProps = ImgProps & {
  * (not even through the app), `onFail` is called so the caller shows the name. A picture that couldn't be
  * measured is named in the console by its host.
  */
-export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
-  const { src, onFail } = props;
+export function TitleLogo({ logos, backdrop, spot, onReady, ...props }: TitleLogoProps & { onReady?: () => void }) {
+  const { src, onFail, onLoad } = props;
   const choice = useLogoChoice(src, logos, backdrop, spot);
   const named = choice === "unsure" || choice === "none";
   useEffect(() => {
     if (named) onFail?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [named]);
+  // Ready once the chosen logo is measured and its picture is in: the page around it may show (useReadyTogether).
+  const [, loadedOne] = useState(0);
+  const ready = !!src && logoReady(src, logos, backdrop, spot);
+  useEffect(() => {
+    if (ready) onReady?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
   if (named) return null;
   const look = choice?.look ?? "as-is";
-  return <Img {...props} src={choice?.src ?? src} data-logo-look={look === "as-is" ? undefined : look} data-logo-pending={choice ? undefined : ""} />;
+  return (
+    <Img
+      {...props}
+      src={choice?.src ?? src}
+      onLoad={(e) => {
+        loadedOne((n) => n + 1);
+        onLoad?.(e);
+      }}
+      data-logo-look={look === "as-is" ? undefined : look}
+      data-logo-pending={choice ? undefined : ""}
+    />
+  );
+}
+
+/** The cache key of a logo's choice: its candidates and the spot on the backdrop it's measured against. */
+function choiceId(src: string, logos?: string[], backdrop?: string, spot?: LogoSpot) {
+  const candidates = logos?.includes(src) ? logos.slice(0, MAX_CANDIDATES) : [src];
+  const behindKey = backdrop && spot ? `${backdrop} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim} ${scrimLevel(spot)}` : undefined;
+  return { candidates, id: `${candidates.join(" ")}|${behindKey}` };
+}
+
+/**
+ * Whether {@link TitleLogo} is done for these arguments: its choice is made and the chosen picture loaded (or
+ * failed), or no logo will show (the name does). Synchronous, so a page whose logo is in already shows at once.
+ */
+export function logoReady(src: string, logos?: string[], backdrop?: string, spot?: LogoSpot) {
+  const choice = choices.get(choiceId(src, logos, backdrop, spot).id);
+  if (choice === undefined) return false;
+  if (typeof choice === "string") return true;
+  return imageLoaded(choice.src) || imageBroken(choice.src);
 }
 
 /**
@@ -41,10 +90,7 @@ export function TitleLogo({ logos, backdrop, spot, ...props }: TitleLogoProps) {
  * logo to show and how, "none" or "unsure" when the name shows instead, undefined while it's being measured.
  */
 export function useLogoChoice(src: string | undefined, logos?: string[], backdrop?: string, spot?: LogoSpot): Choice | undefined {
-  const candidates = src && logos?.includes(src) ? logos.slice(0, MAX_CANDIDATES) : src ? [src] : [];
-  const key = candidates.join(" ");
-  const behindKey = backdrop && spot ? `${backdrop} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim}` : undefined;
-  const id = `${key}|${behindKey}`;
+  const { candidates, id } = src ? choiceId(src, logos, backdrop, spot) : { candidates: [] as string[], id: "" };
   // The choice lives in the module's cache, so a new title never shows the last one's for a frame.
   const choice = choices.get(id);
   const [, setMeasured] = useState(0);
@@ -197,13 +243,14 @@ function measureLogo(src: string) {
 
 /** The luminance behind the logo, measured once per backdrop and spot; null when it can't be. */
 function measureBackdrop(src: string, spot: LogoSpot) {
-  const key = `${src} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim}`;
+  const level = scrimLevel(spot);
+  const key = `${src} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim} ${level}`;
   let lum = behinds.get(key);
   if (!lum) {
     lum = loadReadable(src).then((img) => {
       const px = img && pixelsOf(img, 48, spot);
       if (!px) noteUnmeasured("backdrop", src);
-      return px ? backdropLuminance(px, spot.scrim) : null;
+      return px ? backdropLuminance(px, spot.scrim, level) : null;
     }).catch(() => null);
     behinds.set(key, lum);
   }

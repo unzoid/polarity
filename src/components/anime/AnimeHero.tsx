@@ -18,12 +18,13 @@ import { joinFacts } from "../../lib/format";
 import { usePrefs } from "../../lib/settings";
 import { Star, Volume, VolumeMuted } from "../icons";
 import { IconButton } from "../ui/Button";
-import { useArtGate } from "../../lib/ui";
+import { useArtGate, useReadyTogether } from "../../lib/ui";
+import { HeroSkeleton } from "../title/HeroSkeleton";
 import { SourcePicker, useSourcePicker } from "../title/SourcePicker";
 import { TitleActions } from "../title/TitleActions";
 import { SimklPanel } from "../title/SimklPanel";
 import { TraktNotSent } from "../title/TraktRating";
-import { TitleHeading } from "../title/TitleHeading";
+import { TitleHeading, useHeadingReady } from "../title/TitleHeading";
 import { openTrailer } from "../Trailer";
 import { AnimeSeriesPick } from "./AnimeSeriesPick";
 import { useAnimePlayback } from "./useAnimePlayback";
@@ -124,11 +125,25 @@ export function AnimeHero({
       ];
   const paragraphs = cleanDescription(anime?.description);
   const gate = useArtGate(background);
+  // The page loads together (as a title page does, Detail.tsx): the art, the heading, the entry's details and
+  // what Play plays come in as one, over a skeleton until then.
+  const heading = useHeadingReady({ logo, logos, backdrop: background, look: "detail", pending: logoPending });
+  const ready = useReadyTogether(!!anime && !pb.loading && gate["data-art"] === "ready" && heading.ready, String(item.id));
 
   return (
-    <section className="detail-hero anime-hero" {...gate}>
+    <section className="detail-hero anime-hero" {...gate} data-ready={ready}>
       <div className="detail-hero-main">
-        <TitleHeading name={name} logo={logo} logos={logos} backdrop={background} look="detail" pending={logoPending} onLogoFail={() => setNoLogo(logo)} />
+        {!ready && <HeroSkeleton />}
+        <TitleHeading
+          name={name}
+          logo={logo}
+          logos={logos}
+          backdrop={background}
+          look="detail"
+          pending={logoPending}
+          onLogoFail={() => setNoLogo(logo)}
+          onSettled={heading.onSettled}
+        />
         {subtitle && <p className="anime-native t-callout">{subtitle}</p>}
         <p className="detail-facts anime-meta-line t-callout tabular">
           {score && (

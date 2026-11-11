@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ElementType } from "react";
-import { useProfileSheetHosts } from "../profileSheetHost";
+import { useProfileMenuHosts } from "../profileSheetHost";
 import { Dialog } from "@base-ui/react/dialog";
 import { useAccount, type FriendEntry, type FriendPresence } from "../../lib/account";
 import {
@@ -32,8 +32,8 @@ import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
  */
 export function FriendsPanel() {
   const open = useFriendsOpen();
-  // A phone's profile sheet shows it as one of its views instead (ProfileMenu.tsx).
-  const inSheet = useProfileSheetHosts();
+  // The profile menu shows it as one of its views instead (ProfileMenu.tsx), but on iOS.
+  const inSheet = useProfileMenuHosts();
   return (
     <Dialog.Root
       open={open && !inSheet}

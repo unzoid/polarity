@@ -70,11 +70,14 @@ export const clock = (page: Page) => page.locator(".player-remaining").textConte
 
 /**
  * The watch party's dialogs and panels on screen (#247): the join dialog, a link to confirm, "Watch party over",
- * the party menu (top bar popover, TV panel) and the player's Watch Party panel. Never more than one.
+ * the party menu (top bar popover, TV panel), the profile menu at its Join or Friends view, and the player's
+ * Watch Party panel. Never more than one.
  */
 export const partySurfaces = (page: Page) =>
   page
-    .locator(".party-dialog, .party-link-confirm, .party-popover, .tv-party, .tv-join, .options-overlay[data-open=true]:has(.party-pane, .party-column)")
+    .locator(
+      ".party-dialog, .party-link-confirm, .party-popover, .profile-pop:has(.profile-pop-view:not([data-view=list])), .tv-party, .tv-join, .tv-friends, .options-overlay[data-open=true]:has(.party-pane, .party-column)",
+    )
     .filter({ visible: true });
 
 /** Season names whose letters reach below the baseline, and above the capitals (#353). */

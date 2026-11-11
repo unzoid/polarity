@@ -190,6 +190,9 @@ pub struct Mpv {
     /// Bumped on every `mpv_load`, so autocrop measures each load afresh
     /// (the same URL played again included).
     loads: AtomicU64,
+    /// Which player asked for a load last and whose file mpv has, so a player
+    /// that was left can't load over or stop its successor (`polar_player::turns`).
+    turns: polar_player::turns::Turns,
     /// Bumped each time an autocrop loop starts; an older loop sees it and
     /// stops, so switching autocrop off and on quickly can't leave two running.
     autocrop_run: AtomicU64,

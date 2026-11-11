@@ -101,6 +101,31 @@ test("ErrorBoundary: children render as they are while nothing fails; TV gets it
   quiet.mockRestore();
 });
 
+test("ErrorBoundary: a quiet one leaves its part out and keeps what's beside it", async () => {
+  const quiet = spyOn(console, "error").mockImplementation(() => {});
+  const { container } = await render(
+    <main>
+      <p>Page</p>
+      <ErrorBoundary where="toasts" quiet>
+        <Broken />
+      </ErrorBoundary>
+    </main>,
+  );
+  expect(container.textContent).toContain("Page");
+  expect(container.textContent).not.toContain("Something went wrong here.");
+  expect(quiet.mock.calls.some((c) => String(c[0]).includes("[toasts] render failed"))).toBe(true);
+  quiet.mockRestore();
+});
+
+test("ErrorBoundary: a quiet one draws its children while nothing fails", async () => {
+  const { container } = await render(
+    <ErrorBoundary where="toasts" quiet>
+      <p>Toast</p>
+    </ErrorBoundary>,
+  );
+  expect(container.textContent).toContain("Toast");
+});
+
 test("Img: a picture that fails moves on to the next; none left, it's gone (test report 1, items 10 and 31)", async () => {
   const { act } = await import("react");
   const { Img } = await import("../../src/components/Img");

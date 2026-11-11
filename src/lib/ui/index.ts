@@ -16,6 +16,7 @@ export * from "./lazy";
 export * from "./logoContrast";
 export * from "./missMargin";
 export * from "./nameWait";
+export * from "./readyTogether";
 export * from "./motion";
 export * from "./pageDrag";
 export * from "./pageFocus";

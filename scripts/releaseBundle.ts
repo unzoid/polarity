@@ -13,7 +13,7 @@
  */
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 /** Texts only the dev-only parts contain, each with the part it stands for. */
 export const DEV_ONLY_MARKERS: { text: string; part: string }[] = [
@@ -48,7 +48,7 @@ export function findMarkers(dir: string, markers = DEV_ONLY_MARKERS): { text: st
 
 /** What is wrong with a release bundle and a dev bundle of the same code, or an empty list. */
 export function bundleProblems(releaseDir: string, devDir: string, markers = DEV_ONLY_MARKERS): string[] {
-  const inRelease = findMarkers(releaseDir, markers).map((m) => `The release bundle has ${m.part}: "${m.text}" in ${m.file}`);
+  const inRelease = findMarkers(releaseDir, markers).map((m) => `The release bundle has ${m.part}: "${m.text}" in ${m.file.split(sep).join("/")}`);
   const inDev = new Set(findMarkers(devDir, markers).map((m) => m.text));
   const stale = markers
     .filter((m) => !inDev.has(m.text))

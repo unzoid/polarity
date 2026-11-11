@@ -506,7 +506,8 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
 }
 
 #[tauri::command]
-pub fn settings_set(state: State<'_, AppState>, settings: Settings) -> Result<SettingsView> {
+pub fn settings_set(state: State<'_, AppState>, mut settings: Settings) -> Result<SettingsView> {
+    settings.bound_custom_themes();
     let rebuild = {
         let store = state.store.locked();
         store.data.settings.tmdb_key != settings.tmdb_key || store.data.settings.language != settings.language

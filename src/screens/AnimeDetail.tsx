@@ -11,7 +11,7 @@ import { AnimeListPanels } from "../components/anime/AnimeListPanel";
 import { AnimeRelated } from "../components/anime/AnimeRelated";
 import { Img } from "../components/Img";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Skeleton } from "../components/ui/Skeleton";
+import { DetailPending } from "../components/title/HeroSkeleton";
 import {
   type Anime,
   animeArt,
@@ -157,7 +157,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
         <DetailSkeleton />
       </div>
     ) : (
-      <Skeleton className="detail-loading" />
+      <DetailPending />
     );
 
   const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });

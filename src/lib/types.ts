@@ -9,7 +9,7 @@ export type ContentType = "movie" | "series";
 export type SecretsPlace = "keychain" | "file" | "unreadable";
 
 /** The app's font (Settings → Appearance). See lib/settings/fonts.ts. */
-export type UiFont = "inter" | "system" | "opendyslexic";
+export type UiFont = "inter" | "instrument" | "hanken" | "onest" | "mona" | "system" | "opendyslexic";
 
 export interface MetaPreview {
   id: string;
@@ -390,8 +390,13 @@ export interface Settings {
   subtitleMode: "always" | "foreign";
 
   // Appearance & browsing
+  /** From before themes: only read while `theme` is still "dark" or "black" (lib/theme). */
   accentColor: string;
-  theme: "dark" | "black";
+  /** A built-in theme's id, "custom:<id>" for one of `customThemes`, or "dark" / "black" from before themes. */
+  theme: string;
+  customThemes: CustomTheme[];
+  /** "dark", "light" or "system" (follow the system's appearance). */
+  colorScheme: "dark" | "light" | "system";
   cardSize: "small" | "medium" | "large";
   reduceMotion: "system" | "on" | "off";
   heroAutoplay: boolean;
@@ -446,6 +451,18 @@ export interface SkipSegments {
   recap?: Span | null;
   outro?: Span | null;
   postCredits?: Span | null;
+}
+
+/** A theme the user made (store.rs `CustomTheme`); lib/theme checks it before use. */
+export interface CustomTheme {
+  id: string;
+  name: string;
+  /** `#RRGGBB`. */
+  accent: string;
+  /** `#RRGGBB`, a near-black. */
+  base: string;
+  /** Percent of the accent mixed into the greys. */
+  tint: number;
 }
 
 /** How subtitles look in the player (store.rs `SubtitleStyle`). */

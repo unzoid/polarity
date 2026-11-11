@@ -30,18 +30,18 @@
   height: 2.75rem;
   padding: 0 0.875rem;
   border: 1px solid var(--hairline);
-  background: rgb(255 255 255 / 0.02);
-  color: #f7f8f8;
+  background: rgb(var(--ink) / 0.02);
+  color: var(--text);
   text-align: left;
   transition:
     border-color 150ms var(--ease-std),
     box-shadow 150ms var(--ease-std);
 }
 .text-field.text-field-block::placeholder {
-  color: #62666d;
+  color: var(--text-3);
   opacity: 1;
 }
 .text-field.text-field-block:focus {
-  border-color: rgb(255 255 255 / 0.22);
-  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.05);
+  border-color: rgb(var(--ink) / 0.22);
+  box-shadow: 0 0 0 3px rgb(var(--ink) / 0.05);
 }

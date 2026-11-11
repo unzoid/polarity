@@ -56,6 +56,8 @@ import {
   SPEED_PARTY_NOTE,
   captionChoices,
   speedChoices,
+  resumeFrom,
+  startPosition,
 } from "../lib/playback";
 import { downloadedStream, episodeState, isLocalFile, nextVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
@@ -479,11 +481,11 @@ export function Player({
 
   // --- Load source ----------------------------------------------------------
   /** Where to pick up (Settings → Playback: resume on/off, rewind), or undefined to start over. */
-  const resumePoint = (r?: Pick<Progress, "position" | "duration">) => {
-    if (settings?.resumePlayback === false || !r || r.position <= 30 || r.position / r.duration >= watchedFraction()) return undefined;
-    return Math.max(0, r.position - (settings?.resumeRewind ?? 0));
-  };
+  const resumePoint = (r?: Pick<Progress, "position" | "duration">) =>
+    resumeFrom(r, { resume: settings?.resumePlayback !== false, rewind: settings?.resumeRewind ?? 0, watchedFraction: watchedFraction() });
   const resumed = useRef(false);
+  /** Where a source that failed had got to: the next one carries on from there (not from where the episode was opened). */
+  const reached = useRef<number | undefined>(undefined);
   useEffect(() => {
     // Always the app's own player: handing over to AirPlay and back isn't a new source.
     const v = baseRef.current;
@@ -496,7 +498,7 @@ export function Player({
     if (v instanceof MpvMedia) {
       // Start at the resume point (or where the watch party is) directly: no
       // fetching the opening of a network stream only to seek away from it.
-      const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
+      const start = startPosition(partyPosition(videoId), reached.current, resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined)));
       resumed.current = true;
       v.load(source.state.url, start, requestHeaders(source.state.stream), !!link);
     } else if (v instanceof YouTubeMedia) {
@@ -658,7 +660,7 @@ export function Player({
     },
     loadedmetadata: () => {
       const v = videoRef.current!;
-      const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
+      const start = startPosition(partyPosition(videoId), reached.current, resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined)));
       if (!resumed.current && start != null) v.currentTime = start;
       resumed.current = true;
       if (!startedRef.current) {
@@ -675,6 +677,11 @@ export function Player({
       setEnded(true);
       save();
     },
+    seeking: () => {
+      // Gone back from the end to watch again: the "up next" countdown must not go on behind it.
+      const v = videoRef.current;
+      if (v && Number.isFinite(v.duration) && v.currentTime < v.duration - 1) setEnded(false);
+    },
     error: () => {
       // The torrent engine was stopped in the background (#207): its reason stays on screen.
       if (source.halted()) return;
@@ -688,6 +695,9 @@ export function Player({
         const kinds = ["", "loading was stopped", "network error", "couldn't decode it", "format not supported"];
         logStep(`Built-in player: ${kinds[el.error.code] ?? `error ${el.error.code}`}${el.error.message ? ` (${el.error.message})` : ""}`, "fail", "player");
       }
+      // Only once a picture was up, and never 0: a source that fails before it starts leaves the last place alone.
+      const at = videoRef.current?.currentTime;
+      if (startedRef.current && at != null && Number.isFinite(at) && at > 0) reached.current = at;
       if (!exited && source.next()) {
         logStep("Trying the next source", "warn");
         flashNotice("That source didn't load. Trying the next best one.", 3500);

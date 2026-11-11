@@ -82,8 +82,11 @@ export function useSource(
   const progress = useProgress(metaId);
   const [saved, setSaved] = useState<Progress | null | undefined>(undefined);
   useEffect(() => {
-    if (saved === undefined && progress.data) setSaved(progress.data.find((p) => p.videoId === videoId) ?? null);
-  }, [progress.data, saved, videoId]);
+    if (saved !== undefined) return;
+    if (progress.data) setSaved(progress.data.find((p) => p.videoId === videoId) ?? null);
+    // The saved position couldn't be read: play from the start rather than wait for it forever.
+    else if (progress.isError) setSaved(null);
+  }, [progress.data, progress.isError, saved, videoId]);
 
   // A finished download the episode was last played from goes on without asking; any other saved source
   // only once the add-ons' answer has it (savedSource).

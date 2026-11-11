@@ -86,7 +86,7 @@ test("TV sign-in deploys without JWT checks, as docs/supabase-storage.md §9 say
 });
 
 test("the workflow reads secrets only in the deploy job, from the branch's environment, and asks for no write access", () => {
-  const wf = readFileSync(join(import.meta.dir, "../.github/workflows/supabase.yml"), "utf8");
+  const wf = readFileSync(join(import.meta.dir, "../.github/workflows/supabase.yml"), "utf8").replace(/\r\n/g, "\n");
   const [pending, deploy] = wf.split(/^ {2}deploy:$/m);
   expect(pending).not.toContain("secrets.");
   expect(deploy).toContain("environment: ${{ github.ref == 'refs/heads/master' && 'supabase-production' || 'supabase-dev' }}");

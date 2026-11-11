@@ -25,7 +25,7 @@
   height: 3px;
   margin-top: 0.35rem;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--ink) / 0.12);
   overflow: hidden;
 }
 .update-progress > span {
@@ -117,7 +117,7 @@
 .release-notes code {
   padding: 0.05em 0.35em;
   border-radius: var(--r-xs);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   font-size: 0.875em;
 }
 .whats-new-actions {

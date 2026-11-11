@@ -333,7 +333,13 @@
   position: absolute;
   inset: 0 0 -32px 0;
   z-index: -2;
-  background: linear-gradient(to bottom, rgb(0 0 0 / 0.45), rgb(0 0 0 / 0.15) 55%, transparent);
+  /* Black in dark mode; the page's near-white in light mode, so the bar's dark text reads over the art. */
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tone-sunk) 45%, transparent),
+    color-mix(in srgb, var(--tone-sunk) 15%, transparent) 55%,
+    transparent
+  );
   pointer-events: none;
 }
 /* Once the page scrolls under it, the bar is a progressive blur, as on iOS:
@@ -359,7 +365,8 @@
 }
 .navbar-fade::before {
   content: "";
-  background: var(--scrim-2);
+  /* Black under the white tabs in dark mode; the near-white page, stronger, under the dark ones in light. */
+  background: color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent);
 }
 /* The shape is a wide ellipse hanging from the top edge, not a straight
    band: the blur is deepest in the middle and its lower edge curves up
@@ -463,7 +470,7 @@
   font-size: var(--fs-lg);
   font-weight: 500;
   letter-spacing: -0.003em;
-  color: rgb(255 255 255 / 0.82);
+  color: rgb(var(--ink) / 0.82);
   transition:
     color var(--dur-fast) var(--ease-std),
     background-color var(--dur-fast) var(--ease-std);
@@ -471,7 +478,7 @@
 .navbar-link[aria-current="page"] {
   color: var(--text);
   font-weight: 650;
-  background: rgb(255 255 255 / 0.2);
+  background: rgb(var(--ink) / 0.2);
 }
 .navbar-actions {
   flex: none;
@@ -610,8 +617,11 @@ html[data-os="mac"] {
 .navbar-search[data-open="true"] {
   margin-left: 0;
   clip-path: inset(0 round 20px);
-  background: rgb(0 0 0 / 0.55);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28);
+  /* Dark glass on a dark page, frosted white on a light one: it sits over whatever scrolls under the bar. */
+  background: var(--field-glass);
+  -webkit-backdrop-filter: var(--blur-control);
+  backdrop-filter: var(--blur-control);
+  box-shadow: inset 0 0 0 1px var(--field-edge);
 }
 .navbar-search-icon {
   position: absolute;
@@ -1025,6 +1035,11 @@ html[data-os="mac"] {
   user-select: none;
   pointer-events: none;
 }
+/* The wordmark is a white picture (navbar, sign-in, profiles): in light mode it's drawn in the text's
+   near-black. By its file, so every place that shows it follows. */
+:root[data-scheme="light"] img[src*="polarity-white"] {
+  filter: brightness(0) opacity(0.88);
+}
 
 /* Under the empty search field: genres to start from (NavBar SearchSuggestions). */
 .search-suggest {
@@ -1035,14 +1050,14 @@ html[data-os="mac"] {
   display: grid;
   gap: 0.625rem;
   border-radius: var(--r-lg);
-  background: rgb(10 10 11 / 0.9);
+  background: color-mix(in srgb, var(--tone-0) 90%, transparent);
   -webkit-backdrop-filter: blur(8px) saturate(1.2);
   backdrop-filter: blur(8px) saturate(1.2);
   /* The settings panel's border. */
   border: 1px solid var(--fill-3);
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.6),
-    0 12px 32px rgb(0 0 0 / 0.5);
+    0 0 0 1px var(--ring-outer),
+    0 12px 32px var(--shadow-deep);
   animation: search-suggest-in var(--dur-fast) var(--ease-out);
 }
 @keyframes search-suggest-in {
@@ -1125,6 +1140,20 @@ html[data-os="mac"] {
   align-items: center;
   gap: 0.75rem;
 }
+/* Series and Movies: the navbar's tab names the page, so the controls lead and the title is for screen
+   readers only. */
+.discover-header {
+  justify-content: flex-start;
+}
+.discover-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .discover-catalogs {
   display: contents;
 }
@@ -1163,7 +1192,7 @@ html[data-os="mac"] body::after {
   inset: 0;
   z-index: var(--z-system);
   border-radius: var(--r-md);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.12);
   pointer-events: none;
 }
 html[data-os="mac"] .account-bar {
