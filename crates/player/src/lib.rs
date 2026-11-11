@@ -12,6 +12,7 @@
 //!   * [`sampler`]: which frames our detector reads on the desktop, and which reading feeds the tracker.
 //!   * [`headers`]: which of an add-on's request headers playback sends.
 //!   * [`certs`]: one certificate bundle from a folder of certificates (Android's mpv).
+//!   * [`turns`]: which player's load and stop count at the one mpv.
 //!   * [`video_path`]: one log line on how mpv decodes and draws the video (#416).
 
 pub mod allow;
@@ -24,4 +25,5 @@ pub mod lookahead;
 pub mod png;
 pub mod sampler;
 pub mod tune;
+pub mod turns;
 pub mod video_path;
