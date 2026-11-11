@@ -481,7 +481,8 @@ mod tests {
     #[test]
     fn custom_themes_are_bounded() {
         let long = "x".repeat(200);
-        let theme = CustomTheme { id: long.clone(), name: long, accent: "#5E5CE6".into(), base: "#0a0a0a".into(), tint: 3.0 };
+        let theme =
+            CustomTheme { id: long.clone(), name: long, accent: "#5E5CE6".into(), base: "#0a0a0a".into(), tint: 3.0 };
         let mut settings = Settings { custom_themes: vec![theme; 40], ..Settings::default() };
         settings.bound_custom_themes();
         assert_eq!(settings.custom_themes.len(), Settings::MAX_CUSTOM_THEMES);
