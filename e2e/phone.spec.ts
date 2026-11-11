@@ -136,14 +136,14 @@ test("a phone has no TV mode (#141)", async ({ app }) => {
   await expect(app.getByRole("button", { name: "TV mode" })).toHaveCount(0);
 });
 
-test("the season picker keeps its own row on a phone (#151)", async ({ app }) => {
+test("the season picker is a compact button on one line with the tools, its name shown whole (#151)", async ({ app }) => {
   await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Kingsbridge").tap();
   const picker = app.locator(".seasons-picker");
   await expect(picker).toBeVisible();
-  const box = await picker.boundingBox();
-  // The whole bar's width, not squeezed beside Download Season and the layout switch.
-  expect(box!.width).toBeGreaterThan(app.viewportSize()!.width * 0.8);
+  // Beside Download Season and the layout switch (a phone's one line of tools), not squeezed to its first letter.
+  const name = picker.locator(".select-value");
+  expect(await name.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
   expect(await fitsWidth(app)).toBe(true);
 });
 
@@ -234,7 +234,8 @@ async function controlsClearOf(page: Page, i: { top: number; right: number; bott
   expect(boxes.length).toBeGreaterThan(3);
   for (const b of boxes) {
     expect.soft(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(i.top);
-    expect.soft(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(height - i.bottom);
+    // The bottom row reaches 0.75rem into the home indicator's strip on a phone, as Netflix's does (player.css).
+    expect.soft(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(height - i.bottom + (i.bottom ? 12 : 0));
     expect.soft(b.left, `${b.name} right of the left inset`).toBeGreaterThanOrEqual(i.left);
     expect.soft(b.right, `${b.name} left of the right inset`).toBeLessThanOrEqual(width - i.right);
   }
@@ -447,12 +448,11 @@ test.describe("signed in, on a fresh profile", () => {
   });
 });
 
-/** Movies → The Glass Orchard → Play, every source a made-up torrent. `nativeTabs`: iOS's own tab bar takes the tab. */
-async function playTorrentFilm(app: Page, nativeTabs = false) {
+/** Movies (a top-bar button on a phone) → The Glass Orchard → Play, every source a made-up torrent. */
+async function playTorrentFilm(app: Page) {
   await app.addInitScript(() => localStorage.setItem("polar.fakeTorrents", "1"));
   await app.reload();
-  if (nativeTabs) await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
-  else await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Play", exact: true }).tap();
 }
@@ -474,7 +474,7 @@ test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
 
   test("a torrent source can't play here: no notice, the player says so, nothing is opened (#458)", async ({ app }) => {
-    await playTorrentFilm(app, true);
+    await playTorrentFilm(app);
     await expect(app.getByText("Torrent sources can't play on this device.").first()).toBeVisible({ timeout: 15_000 });
     await expect(app.getByRole("dialog", { name: "Torrent playback" })).toHaveCount(0);
     expect(await app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0)).toBe(0);
@@ -499,7 +499,7 @@ test.describe("on an iPhone", () => {
   });
 
   test("Subtitles & Audio opens the app's own panel, fitted to the phone, not an iOS menu (#465)", async ({ app }) => {
-    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Play", exact: true }).tap();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -597,26 +597,27 @@ test.describe("on an iPhone, Back by swiping", () => {
         send({ phase, x, width: window.innerWidth, velocity });
       }, [phase, x, velocity] as const);
     const width = app.viewportSize()!.width;
-    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     const title = app.getByRole("heading", { level: 1, name: "The Glass Orchard" });
     await expect(title).toBeVisible();
     const top = app.locator(".page[data-active='true']");
     const under = app.locator(".page[data-active='false']");
-    const shift = (l: typeof top) => l.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
+    const matrix = (l: typeof top) => l.evaluate((el) => { const m = new DOMMatrix(getComputedStyle(el).transform); return { x: m.m41, scale: m.a }; });
 
-    // Moving: the title page goes with the finger, Movies shows under it coming in from the left.
+    // Moving: a title page opened from a card goes back the way it came (pageDrag.ts): it shrinks and follows the
+    // finger over Movies, which stays in place under it.
     await swipe("begin", 4);
     await swipe("move", 120);
-    await expect(top).toHaveAttribute("data-drag", "top");
-    await expect.poll(() => shift(top)).toBe(120);
+    await expect(top).toHaveAttribute("data-drag", "card");
+    await expect.poll(async () => (await matrix(top)).scale).toBeLessThan(1);
+    expect((await matrix(top)).x).toBeGreaterThan(0);
     await expect(under).toHaveCSS("visibility", "visible");
-    expect(await shift(under)).toBeLessThan(0);
 
-    // Let go before half the width, slowly: both slide back and the title page stays.
+    // Let go before half the width, slowly: the page grows back and stays.
     await swipe("end", 120);
     await expect(top).not.toHaveAttribute("data-drag", /./);
-    expect(await shift(top)).toBe(0);
+    await expect.poll(() => matrix(top)).toEqual({ x: 0, scale: 1 });
     await expect(under).toHaveCSS("visibility", "hidden");
     await expect(title).toBeVisible();
 
@@ -626,12 +627,12 @@ test.describe("on an iPhone, Back by swiping", () => {
     await swipe("end", width * 0.6);
     await expect(app.locator(".page")).toHaveCount(1);
     await expect(app.locator(".page").first()).not.toHaveAttribute("data-motion", /./);
-    expect(await shift(app.locator(".page").first())).toBe(0);
+    expect((await matrix(app.locator(".page").first())).x).toBe(0);
     await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
   });
 
   test("over a sheet the swipe closes the sheet and leaves the page where it is (#451)", async ({ app }) => {
-    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("discover:movie"));
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Choose source", exact: true }).tap();
     await expect(app.locator(".sheet")).toBeVisible();
@@ -673,7 +674,11 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
   await expect(allow).not.toBeChecked();
   await allow.tap();
   await expect(allow).toBeChecked();
-  await settings.getByRole("button", { name: "Close settings" }).tap();
+  // On a phone Settings is a view of the profile sheet, which has no Close of its own: the system Back (Escape) leaves it.
+  await expect(async () => {
+    await app.keyboard.press("Escape");
+    await expect(app.locator(".sheet")).toHaveCount(0, { timeout: 1000 });
+  }).toPass();
 
   // Allowed: the torrent goes on (to the one-time notice first).
   await play();
@@ -689,7 +694,7 @@ test("each page starts right under the top bar, which sits right under the statu
       ["Series", ".screen-header h1"],
       ["Library", ".screen-header h1"],
     ] as const) {
-      await tabs.getByRole("button", { name: tab, exact: true }).tap();
+      await (tab === "Series" ? app.locator(".navbar") : tabs).getByRole("button", { name: tab, exact: true }).tap();
       const content = app.locator(first).first();
       await expect(content).toBeVisible();
       const [bar, logo, page] = await Promise.all([
