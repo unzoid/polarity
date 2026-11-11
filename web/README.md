@@ -1,5 +1,6 @@
 # Polarity website
 
+Libre Franklin, the logo's lavender with a deep indigo ink, heavy headlines and full-width ink bands.
 SolidJS + Tailwind pages, with one Elysia route (`/api/release`) that reads the latest GitHub release.
 Hosted on Cloudflare Workers: Cloudflare serves the built pages in `dist/`, the Worker answers `/api/*`.
 

@@ -4,7 +4,7 @@ const REPO = "unzoid/polarity";
 export const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 const TTL_MS = 10 * 60 * 1000;
 
-export type Platform = "windows" | "macos" | "linux";
+export type Platform = "windows" | "macos" | "linux" | "android" | "ios";
 
 export type Installer = { label: string; url: string; size: number };
 
@@ -23,7 +23,10 @@ type GitHubRelease = {
   assets: { name: string; browser_download_url: string; size: number }[];
 };
 
-/** Tauri's bundle names, in the order each platform should offer them. */
+/**
+ * Tauri's bundle names, and CI's Android and iOS preview builds, in the order
+ * each platform should offer them.
+ */
 const KINDS: { platform: Platform; test: RegExp; label: string }[] = [
   { platform: "windows", test: /-setup\.exe$/i, label: "Installer (.exe)" },
   { platform: "windows", test: /\.msi$/i, label: "Windows Installer (.msi)" },
@@ -33,10 +36,12 @@ const KINDS: { platform: Platform; test: RegExp; label: string }[] = [
   { platform: "linux", test: /\.AppImage$/i, label: "AppImage" },
   { platform: "linux", test: /\.deb$/i, label: "Debian / Ubuntu (.deb)" },
   { platform: "linux", test: /\.rpm$/i, label: "Fedora / openSUSE (.rpm)" },
+  { platform: "android", test: /\.apk$/i, label: "APK (preview)" },
+  { platform: "ios", test: /\.ipa$/i, label: "Unsigned IPA (preview)" },
 ];
 
 function toRelease(gh: GitHubRelease): Release {
-  const platforms: Release["platforms"] = { windows: [], macos: [], linux: [] };
+  const platforms: Release["platforms"] = { windows: [], macos: [], linux: [], android: [], ios: [] };
   for (const kind of KINDS) {
     for (const asset of gh.assets) {
       if (kind.test.test(asset.name)) {

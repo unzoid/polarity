@@ -25,7 +25,7 @@ import {
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
 import { useRouter } from "../lib/router";
-import { useFormFactor } from "../lib/ui";
+import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -67,7 +67,7 @@ export function Search() {
   );
 }
 
-/** The phone's large title and field. The field is the page's own, so leaving the page empties it. */
+/** The phone's field (its large title is the top bar's: NavBar). The field is the page's own, so leaving the page empties it. */
 function SearchHeader() {
   const text = useSearchText();
   const { animeEnabled } = usePrefs();
@@ -90,7 +90,6 @@ function SearchHeader() {
 
   return (
     <header className="search-head">
-      <h1 className="search-head-title">Search</h1>
       <SearchField
         ref={input}
         look="large"
@@ -115,9 +114,12 @@ function SearchHeader() {
 function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
-  const { data: animeArt } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
+  const { data: animeArt, isPending: animeArtPending } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
+  // The tiles come in as one, pictures and colours together (lib/ui/together.ts), not colour first and a
+  // picture here and there after.
+  const together = useTogether();
   return (
-    <div className="search-start">
+    <div className="search-start" {...together}>
       {recent.length > 0 && (
         <section className="search-start-section">
           <div className="search-start-head">
@@ -149,7 +151,7 @@ function SearchStart() {
           <h2 className="t-title2">Anime</h2>
           <div className="genre-tiles">
             {SEARCH_ANIME.map((g) => (
-              <GenreTile key={g} genre={g} image={animeArt?.[g]} />
+              <GenreTile key={g} genre={g} image={animeArt?.[g]} pending={animeArtPending} />
             ))}
           </div>
         </section>
@@ -158,22 +160,25 @@ function SearchStart() {
   );
 }
 
-/** Each tile's tint, so a grid of them reads as a set rather than one colour repeated. */
-const TILE_HUES: Record<string, number> = {
-  Action: 18,
-  Comedy: 45,
-  Drama: 215,
-  Horror: 350,
-  "Sci-Fi": 190,
-  Thriller: 265,
-  Romance: 330,
-  Documentary: 150,
-  Isekai: 200,
-  Shounen: 25,
-  "Slice of Life": 95,
-  Mecha: 230,
-  Iyashikei: 165,
-  Psychological: 285,
+/**
+ * Each tile's two hues, as Apple TV's genre tiles: the picture's light parts take the first, shading across to the
+ * second, and its shadows a deep shade of the second, so every tile is a pair of opposing colours of its own.
+ */
+const TILE_HUES: Record<string, [number, number]> = {
+  Action: [32, 345],
+  Comedy: [95, 185],
+  Drama: [200, 250],
+  Horror: [0, 285],
+  "Sci-Fi": [175, 225],
+  Thriller: [280, 210],
+  Romance: [330, 15],
+  Documentary: [140, 45],
+  Isekai: [195, 300],
+  Shounen: [20, 50],
+  "Slice of Life": [85, 330],
+  Mecha: [220, 165],
+  Iyashikei: [160, 95],
+  Psychological: [265, 320],
 };
 
 /**
@@ -181,16 +186,33 @@ const TILE_HUES: Record<string, number> = {
  * with, so a tap finds them already loaded.
  */
 function MovieGenreTile({ genre }: { genre: string }) {
-  const { data } = useGenreRow("movie", genre);
-  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} />;
+  const { data, isPending } = useGenreRow("movie", genre);
+  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} pending={isPending} />;
 }
 
-/** A genre to search by: its name over its picture, under the genre's tint (the tint alone until the picture's in). */
-function GenreTile({ genre, image }: { genre: string; image?: string }) {
-  const [loaded, setLoaded] = useState(false);
+/**
+ * A genre to search by: its name over its picture in the genre's two colours. Until its picture is in (and the
+ * set's, screens.css) it's a placeholder; a genre with no picture to be had shows its two colours alone.
+ */
+function GenreTile({ genre, image, pending }: { genre: string; image?: string; pending: boolean }) {
+  const [loaded, setLoaded] = useState<string>();
+  const [failed, setFailed] = useState<string>();
+  const [a, b] = TILE_HUES[genre] ?? [220, 280];
+  const art = image && failed !== image ? (loaded === image ? "ready" : "loading") : pending ? "loading" : "none";
   return (
-    <button className="genre-tile pressable" style={{ "--tile-hue": TILE_HUES[genre] ?? 220 } as CSSProperties} onClick={() => setSearchText(genre)}>
-      {image && <img src={image} alt="" loading="lazy" decoding="async" draggable={false} data-loaded={loaded} onLoad={() => setLoaded(true)} />}
+    <button className="genre-tile pressable" data-art={art} style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
+      {image && failed !== image && (
+        <img
+          src={image}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          data-loaded={loaded === image}
+          onLoad={() => setLoaded(image)}
+          onError={() => setFailed(image)}
+        />
+      )}
       <span>{genre}</span>
     </button>
   );

@@ -63,6 +63,22 @@ pub fn player_system_bars(hidden: bool) {
     let _ = hidden;
 }
 
+/// Keep the screen from dimming and locking while a video plays, and let it again when it stops. On
+/// iPhones and iPads the idle timer (ios/system_bars.m); Android's comes through the page's bridge
+/// (src/lib/platform/back.ts). Elsewhere nothing changes.
+#[tauri::command]
+pub fn player_keep_awake(on: bool) {
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn polar_set_keep_awake(on: std::ffi::c_int);
+        }
+        unsafe { polar_set_keep_awake(on.into()) }
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = on;
+}
+
 /// Load `url` (optionally starting at `start` seconds) and play. With `probe_id`,
 /// the link check reports its steps as `player://probe` events. `headers` are
 /// the stream's `behaviorHints.proxyHeaders.request`; only those

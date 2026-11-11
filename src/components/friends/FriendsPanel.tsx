@@ -15,6 +15,7 @@ import {
   useFriendsOpen,
 } from "../../lib/friends";
 import { getParty, joinParty, leaveParty, useParty } from "../../lib/party";
+import { openSettings } from "../../lib/settings";
 import { errorMessage } from "../../lib/errors";
 import { Avatar } from "../Avatar";
 import { Spinner } from "../Spinner";
@@ -149,6 +150,19 @@ export function FriendsBody({ inDialog = true }: { inDialog?: boolean }) {
         </Section>
       )}
       <JoiningNote />
+      {/* The dialog's pointer to what friends see; a phone's sheet leaves it out (Account is a row of its list). */}
+      {inDialog && (
+        <button
+          type="button"
+          className="friends-settings-link"
+          onClick={() => {
+            setFriendsOpen(false);
+            openSettings("account");
+          }}
+        >
+          What friends see: Settings → Account
+        </button>
+      )}
     </div>
   );
 }

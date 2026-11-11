@@ -6,7 +6,13 @@ export type { Platform, Installer } from "../../server/app";
 export const RELEASES_PAGE = "https://github.com/unzoid/polarity/releases/latest";
 export const DOWNLOAD_PAGE = "/download/";
 
-export const PLATFORM_NAMES: Record<Platform, string> = { windows: "Windows", macos: "macOS", linux: "Linux" };
+export const PLATFORM_NAMES: Record<Platform, string> = {
+  windows: "Windows",
+  macos: "macOS",
+  linux: "Linux",
+  android: "Android",
+  ios: "iOS",
+};
 
 async function fetchRelease(): Promise<Release | null> {
   try {

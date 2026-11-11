@@ -54,6 +54,14 @@
   background: var(--bg);
   box-shadow: -10px 0 28px rgb(0 0 0 / 0.45);
 }
+/* A title page from a card going back with the finger (pageDrag.ts): it shrinks with its corners rounding, over the
+   page under it, which stays in place and brightens. */
+.page[data-drag="card"] {
+  z-index: 2;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: 0 18px 60px rgb(0 0 0 / 0.55);
+}
 .page[data-drag="under"] {
   visibility: visible;
   content-visibility: visible;
@@ -91,14 +99,24 @@
 :root[data-form="phone"] .page-pushed {
   animation: none;
 }
-:root[data-form="phone"] .page[data-motion="enter"] {
-  animation: page-enter 260ms var(--ease-out) both;
+/* Neither moves until the new page is laid out (`data-go`, pageMotion.ts, the next frame): it waits unseen for
+   that frame, the old one stays as it was, and then the whole change is seen, every frame of it. */
+:root[data-form="phone"] .page[data-motion="enter"]:not([data-go]) {
+  opacity: 0;
+  pointer-events: none;
+}
+:root[data-form="phone"] .page[data-motion="enter"][data-go] {
+  animation: page-enter 300ms var(--ease-out) both;
+  will-change: transform, opacity;
 }
 :root[data-form="phone"] .page[data-motion="leave"] {
   visibility: visible;
   content-visibility: visible;
   pointer-events: none;
-  animation: page-leave 180ms var(--ease-out) forwards;
+}
+:root[data-form="phone"] .page[data-motion="leave"][data-go] {
+  animation: page-leave 200ms var(--ease-out) forwards;
+  will-change: transform, opacity;
 }
 @keyframes page-enter {
   from {
@@ -110,6 +128,183 @@
   to {
     opacity: 0;
     transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.5));
+  }
+}
+/* A title opened from a card (pageMotion.ts `card`), as one piece on one clock: the title's page starts as exactly
+   the card's box (--card-x/y, --card-sx/sy) and grows to the screen. Riding on it, the card's own picture
+   (.card-ghost, App.tsx) covers it at first, sharp, then softened and dark, and gives way to the page as it
+   settles. What's behind dims and softens under it (.card-scrim). Back plays it the other way and ends on the
+   card. Everything shares the duration and curve, and only transforms and opacity move (the scrim's blur is
+   fixed; its opacity carries it), so the compositor plays every frame whatever the pages are doing. The page is
+   scaled unevenly only while the picture covers it; by the time it shows it's within a hair of its own shape. */
+:root[data-form="phone"] :is(.page[data-card], .card-scrim) {
+  --card-ease: cubic-bezier(0.3, 0.8, 0.2, 1);
+  --card-open: 620ms;
+  --card-close: 540ms;
+  --card-at: translate(var(--card-x), var(--card-y)) scale(var(--card-sx), var(--card-sy));
+}
+:root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
+:root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
+  z-index: 2;
+  background: var(--bg);
+  transform-origin: 0 0;
+  border-radius: var(--card-r);
+  overflow: hidden;
+  will-change: transform;
+}
+:root[data-form="phone"] .page[data-card="open"][data-motion="enter"][data-go] {
+  animation: card-page var(--card-open) var(--card-ease) both;
+}
+:root[data-form="phone"] .page[data-card="close"][data-motion="leave"][data-go] {
+  animation: card-page-back var(--card-close) var(--card-ease) forwards;
+}
+/* The page behind holds still under the scrim; the scrim is all that changes over it. */
+:root[data-form="phone"] .page[data-card="open"][data-motion="leave"][data-go],
+:root[data-form="phone"] .page[data-card="close"][data-motion="enter"][data-go] {
+  animation: none;
+  opacity: 1;
+}
+@keyframes card-page {
+  from {
+    transform: var(--card-at);
+  }
+  to {
+    transform: none;
+  }
+}
+/* Back: the last stretch fades the page (the card's picture by then) out over the card itself, so the card comes
+   back as it is, its corners, rim and rating with it, instead of the copy being swapped for it at the end. */
+@keyframes card-page-back {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: var(--card-at);
+  }
+}
+
+.card-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* The picture fills the page's box, so at the card's box it's the card's picture exactly. */
+.card-ghost img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  opacity: 0;
+}
+/* Softened once, not per frame: only its opacity moves. Scaled past the edges so the blur's rim never shows. */
+.card-ghost-soft {
+  filter: blur(18px) brightness(0.45);
+  transform: scale(1.15);
+}
+[data-card="open"][data-go] > .card-ghost .card-ghost-sharp {
+  animation: card-ghost-sharp-open var(--card-open) linear both;
+}
+[data-card="open"][data-go] > .card-ghost .card-ghost-soft {
+  animation: card-ghost-soft-open var(--card-open) linear both;
+}
+[data-card="close"][data-go] > .card-ghost .card-ghost-sharp {
+  animation: card-ghost-sharp-close var(--card-close) linear both;
+}
+[data-card="close"][data-go] > .card-ghost .card-ghost-soft {
+  animation: card-ghost-soft-close var(--card-close) linear both;
+}
+@keyframes card-ghost-sharp-open {
+  from {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes card-ghost-soft-open {
+  from {
+    opacity: 1;
+  }
+  22% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* Back: the page is covered before it has shrunk enough to look squeezed, then the card's picture sharpens in. */
+@keyframes card-ghost-soft-close {
+  from {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes card-ghost-sharp-close {
+  from {
+    opacity: 0;
+  }
+  35% {
+    opacity: 0;
+  }
+  75% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.card-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgb(0 0 0 / 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+}
+.card-scrim[data-card="open"][data-go] {
+  animation: card-scrim var(--card-open) var(--card-ease) both;
+}
+/* Back: over the page coming back until it moves, then clearing with the card's return. */
+.card-scrim[data-card="close"] {
+  opacity: 1;
+}
+.card-scrim[data-card="close"][data-go] {
+  animation: card-scrim-out var(--card-close) var(--card-ease) both;
+}
+@keyframes card-scrim {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes card-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 /* Less motion: the pair crossfades in place. */
@@ -209,6 +404,22 @@
   backdrop-filter: blur(28px);
   --solid: 0%;
   --end: 44%;
+}
+/* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
+   the stacked blurs. Four masked blurs taken again on every frame of a scroll are more than a phone's web view
+   keeps up with over moving art; one unmasked layer is cheap. */
+:root[data-form="phone"] .navbar-fade {
+  height: var(--nav-h);
+}
+:root[data-form="phone"] .navbar-fade i {
+  display: none;
+}
+:root[data-form="phone"] .navbar-fade::before {
+  -webkit-mask-image: none;
+  mask-image: none;
+  background: rgb(18 18 18 / 0.8);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
 }
 .navbar-brand {
   flex: none;
@@ -350,7 +561,15 @@ html[data-os="mac"] {
   opacity: 0;
   pointer-events: none;
 }
-/* On iOS the system draws Back over this one (NativeBack.tsx): it keeps its place, unseen. */
+/* On a phone, Back comes and goes on the page change's own clock (the card's, the longer of the two), so it and
+   the wordmark making room for it move with the page rather than jumping ahead of it. */
+:root[data-form="phone"] .navbar-back {
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    opacity 400ms var(--ease-std),
+    margin-left 620ms cubic-bezier(0.3, 0.8, 0.2, 1);
+}
+/* On iOS the system draws Back (NativeBack.tsx) over this one: it keeps its place, unseen. */
 [data-native-back] {
   visibility: hidden;
 }
@@ -610,8 +829,35 @@ html[data-os="mac"] {
 :root[data-native-tabs][data-form="phone"] {
   --tabbar-h: var(--safe-bottom);
 }
+/* A phone's tab bar floats over the page: the page darkens towards the bottom edge under it, as Netflix's does,
+   so the bar reads over bright posters instead of sitting on them. Over every page; the player is above it. */
+:root[data-form="phone"] .main::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 5;
+  height: calc(var(--tabbar-h, var(--safe-bottom)) + 3.5rem);
+  background: linear-gradient(to top, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.55) 45%, transparent);
+  pointer-events: none;
+}
 :root[data-form="phone"] .brand-logo {
-  height: 30px;
+  height: 40px;
+}
+/* The Search page's large title, where the wordmark stands on the other pages (NavBar). Its own search
+   button goes: the field is right under it. The button stays mounted, for the search shortcut. */
+.navbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0.5rem;
+  font-size: 2.125rem;
+  line-height: 44px;
+  letter-spacing: -0.022em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+:root[data-form="phone"] .navbar-search-page[aria-current="page"] {
+  display: none;
 }
 :root[data-form="phone"] .scroll {
   padding-bottom: calc(4rem + var(--tabbar-h));
@@ -640,16 +886,28 @@ html[data-os="mac"] {
 :root[data-form="phone"] .empty-state.anime-unreachable {
   padding-top: calc(var(--nav-h) + 3rem);
 }
+/* Discover's controls on a phone: the pickers on one row, the catalogs (six of them, wider than the screen) on
+   the next. That row scrolls from one screen edge to the other, past the page's margins, so the control runs
+   off the edge of the glass as a row of chips does instead of being cut short of it. */
 :root[data-form="phone"] .discover-controls {
-  max-width: 100%;
-  padding: 2px 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 :root[data-form="phone"] .discover-controls > * {
   flex: none;
 }
-:root[data-form="phone"] .discover-controls::-webkit-scrollbar {
+:root[data-form="phone"] .discover-catalogs {
+  display: flex;
+  order: 1;
+  flex: none;
+  width: calc(100% + var(--content-start) + var(--gutter));
+  margin: 0 calc(-1 * var(--gutter)) 0 calc(-1 * var(--content-start));
+  padding: 2px var(--gutter) 2px var(--content-start);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+:root[data-form="phone"] .discover-catalogs::-webkit-scrollbar {
   display: none;
 }
 /* Touch: the bar's icons grow to a finger's size. */
@@ -895,6 +1153,9 @@ html[data-os="mac"] {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+.discover-catalogs {
+  display: contents;
 }
 /* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
 .discover-controls .select-trigger,

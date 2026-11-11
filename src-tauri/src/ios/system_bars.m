@@ -73,3 +73,10 @@ void polar_set_system_bars_hidden(int hide) {
         [vc setNeedsUpdateOfHomeIndicatorAutoHidden];
     });
 }
+
+/// Keep the screen on (1) while a video plays, or let it lock itself again (0). Any thread.
+void polar_set_keep_awake(int on) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIApplication.sharedApplication.idleTimerDisabled = on != 0;
+    });
+}

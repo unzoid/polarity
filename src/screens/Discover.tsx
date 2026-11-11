@@ -88,7 +88,12 @@ export function Discover({
               options={[...(own?.genreRequired ? [] : [{ value: "", label: "All Genres" }]), ...genres.map((g) => ({ value: g, label: g }))]}
             />
           )}
-          {!own && <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />}
+          {!own && (
+            // Its own row on a phone, scrolling from one screen edge to the other (shell.css).
+            <div className="discover-catalogs">
+              <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />
+            </div>
+          )}
         </div>
       </header>
       <PosterGrid pager={query} stale={query.isPlaceholderData}>

@@ -100,7 +100,7 @@ export function useSource(
   const { settings } = useTitleSettings(type, videoId);
   // Best Match for this device; the runtime gives the files' bitrates.
   const { data: meta } = useMeta(type, metaId, needsRanking);
-  const match = useMatchContext(settings, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
+  const match = useMatchContext(settings, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   const matchRef = useRef(match);
   matchRef.current = match;
   useEffect(() => {

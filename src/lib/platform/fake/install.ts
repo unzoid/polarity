@@ -251,6 +251,7 @@ mockIPC(
 // A tab picked in iOS's tab bar, as the native shell reports it (components/NativeTabs.tsx).
 (window as { __polarFakeNativeTab?: (id: string) => void }).__polarFakeNativeTab = (id) => void emit("native://tab", id);
 
+
 // A step of the swipe in from the left edge, as iOS's shell reports it (lib/platform/backSwipe.ts, #451).
 (window as { __polarFakeBackSwipe?: (swipe: object) => void }).__polarFakeBackSwipe = (swipe) => void emit("native://back-swipe", swipe);
 

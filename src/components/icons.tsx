@@ -53,6 +53,8 @@ export const Grid = icon(S24.Squares2X2Icon, S20.Squares2X2Icon, S16.Squares2X2I
 export const Hidden = icon(S24.EyeSlashIcon, S20.EyeSlashIcon, S16.EyeSlashIcon);
 export const Info = icon(S24.InformationCircleIcon, S20.InformationCircleIcon, S16.InformationCircleIcon);
 export const Download = icon(S24.ArrowDownTrayIcon, S20.ArrowDownTrayIcon, S16.ArrowDownTrayIcon);
+/** A whole season or show at once (BatchDownload), set apart from one episode's Download. */
+export const DownloadAll = icon(S24.ArrowDownOnSquareStackIcon, S20.ArrowDownOnSquareStackIcon, S16.ArrowDownOnSquareStackIcon);
 export const Instant =icon(S24.BoltIcon, S20.BoltIcon, S16.BoltIcon);
 export const LayoutList = icon(S24.ListBulletIcon, S20.ListBulletIcon, S16.ListBulletIcon);
 export const LayoutRow = icon(S24.ViewColumnsIcon, S20.ViewColumnsIcon, S16.ViewColumnsIcon);

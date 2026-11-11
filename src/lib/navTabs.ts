@@ -11,6 +11,7 @@ const ICONS: Record<string, string> = {
   "discover:movie": "film",
   anime: "sparkles",
   library: "books.vertical",
+  search: "magnifyingglass",
 };
 
 /**

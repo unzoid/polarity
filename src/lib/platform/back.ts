@@ -1,5 +1,5 @@
 import { exit, onBackButtonPress } from "@tauri-apps/api/app";
-import { inShell, type Unlisten } from "./bridge";
+import { call, inShell, type Unlisten } from "./bridge";
 import { os } from "./device";
 import { onBackSwipe, swipeGoesBack, type BackSwipe } from "./backSwipe";
 
@@ -73,7 +73,25 @@ export function leaveApp(scope: LeaveBridge = globalThis as LeaveBridge, quit: (
   return quit();
 }
 
-type ImmersiveBridge = { polarActions?: Actions; polarDevice?: { immersive?: (on: boolean) => void } };
+type ImmersiveBridge = { polarActions?: Actions; polarDevice?: { immersive?: (on: boolean) => void; keepAwake?: (on: boolean) => void } };
+
+/**
+ * Keep the screen on while a video plays, and let it dim and lock again when it pauses or the player closes, as
+ * other video apps do: Android through the page's bridge (MainActivity.kt), iOS's idle timer through the shell
+ * (ios/system_bars.m). Elsewhere it does nothing.
+ */
+export function keepScreenOn(on: boolean, scope: ImmersiveBridge = globalThis as ImmersiveBridge): void {
+  if (os === "ios" && inShell) {
+    void call<void>("player_keep_awake", { on }).catch(() => {});
+    return;
+  }
+  try {
+    if (typeof scope.polarActions?.postMessage === "function") scope.polarActions.postMessage(on ? "awake:on" : "awake:off");
+    else scope.polarDevice?.keepAwake?.(on);
+  } catch {
+    // An older shell without the call: the screen locks on its own timer, as before.
+  }
+}
 
 /**
  * Hide Android's status and navigation bars while the player is open, and bring them back after (#178).

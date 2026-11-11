@@ -1,3 +1,4 @@
+mod art_focus;
 #[cfg(any(windows, test))]
 mod automation;
 mod commands;
@@ -367,8 +368,10 @@ pub fn run() {
             player::mpv_stop,
             player::mpv_snapshot,
             player::player_system_bars,
+            player::player_keep_awake,
             native_tabs::native_tabs,
             native_back::native_back,
+            art_focus::art_focus,
             native_dialogs::native_dialog,
             native_dialogs::native_share,
             notifications::notifications_permission,
