@@ -1,64 +1,91 @@
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { reveal } from "../lib/reveal";
 import { Ref } from "./Footnotes";
-import { Smooth } from "./Smooth";
+import { Seg } from "./Seg";
 
 // Screenshots follow AGENTS.md: no unblurred posters, key art or title logos.
 const scenes: {
   id: string;
-  title: string;
+  label: string;
   body: string;
   note?: 1 | 2 | 3;
   img: { src: string; w: number; h: number; alt: string };
 }[] = [
   {
+    id: "profiles",
+    label: "Profiles",
+    body: "Everyone in the house gets their own avatar, history and settings.",
+    img: { src: "/profiles.webp", w: 1426, h: 886, alt: "Polarity's profile picker: who's watching?" },
+  },
+  {
     id: "anime",
-    title: "Anime",
+    label: "Anime",
     body: "Rankings, tags, studios, seasons and alternative titles on every show's page.",
     note: 2,
-    img: { src: "/anime-details.webp", w: 1442, h: 540, alt: "An anime's page with its rankings, story, tags and facts" },
+    img: { src: "/anime-details.webp", w: 1424, h: 885, alt: "An anime's page with its rankings, story, tags and facts" },
+  },
+  {
+    id: "party",
+    label: "Watch party",
+    body: "Friends join with a code. You choose who controls playback and whether everyone waits for each other.",
+    img: { src: "/party.webp", w: 1419, h: 883, alt: "A watch party's code, who's watching, and its settings" },
   },
   {
     id: "settings",
-    title: "Customizable",
-    body: "Settings for playback, subtitles, audio, appearance and controls, all searchable.",
-    img: { src: "/settings.webp", w: 1442, h: 902, alt: "Playback settings for autoplay, Up Next and skipping intros" },
+    label: "Settings",
+    body: "Playback, subtitles, audio, anime, controls and sources, all searchable.",
+    img: { src: "/settings.webp", w: 1386, h: 875, alt: "The Anime settings: title language, voice actors and shelves" },
   },
   {
     id: "tv",
-    title: "TV mode",
+    label: "TV mode",
     body: "Large cards, with navigation by controller or arrow keys.",
     img: { src: "/tv-search.webp", w: 2000, h: 1125, alt: "Search in TV mode with an on-screen keyboard and genres" },
   },
 ];
 
-/** A centered heading, then the screenshot, large. */
+/** The dark band under the hero: a heading, then one screenshot at a time, picked with a toggle. */
 export function Showcase() {
+  const [current, setCurrent] = createSignal(0);
+  const scene = () => scenes[current()];
+
   return (
-    <For each={scenes}>
-      {(scene) => (
-        <section id={scene.id} class="mx-auto mt-32 max-w-[1200px] px-6 sm:mt-48">
-          <header ref={reveal} class="reveal mx-auto max-w-[40rem] text-center">
-            <h2 class="text-headline text-balance">
-              {scene.title}
-              <Show when={scene.note}>{(n) => <Ref n={n()} />}</Show>
-            </h2>
-            <p class="text-lede mx-auto mt-5 max-w-[34rem] text-mute">{scene.body}</p>
-          </header>
-          <div ref={reveal} class="reveal mt-14 drop-shadow-[0_24px_48px_var(--shadow)] sm:mt-16">
-            <Smooth radius={20} edge="var(--edge)" class="bg-black">
+    <section id="showcase" class="band px-gutter pt-16 pb-[72px] md:pt-[88px] md:pb-24">
+      <div ref={reveal} class="reveal grid gap-6 md:grid-cols-2 md:items-end md:gap-14">
+        <h2 class="text-headline max-w-[11em]">On your desk or your TV.</h2>
+        <p class="max-w-[31em] text-[19px]">TV mode has bigger cards and works with a controller or the arrow keys.</p>
+      </div>
+
+      <figure class="mt-12 md:mt-16">
+        <figcaption class="grid gap-5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center md:gap-10">
+          <Seg label="Screenshot" items={scenes.map((s) => s.label)} value={current()} onChange={setCurrent} />
+          <p class="max-w-[36em] text-[17px]">
+            {scene().body}
+            <Show when={scene().note}>{(n) => <Ref n={n()} />}</Show>
+          </p>
+        </figcaption>
+        {/* The stage takes the current screenshot's shape; the toggle above it never moves. */}
+        <div
+          ref={reveal}
+          class="reveal relative mt-8 overflow-hidden rounded-[14px] bg-black"
+          style={{ "aspect-ratio": `${scene().img.w} / ${scene().img.h}` }}
+        >
+          <For each={scenes}>
+            {(s, i) => (
               <img
-                src={scene.img.src}
-                alt={scene.img.alt}
-                width={scene.img.w}
-                height={scene.img.h}
-                loading="lazy"
-                class="block w-full"
+                src={s.img.src}
+                alt={s.img.alt}
+                width={s.img.w}
+                height={s.img.h}
+                loading={i() === 0 ? "eager" : "lazy"}
+                aria-hidden={i() !== current()}
+                class="absolute inset-0 size-full object-cover object-top transition-opacity duration-500 ease-[var(--ease-out-strong)]"
+                classList={{ "opacity-0": i() !== current() }}
               />
-            </Smooth>
-          </div>
-        </section>
-      )}
-    </For>
+            )}
+          </For>
+        </div>
+      </figure>
+    </section>
   );
 }

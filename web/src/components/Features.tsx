@@ -11,11 +11,9 @@ import CircleUser from "lucide-solid/icons/circle-user";
 import Captions from "lucide-solid/icons/captions";
 import { reveal } from "../lib/reveal";
 import { Ref } from "./Footnotes";
-import { Smooth } from "./Smooth";
 
-type Feature = { icon: Component<LucideProps>; title: string; body: string; note?: 1 | 2 | 3 };
-
-const features: Feature[] = [
+/** Everything at a glance. */
+const overview: { icon: Component<LucideProps>; title: string; body: string; note?: 1 | 2 | 3 }[] = [
   { icon: FastForward, title: "Skip intros", body: "Jump past intros and recaps, and skip filler episodes in anime.", note: 1 },
   { icon: History, title: "Resume anywhere", body: "Pick up exactly where you stopped, on any of your devices." },
   { icon: Users, title: "Watch parties", body: "Watch together with playback kept in sync." },
@@ -29,27 +27,27 @@ const features: Feature[] = [
 
 export function Features() {
   return (
-    <section id="features" class="mx-auto mt-32 max-w-[1080px] px-6 sm:mt-48">
-      <header ref={reveal} class="reveal mx-auto max-w-[40rem] text-center">
-        <h2 class="text-headline text-balance">Features</h2>
-      </header>
-      <div ref={reveal} class="reveal mt-14 sm:mt-16">
-        <Smooth radius={28} class="bg-tile px-8 py-12 sm:px-12 sm:py-14">
-          <ul class="grid gap-x-12 gap-y-12 sm:grid-cols-2 sm:gap-y-16 lg:grid-cols-3">
-            <For each={features}>
-              {(f) => (
-                <li>
-                  <f.icon class="size-6 text-icon" stroke-width={1.75} aria-hidden="true" />
-                  <h3 class="mt-4 text-[1.0625rem] font-semibold tracking-[-0.016em]">
-                    {f.title}
-                    <Show when={f.note}>{(n) => <Ref n={n()} />}</Show>
-                  </h3>
-                  <p class="mt-1 max-w-[19rem] text-[0.9375rem] leading-[1.45] text-mute">{f.body}</p>
-                </li>
-              )}
-            </For>
-          </ul>
-        </Smooth>
+    <section id="features" class="px-gutter scroll-mt-0 pt-16 md:pt-[88px]">
+      <div>
+        <h2 ref={reveal} class="reveal text-headline">Features</h2>
+        {/* One big ink card, like the app's own feature panel. */}
+        <ul
+          ref={reveal}
+          class="reveal band mt-10 grid gap-x-12 gap-y-12 rounded-[28px] px-8 py-12 sm:grid-cols-2 sm:px-12 sm:py-14 md:mt-12 lg:grid-cols-3 lg:gap-y-16"
+        >
+          <For each={overview}>
+            {(f) => (
+              <li>
+                <f.icon class="size-7" stroke-width={2} aria-hidden="true" />
+                <h3 class="mt-4 text-[21px] leading-tight font-extrabold tracking-[-0.02em] text-white">
+                  {f.title}
+                  <Show when={f.note}>{(n) => <Ref n={n()} />}</Show>
+                </h3>
+                <p class="mt-1.5 max-w-[20em] text-[17px] leading-snug">{f.body}</p>
+              </li>
+            )}
+          </For>
+        </ul>
       </div>
     </section>
   );
