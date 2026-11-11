@@ -10,7 +10,8 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const SIMKL_MARK_SHA256 = "e6b3dcd9485afabf762c36b7820e565700123a32e9dd2a351d7233b9c1e6ed25";
 
 test("the mark is Simkl's own file, byte for byte", () => {
-  const bytes = readFileSync(join(ROOT, "src/assets/simkl-mark.svg"));
+  // A Windows checkout turns the file's line ends into CRLF; the hash is of the file as Simkl serves it (LF).
+  const bytes = Buffer.from(readFileSync(join(ROOT, "src/assets/simkl-mark.svg")).toString("latin1").replace(/\r\n/g, "\n"), "latin1");
   // sha256 of https://us.simkl.in/img_favicon/v2/safari-pinned-tab.svg, the monochrome SVG in Simkl's API rules.
   expect(createHash("sha256").update(bytes).digest("hex")).toBe(SIMKL_MARK_SHA256);
 });
