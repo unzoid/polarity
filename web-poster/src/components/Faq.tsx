@@ -49,7 +49,7 @@ export function Faq() {
                     <path d="M8 1.5v13M1.5 8h13" stroke="currentColor" stroke-width="2.5" />
                   </svg>
                 </summary>
-                <p class="-mt-1 max-w-[32em] pb-6 text-[19px]">{item.a}</p>
+                <p class="max-w-[32em] pb-6 text-[19px]">{item.a}</p>
               </details>
             )}
           </For>
