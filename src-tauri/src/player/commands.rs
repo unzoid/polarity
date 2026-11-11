@@ -68,6 +68,7 @@ pub fn player_system_bars(hidden: bool) {
 /// the stream's `behaviorHints.proxyHeaders.request`; only those
 /// `polar_player::headers` passes reach the link check and mpv. `link`: a link the user chose
 /// (Watch a Link), checked without the placeholder rule for add-on streams (#474).
+/// `owner`: the page's player that asks, so a load it no longer wants is dropped (`polar_player::turns`).
 #[tauri::command]
 // The webview's arguments, plus the three Tauri hands in.
 #[allow(clippy::too_many_arguments)]
@@ -80,7 +81,9 @@ pub async fn mpv_load(
     probe_id: Option<u32>,
     headers: Option<std::collections::HashMap<String, String>>,
     link: Option<bool>,
+    owner: Option<u64>,
 ) -> Result<(), CmdError> {
+    state.mpv.turns.ask(owner);
     // Web streams, a finished download, or a file the user opened - never any other path on disk.
     let downloaded = app.state::<Arc<crate::downloads::Downloads>>().owns(&url);
     let opened = app.state::<Arc<crate::local_files::LocalFiles>>().owns(&url);
@@ -111,6 +114,10 @@ pub async fn mpv_load(
     if opened {
         options = if options.is_empty() { "sub-auto=fuzzy".into() } else { format!("{options},sub-auto=fuzzy") };
     }
+    // The link check and starting mpv took a while: a player picked since then is the one to load.
+    if !state.mpv.turns.wanted(owner) {
+        return Ok(());
+    }
     // A new file is measured afresh (autocrop): drop the last one's crop.
     let load = state.mpv.loads.fetch_add(1, Ordering::SeqCst) + 1;
     state.mpv.held.store(false, Ordering::SeqCst);
@@ -125,6 +132,10 @@ pub async fn mpv_load(
         *state.mpv.opening.locked() = Some(Opening::Probing(load));
         tauri::async_runtime::spawn(opening(url.clone(), fields.clone(), start.unwrap_or(0.0)))
     });
+    if !state.mpv.turns.wanted(owner) {
+        return Ok(());
+    }
+    state.mpv.turns.opened(owner);
     let loaded = load_paused(&state, &url, fields, &options, probe.is_some()).await;
     let found = match probe {
         Some(task) if loaded.is_ok() => task.await.ok().flatten(),
@@ -242,13 +253,19 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
 
 /// Stop playback but keep mpv alive (idle) for the next title.
 #[tauri::command]
-pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>, owner: Option<u64>) -> Result<(), String> {
     if state.mpv.conn.lock().await.is_none() {
+        return Ok(());
+    }
+    // A player that was left: mpv has its successor's file by now, which isn't its to stop.
+    if !state.mpv.turns.may_stop(owner) {
         return Ok(());
     }
     state.mpv.schedule_idle_shutdown(&app);
     state.mpv.set_visible(false).await;
-    state.mpv.request(json!(["stop"])).await.map(|_| ())
+    let stopped = state.mpv.request(json!(["stop"])).await.map(|_| ());
+    state.mpv.turns.stopped();
+    stopped
 }
 
 /// The current frame as a JPEG data URL — mpv's picture lives in a native
