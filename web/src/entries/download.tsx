@@ -2,6 +2,7 @@ import { render } from "solid-js/web";
 import { For, Match, Show, Switch, type JSX } from "solid-js";
 import Command from "lucide-solid/icons/command";
 import Terminal from "lucide-solid/icons/terminal";
+import Smartphone from "lucide-solid/icons/smartphone";
 import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import "../styles.css";
 import { Layout } from "../components/Layout";
@@ -13,16 +14,20 @@ const ICONS: Record<Platform, () => JSX.Element> = {
   windows: () => <WindowsGlyph class="size-6" />,
   macos: () => <Command class="size-6" stroke-width={1.75} />,
   linux: () => <Terminal class="size-6" stroke-width={1.75} />,
+  android: () => <Smartphone class="size-6" stroke-width={1.75} />,
+  ios: () => <Smartphone class="size-6" stroke-width={1.75} />,
 };
 
 const REQUIREMENTS: Record<Platform, string> = {
   windows: "Windows 10 or later, 64-bit",
-  macos: "",
-  linux: "",
+  macos: "macOS 11 or later on Apple Silicon",
+  linux: "64-bit, with glibc as new as Ubuntu 22.04's",
+  android: "Preview for 64-bit phones. It doesn't update itself yet.",
+  ios: "Preview. Unsigned: you sign it yourself to install it.",
 };
 
-// The visitor's own platform goes first.
-const ORDER: Platform[] = (["windows", "macos", "linux"] as Platform[]).sort(
+// The visitor's own platform goes first; the phone previews come after the desktop apps.
+const ORDER: Platform[] = (["windows", "macos", "linux", "android", "ios"] as Platform[]).sort(
   (a, b) => Number(b === platform) - Number(a === platform),
 );
 
@@ -34,12 +39,12 @@ function Download() {
 
   return (
     <Layout>
-      <section class="px-6 pt-36 text-center sm:pt-44">
+      <section class="px-gutter pt-[4vh]">
         <h1 class="enter text-display" style={{ "--rise": "16px", "--dur": "800ms" }}>
           Download Polarity
         </h1>
-        <p class="enter text-lede mx-auto mt-5 max-w-[32rem] text-mute" style={{ "--rise": "10px", "--delay": "100ms" }}>
-          Free and open source. Updates install automatically.
+        <p class="enter text-lede mt-8 max-w-[30em]" style={{ "--rise": "10px", "--delay": "100ms" }}>
+          Free and open source. The desktop apps update themselves.
           <Show when={release()?.version}>
             {(v) => (
               <>
@@ -54,14 +59,14 @@ function Download() {
         </p>
       </section>
 
-      <section class="enter mx-auto mt-16 max-w-[1080px] px-6 sm:mt-20" style={{ "--rise": "20px", "--delay": "200ms", "--dur": "900ms" }}>
+      <section class="enter px-gutter mt-16 sm:mt-20" style={{ "--rise": "20px", "--delay": "200ms", "--dur": "900ms" }}>
         <ul class="grid gap-4 md:grid-cols-3">
           <For each={ORDER}>
             {(p) => (
               <li>
                 <Smooth radius={28} class="flex h-full min-h-72 flex-col bg-tile p-8">
                   <div class="flex items-center gap-3 text-icon">{ICONS[p]()}</div>
-                  <h2 class="mt-5 text-2xl font-semibold tracking-[-0.024em]">
+                  <h2 class="text-title mt-5">
                     {PLATFORM_NAMES[p]}
                     <Show when={p === platform}>
                       <span class="ml-2 align-middle text-xs font-medium tracking-normal text-faint">Your system</span>
@@ -101,7 +106,7 @@ function Download() {
                           <>
                             <a
                               href={installers()[0].url}
-                              class="press flex h-11 w-full items-center justify-center gap-2 rounded-full bg-accent font-medium text-accent-ink hover:bg-accent-hover"
+                              class="btn btn-sm btn-solid w-full"
                             >
                               <ArrowDownToLine class="size-4" stroke-width={2.2} />
                               {installers()[0].label}
@@ -128,7 +133,7 @@ function Download() {
             )}
           </For>
         </ul>
-        <p class="mt-8 text-center text-sm text-faint">
+        <p class="mt-8 text-sm text-faint">
           Looking for an older version?{" "}
           <a href="https://github.com/unzoid/polarity/releases" class="text-mute hover:text-ink hover:underline">
             All releases
