@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChainLink, MediaFormat } from "../src/lib/anime/anilist";
-import { isSeason, walkSeasons } from "../src/lib/anime/seasons";
+import { isSeason, nothingKnownYet, walkSeasons } from "../src/lib/anime/seasons";
 
 function entry(id: number, format: MediaFormat, episodes: number | null, prequel?: number, sequel?: number, prequelFormat?: MediaFormat): ChainLink {
   const edges: ChainLink["relations"]["edges"] = [];
@@ -49,5 +49,79 @@ describe("season walk (test report 1, items 8 and 12)", () => {
     });
     expect(walk.seasons.map((s) => s.card.id)).toEqual([1, 2]);
     expect(asked).toBe(0);
+  });
+});
+
+// An invented franchise, Ember Coast, in watch order: a prequel film, two seasons with an OVA between them, a third
+// season split in two (its second part announced, no English title and no format yet) and a part nothing is known of.
+type Made = Partial<ChainLink> & { id: number; romaji: string; english?: string };
+const EMBER: Made[] = [
+  { id: 10, format: "MOVIE", episodes: 1, romaji: "Ember Coast 0", english: "EMBER COAST 0" },
+  { id: 11, format: "TV", episodes: 12, romaji: "Ember Coast", english: "Ember Coast" },
+  { id: 12, format: "OVA", episodes: 1, romaji: "Ember Coast: Umibe", english: "Ember Coast: By the Sea" },
+  { id: 13, format: "TV", episodes: 12, romaji: "Ember Coast 2nd Season", english: "Ember Coast Season 2" },
+  { id: 14, format: "TV", episodes: 12, romaji: "Ember Coast: Kiri no Shou - Zenpen", english: "Ember Coast Season 3: The Mist Arc Part 1" },
+  { id: 15, format: null, episodes: null, status: "NOT_YET_RELEASED", startDate: { year: 2027, month: 1 }, romaji: "Ember Coast: Kiri no Shou - Kouhen" },
+  { id: 16, format: "TV", episodes: null, status: "NOT_YET_RELEASED", description: null, romaji: "Ember Coast: Saigo no Shou" },
+];
+
+function ember(i: number): ChainLink {
+  const { romaji, english, ...m } = EMBER[i];
+  const edges: ChainLink["relations"]["edges"] = [];
+  if (i > 0) edges.push({ relationType: "PREQUEL", node: { id: EMBER[i - 1].id, type: "ANIME", format: EMBER[i - 1].format } });
+  if (i < EMBER.length - 1) edges.push({ relationType: "SEQUEL", node: { id: EMBER[i + 1].id, type: "ANIME", format: EMBER[i + 1].format } });
+  return { status: "FINISHED", ...m, type: "ANIME", title: { romaji, english: english ?? null, native: null }, relations: { edges } } as unknown as ChainLink;
+}
+
+const emberWalk = (i: number) => walkSeasons(ember(i), async (id) => ember(EMBER.findIndex((m) => m.id === id)));
+
+describe("one set of season tabs whichever entry the page opens from (#351)", () => {
+  test("every entry's walk finds the same seasons, labels and order", async () => {
+    const walks = await Promise.all(EMBER.map((_, i) => emberWalk(i)));
+    for (const walk of walks) {
+      expect(walk.seasons.map((s) => [s.card.id, s.label])).toEqual([
+        [10, "Movie"],
+        [11, "Season 1"],
+        [13, "Season 2"],
+        [14, "Season 3"],
+        [15, "Season 4"],
+      ]);
+      expect(walk.order.map((c) => c.id)).toEqual([10, 11, 12, 13, 14, 15]);
+      expect(walk.complete).toBe(true);
+    }
+  });
+
+  test("an announced part with no English title is named after the part before it", async () => {
+    const walk = await emberWalk(1);
+    expect(walk.seasons.at(-1)!.card.title.english).toBe("Ember Coast Season 3: The Mist Arc Part 2");
+  });
+
+  test("a part nothing is known of gets no tab and no place in the order; a card that came without its story stays", async () => {
+    const walk = await emberWalk(6);
+    expect(walk.seasons.some((s) => s.card.id === 16)).toBe(false);
+    expect(walk.order.some((c) => c.id === 16)).toBe(false);
+    expect(nothingKnownYet({ status: "NOT_YET_RELEASED", description: null })).toBe(true);
+    expect(nothingKnownYet({ status: "NOT_YET_RELEASED" })).toBe(false);
+    expect(nothingKnownYet({ status: "NOT_YET_RELEASED", description: null, startDate: { year: 2027 } })).toBe(false);
+    expect(nothingKnownYet({ status: "NOT_YET_RELEASED", description: "A story." })).toBe(false);
+  });
+
+  test("an OVA opened on its own is no tab", async () => {
+    const walk = await emberWalk(2);
+    expect(walk.seasons.some((s) => s.card.id === 12)).toBe(false);
+  });
+
+  test("an entry on a branch the walk forward doesn't take keeps the chain through it", async () => {
+    const side = entry(3, "MOVIE", 1, 1);
+    const first = entry(1, "TV", 12, undefined, 2);
+    first.relations.edges.unshift({ relationType: "SEQUEL", node: { id: 3, type: "ANIME", format: "MOVIE" } });
+    const second = entry(2, "TV", 12, 1);
+    const all = new Map([
+      [1, first],
+      [2, second],
+      [3, side],
+    ]);
+    const walk = await walkSeasons(second, async (id) => all.get(id)!);
+    expect(walk.seasons.map((s) => s.card.id)).toEqual([1, 2]);
   });
 });

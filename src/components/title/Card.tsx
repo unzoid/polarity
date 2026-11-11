@@ -1,5 +1,5 @@
-import { useState, type HTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
-import { useArtGate } from "../../lib/ui";
+import { cloneElement, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type Ref } from "react";
+import { useArtGate, useNameWait } from "../../lib/ui";
 import { Img } from "../Img";
 import { TitleLogo } from "../TitleLogo";
 import { Skeleton } from "../ui/Skeleton";
@@ -33,6 +33,8 @@ type CardProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
   trailing?: ReactNode;
   /** The title's tooltip; `title` is the caption. */
   hint?: string;
+  /** The card's root element (a button, or the `role="link"` div with `actions`). */
+  ref?: Ref<HTMLElement>;
 };
 
 /**
@@ -54,6 +56,7 @@ export function Card({
   trailing,
   hint,
   className,
+  ref,
   ...root
 }: CardProps) {
   const gate = useArtGate(art, artFallbacks);
@@ -74,7 +77,7 @@ export function Card({
   const cls = `card card-${shape}${className ? ` ${className}` : ""}`;
   if (!actions)
     return (
-      <button className={cls} title={hint} {...root}>
+      <button ref={ref as Ref<HTMLButtonElement>} className={cls} title={hint} {...root}>
         {body}
       </button>
     );
@@ -86,7 +89,7 @@ export function Card({
     }
   };
   return (
-    <div className={cls} role="link" tabIndex={0} title={hint} {...root} onKeyDown={onKeyDown}>
+    <div ref={ref as Ref<HTMLDivElement>} className={cls} role="link" tabIndex={0} title={hint} {...root} onKeyDown={onKeyDown}>
       {body}
     </div>
   );
@@ -113,20 +116,50 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
   );
 }
 
-/** The scrim and the title on landscape art: the logo when there is one and it loads, else the name. Both wait for the art. */
-export function ArtTitle({ name, logo }: { name: string; logo?: string }) {
+/**
+ * The scrim and the title on landscape art: the logo when there is one and it loads, else the name. Both wait for the art.
+ * `logos` are the title's other logos, `logo` first: the first shaped like a logo that reads is drawn (TitleLogo).
+ * While `pending` (the logo isn't known yet) neither shows, for at most `NAME_WAIT` (#343).
+ */
+export function ArtTitle({ name, logo, logos, pending }: { name: string; logo?: string; logos?: string[]; pending?: boolean }) {
   return (
     <>
       <div className="card-art-scrim art-after" />
-      <LogoOrName logo={logo} alt={name} logoClass="card-logo" name={<span className="card-art-title t-title2 art-after">{name}</span>} />
+      <LogoOrName
+        logo={logo}
+        logos={logos}
+        pending={pending}
+        alt={name}
+        logoClass="card-logo"
+        name={<span className="card-art-title t-title2 art-after">{name}</span>}
+      />
     </>
   );
 }
 
-/** A card's logo, or `name` while there's none or it doesn't load; a new `logo` gets a fresh try. The logo waits for the art (`art-after`). */
-export function LogoOrName({ logo, alt, logoClass, name }: { logo?: string; alt: string; logoClass: string; name: ReactNode }) {
+/**
+ * A card's logo, or `name` while there's none or it doesn't load; a new `logo` gets a fresh try. The logo waits for the art (`art-after`).
+ * While `pending` (the logo isn't known yet) the name keeps its place unseen, for at most `NAME_WAIT` (#343).
+ */
+export function LogoOrName({
+  logo,
+  logos,
+  pending = false,
+  alt,
+  logoClass,
+  name,
+}: {
+  logo?: string;
+  logos?: string[];
+  pending?: boolean;
+  alt: string;
+  logoClass: string;
+  name: ReactElement<HTMLAttributes<HTMLElement>>;
+}) {
   const { shown, onError } = useCardArt(logo);
-  return shown ? <TitleLogo src={shown} alt={alt} className={`${logoClass} art-after`} onFail={onError} /> : name;
+  const waiting = useNameWait(pending && !logo, alt);
+  if (shown) return <TitleLogo src={shown} logos={logos} alt={alt} className={`${logoClass} art-after`} onFail={onError} />;
+  return waiting ? cloneElement(name, { "data-name-wait": "" } as HTMLAttributes<HTMLElement>) : name;
 }
 
 /** A stripe along the bottom of the art for how far in you are (0–1). */

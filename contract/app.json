@@ -2,6 +2,7 @@
   "CacheInfo": ["bytes","path"],
   "CmdError": ["code","message"],
   "Cue": ["endMs","h","sheet","startMs","w","x","y"],
+  "CustomTheme": ["accent","base","id","name","tint"],
   "Download": ["addedAt","background","episode","episodeTitle","error","file","headers","id","logo","metaId","name","poster","quality","received","season","state","thumbnail","total","type","url"],
   "Imported": ["library","progress"],
   "InstalledAddon": ["manifest","manifestUrl"],
@@ -14,10 +15,10 @@
   "Ratings": ["audience","awards","imdb","imdbVotes","letterboxd","links","metacritic","rated","rottenTomatoes","tmdb","trakt"],
   "SearchResults": ["movies","series"],
   "Segments": ["intro","outro","postCredits","recap"],
-  "Settings": ["accentColor","animeAudioLanguage","animeSubtitleLanguage","audioLanguage","autoPickSource","autoSkip","autoSkipRecaps","autoplayCountdown","autoplayNext","cardRatingPosition","cardSize","clickAction","controlsHideSecs","episodeLayout","excludeKeywords","heroAutoplay","hideCam","hideEpisodeDescriptions","hideEpisodeThumbs","language","maxEpisodeSizeGb","maxMovieSizeGb","maxResolution","mdblistKey","metadataSource","nextUpTiming","omdbKey","playbackSpeed","preferScreenResolution","ratingColors","reduceMotion","rememberSpeed","resumePlayback","resumeRewind","seekPreviews","seekStep","seekrKey","showCalendar","showCardDetails","showCardRatings","showCardTitles","showContinueWatching","sourceAutoTags","sourceFiltersHide","sourceSort","startFullscreen","startPage","stillWatchingAfter","subtitleLanguage","subtitleMode","subtitleStyle","theme","timeDisplay","tmdbKey","trailerAutoplay","trailerSound","uiFont","watchedThreshold","wheelAction"],
+  "Settings": ["accentColor","animeAudioLanguage","animeSubtitleLanguage","audioLanguage","autoPickSource","autoSkip","autoSkipRecaps","autoplayCountdown","autoplayNext","cardRatingPosition","cardSize","clickAction","colorScheme","controlsHideSecs","customThemes","episodeLayout","excludeKeywords","heroAutoplay","hideCam","hideEpisodeDescriptions","hideEpisodeThumbs","language","maxEpisodeSizeGb","maxMovieSizeGb","maxResolution","mdblistKey","metadataSource","nextUpTiming","omdbKey","playbackSpeed","preferScreenResolution","ratingColors","reduceMotion","rememberSpeed","resumePlayback","resumeRewind","seekPreviews","seekStep","seekrKey","showCalendar","showCardDetails","showCardRatings","showCardTitles","showContinueWatching","sourceAutoTags","sourceFiltersHide","sourceSort","startFullscreen","startPage","stillWatchingAfter","subtitleLanguage","subtitleMode","subtitleStyle","theme","timeDisplay","tmdbKey","trailerAutoplay","trailerSound","uiFont","watchedThreshold","wheelAction"],
   "Span": ["end","start"],
-  "StreamsResult": ["failed","hidden","streams"],
+  "StreamsResult": ["asked","failed","hidden","ids","streams"],
   "SubtitleOption": ["addon","id","lang","url"],
-  "SubtitleStyle": ["background","color","font","opacity","outline","outlineColor","raise","size"],
+  "SubtitleStyle": ["background","color","font","fontFromSubtitles","opacity","outline","outlineColor","raise","size"],
   "TorrentLink": ["size","url"]
 }

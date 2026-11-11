@@ -246,22 +246,28 @@ export function ProfileEditor({
   );
 }
 
-/** Full-page icon chooser, grouped into rows. */
-function IconPicker({
+/**
+ * Full-page icon chooser, grouped into rows. `bare`: the icons alone, inside something that has its own header and
+ * Back (the profile sheet's Edit Profile, ProfileEditSheet.tsx).
+ */
+export function IconPicker({
   name,
   current,
   taken,
   onPick,
   onBack,
+  bare = false,
 }: {
   name: string;
   current: AvatarId;
   taken: string[];
   onPick: (id: AvatarId) => void;
   onBack: () => void;
+  bare?: boolean;
 }) {
   return (
-    <div className="icon-picker">
+    <div className="icon-picker" data-bare={bare || undefined}>
+      {!bare && (
       <header className="icon-picker-head">
         <button type="button" className="auth-back pressable" onClick={onBack}>
           <ArrowLeft size={16} strokeWidth={2.5} />
@@ -275,6 +281,7 @@ function IconPicker({
           </span>
         </div>
       </header>
+      )}
       {AVATAR_GROUPS.map((g) => (
         <section key={g.id} className="icon-picker-group">
           <h2>{g.name}</h2>

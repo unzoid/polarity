@@ -6,12 +6,17 @@ import { MotionConfig } from "motion/react";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { queryClient } from "./lib/net";
-import { AccountProvider } from "./lib/account";
+import { AccountProvider, startAccountBackend } from "./lib/account";
 import { installKeepFieldInView, mirrorFormFactor } from "./lib/ui";
 import { inShell, os } from "./lib/platform";
 
 // Inter with weight + optical-size axes: large titles get the Display cut automatically.
 import "@fontsource-variable/inter/opsz.css";
+// The other app fonts (Settings → Appearance → Font): only @font-face rules here; a font's files load when it's chosen.
+import "@fontsource-variable/instrument-sans/wght.css";
+import "@fontsource-variable/hanken-grotesk/wght.css";
+import "@fontsource-variable/onest/wght.css";
+import "@fontsource-variable/mona-sans/wght.css";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/ui/button.css";
@@ -75,6 +80,8 @@ if (!inShell) {
   );
 } else {
   installGamepad();
+  // A dev build's database connection is in the keychain (lib/account/devDatabase.ts).
+  await startAccountBackend().catch(() => undefined);
   root.render(
     <StrictMode>
       {/* reducedMotion="user": springs become instant cross-fades when the OS asks for less motion. */}

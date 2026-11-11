@@ -41,6 +41,8 @@ import {
 import { episodeCode, formatBytes } from "../../lib/format";
 import { useProgressOf } from "../../lib/net";
 import { useRouter } from "../../lib/router";
+import { os } from "../../lib/platform";
+import { useFormFactor } from "../../lib/ui";
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 const seasonName = (s: number) => (s === 0 ? "Specials" : `Season ${s}`);
@@ -63,7 +65,11 @@ export function DownloadsPage() {
     return m;
   }, [progress]);
 
-  const [view, setView] = useState<DownloadsView>(readDownloadsView);
+  // A phone's page is the list and little else: no Movies / Shows / In Progress switch (what's coming down has
+  // its own section at the top already), so everything shows whatever this device's last choice was.
+  const phone = useFormFactor().form === "phone";
+  const [stored, setView] = useState<DownloadsView>(readDownloadsView);
+  const view = useMemo((): DownloadsView => (phone ? { ...stored, filter: "all" } : stored), [stored, phone]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const update = (patch: Partial<DownloadsView>) =>
@@ -137,47 +143,60 @@ export function DownloadsPage() {
   const shownIds = [...shownActive, ...shownTitles.flatMap((t) => t.items)].map((d) => d.id);
 
   return (
-    <div className="downloads">
+    <div className="downloads" data-selecting={selected ? "" : undefined}>
       <StorageSummary list={all} />
       <div className="downloads-toolbar" data-nav-row data-nav-group>
-        <Segmented
-          label="Show"
-          options={DOWNLOAD_FILTERS.map((f) => ({ id: f.value, label: f.label }))}
-          value={view.filter}
-          onChange={(filter) => update({ filter })}
-        />
+        {!phone && (
+          <Segmented
+            label="Show"
+            options={DOWNLOAD_FILTERS.map((f) => ({ id: f.value, label: f.label }))}
+            value={view.filter}
+            onChange={(filter) => update({ filter })}
+          />
+        )}
         {finished.length + new Set(active.map((d) => d.metaId)).size > SEARCH_FROM && (
           <SearchField look="pill" label="Search downloads" placeholder="Search" value={query} onChange={setQuery} className="downloads-search" />
         )}
         <Dropdown label="Sort by" value={view.sort} onChange={(sort) => update({ sort })} options={DOWNLOAD_SORTS} />
         <span className="downloads-toolbar-gap" />
         {!selected && allWatched.length > 0 && <BulkDelete ids={allWatched} label={`Delete All Watched (${allWatched.length})`} />}
-        <Button className="downloads-select" onClick={() => setSelected(selected ? null : new Set())} aria-pressed={!!selected}>
+        <Button
+          variant={selected ? "primary" : "plain"}
+          className="downloads-select"
+          onClick={() => setSelected(selected ? null : new Set())}
+          aria-pressed={!!selected}
+        >
           {selected ? "Done" : "Select"}
         </Button>
       </div>
-      {selected && (
-        <div className="downloads-selectbar" role="region" aria-label="Selection" data-nav-row>
-          <span className="t-callout tabular">{selected.size ? `${plural(selected.size, "download")} selected` : "Select downloads to delete"}</span>
-          <Button onClick={() => setSelected(selected.size === shownIds.length ? new Set() : new Set(shownIds))}>
-            {selected.size === shownIds.length && shownIds.length ? "Select None" : "Select All"}
-          </Button>
-          {selected.size > 0 && <BulkDelete ids={[...selected]} label={`Delete Selected (${selected.size})`} onDone={() => setSelected(new Set())} />}
-        </div>
-      )}
 
       {shownActive.length > 0 && <ActiveSection list={shownActive} selection={selection} />}
 
       {shownTitles.length > 0 && (
         <section className="downloads-library" aria-label="Downloaded">
           {shownActive.length > 0 && <h2 className="downloads-heading t-title3">Downloaded</h2>}
-          {shownTitles.map((t) => (
-            <TitleGroup key={t.key} title={t} watched={watched} open={view.open} onToggle={toggleOpen} selection={selection} />
-          ))}
+          <div className="downloads-panel">
+            {shownTitles.map((t) => (
+              <TitleGroup key={t.key} title={t} watched={watched} open={view.open} onToggle={toggleOpen} selection={selection} />
+            ))}
+          </div>
         </section>
       )}
       {!shownActive.length && !shownTitles.length && (
         <EmptyState>{view.filter === "active" && !query ? "Nothing is downloading." : "No downloads match."}</EmptyState>
+      )}
+
+      {/* While selecting, the actions float over the list at the bottom of the window, as in Photos. */}
+      {selected && (
+        <div className="downloads-selectbar" role="region" aria-label="Selection" data-nav-row>
+          <Button onClick={() => setSelected(selected.size === shownIds.length ? new Set() : new Set(shownIds))}>
+            {selected.size === shownIds.length && shownIds.length ? "Select None" : "Select All"}
+          </Button>
+          <span className="downloads-selectbar-count t-callout tabular" aria-live="polite">
+            {selected.size ? `${selected.size} selected` : "Select downloads"}
+          </span>
+          <BulkDelete ids={[...selected]} label="Delete" disabled={!selected.size} onDone={() => setSelected(new Set())} />
+        </div>
       )}
     </div>
   );
@@ -193,7 +212,8 @@ function StorageSummary({ list }: { list: DownloadRecord[] }) {
   return (
     <div className="downloads-summary">
       <p className="t-headline tabular">{parts.filter(Boolean).join(" · ")}</p>
-      {storage?.dir && (
+      {/* A phone's app keeps its files in its own container: a path there is nothing anyone can go to. */}
+      {storage?.dir && os !== "ios" && os !== "android" && (
         <p className="t-caption faint downloads-folder" title={storage.dir}>
           Saved in {storage.dir}
         </p>
@@ -223,7 +243,7 @@ function ActiveSection({ list, selection }: { list: DownloadRecord[]; selection:
           </span>
         )}
       </div>
-      <ul className="download-rows">
+      <ul className="download-rows downloads-panel">
         {list.map((d) => (
           <DownloadRow key={d.id} d={d} series={d.type === "series"} watched={false} selection={selection} showTitle />
         ))}
@@ -288,8 +308,8 @@ const TitleGroup = memo(function TitleGroup({
         </div>
         <Fold open={isOpen} id={bodyId}>
           <div className="download-title-actions" data-nav-row>
-            {watchedHere.length > 0 && <BulkDelete ids={watchedHere} label={`Delete Watched (${watchedHere.length})`} />}
-            <BulkDelete ids={ids} label="Delete All" />
+            {watchedHere.length > 0 && <BulkDelete ids={watchedHere} label={`Delete Watched (${watchedHere.length})`} small />}
+            <BulkDelete ids={ids} label="Delete All" small />
           </div>
           {title.seasons.length ? (
             title.seasons.map((s) => <SeasonGroup key={s.key} season={s} watched={watched} open={open} onToggle={onToggle} selection={selection} />)
@@ -394,7 +414,19 @@ function SelectBox({ ids, selection, label }: { ids: string[]; selection: NonNul
 }
 
 /** A text button that deletes several at once: the first click arms it (red, the bin's lid open), the second deletes. */
-function BulkDelete({ ids, label, small = false, onDone }: { ids: string[]; label: string; small?: boolean; onDone?: () => void }) {
+function BulkDelete({
+  ids,
+  label,
+  small = false,
+  disabled = false,
+  onDone,
+}: {
+  ids: string[];
+  label: string;
+  small?: boolean;
+  disabled?: boolean;
+  onDone?: () => void;
+}) {
   const { armed, props } = useConfirmDelete(() => {
     void removeDownloads(ids).then(onDone);
   }, label);
@@ -402,6 +434,7 @@ function BulkDelete({ ids, label, small = false, onDone }: { ids: string[]; labe
     <button
       type="button"
       className={buttonClass("plain", false, `confirm-delete downloads-bulk${small ? " downloads-bulk-sm" : ""}`)}
+      disabled={disabled}
       {...props}
       aria-label={armed ? `Click again: ${label}` : label}
     >

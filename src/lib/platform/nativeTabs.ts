@@ -18,6 +18,8 @@ export type NativeTabsState = {
   selected: string | null;
   /** Hidden while the player, Settings or a sheet is open: they cover the whole screen, as iOS's own sheets cover its tab bar. */
   hidden: boolean;
+  /** The app's colour scheme, which the bar is drawn in (it can differ from the system's). */
+  scheme?: "light" | "dark";
 };
 
 /** Show the tabs as given; the first call puts the tab bar around the web view. */

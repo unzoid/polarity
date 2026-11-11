@@ -37,7 +37,7 @@ base64 = "0.22"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_Pipes"] }
 # "Open Stremio links in Polarity" (#163) keeps and puts back the scheme's registration it replaces;
 # the version the deep-link plugin already uses.
 windows-registry = "0.6"

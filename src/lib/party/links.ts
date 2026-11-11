@@ -77,6 +77,14 @@ export function linkMedia(url: string): PartyMedia {
   return { type: "movie", metaId: id, videoId: id, url, label: linkLabel(url) };
 }
 
+/**
+ * The player's route for what the room is on: a link carries its URL as the stream, since a link has no
+ * sources to look up (#387). Following the room and "Go to the Current Stream" both open it this way.
+ */
+export function partyRoute(m: PartyMedia) {
+  return { name: "player", type: m.type, metaId: m.metaId, videoId: m.videoId, ...(m.url ? { stream: { url: m.url, name: m.label } } : {}) } as const;
+}
+
 /** YouTube's hosts for a video people paste (#201): watch pages, youtu.be, Shorts, live pages and embeds. */
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com"]);
 /** A YouTube video id: eleven of these characters. */

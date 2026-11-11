@@ -262,17 +262,58 @@ describe("add-ons and keys per profile on this device (#80)", () => {
     expect(await s.startProfile("Q")).toBe(false);
   });
 
-  test("shared between profiles on this device: a new profile starts with what's here, as before #80", async () => {
+  test("with every account on this device: a new profile starts with what's here, as before #80 (#429)", async () => {
     const { setPrefs } = await import("../src/lib/settings/prefs");
     const h = device({ tmdbKey: "shared-key" }, [guestAddon]);
     on(h);
-    setPrefs({ shareAddonsAndKeys: true });
+    setPrefs({ shareSetup: "device" });
     try {
-      expect(await s.startProfile("R")).toBe(false);
+      expect(await s.startProfile("R", "someone-else", ["R"])).toBe(false);
       expect(h.settings.tmdbKey).toBe("shared-key");
       expect(h.addons).toEqual([guestAddon]);
     } finally {
-      setPrefs({ shareAddonsAndKeys: false });
+      setPrefs({ shareSetup: "account" });
+    }
+  });
+
+  test("between this account's profiles (the default): another of its profiles' set, never another account's (#429)", async () => {
+    const { getPrefs, setPrefs } = await import("../src/lib/settings/prefs");
+    expect(getPrefs().shareSetup).toBe("account");
+    const addonA = "https://addon.example.com/a.json";
+    const addonX = "https://addon.example.com/x.json";
+    const d = device({}, [subtitles]);
+    on(d);
+    d.storage.set("polar.settingsOwner", "local");
+    const enter = async (id: string, siblings: string[]) => s.startProfile(id, await s.keepDeviceSettings(id), siblings);
+    const synced = async (id: string, key: string, addon: string) => {
+      d.settings.tmdbKey = key;
+      d.addons.push(addon);
+      stored = null;
+      await s.syncSettings(id, server, () => true);
+    };
+    // Account 1's first profile here starts empty, then adds its own.
+    expect(await enter("A1", ["A1", "B1", "C1"])).toBe(false);
+    await synced("A1", "a-key", addonA);
+    // Another account's profile gets none of them.
+    expect(await enter("X2", ["X2"])).toBe(true);
+    expect(d.settings.tmdbKey).toBeNull();
+    expect(d.addons).toEqual([subtitles]);
+    await synced("X2", "x-key", addonX);
+    // Account 1's next profile, after the other account's: account 1's set, none of the other's.
+    expect(await enter("B1", ["A1", "B1", "C1"])).toBe(true);
+    expect(d.settings.tmdbKey).toBe("a-key");
+    expect(d.addons.sort()).toEqual([addonA, subtitles]);
+    // Straight after one of its own profiles: what's here stays.
+    expect(await enter("C1", ["A1", "B1", "C1"])).toBe(false);
+    expect(d.settings.tmdbKey).toBe("a-key");
+    // Not shared: nothing of the profile before, even of the same account.
+    setPrefs({ shareSetup: "none" });
+    try {
+      expect(await enter("D1", ["A1", "B1", "C1", "D1"])).toBe(true);
+      expect(d.settings.tmdbKey).toBeNull();
+      expect(d.addons).toEqual([subtitles]);
+    } finally {
+      setPrefs({ shareSetup: "account" });
     }
   });
 
@@ -281,5 +322,86 @@ describe("add-ons and keys per profile on this device (#80)", () => {
     on(e);
     expect(await s.startProfile("S")).toBe(false);
     expect(e.addons).toEqual([subtitles]);
+  });
+});
+
+describe("a round whose profile was left stops (plan 002)", () => {
+  /** The shared server, counting uploads; `afterGet` runs once the read has been made. */
+  const counting = (afterGet: () => void = () => {}, onPut: () => void = () => {}) => {
+    const calls = { put: 0 };
+    const wrapper = {
+      settings: {
+        get: async (space: string) => {
+          const r = await server.settings.get(space);
+          afterGet();
+          return r;
+        },
+        put: async (space: string, doc: { data: Record<string, unknown>; updatedAt: number }) => {
+          calls.put++;
+          onPut();
+          return server.settings.put(space, doc);
+        },
+      },
+    } as unknown as AccountBackend;
+    return { calls, wrapper };
+  };
+  /** A device that has synced once, then changed a setting, so the next round would upload. */
+  const changed = async (space: string) => {
+    stored = null;
+    const d = device({ tmdbKey: "key-a" });
+    on(d);
+    await s.syncSettings(space, server, () => true);
+    d.settings.seekStep = 20;
+    return d;
+  };
+
+  test("no upload after the profile is left", async () => {
+    await changed("left1");
+    // Active at the existing check after the read, left during the waits after it.
+    let asked = 0;
+    const { calls, wrapper } = counting();
+    await s.syncSettings("left1", wrapper, () => asked++ === 0);
+    expect(calls.put).toBe(0);
+  });
+
+  test("no write to the store after the profile is left mid-round", async () => {
+    // Another device put a different document up; this one has never synced the profile.
+    stored = null;
+    const a = device({ tmdbKey: "key-a" });
+    a.settings.seekStep = 30;
+    on(a);
+    await s.syncSettings("left2", server, () => true);
+    const b = device();
+    on(b);
+    const before = structuredClone(b.settings);
+    let calls = 0;
+    const { calls: counted, wrapper } = counting();
+    await s.syncSettings("left2", wrapper, () => calls++ === 0);
+    expect(b.settings).toEqual(before);
+    expect(counted.put).toBe(0);
+  });
+
+  test("nothing is saved after sign-out", async () => {
+    await changed("left3");
+    const mine = (m: Map<string, string>) => new Set([...m.keys()].filter((k) => k.includes("left3")));
+    const d = dev;
+    let active = true;
+    const { wrapper } = counting(
+      () => {},
+      () => {
+        active = false;
+        s.forgetSettings("left3");
+      },
+    );
+    await s.syncSettings("left3", wrapper, () => active);
+    expect(mine(d.keychain).size).toBe(0);
+    expect(mine(d.storage).size).toBe(0);
+  });
+
+  test("control: a round that stays active uploads once", async () => {
+    await changed("left4");
+    const { calls, wrapper } = counting();
+    await s.syncSettings("left4", wrapper, () => true);
+    expect(calls.put).toBe(1);
   });
 });

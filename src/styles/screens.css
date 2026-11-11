@@ -14,13 +14,6 @@
   gap: 0.75rem;
   padding: 0 var(--gutter) 1.5rem;
 }
-.search-head-title {
-  margin: 0;
-  font-size: 2.125rem;
-  line-height: 1.1;
-  letter-spacing: -0.022em;
-  font-weight: 700;
-}
 .search-start {
   display: flex;
   flex-direction: column;
@@ -92,37 +85,85 @@
   padding: 0.75rem 0.875rem;
   overflow: hidden;
   border-radius: var(--r-md);
-  background: linear-gradient(140deg, hsl(var(--tile-hue) 70% 48%), hsl(calc(var(--tile-hue) + 40) 65% 22%));
+  /* WebKit lets the blended layers below out past the rounded corners until it has drawn them once (the tiles
+     with a picture showed square): a clip path cuts them from the first frame. */
+  clip-path: inset(0 round var(--r-md));
+  background: var(--surface-1);
   color: #fff;
   font-size: 1.0625rem;
   font-weight: 650;
   letter-spacing: -0.01em;
   text-align: left;
   -webkit-touch-callout: none;
+  /* Its press (.pressable) and its coming in with the other tiles (.together-wait). */
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
 }
+/* The picture in two colours (a duotone, as Apple TV's tiles): in grey, then multiplied by the genre's
+   gradient, which paints its light parts from one hue across to the other, then lightened to a deep shade
+   of the second, which takes its shadows. Until the picture's in, the gradient alone. */
 .genre-tile > img {
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: -3;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: grayscale(1) contrast(1.15);
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
 }
 .genre-tile > img[data-loaded="true"] {
   opacity: 1;
 }
-/* The tint keeps each tile its genre's colour, and its name legible over any art. */
-.genre-tile::before {
+.genre-tile::before,
+.genre-tile::after {
   content: "";
   position: absolute;
   inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.genre-tile::before {
+  z-index: -2;
+  background: linear-gradient(150deg, hsl(var(--tile-a) 95% 62%), hsl(var(--tile-b) 90% 58%));
+  mix-blend-mode: multiply;
+}
+.genre-tile::after {
   z-index: -1;
-  background: linear-gradient(160deg, hsl(var(--tile-hue) 70% 45% / 0.35), hsl(var(--tile-hue) 65% 10% / 0.85));
+  background: linear-gradient(150deg, hsl(var(--tile-a) 70% 16%), hsl(var(--tile-b) 75% 12%));
+  mix-blend-mode: lighten;
+}
+.genre-tile:has(> img[data-loaded="true"])::before,
+.genre-tile:has(> img[data-loaded="true"])::after {
+  opacity: 1;
 }
 .genre-tile > span {
   text-shadow: 0 1px 8px rgb(0 0 0 / 0.4);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+/* No picture to be had: the genre's two colours alone. */
+.genre-tile[data-art="none"] {
+  background: linear-gradient(150deg, hsl(var(--tile-a) 80% 52%), hsl(var(--tile-b) 75% 34%));
+}
+/* A placeholder (as .skeleton, ui/skeleton.css) until its picture is in, and, while the set is still coming in
+   (Search.tsx `useTogether`), until every tile's is: the tiles come in together, picture, colours and name at
+   once, never colour first and the picture after. */
+.genre-tile[data-art="loading"],
+[data-together="pending"] .genre-tile {
+  background: linear-gradient(100deg, var(--surface-1) 40%, var(--surface-2) 50%, var(--surface-1) 60%) 0 0 / 300% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+:is(.genre-tile[data-art="loading"], [data-together="pending"] .genre-tile) > :is(img, span),
+:is(.genre-tile[data-art="loading"], [data-together="pending"] .genre-tile)::before,
+:is(.genre-tile[data-art="loading"], [data-together="pending"] .genre-tile)::after {
+  opacity: 0 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .genre-tile {
+    animation: none !important;
+  }
 }
 
 /* --- Settings pages (drawn in the settings overlay): options sit in bordered cards with hairline rows.
@@ -141,11 +182,11 @@
 .settings-card {
   border: 1px solid var(--hairline-strong);
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.025);
+  background: rgb(var(--ink) / 0.025);
   overflow: hidden;
 }
 .settings-card > * + * {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.07);
 }
 .settings-card-pad {
   padding: 1rem 1.5rem 1.25rem;
@@ -186,6 +227,8 @@
 .settings-row-title {
   font-size: var(--fs-lg);
   font-weight: 600;
+  /* An add-on names itself: a long unbroken name wraps inside the row (#456). */
+  overflow-wrap: anywhere;
 }
 .settings-row-caption {
   font-size: var(--fs-sm);
@@ -193,6 +236,10 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* What a setting does right now (Look ahead for bar changes), on a line of its own under the caption. */
+.settings-row-status {
+  display: block;
 }
 .settings-row-icon {
   flex: none;
@@ -298,6 +345,419 @@
   outline-offset: 4px;
 }
 
+/* --- Appearance → Colour scheme and Theme (components/settings/ThemePicker.tsx). Each tile is .themed: it
+       sets the theme inputs inline, so its little window is drawn from the same tokens as the app. */
+/* The heading with its actions on the right, their edge on the card's. */
+.theme-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.theme-picker-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+/* Three across, sharing the card's whole width (over .theme-grid's auto-fill columns). */
+.theme-grid.scheme-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.scheme-grid .theme-thumb {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+}
+.scheme-grid .scheme-split {
+  border-radius: 12px;
+}
+.scheme-grid .theme-tile-name {
+  font-size: 15px;
+}
+/* System: light on the left, dark on the right, split down the middle. */
+.scheme-split {
+  position: relative;
+  display: grid;
+  width: 100%;
+  border-radius: 10px;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+.scheme-split > .theme-thumb {
+  grid-area: 1 / 1;
+}
+.scheme-split > .theme-thumb:last-child {
+  clip-path: inset(0 0 0 50%);
+}
+.theme-tile:active .scheme-split {
+  transform: scale(0.97);
+}
+.theme-tile[aria-checked="true"] .scheme-split {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.theme-tile[aria-checked="true"] .scheme-split .theme-thumb {
+  outline: none;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 1.25rem 1rem;
+  padding: 1.25rem;
+}
+.theme-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  outline: none;
+}
+.theme-tile .theme-thumb {
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .theme-tile:hover .theme-thumb {
+    box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.2);
+  }
+}
+.theme-tile:active .theme-thumb {
+  transform: scale(0.97);
+}
+/* The chosen one: ringed in its own accent, a hair off the picture (an outline's gap shows whatever is behind). */
+.theme-tile[aria-checked="true"] .theme-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.theme-tile:focus-visible .theme-thumb {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink) / 0.08),
+    0 0 0 6px color-mix(in srgb, var(--focus) 45%, transparent);
+}
+.theme-tile-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.theme-tile[aria-checked="true"] .theme-tile-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* The little window: a sidebar, a page with two lines and a pill, a field ending in the accent. */
+.theme-thumb {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22% 1fr;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--tone-3);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+}
+.theme-thumb-side::before {
+  content: "";
+  display: block;
+  height: 5px;
+  margin: 18% 18% 0;
+  border-radius: 3px;
+  background: rgb(var(--ink) / 0.1);
+}
+.theme-thumb-page {
+  position: relative;
+  margin: 8% 8% 8% 0;
+  border-radius: 6px;
+  background: var(--tone-0);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.06);
+}
+.theme-thumb-line {
+  position: absolute;
+  top: 20%;
+  left: 9%;
+  width: 50%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(var(--ink) / 0.22);
+}
+.theme-thumb-line-short {
+  top: calc(20% + 7px);
+  width: 34%;
+  background: rgb(var(--ink) / 0.12);
+}
+.theme-thumb-pill {
+  position: absolute;
+  top: 12%;
+  right: 8%;
+  width: 24%;
+  height: 9%;
+  border-radius: var(--r-pill);
+  background: rgb(var(--ink) / 0.08);
+}
+.theme-thumb-field {
+  position: absolute;
+  left: 9%;
+  right: 8%;
+  bottom: 13%;
+  height: 17%;
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.1);
+}
+.theme-thumb-field::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 6%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+/* Create / edit theme. Drawn in the draft's colours (.themed), centred like any modal, above Settings. */
+/* Over Settings: the whole window dims under it. */
+.theme-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 1);
+  background: rgb(0 0 0 / 0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.theme-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  z-index: calc(var(--z-modal) + 2);
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: hidden auto;
+  border-radius: var(--r-lg);
+  background: var(--tone-2);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ink) / 0.06),
+    0 0 0 1px rgb(var(--ink) / 0.1),
+    0 2px 8px rgb(0 0 0 / 0.2),
+    0 32px 72px -16px rgb(0 0 0 / 0.65);
+  outline: none;
+  /* A modal isn't anchored to a trigger: it settles from its centre. */
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-std);
+}
+.theme-dialog-scrim[data-starting-style],
+.theme-dialog-scrim[data-ending-style],
+.theme-dialog[data-starting-style],
+.theme-dialog[data-ending-style] {
+  opacity: 0;
+}
+.theme-dialog[data-starting-style] {
+  transform: scale(0.96);
+}
+.theme-dialog[data-ending-style] {
+  transform: scale(0.98);
+}
+/* Leaving is quicker than arriving. */
+.theme-dialog-scrim[data-ending-style],
+.theme-dialog[data-ending-style] {
+  transition-duration: 120ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-dialog[data-starting-style],
+  .theme-dialog[data-ending-style] {
+    transform: none;
+  }
+}
+/* Up top, the draft on its own page colour, lit faintly by its accent. */
+.theme-dialog-stage {
+  display: grid;
+  place-items: center;
+  padding: 1.75rem 0 1.5rem;
+  background:
+    radial-gradient(60% 90% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    var(--tone-0);
+  border-bottom: 1px solid var(--hairline);
+  transition: background-color var(--dur-base) var(--ease-std);
+}
+.theme-dialog-stage .theme-thumb {
+  width: 13.5rem;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink) / 0.08),
+    0 12px 32px -12px rgb(0 0 0 / 0.5);
+}
+/* The picture's colours ease from one choice to the next. */
+.theme-dialog-stage :is(.theme-thumb, .theme-thumb-page),
+.theme-dialog-stage .theme-thumb-field::after {
+  transition: background-color var(--dur-base) var(--ease-std);
+}
+.theme-dialog-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+.theme-dialog-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.theme-dialog-description {
+  margin: 0.25rem 0 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+/* Label left, control right, one line each. */
+.theme-dialog-rows {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.875rem 1rem;
+  margin-top: 1.25rem;
+}
+.theme-dialog-row {
+  display: contents;
+}
+.theme-dialog-label {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.theme-dialog-row .segmented {
+  justify-self: start;
+}
+.theme-dialog-input {
+  height: 2.125rem;
+  min-width: 0;
+  padding: 0 0.75rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--fill-1);
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+  outline: none;
+  transition:
+    border-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+.theme-dialog-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.theme-dialog-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.theme-dialog-swatch {
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-round);
+  background: var(--swatch);
+  cursor: pointer;
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.theme-dialog-swatch:active {
+  transform: scale(0.9);
+}
+.theme-dialog-swatch[aria-checked="true"] {
+  box-shadow:
+    0 0 0 2px var(--tone-2),
+    0 0 0 3.5px var(--swatch);
+}
+.theme-dialog-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+/* Delete on the left, apart from the two that close the dialog. */
+.theme-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  border-top: 1px solid var(--hairline);
+  background: var(--fill-1);
+}
+.theme-dialog-btn,
+.theme-dialog-delete {
+  height: 2rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
+}
+.theme-dialog-btn {
+  background: var(--fill-2);
+  color: var(--text);
+}
+.theme-dialog-btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.theme-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.theme-dialog-delete {
+  margin-right: auto;
+  padding: 0 0.625rem;
+  background: none;
+  color: var(--danger);
+}
+.theme-dialog-delete[data-armed] {
+  background: var(--danger);
+  color: #fff;
+}
+@media (hover: hover) and (pointer: fine) {
+  .theme-dialog-btn:not(:disabled):hover {
+    background: var(--fill-3);
+  }
+  .theme-dialog-btn-primary:not(:disabled):hover {
+    background: color-mix(in srgb, var(--accent) 88%, white);
+  }
+  .theme-dialog-delete:not([data-armed]):hover {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+  }
+}
+:is(.theme-dialog-btn, .theme-dialog-delete):not(:disabled):active {
+  transform: scale(0.97);
+}
+:is(.theme-dialog-btn, .theme-dialog-delete):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .theme-dialog-rows {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.375rem;
+  }
+  .theme-dialog-label:not(:first-child) {
+    margin-top: 0.5rem;
+  }
+}
+
 .settings-row-value {
   flex: none;
   max-width: 14rem;
@@ -324,6 +784,23 @@
 .settings-expand[data-open="true"] .settings-chevron {
   transform: rotate(90deg);
 }
+/* A row with a button of its own beside the chevron (ExpandRow `accessory`): the button sits over the row,
+   in room kept clear just before the chevron, so the whole row still lights up and opens. */
+.settings-expand-head {
+  position: relative;
+}
+.settings-row-button[data-accessory] .settings-chevron {
+  margin-left: 2.75rem;
+}
+.settings-expand-accessory {
+  position: absolute;
+  top: 50%;
+  right: calc(1.5rem + 18px + 0.375rem);
+  translate: 0 -50%;
+}
+.t3s .settings-expand-accessory {
+  right: calc(1.25rem + 18px + 0.375rem);
+}
 /* The opened part fades in under its row. The height change itself is
    instant: animating height would re-lay out the page on every frame. */
 .settings-expand-body {
@@ -339,10 +816,12 @@
   font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--text-2);
+  /* An add-on's description may hold long unbroken words (providers joined by slashes, a link):
+     they wrap here instead of widening the whole page (#456). */
+  overflow-wrap: anywhere;
 }
 .settings-url {
   color: var(--text-3);
-  overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -564,11 +1043,11 @@
   transition: background-color var(--dur-fast) var(--ease-std);
 }
 .shortcut-row[data-capturing] {
-  background: rgb(255 255 255 / 0.03);
+  background: rgb(var(--ink) / 0.03);
 }
 @media (hover: hover) and (pointer: fine) {
   .shortcut-row:hover {
-    background: rgb(255 255 255 / 0.03);
+    background: rgb(var(--ink) / 0.03);
   }
 }
 .shortcut-text {
@@ -636,7 +1115,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .shortcut-tool:hover {
-    background: rgb(255 255 255 / 0.08);
+    background: rgb(var(--ink) / 0.08);
     color: var(--text);
   }
 }
@@ -698,7 +1177,7 @@
   height: 24px;
   padding: 0 0.4rem;
   border-radius: 5px;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.05));
+  background: linear-gradient(180deg, rgb(var(--ink) / 0.09), rgb(var(--ink) / 0.05));
   box-shadow:
     inset 0 0 0 1px var(--fill-3),
     inset 0 -1px 0 var(--scrim-1);
@@ -711,7 +1190,7 @@
 .keycap-ghost {
   background: none;
   box-shadow: none;
-  border: 1px dashed rgb(255 255 255 / 0.15);
+  border: 1px dashed rgb(var(--ink) / 0.15);
   color: var(--text-3);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -721,127 +1200,109 @@
   }
 }
 
-/* --- Library: collection tiles, then a shelf from each. -------------------------------------- */
-.library-collections {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 0 var(--gutter) 2.5rem var(--content-start);
+/* --- Library: Downloads as a panel, then a shelf from each collection. ---------------------- */
+/* One material surface, no art behind it: a grouped section, not a picture.
+   Continuous (squircle) corners where the webview draws them, round ones
+   otherwise, like the volume HUD. */
+.library-panel {
+  margin: 0 var(--gutter) 2.5rem var(--content-start);
+  overflow: hidden;
+  border-radius: var(--r-panel);
+  corner-shape: squircle;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--hairline);
 }
-@media (max-width: 960px) {
-  .library-collections {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+/* The shelf inside lines up with the heading's padding, not the page's. */
+.library-panel > * {
+  --gutter: 1.25rem;
+  --content-start: 1.25rem;
 }
-/* A tile: the collection's latest art, blurred to a wash of its colour, under
-   an icon, the name and a count. Material, not a picture: the art is only
-   there to tell the tiles apart at a glance. */
-.library-tile {
-  position: relative;
-  isolation: isolate;
+.library-panel > .row {
+  padding-bottom: 1rem;
+}
+/* The heading is the panel's link: it highlights on press, as a list row does. */
+.library-panel-head {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  min-height: 5.5rem;
-  padding: 1rem 1rem 1rem 1.125rem;
-  overflow: hidden;
-  border-radius: var(--r-lg);
-  background: var(--fill-2);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  width: 100%;
+  padding: 1rem 1.25rem;
   text-align: left;
-  transition:
-    transform var(--dur-press) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-std);
+  transition: background-color var(--dur-fast) var(--ease-std);
 }
-.library-tile-art {
-  position: absolute;
-  inset: -20%;
-  z-index: -1;
-  width: 140%;
-  height: 140%;
-  object-fit: cover;
-  /* A hint of the titles inside, not a wash of colour. */
-  filter: blur(40px) saturate(120%) brightness(0.5);
-  opacity: 0.45;
+.library-panel-head:active {
+  background: var(--fill-2);
+  transition: none;
 }
-@media (hover: hover) and (pointer: fine) {
-  .library-tile:hover {
-    background: var(--fill-3);
-  }
-  .library-tile:hover .library-tile-chevron {
-    transform: translateX(2px);
-    opacity: 0.9;
-  }
-}
-.library-tile-icon {
+.library-panel-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--r-round);
-  background: var(--fill-4);
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--r-md);
+  corner-shape: squircle;
+  background: var(--fill-3);
   color: var(--text);
 }
-.library-tile-text {
+.library-panel-text {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
 }
-.library-tile-title {
+.library-panel-title {
   font-size: var(--fs-xl);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
-.library-tile-detail {
+.library-panel-detail {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: var(--fs-sm);
   color: var(--text-2);
 }
-.library-tile-chevron {
+.library-panel-chevron {
   flex: none;
-  opacity: 0.5;
+  color: var(--text-3);
   transition:
     transform var(--dur-fast) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-std);
+    color var(--dur-fast) var(--ease-std);
 }
-/* Phone: two tiles a row leave no room for the chevron; the name and count keep it. */
-:root[data-form="phone"] .library-collections {
-  gap: 0.625rem;
+@media (hover: hover) and (pointer: fine) {
+  .library-panel-head:hover {
+    background: var(--fill-1);
+  }
+  .library-panel-head:hover .library-panel-chevron {
+    color: var(--text);
+    transform: translateX(3px);
+  }
 }
-:root[data-form="phone"] .library-tile {
-  gap: 0.625rem;
-  min-height: 4.5rem;
-  padding: 0.75rem;
+@media (prefers-reduced-motion: reduce) {
+  .library-panel-chevron {
+    transition: none;
+  }
+  .library-panel-head:hover .library-panel-chevron {
+    transform: none;
+  }
 }
-:root[data-form="phone"] .library-tile-icon {
-  width: 2.25rem;
-  height: 2.25rem;
+:root[data-form="phone"] .library-panel {
+  margin-bottom: 1.75rem;
 }
-:root[data-form="phone"] .library-tile-title {
+:root[data-form="phone"] .library-panel > * {
+  --gutter: 1rem;
+  --content-start: 1rem;
+}
+:root[data-form="phone"] .library-panel-head {
+  padding: 0.875rem 1rem;
+}
+:root[data-form="phone"] .library-panel-title {
   font-size: var(--fs-lg);
-}
-:root[data-form="phone"] .library-tile-chevron {
-  display: none;
 }
 .library-rows {
   padding-bottom: 3rem;
-}
-.library-see-all {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.125rem;
-  color: var(--text-2);
-  font-weight: 600;
-}
-@media (hover: hover) and (pointer: fine) {
-  .library-see-all:hover {
-    color: var(--text);
-  }
 }
 /* A whole collection: "‹ Library" over the title, filters on the right. */
 .library-page-header {
@@ -882,7 +1343,17 @@
     transform: none;
   }
 }
-/* Library → Recent Files (#204): a file on this device, its kind on the art and × to take it off. */
+/* Library → Recent Files (#204): a file on this device, its kind on the art and × to take it off.
+   A file has no artwork: a quiet film glyph on the card's material stands in,
+   not the "no still" glyph, which reads as something missing. */
+.recent-file-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, var(--fill-3), var(--fill-1));
+  color: var(--text-3);
+}
 .recent-file-kind {
   position: absolute;
   left: 0.75rem;
@@ -890,7 +1361,7 @@
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--accent) 75%, white);
+  color: color-mix(in srgb, var(--accent) 75%, rgb(var(--ink-text)));
 }
 .recent-file-forget {
   position: absolute;
@@ -1036,7 +1507,8 @@
   width: 9.5rem;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: var(--r-sm, 8px);
+  border-radius: var(--r-sm);
+  corner-shape: squircle;
   background: var(--fill-2);
 }
 .download-row-still img {
@@ -1108,25 +1580,25 @@
 .downloads-toolbar-gap {
   flex: 1;
 }
-.downloads-search {
+/* Every control in the toolbar is the segmented control's pill: one height, one glass. */
+.downloads-search.search-field-pill {
   width: 14rem;
+  height: 38px;
+  border: 0;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
 }
-.downloads-selectbar {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  margin-bottom: 1rem;
-  padding: 0.375rem 0.375rem 0.375rem 1rem;
-  border-radius: var(--r-md);
-  background: var(--surface-1);
-  box-shadow: 0 0 0 1px var(--hairline);
+.downloads-toolbar .btn,
+.downloads-selectbar .btn {
+  height: 38px;
+  padding: 0 1rem;
+  font-size: var(--fs-md);
 }
-.downloads-selectbar > span {
-  flex: 1;
+.downloads-toolbar .btn:not(.btn-primary) {
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
 }
 .downloads-bulk {
   display: inline-flex;
@@ -1135,12 +1607,163 @@
 }
 .btn.downloads-bulk.confirm-delete[data-armed] {
   background: rgb(255 107 94 / 0.18);
+  box-shadow: none;
   color: var(--danger);
 }
+/* A title's or season's own deletes: a smaller, quieter pill inside the list. */
 .btn.downloads-bulk-sm {
-  height: 32px;
+  height: 30px;
   padding: 0 0.75rem;
+  gap: 0.3125rem;
+  background: var(--fill-2);
   font-size: var(--fs-sm);
+}
+@media (hover: hover) and (pointer: fine) {
+  .downloads-toolbar .btn:not(.btn-primary):hover,
+  .downloads-selectbar .btn:not(:disabled):hover,
+  .btn.downloads-bulk-sm:hover {
+    background: var(--fill-3);
+  }
+}
+/* Selecting (#15): the actions float at the bottom of the window over a thick
+   material, as Photos' selection toolbar does, so they stay in reach down a
+   long list. It rises in from just below where it rests. */
+.downloads[data-selecting] {
+  padding-bottom: 6rem;
+}
+.downloads-selectbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + max(1.25rem, var(--safe-bottom)));
+  z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 0.375rem;
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    0 0 0 1px var(--glass-edge),
+    0 16px 40px -12px rgb(0 0 0 / 0.7);
+  transform: translateX(-50%);
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+@starting-style {
+  .downloads-selectbar {
+    opacity: 0;
+    transform: translate(-50%, 0.75rem);
+  }
+}
+.downloads-selectbar .btn {
+  background: var(--fill-2);
+}
+.downloads-selectbar .btn.confirm-delete:not(:disabled):not([data-armed]) {
+  color: var(--danger);
+}
+.downloads-selectbar-count {
+  flex: 1;
+  text-align: center;
+  color: var(--text-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  @starting-style {
+    .downloads-selectbar {
+      transform: translateX(-50%);
+    }
+  }
+}
+/* One grouped surface per list, as on the Library page: hairlines between the
+   rows, the first one hidden under the panel's top edge. */
+.downloads-panel {
+  padding: 0 1rem;
+  overflow: hidden;
+  border-radius: var(--r-panel);
+  corner-shape: squircle;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.downloads-panel > :first-child {
+  margin-top: -1px;
+}
+/* Room after the last row: the row padding alone sits tight against the edge. */
+.downloads-panel > :last-child {
+  margin-bottom: 0.25rem;
+}
+:root[data-form="phone"] .downloads-panel {
+  padding: 0 0.75rem;
+}
+/* Select boxes: the round check of iOS lists — an empty ring, filled with the
+   accent and a white tick once picked (a dash when part of a group is). */
+.download-check {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin: 0;
+  border: 1.5px solid var(--text-3);
+  border-radius: var(--r-round);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform var(--dur-press) var(--ease-out),
+    opacity 180ms var(--ease-out);
+}
+@starting-style {
+  .download-check {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+.download-check:active {
+  transform: scale(0.9);
+}
+.download-check:checked,
+.download-check:indeterminate {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.download-check::after {
+  content: "";
+  width: 0.75rem;
+  height: 0.75rem;
+  background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 160ms var(--ease-out);
+}
+.download-check:indeterminate::after {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.download-check:checked::after,
+.download-check:indeterminate::after {
+  opacity: 1;
+  transform: none;
+}
+.download-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .download-check:not(:checked):not(:indeterminate):hover {
+    border-color: var(--text-2);
+  }
 }
 .downloads-heading {
   margin: 0 0 0.5rem;
@@ -1205,7 +1828,8 @@
   width: 2.75rem;
   aspect-ratio: 2 / 3;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
+  corner-shape: squircle;
   background: var(--fill-2);
 }
 .download-title-poster img {
@@ -1235,11 +1859,15 @@
   min-height: 0;
   overflow: hidden;
 }
+/* In line with the episode rows below them. */
 .download-title-actions {
   display: flex;
   justify-content: flex-start;
   gap: 0.5rem;
-  padding: 0 0 0.5rem;
+  padding: 0 0 0.75rem 3.75rem;
+}
+:root[data-form="phone"] .download-title-actions {
+  padding-left: 0;
 }
 .download-title .download-rows,
 .download-season {
@@ -1282,14 +1910,6 @@
 .download-row[data-watched] .download-row-still img {
   opacity: 0.6;
 }
-.download-check {
-  flex: none;
-  width: 1.125rem;
-  height: 1.125rem;
-  margin: 0;
-  accent-color: var(--progress);
-  cursor: pointer;
-}
 @media (prefers-reduced-motion: reduce) {
   .download-fold,
   .download-title-chevron,
@@ -1297,8 +1917,46 @@
     transition: none;
   }
 }
-:root[data-form="phone"] .downloads-toolbar > :first-child {
-  flex: 1 1 100%;
+/* A phone's Downloads: the count and room as a quiet line, sort and Select on one row (Select at its end), and
+   "Downloading 1 of 2" on one line with its bar taking what's left. */
+:root[data-form="phone"] .downloads-summary {
+  margin-bottom: 0.75rem;
+}
+:root[data-form="phone"] .downloads-summary .t-headline {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text-2);
+}
+:root[data-form="phone"] .downloads-toolbar {
+  flex-wrap: nowrap;
+  margin-bottom: 1.5rem;
+}
+:root[data-form="phone"] .downloads-toolbar .downloads-select {
+  margin-left: auto;
+}
+:root[data-form="phone"] .downloads-active-head {
+  align-items: center;
+  margin-bottom: 0.625rem;
+}
+:root[data-form="phone"] .downloads-active-head .downloads-heading {
+  flex: none;
+  margin: 0;
+  font-size: var(--fs-xl);
+  white-space: nowrap;
+}
+:root[data-form="phone"] .downloads-active-bar {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+/* An episode's name gets a second line rather than being cut after a few words. */
+:root[data-form="phone"] .download-row-text > .t-headline {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  font-size: var(--fs-base);
+  line-height: 1.25;
 }
 :root[data-form="phone"] .downloads-search {
   flex: 1;
@@ -1384,7 +2042,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .calendar-item:hover {
-    background: rgb(255 255 255 / 0.09);
+    background: rgb(var(--ink) / 0.09);
   }
 }
 .calendar-art {
@@ -1447,7 +2105,7 @@
   user-select: none;
 }
 :root[data-form="phone"] .calendar-item:active {
-  background: rgb(255 255 255 / 0.09);
+  background: rgb(var(--ink) / 0.09);
 }
 
 /* A line above the grid, spaced like the Saved / Watched toolbar. */
@@ -1509,7 +2167,7 @@
   border-radius: var(--r-xs);
   box-shadow:
     0 10px 24px -6px rgb(0 0 0 / 0.6),
-    0 0 0 1px rgb(255 255 255 / 0.08);
+    0 0 0 1px rgb(var(--ink) / 0.08);
   transform-origin: 50% 100%;
   transition: transform var(--dur-base) var(--ease-out);
 }
@@ -1600,10 +2258,24 @@
 .playlist-new::after {
   display: none;
 }
+/* Its words centred on their own lines, with room either side: on a phone's small card "New Playlist" ran
+   from the left edge and out past the right one. */
+.playlist-new > span {
+  padding: 0 0.375rem;
+  text-align: center;
+  line-height: 1.2;
+}
+:root[data-form="phone"] .playlist-new > span {
+  font-size: var(--fs-sm);
+}
+:root[data-form="phone"] .playlist-new > svg {
+  width: 22px;
+  height: 22px;
+}
 @media (hover: hover) and (pointer: fine) {
   .playlist-tile:hover .playlist-new {
     color: var(--text);
-    border-color: rgb(255 255 255 / 0.3);
+    border-color: rgb(var(--ink) / 0.3);
   }
 }
 
@@ -1626,6 +2298,10 @@
   .playlist-back:hover {
     color: var(--text);
   }
+}
+/* A phone's top bar already has Back (NavBar); a second one over the title only repeats it. */
+:root[data-form="phone"] .playlist-back {
+  display: none;
 }
 .playlist-view-title {
   display: flex;
@@ -1657,7 +2333,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .playlist-name-input:hover {
-    background: rgb(255 255 255 / 0.05);
+    background: rgb(var(--ink) / 0.05);
   }
 }
 .playlist-name-input:focus {
@@ -1674,7 +2350,7 @@
 .btn.btn-icon.quiet-btn {
   width: 44px;
   height: 44px;
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   backdrop-filter: none;
   box-shadow: none;
   color: var(--text-2);
@@ -1693,7 +2369,7 @@
   }
 }
 .btn.btn-icon.quiet-btn[data-popup-open] {
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(var(--ink) / 0.16);
   color: var(--text);
 }
 .btn-glyph,

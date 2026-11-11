@@ -26,7 +26,7 @@ test("while loading: the stage message and the last five steps, nothing to press
   expect(container.querySelectorAll("button").length).toBe(0);
 });
 
-test("failed: says where it failed, shows the whole log, focuses Choose Another Source", async () => {
+test("failed: says where it failed, keeps the whole log behind Show Steps, focuses Choose Another Source", async () => {
   let picked = 0;
   const { container } = await render(
     <PlayerStatus
@@ -40,9 +40,12 @@ test("failed: says where it failed, shows the whole log, focuses Choose Another 
   );
   expect(container.querySelector("[role=status]")!.textContent).toBe("The server refused the link (403).");
   expect(container.querySelector(".player-status-where")!.textContent).toBe("Failed at the source's server");
-  expect(container.querySelectorAll(".player-steps li").length).toBe(steps.length);
   const choose = byText(container, "button", "Choose Another Source");
   expect(document.activeElement).toBe(choose);
+  expect(container.querySelector(".player-steps")).toBeNull();
+  await click(byText(container, "button", "Show Steps"));
+  expect(container.querySelectorAll(".player-steps li").length).toBe(steps.length);
+  expect(byText(container, "button", "Hide Steps").getAttribute("aria-expanded")).toBe("true");
   await click(choose);
   expect(picked).toBe(1);
 });
@@ -98,4 +101,31 @@ test("a YouTube video that can't play here (Android) says so and offers Open in 
   expect(document.activeElement).toBe(open);
   await click(open);
   expect(opened).toBe(1);
+});
+
+test("no add-ons: Try Again asks again and Open Add-ons goes to the Add-ons page; a playback error offers no Try Again (#375)", async () => {
+  let retried = 0;
+  const pages: string[] = [];
+  const { container, unmount } = await render(
+    <PlayerStatus
+      state={{ status: "failed", reason: "No sources found. Install a stream add-on in Settings.", settings: "addons" }}
+      error={null}
+      name="Sintel"
+      steps={steps}
+      backend="mpv"
+      onSources={noop}
+      onSettings={(page) => pages.push(page)}
+      onRetry={() => retried++}
+    />,
+  );
+  await click(byText(container, "button", "Try Again"));
+  await click(byText(container, "button", "Open Add-ons"));
+  expect([retried, pages]).toEqual([1, ["addons"]]);
+  await unmount();
+
+  const player = await render(
+    <PlayerStatus state={{ status: "ready", url: "https://media.example.com/film.mkv", stream: { url: "https://media.example.com/film.mkv" } }} error="The file couldn't be decoded." steps={steps} backend="mpv" onRetry={noop} />,
+  );
+  expect([...player.container.querySelectorAll("button")].map((b) => b.textContent)).not.toContain("Try Again");
+  await player.unmount();
 });

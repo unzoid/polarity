@@ -119,10 +119,15 @@ pub struct Settings {
     pub subtitle_mode: String,
 
     // --- Appearance & browsing ---
-    /// Accent colour, `#RRGGBB`.
+    /// Accent colour, `#RRGGBB`, from before themes: only read while `theme` is still "dark" or "black".
     pub accent_color: String,
-    /// "dark" or "black" (pure black backgrounds, for OLED screens).
+    /// A built-in theme ("polar", "oled", …) or "custom:<id>" for one of `custom_themes`. "dark" and
+    /// "black" are from before themes; `src/lib/theme` reads them.
     pub theme: String,
+    /// Themes the user made (Settings → Appearance → Create theme).
+    pub custom_themes: Vec<CustomTheme>,
+    /// "dark", "light" or "system" (follow the system's appearance).
+    pub color_scheme: String,
     /// Poster and thumbnail size: "small", "medium" or "large".
     pub card_size: String,
     /// "system" (follow Windows), "on" or "off".
@@ -146,6 +151,22 @@ pub struct Settings {
     pub show_calendar: bool,
 }
 
+/// A theme the user made: an accent, the near-black it's built on, and how much of the accent tints
+/// the greys. The app checks the values where it reads them (`src/lib/theme`); only the size is
+/// bounded here (`Settings::bound_custom_themes`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CustomTheme {
+    pub id: String,
+    pub name: String,
+    /// `#RRGGBB`.
+    pub accent: String,
+    /// `#RRGGBB`, a near-black.
+    pub base: String,
+    /// Percent of the accent mixed into the greys.
+    pub tint: f32,
+}
+
 /// Subtitle appearance. Applies to every video; the timing offset (delay) is
 /// per video, so it isn't stored here.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -167,6 +188,10 @@ pub struct SubtitleStyle {
     pub background: u32,
     /// Font family name, as installed on the system.
     pub font: String,
+    /// Styled subtitles keep their release's font. Missing (`None`) in styles saved before the
+    /// choice existed; the app reads those from `font` (SubtitleSettings.tsx `keepsReleaseFont`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_from_subtitles: Option<bool>,
 }
 
 impl Default for SubtitleStyle {
@@ -180,6 +205,7 @@ impl Default for SubtitleStyle {
             outline_color: "#000000".into(),
             background: 0,
             font: "Segoe UI Semibold".into(),
+            font_from_subtitles: Some(true),
         }
     }
 }
@@ -233,7 +259,9 @@ impl Default for Settings {
             omdb_key: None,
             subtitle_mode: "always".into(),
             accent_color: "#0A84FF".into(),
-            theme: "dark".into(),
+            theme: "polar".into(),
+            custom_themes: Vec::new(),
+            color_scheme: "dark".into(),
             card_size: "medium".into(),
             reduce_motion: "system".into(),
             hero_autoplay: true,
@@ -250,6 +278,22 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// At most this many custom themes, each id and name this long (in characters): settings sync
+    /// sends them to every device, so a bad file can't grow without end.
+    pub const MAX_CUSTOM_THEMES: usize = 24;
+    const MAX_THEME_TEXT: usize = 48;
+
+    pub fn bound_custom_themes(&mut self) {
+        self.custom_themes.truncate(Self::MAX_CUSTOM_THEMES);
+        for t in &mut self.custom_themes {
+            for text in [&mut t.id, &mut t.name, &mut t.accent, &mut t.base] {
+                if text.chars().count() > Self::MAX_THEME_TEXT {
+                    *text = text.chars().take(Self::MAX_THEME_TEXT).collect();
+                }
+            }
+        }
+    }
+
     /// Watched threshold as a fraction, kept to a sensible range.
     pub fn watched_fraction(&self) -> f64 {
         (self.watched_threshold.clamp(50, 100) as f64) / 100.0
@@ -428,4 +472,28 @@ impl Store {
 
 pub fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_themes_are_bounded() {
+        let long = "x".repeat(200);
+        let theme =
+            CustomTheme { id: long.clone(), name: long, accent: "#5E5CE6".into(), base: "#0a0a0a".into(), tint: 3.0 };
+        let mut settings = Settings { custom_themes: vec![theme; 40], ..Settings::default() };
+        settings.bound_custom_themes();
+        assert_eq!(settings.custom_themes.len(), Settings::MAX_CUSTOM_THEMES);
+        assert_eq!(settings.custom_themes[0].name.chars().count(), 48);
+        assert_eq!(settings.custom_themes[0].accent, "#5E5CE6");
+    }
+
+    #[test]
+    fn files_from_before_themes_read() {
+        let settings: Settings = serde_json::from_str(r##"{"theme":"black","accentColor":"#FF375F"}"##).unwrap();
+        assert_eq!(settings.theme, "black");
+        assert!(settings.custom_themes.is_empty());
+    }
 }

@@ -48,7 +48,7 @@ export const ACTIONS: { id: Action; label: string; group: ActionGroup; when?: st
   { id: "mute", label: "Mute", group: "player" },
   { id: "fullscreen", label: "Fullscreen", group: "player" },
   { id: "pinWindow", label: "Pin window on top", group: "player", when: "While watching, on desktop" },
-  { id: "fill", label: "Fit / fill the window", group: "player" },
+  { id: "fill", label: "Crop mode: Fit, Crop black bars, Fill window", group: "player" },
   { id: "skip", label: "Skip intro / recap", group: "player" },
   { id: "nextEpisode", label: "Next episode", group: "player" },
   { id: "tracks", label: "Subtitles & audio", group: "player" },

@@ -3,11 +3,14 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Sources, Trailer as TrailerIcon } from "../icons";
 import { Img } from "../Img";
 import { Button } from "../ui/Button";
-import { ease } from "../../lib/ui";
+import { ease, imageBroken, markImageBroken, useNameWait } from "../../lib/ui";
+import { useLogoChoice } from "../TitleLogo";
 import { osName } from "../../lib/platform";
 import { appVersion } from "../../lib/updater";
 import { failedStage, formatReport, STAGE_LABEL, type StartStage, type StartStep } from "../../lib/playback";
 import type { useSource } from "./useSource";
+import { watchLog } from "../../lib/playback/watchLog";
+import { watchLogText } from "./useWatchLog";
 
 /** How far the logo has filled in for each loading stage (0–100). */
 const FILL = { searching: 34, resolving: 66, starting: 92, done: 100 } as const;
@@ -29,30 +32,52 @@ export function PlayerStatus({
   state,
   error,
   logo,
+  logos,
+  artPending = false,
   name,
   background,
   steps,
   backend,
   onSources,
   onSettings,
+  onRetry,
   onYouTube,
 }: {
   state: ReturnType<typeof useSource>["state"];
   error: string | null;
+  /** The title page's logo (#391), and all of its logos to choose from (`TitleLogo`). */
   logo?: string;
+  logos?: string[];
+  /** The page's art isn't known yet: nothing shows in the logo's place, for at most `NAME_WAIT`. */
+  artPending?: boolean;
   name?: string;
   background?: string;
   steps: StartStep[];
   backend: string;
   /** Left out where there's nothing else to choose (a pasted link). */
   onSources?: () => void;
-  /** Opens Settings → Sources, offered when the reason names a setting there. Left out in TV mode. */
-  onSettings?: () => void;
+  /** Opens the Settings page the reason names (Sources for its filters, Add-ons when there's none; in TV mode, desktop mode's, #435). */
+  onSettings?: (page: "sources" | "addons") => void;
+  /** Asks the add-ons again after finding no source or none that played (#375). */
+  onRetry?: () => void;
   /** A YouTube video that can't play here (Android): open it in YouTube. */
   onYouTube?: () => void;
 }) {
+  // A logo that doesn't load leaves the name, never a broken-image icon (#360).
+  const [, setBroken] = useState(0);
+  const candidate = logo && !imageBroken(logo) ? logo : undefined;
+  // The page's checks (#371, #354): a picture not shaped like a logo is never shown, the name is.
+  const choice = useLogoChoice(candidate, logos);
+  const shown = typeof choice === "object" ? choice : undefined;
+  const mark = shown && !imageBroken(shown.src) ? shown.src : undefined;
+  const look = shown?.look === "as-is" ? undefined : shown?.look;
+  // While the art or the logo's shape isn't known, the name keeps its place unseen (#343).
+  const waiting = useNameWait(artPending && !logo, name ?? "");
+  const hidden = !mark && (waiting || (!!candidate && choice === undefined));
   const failed = state.status === "failed" || !!error;
   const stageAt = failed ? failedStage(steps) : undefined;
+  // Failed, the screen leads with what to do next; the log waits behind Show Steps (Copy Details has it all).
+  const [log, setLog] = useState(false);
 
   const stage = state.status === "searching" ? "searching" : state.status === "resolving" || state.status === "notice" ? "resolving" : "starting";
   const message = failed
@@ -73,13 +98,23 @@ export function PlayerStatus({
       <div className="player-status-content">
         <div
           className="load-mark"
-          data-long={!logo && (name?.length ?? 0) > LONG_NAME}
+          data-long={!mark && (name?.length ?? 0) > LONG_NAME}
+          data-name-wait={hidden ? "" : undefined}
           style={{ "--fill": `${failed ? 0 : FILL[stage]}%` } as React.CSSProperties}
         >
-          {logo ? (
+          {mark ? (
             <>
-              <img src={logo} alt={name ?? ""} className="load-mark-base" />
-              <img src={logo} alt="" aria-hidden className="load-mark-fill" />
+              <img
+                src={mark}
+                alt={name ?? ""}
+                className="load-mark-base"
+                data-logo-look={look}
+                onError={() => {
+                  markImageBroken(mark);
+                  setBroken((n) => n + 1);
+                }}
+              />
+              <img src={mark} alt="" aria-hidden className="load-mark-fill" data-logo-look={look} />
             </>
           ) : (
             <>
@@ -93,8 +128,17 @@ export function PlayerStatus({
         <p key={message} className="player-status-message t-callout" role="status">
           {message}
         </p>
-        {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
-        <StartSteps steps={steps} all={failed} />
+        {failed && (stageAt || steps.length > 0) && (
+          <div className="player-status-meta">
+            {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
+            {steps.length > 0 && (
+              <button type="button" className="player-status-log t-caption" aria-expanded={log} onClick={() => setLog((v) => !v)}>
+                {log ? "Hide Steps" : "Show Steps"}
+              </button>
+            )}
+          </div>
+        )}
+        {(!failed || log) && <StartSteps steps={steps} all={failed} />}
         {failed && (
           <div className="player-status-actions">
             {/* Focused, so Enter (or a controller's A) picks it straight away. */}
@@ -103,9 +147,14 @@ export function PlayerStatus({
                 <Sources size={17} /> Choose Another Source
               </Button>
             )}
+            {onRetry && state.status === "failed" && !error && (
+              <Button variant="glass" onClick={onRetry}>
+                Try Again
+              </Button>
+            )}
             {onSettings && state.status === "failed" && state.settings && (
-              <Button variant="glass" onClick={onSettings}>
-                Open Settings
+              <Button variant="glass" onClick={() => onSettings(state.settings!)}>
+                {state.settings === "addons" ? "Open Add-ons" : "Open Settings"}
               </Button>
             )}
             {onYouTube && (
@@ -114,6 +163,7 @@ export function PlayerStatus({
               </Button>
             )}
             <CopyDetails steps={steps} backend={backend} outcome={message} stage={stageAt} />
+            {watchLog && <CopyWatchLog backend={backend} />}
           </div>
         )}
       </div>
@@ -159,6 +209,25 @@ function CopyDetails({ steps, backend, outcome, stage }: { steps: StartStep[]; b
   return (
     <Button variant="glass" onClick={() => void copy()}>
       {copied === "yes" ? "Copied" : copied === "no" ? "Couldn't copy" : "Copy Details"}
+    </Button>
+  );
+}
+
+/** The watch log (#424), in builds that keep one: what the player did while the video played. */
+function CopyWatchLog({ backend }: { backend: string }) {
+  const [copied, setCopied] = useState<"yes" | "no" | null>(null);
+  const copy = () => {
+    void watchLogText(backend)
+      .then((text) => navigator.clipboard.writeText(text))
+      .then(
+        () => setCopied("yes"),
+        () => setCopied("no"),
+      );
+    window.setTimeout(() => setCopied(null), 2500);
+  };
+  return (
+    <Button variant="glass" onClick={copy}>
+      {copied === "yes" ? "Copied" : copied === "no" ? "Couldn't copy" : "Copy Watch Log"}
     </Button>
   );
 }

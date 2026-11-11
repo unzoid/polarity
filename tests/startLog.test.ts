@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { describeProbe, describeStream, failedStage, formatBytes, formatReport, hostOf, redact, type StartStep } from "../src/lib/playback/startLog";
+import { describe, expect, test } from "bun:test";
+import { askedLine, describeProbe, describeStream, failedStage, formatBytes, formatReport, hostOf, noneFound, noSources, redact, type StartStep } from "../src/lib/playback/startLog";
 
 test("links keep only their host", () => {
   expect(hostOf("https://addon.example.com/eyJrZXkiOiJzZWNyZXQifQ/stream/movie/tt1.json")).toBe("addon.example.com");
@@ -94,4 +94,22 @@ test("no key-like string from an add-on link reaches Copy Details", () => {
   for (const secret of ["a8Fk2LmQ9xZ3pR7tY1wB", config, "TOKEN", "apikey", "xxx", "tt0000000", "frag", "user:"]) expect(report).not.toContain(secret);
   expect(report).toContain("Asked <addon.example.com> and got nothing");
   expect(report).toContain("Asked <media.example.com> and got nothing");
+});
+
+describe("asking the add-ons (#360)", () => {
+  test("the log names the add-ons asked and the ids", () => {
+    expect(askedLine(["Open Films", "Open Mirror"], ["tt0000001:1:8", "kitsu:1:8"])).toBe("Asked 2 add-ons (Open Films, Open Mirror) for tt0000001:1:8, kitsu:1:8");
+    expect(askedLine(["Open Films"], ["tt0000001:1:8"])).toBe("Asked 1 add-on (Open Films) for tt0000001:1:8");
+    expect(askedLine([], ["tt0000001:1:8"])).toBe("None of your add-ons serves tt0000001:1:8, so none was asked");
+    expect(noneFound(2)).toBe("No sources from the 2 add-ons asked");
+  });
+
+  test("nothing to play says why: no add-on asked, none answered, nothing found, or all filtered", () => {
+    expect(noSources({ found: 0, filtered: 0 }).reason).toBe("No sources found. Install a stream add-on in Settings.");
+    expect(noSources({ asked: 0, answered: 0, found: 0, filtered: 0 }).reason).toBe("No sources found. Install a stream add-on in Settings.");
+    expect(noSources({ asked: 0, answered: 0, found: 0, filtered: 0 }).settings).toBe("addons");
+    expect(noSources({ asked: 2, answered: 0, found: 0, filtered: 0 }).reason).toBe("None of your add-ons answered. Try again in a moment.");
+    expect(noSources({ asked: 2, answered: 1, found: 0, filtered: 0 }).reason).toBe("Your add-ons found no sources for this.");
+    expect(noSources({ asked: 2, answered: 2, found: 3, filtered: 3 })).toEqual({ reason: "Your source filters left out every source.", settings: "sources" });
+  });
 });

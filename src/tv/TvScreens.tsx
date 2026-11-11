@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Speed } from "../components/icons";
-import { addRecentSearch, clearRecentSearches, searchMinLength, useRecentSearches } from "../lib/catalog";
+import { addRecentSearch, clearRecentSearches, genreOf, searchMinLength, searchRows, useRecentSearches, type SearchRow } from "../lib/catalog";
 import { playSound } from "./sounds";
 import { useContinueWatching, useLibrary, useSearch, useWatchHistory } from "../lib/net";
 import {
@@ -32,7 +32,6 @@ import { useRouter } from "../lib/router";
 import { TvBrowse, TvCard, TvContinueRail, TvItemsRail, TvRail, TvShelfRail, type RailRow } from "./TvRails";
 import { TvKeyboard } from "./TvKeyboard";
 import { TvAnimeRail } from "./TvAnime";
-import { TvFriendsRail } from "./TvFriends";
 import { useAnimeAliases, useAnimeResults, withoutAnime } from "../lib/anime";
 import { usePrefs } from "../lib/settings";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -55,8 +54,6 @@ export function TvHome() {
 
   const rows: RailRow[] = [
     { key: "continue", render: () => <TvContinueRail /> },
-    // Only while the profile has Friends on and someone to show (#135).
-    { key: "friends", render: () => <TvFriendsRail /> },
     { key: "trending", render: () => <TvItemsRail title="Trending Now" items={picks} shape="poster" /> },
     ...addonRows.map((c) => ({ key: `addon:${catalogKey(c)}`, render: (near: boolean) => <TvAddonRail catalog={c} enabled={near} /> })),
     ...shelves.map((shelf, i) => ({
@@ -157,7 +154,7 @@ export function TvLibrary() {
           </TvRail>
         ) : null,
     },
-    { key: "saved", render: () => <TvItemsRail title="Saved" items={saved} shape="poster" watching={watching} /> },
+    { key: "saved", render: () => <TvItemsRail title="Saved" items={saved} shape="poster" watching={watching} saved /> },
     {
       key: "watched",
       render: () =>
@@ -239,6 +236,14 @@ export function TvSearch() {
   const series = withoutAnime(data?.series, anime.items, aliases);
   const fromAddons = useAddonSearches(searching ? query : "");
   const addonsQuiet = fromAddons.every((r) => r.failed || (r.items && !r.items.length));
+  const typedGenre = searching ? genreOf(query) : undefined;
+  const ownRows: Record<SearchRow, ReactNode> = {
+    movieGenre: typedGenre && <TvShelfRail key="movieGenre" shelf={genreShelf("movie", typedGenre)} enabled exclude={NO_IDS} />,
+    seriesGenre: typedGenre && <TvShelfRail key="seriesGenre" shelf={genreShelf("series", typedGenre)} enabled exclude={NO_IDS} />,
+    movies: <TvItemsRail key="movies" title="Movies" items={movies} shape="poster" />,
+    series: <TvItemsRail key="series" title="Series" items={series} shape="poster" />,
+    anime: animeEnabled && (anime.loading || !!anime.items?.length) && <TvAnimeRail key="anime" title={anime.title} items={anime.items} shape="poster" />,
+  };
   const empty =
     searching && data && !isPlaceholderData && !movies!.length && !series!.length && !anime.loading && !anime.items?.length && addonsQuiet;
 
@@ -315,11 +320,8 @@ export function TvSearch() {
         {searching && !data && <TvItemsRail title="Results" items={undefined} shape="poster" />}
         {searching && data && (
           <>
-            <TvItemsRail title="Movies" items={movies} shape="poster" />
-            <TvItemsRail title="Series" items={series} shape="poster" />
-            {animeEnabled && (anime.loading || !!anime.items?.length) && (
-              <TvAnimeRail title={anime.title} items={anime.items} shape="poster" />
-            )}
+            {/* Search's own rows in desktop's order: a genre's popular titles first, an anime genre's anime by its kind (#338, #431). */}
+            {searchRows(typedGenre, !!anime.genre).map((row) => ownRows[row])}
             {fromAddons.map((r) => !r.failed && <TvItemsRail key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} shape="poster" />)}
           </>
         )}
@@ -348,6 +350,16 @@ const SEARCH_GENRES = [
 ];
 
 /** One genre's popular and top-rated titles, movies and series. */
+/** A genre's popular movies or series, as desktop's search names them (#338). */
+const genreShelf = (type: ContentType, genre: string): Shelf => ({
+  kind: "catalog",
+  type,
+  id: "popular",
+  genre,
+  title: `Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`,
+  shape: "poster",
+});
+
 function TvGenreResults({ genre }: { genre: string }) {
   const shelves: Shelf[] = [
     { kind: "catalog", type: "movie", id: "popular", genre, title: `Popular ${genre} Movies`, shape: "poster" },

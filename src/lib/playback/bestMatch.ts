@@ -20,6 +20,8 @@ export const WEIGHTS = {
   cam: -100,
   /** The file's name says it's another episode: never at the top. */
   otherEpisode: -200,
+  /** A disc release (BD, Blu-ray) of an episode that aired within NEW_EPISODE_DAYS, or hasn't aired: unlikely to be what it says. */
+  notOutYet: -40,
 
   // Bitrate: size ÷ runtime. Size alone never costs points.
   /** Below the least a file of its height needs to look right (BITRATE_FLOOR). */
@@ -47,6 +49,8 @@ export const WEIGHTS = {
   audioLanguage: 8,
   /** Multi-audio: usually has it, but doesn't say. */
   audioMulti: 5,
+  /** Says which audio it has, and that's only other languages (a dub): it would play in a language you don't want. */
+  audioOtherLanguage: -15,
   /** Each preferred tag (Remux, Atmos, 10-bit…) it has. */
   preferredTag: 3,
   /** The first preferred release group, then each next one less, never below the last. */
@@ -77,6 +81,7 @@ export const FACTOR_LABELS: Record<Factor, string> = {
   direct: "Direct link",
   cam: "CAM or telesync",
   otherEpisode: "Another episode",
+  notOutYet: "Disc release of a new episode",
   bitrateLow: "Bitrate for its resolution",
   bitrateBelowOthers: "Bitrate under the others",
   bitrateAboveOthers: "Bitrate above the others",
@@ -89,6 +94,7 @@ export const FACTOR_LABELS: Record<Factor, string> = {
   softwareDecode: "Software decoding",
   audioLanguage: "Audio language",
   audioMulti: "Multi-audio",
+  audioOtherLanguage: "Audio in another language",
   preferredTag: "Preferred tags",
   preferredGroup: "Preferred release group",
   failRate: "Failed here before",
@@ -102,6 +108,8 @@ export const BITRATE_FLOOR: Record<number, number> = { 2160: 8, 1440: 4, 1080: 2
 export const MIN_TRIES = 2;
 export const RECENT_FAIL_HOURS = 24;
 export const SLOW_START_MS = 10_000;
+/** How long after an episode airs a disc release of it can't be out yet. */
+export const NEW_EPISODE_DAYS = 28;
 
 /** What this device can show and decode; `null` = couldn't tell (no points either way). */
 export interface Device {
@@ -136,12 +144,19 @@ export interface MatchContext {
   runtimeSec: number | null;
   /** Settings → Subtitles & Audio's audio language ("" = the file's own). */
   audioLanguage: string;
+  /**
+   * What "the file's own" (`audioLanguage` "") stands for: the language the title was made in when its details
+   * say, else this device's. A file that's only a dub into another language isn't the file's own track.
+   */
+  ownLanguage?: { code: string; from: "title" | "device" };
   /** Settings → Sources' tags (sources.ts' TAG_LABELS keys). */
   preferredTags: string[];
   /** Settings → Anime's release groups, most preferred first. */
   preferredGroups: string[];
   history: (kind: "addon" | "group", name: string) => SourceRecord | undefined;
   now: number;
+  /** When the episode aired (ms since the epoch), when known; null for a film or an unknown date. */
+  aired?: number | null;
 }
 
 /** One row of a source's score table: `input` null where the factor doesn't apply. */
@@ -243,6 +258,11 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
   if (q.direct) add("direct", "Direct link", W.direct);
   if (q.lowQualitySource) add("cam", "CAM or telesync", W.cam);
   if (r.otherEpisode) add("otherEpisode", `The file says ${r.fileEpisode ?? "another episode"}`, W.otherEpisode);
+  const days = ctx.aired == null ? null : (ctx.now - ctx.aired) / 86_400_000;
+  if (days != null && days < NEW_EPISODE_DAYS && (q.tags ?? []).includes("BluRay")) {
+    const when = days < 0 ? "hasn't aired yet" : days < 1 ? "aired today" : `aired ${Math.floor(days)} day${Math.floor(days) === 1 ? "" : "s"} ago`;
+    add("notOutYet", `A disc release, but the episode ${when}`, W.notOutYet);
+  }
 
   // Bitrate, against the others of its height and the connection.
   const rate = bitrateMbps(r, ctx.runtimeSec);
@@ -267,11 +287,18 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
   else if (codec === false) add("softwareDecode", `${q.codec} without hardware decoding here`, W.softwareDecode * ((h ?? 0) >= 2160 ? 2 : 1));
 
   // Preferences.
-  const pref = ctx.audioLanguage;
+  const own = ctx.audioLanguage ? null : ctx.ownLanguage;
+  const pref = ctx.audioLanguage || own?.code;
   if (pref) {
     const langs = q.languages ?? [];
-    if (langs.some((l) => langMatches(l, pref))) add("audioLanguage", `Audio in ${languageName(pref) ?? pref}, your language`, W.audioLanguage);
-    else if (langs.includes("multi")) add("audioMulti", "Multi-audio, may have your language", W.audioMulti);
+    const name = languageName(pref) ?? pref;
+    const whose = !own ? "your language" : own.from === "title" ? "the title's own" : "this device's language";
+    if (langs.some((l) => langMatches(l, pref))) add("audioLanguage", `Audio in ${name}, ${whose}`, W.audioLanguage);
+    else if (langs.includes("multi")) add("audioMulti", `Multi-audio, may have ${own ? name : "your language"}`, W.audioMulti);
+    else if (langs.length) {
+      const other = langs.map((l) => languageName(l) ?? l).join(", ");
+      add("audioOtherLanguage", `Audio in ${other}, not ${name}`, W.audioOtherLanguage);
+    }
   }
   const tags = groupTags(r);
   for (const t of ctx.preferredTags) if (tags.includes(t)) add("preferredTag", `${TAG_NAMES[t] ?? t}, which you prefer`, W.preferredTag);

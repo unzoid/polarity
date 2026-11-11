@@ -9,7 +9,7 @@ export type ContentType = "movie" | "series";
 export type SecretsPlace = "keychain" | "file" | "unreadable";
 
 /** The app's font (Settings → Appearance). See lib/settings/fonts.ts. */
-export type UiFont = "inter" | "system" | "opendyslexic";
+export type UiFont = "inter" | "instrument" | "hanken" | "onest" | "mona" | "system" | "opendyslexic";
 
 export interface MetaPreview {
   id: string;
@@ -169,6 +169,10 @@ export interface StreamsResult {
   failed: string[];
   /** Left out by the filters in Settings → Sources. */
   hidden?: number;
+  /** The add-ons asked, whatever they answered (the player's start log). */
+  asked?: string[];
+  /** The ids they were asked for: the episode's, then its other ids. */
+  ids?: string[];
 }
 
 /** What `search` returns: matches of each kind. */
@@ -386,8 +390,13 @@ export interface Settings {
   subtitleMode: "always" | "foreign";
 
   // Appearance & browsing
+  /** From before themes: only read while `theme` is still "dark" or "black" (lib/theme). */
   accentColor: string;
-  theme: "dark" | "black";
+  /** A built-in theme's id, "custom:<id>" for one of `customThemes`, or "dark" / "black" from before themes. */
+  theme: string;
+  customThemes: CustomTheme[];
+  /** "dark", "light" or "system" (follow the system's appearance). */
+  colorScheme: "dark" | "light" | "system";
   cardSize: "small" | "medium" | "large";
   reduceMotion: "system" | "on" | "off";
   heroAutoplay: boolean;
@@ -444,6 +453,18 @@ export interface SkipSegments {
   postCredits?: Span | null;
 }
 
+/** A theme the user made (store.rs `CustomTheme`); lib/theme checks it before use. */
+export interface CustomTheme {
+  id: string;
+  name: string;
+  /** `#RRGGBB`. */
+  accent: string;
+  /** `#RRGGBB`, a near-black. */
+  base: string;
+  /** Percent of the accent mixed into the greys. */
+  tint: number;
+}
+
 /** How subtitles look in the player (store.rs `SubtitleStyle`). */
 export interface SubtitleStyle {
   /** Percent of normal size. */
@@ -457,6 +478,8 @@ export interface SubtitleStyle {
   outlineColor: string;
   /** Opacity of a dark box behind the text, percent (0 = none). */
   background: number;
-  /** System font family name (older saved styles may lack it). */
+  /** System font family name (older saved styles may lack it): plain-text subtitles always use it, styled ones only when `fontFromSubtitles` is false. */
   font?: string;
+  /** Styled subtitles keep their release's font ("From the subtitles"). Missing in styles saved before the choice: see SubtitleSettings' `keepsReleaseFont`. */
+  fontFromSubtitles?: boolean;
 }

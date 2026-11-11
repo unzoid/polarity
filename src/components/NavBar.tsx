@@ -1,10 +1,9 @@
 import logo from "../assets/polarity-white.png";
-import { ChevronDown, ChevronLeft, Close, Search, Speed, Tv } from "./icons";
+import { Calendar, ChevronDown, Close, Search, Speed, Trailer, Tv } from "./icons";
 import {
   addRecentSearch,
   clearRecentSearches,
   FOCUS_SEARCH_EVENT,
-  focusSearch,
   SEARCH_ANIME,
   SEARCH_GENRES,
   setSearchText,
@@ -17,7 +16,7 @@ import { createPortal } from "react-dom";
 import { rootTab, useRouter, type TabRoute } from "../lib/router";
 import { usePrefs, useSettingsOverlay } from "../lib/settings";
 import { dismissDepth, onDismissDepth, useFormFactor, useHandFocus } from "../lib/ui";
-import { MOD_LABEL } from "../lib/platform";
+import { MOD_LABEL, nativeTabsAvailable } from "../lib/platform";
 import { useSettings } from "../lib/net";
 import { WindowControls } from "./WindowControls";
 import { ProfileMenu } from "./ProfileMenu";
@@ -30,6 +29,7 @@ import { Chip } from "./ui/Chip";
 import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "./ui/Menu";
 import { useNativeTabs } from "./NativeTabs";
 import { useNativeBack } from "./NativeBack";
+import { BackButton } from "./BackButton";
 import { backHistory, type NavLink } from "../lib/navTabs";
 
 const LINKS: NavLink[] = [
@@ -39,6 +39,8 @@ const LINKS: NavLink[] = [
   { route: { name: "anime" }, label: "Anime" },
   { route: { name: "library" }, label: "Library" },
 ];
+/** A phone's last tab: Search is a page of its own there (screens/Search.tsx). */
+const SEARCH: NavLink = { route: { name: "search" }, label: "Search" };
 /** Settings → Browsing → Show the Calendar (off by default). */
 const CALENDAR: NavLink = { route: { name: "calendar" }, label: "Calendar" };
 
@@ -75,8 +77,16 @@ export function NavBar() {
   const { data: settings } = useSettings();
   const { animeEnabled, showTvButton } = usePrefs();
   const sections = animeEnabled ? LINKS : LINKS.filter((l) => l.route.name !== "anime");
-  const links = settings?.showCalendar ? [...sections, CALENDAR] : sections;
-  useNativeTabs(links);
+  // A phone's tab bar (iOS's own or ours) holds the five sections; the Calendar is a button in the top bar there,
+  // as on an iPad with iOS's tab bar. A sixth tab would make iOS add its own More tab (#449).
+  const calendarButton = !!settings?.showCalendar && (phone || nativeTabsAvailable);
+  // A phone's tab bar is Home, Anime, Library and Search, as phone apps have it: Series and Movies are the two
+  // buttons beside the profile in the top bar, where Search used to be.
+  const catalogs = phone ? sections.filter((l) => l.route.name === "discover") : [];
+  const tabs = phone ? [...sections.filter((l) => l.route.name !== "discover"), SEARCH] : sections;
+  const links = settings?.showCalendar && !calendarButton ? [...tabs, CALENDAR] : tabs;
+  useNativeTabs(tabs);
+  useSearchTab(phone);
 
   return (
     <header className="navbar" data-scrolled={scrolled} data-tauri-drag-region>
@@ -87,28 +97,51 @@ export function NavBar() {
         <i />
       </div>
       {/* Always takes its place, so the brand and tabs never shift when it appears. */}
-      <button
+      <BackButton
         ref={backButton}
-        className="navbar-icon navbar-back pressable"
+        className="navbar-back"
         data-shown={canGoBack}
         data-native-back={nativeBack || undefined}
         onClick={back}
-        aria-label="Back"
-        title="Back (Esc)"
         inert={!canGoBack}
         tabIndex={canGoBack ? 0 : -1}
         disabled={!canGoBack}
-      >
-        <ChevronLeft size={22} strokeWidth={2.25} />
-      </button>
-      <button className="navbar-brand" onClick={() => tab({ name: "home" })} aria-label="Polarity home">
-        <img className="brand-logo" src={logo} alt="Polarity" draggable={false} />
-      </button>
+      />
+      {/* A phone's Search page names itself in the bar, as a phone app's large title does, instead of the wordmark. */}
+      {phone && current.name === "search" ? (
+        <h1 className="navbar-title">Search</h1>
+      ) : (
+        <button className="navbar-brand" onClick={() => tab({ name: "home" })} aria-label="Polarity home">
+          <img className="brand-logo wordmark" src={logo} alt="Polarity" draggable={false} />
+        </button>
+      )}
       <NavLinks links={links} isActive={isActive} open={tab} />
       <div className="navbar-actions">
         <UpdatePill />
         <NavParty />
-        {phone ? <SearchPageButton /> : <SearchBox />}
+        {!phone && <SearchBox />}
+        {catalogs.map((l) => (
+          <button
+            key={l.label}
+            className="navbar-icon navbar-catalog pressable"
+            aria-label={l.label}
+            title={l.label}
+            aria-current={active.name === "discover" && l.route.name === "discover" && active.type === l.route.type ? "page" : undefined}
+            onClick={() => tab(l.route)}
+          >
+            {l.route.name === "discover" && l.route.type === "movie" ? <Trailer size={23} /> : <Tv size={23} />}
+          </button>
+        ))}
+        {calendarButton && (
+          <button
+            className="navbar-icon pressable"
+            aria-label="Calendar"
+            aria-current={active.name === "calendar" ? "page" : undefined}
+            onClick={() => tab(CALENDAR.route)}
+          >
+            <Calendar size={23} />
+          </button>
+        )}
         {showTvButton && tvModeAvailable && (
           <button className="navbar-icon pressable" aria-label="TV mode" title="TV mode" onClick={() => setTvMode(true)}>
             <Tv size={23} />
@@ -214,38 +247,26 @@ function NavLinks({ links, isActive, open }: { links: NavLink[]; isActive: (r: T
 }
 
 /**
- * On a phone search is a page of its own, as in phone apps (screens/Search.tsx): the icon opens it, or goes
- * back to it from a title opened there. On it, the icon (and Ctrl K) brings its field into view and focuses it.
- * iOS draws a search tab of its own, so the icon hides there (shell.css).
+ * On a phone search is a tab of its own, as in phone apps (screens/Search.tsx). Asking for search (Ctrl K, a
+ * link) opens that tab, or goes back to it from a title opened there; on it, the page's own field takes the ask.
  */
-function SearchPageButton() {
-  const { stack, current, navigate, back } = useRouter();
-  const onPage = current.name === "search";
-  const latest = useRef({ stack, navigate, back });
-  latest.current = { stack, navigate, back };
+function useSearchTab(phone: boolean) {
+  const { stack, tab, back } = useRouter();
+  const latest = useRef({ stack, tab, back });
+  latest.current = { stack, tab, back };
 
   useEffect(() => {
+    if (!phone) return;
     const open = () => {
-      const { stack, navigate, back } = latest.current;
+      const { stack, tab, back } = latest.current;
       if (stack[stack.length - 1].route.name === "search") return; // the page's field takes it (Search.tsx)
       const at = stack.map((e) => e.route.name).lastIndexOf("search");
-      if (at < 0) navigate({ name: "search" });
+      if (at < 0) tab({ name: "search" });
       else for (let i = at; i < stack.length - 1; i++) back();
     };
     window.addEventListener(FOCUS_SEARCH_EVENT, open);
     return () => window.removeEventListener(FOCUS_SEARCH_EVENT, open);
-  }, []);
-
-  return (
-    <button
-      className="navbar-icon navbar-search-page pressable"
-      aria-label="Search"
-      aria-current={onPage ? "page" : undefined}
-      onClick={focusSearch}
-    >
-      <Search size={23} strokeWidth={2} />
-    </button>
-  );
+  }, [phone]);
 }
 
 /**

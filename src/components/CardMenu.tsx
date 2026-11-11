@@ -86,10 +86,20 @@ export function CardMenuHost() {
 const pointAnchor = (x: number, y: number) => ({ getBoundingClientRect: () => DOMRect.fromRect({ x, y, width: 0, height: 0 }) });
 
 /**
- * One of a title's choices. The web menu draws them with their icons; iOS lists them in its own menu.
+ * One of a title's choices. The web menu draws them with their icons; iOS lists them in its own menu, with
+ * `symbol` (an SF Symbol) beside the main ones, as its own apps' menus have: open, play, watched, keep.
  * `playlists` is the Add to Playlist submenu.
  */
-type Choice = { id: string; label: string; icon: ReactNode; run?: () => void; disabled?: boolean; destructive?: boolean; playlists?: boolean };
+type Choice = {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  symbol?: string;
+  run?: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+  playlists?: boolean;
+};
 /** The choices in groups, a separator between groups. */
 type Choices = { detail?: string; groups: Choice[][]; settled: boolean };
 
@@ -97,6 +107,7 @@ const goTo = (target: Target, navigate: ReturnType<typeof useRouter>["navigate"]
   id: "open",
   label: series ? "Go to Show" : "Go to Movie",
   icon: <Info />,
+  symbol: "info.circle",
   run: target.open ?? (() => navigate({ name: "detail", type: target.item.type, id: target.item.id, preview: target.item })),
 });
 
@@ -117,19 +128,21 @@ function useLinkedChoices(target: Target): Choices {
       id: "play",
       label: a.entryInProgress ? "Resume" : "Play",
       icon: <Play />,
-      run: () => navigate({ name: "player", type: entry.type, metaId: entry.metaId, videoId: entry.videoId, stream: entry.stream }),
+      symbol: "play",
+      run: () => navigate({ name: "player", type: entry.type, metaId: entry.metaId, videoId: entry.videoId }),
     });
   play.push(goTo(target, navigate, a.isSeries));
   if (a.trailerYtId || item.id.startsWith("tt"))
-    play.push({ id: "trailer", label: "Play Trailer", icon: <Trailer />, run: () => openTrailer(trailerFor(item.name, item.id, a)) });
+    play.push({ id: "trailer", label: "Play Trailer", icon: <Trailer />, symbol: "film", run: () => openTrailer(trailerFor(item.name, item.id, a)) });
 
   const watched: Choice[] = [];
-  if (a.episodeUnwatched) watched.push({ id: "episode-watched", label: `Mark ${a.episodeLabel} as Watched`, icon: <Watched />, run: a.markEpisodeWatched });
-  if (a.episodeWatched) watched.push({ id: "episode-unwatched", label: `Mark ${a.episodeLabel} as Unwatched`, icon: <Reset />, run: a.markEpisodeUnwatched });
+  if (a.episodeUnwatched) watched.push({ id: "episode-watched", label: `Mark ${a.episodeLabel} as Watched`, icon: <Watched />, symbol: "checkmark.circle", run: a.markEpisodeWatched });
+  if (a.episodeWatched) watched.push({ id: "episode-unwatched", label: `Mark ${a.episodeLabel} as Unwatched`, icon: <Reset />, symbol: "arrow.uturn.backward.circle", run: a.markEpisodeUnwatched });
   watched.push({
     id: "watched",
     label: `Mark ${a.isSeries ? "Show " : ""}as ${a.allWatched ? "Unwatched" : "Watched"}`,
     icon: a.allWatched ? <Reset /> : <Watched />,
+    symbol: a.allWatched ? "arrow.uturn.backward.circle" : "checkmark.circle",
     disabled: !a.canToggleWatched,
     run: a.toggleWatched,
   });
@@ -149,10 +162,11 @@ function useLinkedChoices(target: Target): Choices {
       id: "library",
       label: a.inLibrary ? "Remove from Library" : "Add to Library",
       icon: a.inLibrary ? <Minus /> : <Plus />,
+      symbol: a.inLibrary ? "minus.circle" : "plus",
       destructive: a.inLibrary,
       run: a.toggleLibrary,
     },
-    { id: "playlists", label: a.inPlaylist ? "Playlists" : "Add to Playlist", icon: a.inPlaylist ? <Check /> : <PlaylistIcon />, playlists: true },
+    { id: "playlists", label: a.inPlaylist ? "Playlists" : "Add to Playlist", icon: a.inPlaylist ? <Check /> : <PlaylistIcon />, symbol: "text.badge.plus", playlists: true },
   ];
 
   const out: Choice[] = [];
@@ -245,6 +259,7 @@ function NativeMenu({ target, choices }: { target: Target; choices: Choices }) {
           label: c.label,
           style: c.destructive ? "destructive" : "default",
           group: i,
+          ...(c.symbol ? { symbol: c.symbol } : {}),
           ...(c.playlists ? { children } : {}),
         })),
     );

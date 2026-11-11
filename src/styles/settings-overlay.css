@@ -8,12 +8,12 @@
  * file restyles their .settings-* classes inside .t3s.
  */
 .t3s {
-  --t3-bg: #000;
-  --t3-card: #111111;
-  --t3-fg: #f5f5f5;
-  --t3-muted-fg: #a3a3a3;
-  --t3-border: rgb(255 255 255 / 0.08);
-  --t3-input: rgb(255 255 255 / 0.11);
+  --t3-bg: var(--tone-sunk);
+  --t3-card: var(--tone-1);
+  --t3-fg: var(--text);
+  --t3-muted-fg: rgb(var(--ink-text) / 0.62);
+  --t3-border: rgb(var(--ink) / 0.08);
+  --t3-input: rgb(var(--ink) / 0.11);
   --t3-hover: var(--fill-1);
   --t3-selected: var(--fill-2);
   --t3-primary: var(--accent);
@@ -37,8 +37,8 @@
   color: var(--t3-fg);
   font-size: 16px;
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.6),
-    0 32px 80px -16px rgb(0 0 0 / 0.85);
+    0 0 0 1px var(--ring-outer),
+    0 32px 80px -16px var(--shadow-deep);
   outline: none;
 }
 /* Narrow windows: a slimmer sidebar and the window's full width. */
@@ -101,6 +101,28 @@
   }
 }
 
+/* The page set into the window: the sidebar's material runs all the way round it, and its corners follow
+   the window's at the same distance. Not on a phone, where the sheet shows one or the other. */
+:root:not([data-form="phone"]) .t3s {
+  --t3-inset: 8px;
+  border-radius: var(--r-panel);
+  background: color-mix(in srgb, var(--tone-1) 82%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+:root:not([data-form="phone"]) .t3s-sidebar {
+  border-right: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root:not([data-form="phone"]) .t3s-main {
+  margin: var(--t3-inset) var(--t3-inset) var(--t3-inset) 0;
+  border: 1px solid var(--t3-border);
+  border-radius: calc(var(--r-panel) - var(--t3-inset));
+  overflow: hidden;
+}
+
 /* --- Sidebar ----------------------------------------------------------- */
 .t3s-sidebar {
   display: flex;
@@ -109,13 +131,15 @@
   min-height: 0;
   padding: 0.5rem;
   border-right: 1px solid var(--t3-border);
-  background: rgb(17 17 17 / 0.82);
+  background: color-mix(in srgb, var(--tone-1) 82%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
   backdrop-filter: blur(24px) saturate(1.2);
   overflow-y: auto;
   overflow-x: hidden;
 }
 .t3s-search {
+  /* Its own height, always: in the sidebar's column a long list below (search results) shrank it. */
+  flex: none;
   gap: 0.625rem;
   height: 2.5rem;
   padding: 0 0.625rem;
@@ -147,7 +171,7 @@
   height: 20px;
   padding: 0 0.25rem;
   border-radius: 4px;
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   color: var(--t3-muted-fg);
   font: 500 11px/1 var(--font);
 }
@@ -183,7 +207,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .t3s-search .search-field-clear:hover {
-    background: rgb(255 255 255 / 0.08);
+    background: rgb(var(--ink) / 0.08);
     color: var(--t3-fg);
   }
 }
@@ -425,11 +449,20 @@
   overflow: visible;
   border: 1px solid var(--fill-2);
   border-radius: var(--r-card);
-  background: rgb(17 17 17 / 0.4);
+  background: color-mix(in srgb, var(--tone-1) 40%, transparent);
+}
+/* Light: grouped, as iOS's and macOS's own Settings: white cards on a pale grey. The dark scheme's
+   cards-a-step-off-the-page left them the page's own colour on a near-white page. */
+:root[data-scheme="light"] .t3s {
+  --t3-bg: var(--tone-1);
+  --t3-card: var(--tone-sunk);
+}
+:root[data-scheme="light"] .t3s .settings-card {
+  background: var(--t3-card);
 }
 .t3s .settings-card > * + * {
   box-shadow: none;
-  border-top: 1px solid rgb(255 255 255 / 0.05);
+  border-top: 1px solid rgb(var(--ink) / 0.05);
 }
 .t3s .settings-card > :first-child {
   border-top-left-radius: 11px;
@@ -459,7 +492,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .t3s .settings-row-button:hover {
-    background: rgb(255 255 255 / 0.025);
+    background: rgb(var(--ink) / 0.025);
   }
 }
 .t3s .settings-row-text {
@@ -517,8 +550,8 @@
    faint fill (input/32), a 1px top highlight and a hairline drop shadow give
    the "shading"; hover deepens the fill (input/64). */
 .t3s {
-  --t3-control: rgb(255 255 255 / 0.035);
-  --t3-control-hover: rgb(255 255 255 / 0.07);
+  --t3-control: rgb(var(--ink) / 0.035);
+  --t3-control-hover: rgb(var(--ink) / 0.07);
   --t3-control-shade: inset 0 1px 0 var(--fill-2), 0 1px 2px rgb(0 0 0 / 0.05);
 }
 .t3s .select-trigger {
@@ -530,6 +563,12 @@
   background: var(--t3-control);
   box-shadow: var(--t3-control-shade);
   font-weight: 400;
+}
+/* Share add-ons and keys' choices are long (#429): wide enough to show the chosen one whole. On a phone it's full width. */
+@media (min-width: 601px) {
+  .t3s .settings-row[data-setting="shareSetup"] .select-trigger {
+    width: 19rem;
+  }
 }
 @media (hover: hover) and (pointer: fine) {
   .t3s .select-trigger:hover {
@@ -593,7 +632,7 @@
   border-color: color-mix(in oklab, var(--t3-primary) 45%, transparent);
   background: color-mix(in oklab, var(--t3-primary) 16%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in oklab, var(--t3-primary) 22%, transparent), 0 1px 2px rgb(0 0 0 / 0.05);
-  color: color-mix(in oklab, var(--t3-primary) 35%, white);
+  color: color-mix(in oklab, var(--t3-primary) 35%, rgb(var(--ink-text)));
 }
 @media (hover: hover) and (pointer: fine) {
   .t3s .btn-primary:not(:disabled):hover {
@@ -776,7 +815,7 @@
   width: 36px;
   height: 4px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.18);
+  background: rgb(var(--ink) / 0.18);
   translate: -50% 0;
 }
 /* Where a finger pulls the sheet down: the browser mustn't take the drag as a scroll. */
@@ -931,6 +970,83 @@
 :root[data-form="phone"] .t3s-page {
   padding-top: 0.5rem;
 }
+/* A section's page in the list's own look: the same filled cards, corners and inset as the list, and its groups
+   named the way the list names its own (small, grey, above the card) rather than with big white headings. The
+   captions run the card's width instead of being balanced into short lines. */
+:root[data-form="phone"] .t3s-page {
+  gap: 1.75rem;
+  padding: 0.5rem 1rem 3rem;
+}
+:root[data-form="phone"] .t3s .settings-group {
+  gap: 0;
+}
+:root[data-form="phone"] .t3s .settings-group-title {
+  min-height: 0;
+  padding: 0 0.25rem 0.5rem;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--t3-muted-fg);
+}
+:root[data-form="phone"] .t3s .settings-card {
+  border: 0;
+  border-radius: 14px;
+  background: var(--t3-card);
+}
+:root[data-form="phone"] .t3s .settings-card > :first-child {
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+}
+:root[data-form="phone"] .t3s .settings-card > :last-child {
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+:root[data-form="phone"] .t3s .settings-row {
+  padding: 0.875rem 1rem;
+}
+:root[data-form="phone"] .t3s .settings-row-caption {
+  font-size: 13px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+:root[data-form="phone"] .t3s .settings-row:active:is(.settings-row-button) {
+  background: var(--t3-selected);
+}
+
+/* Settings as the profile sheet's next view (SettingsOverlay `embedded`, ProfileMenu.tsx): no sheet of its own, so
+   none of the above's frame, position or motion; the profile sheet's header names the view and holds its Back. It
+   fills the sheet at its tallest (the sheet's own top, header and padding taken off), its list and page scrolling
+   inside, and its cards take the profile sheet's look. */
+:root[data-form="phone"] .t3s[data-embedded] {
+  --t3-bg: transparent;
+  --t3-card: rgb(255 255 255 / 0.05);
+  position: relative;
+  z-index: auto;
+  inset: auto;
+  width: auto;
+  height: calc(100dvh - var(--safe-top) - 2.5rem - 6.75rem);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  transform: none;
+  transition: none;
+}
+:root[data-form="phone"] .t3s[data-embedded] .t3s-sidebar {
+  padding: 0 0 1rem;
+}
+:root[data-form="phone"] .t3s[data-embedded] .t3s-page {
+  padding: 0.25rem 0 2rem;
+}
+.profile-sheet-loading {
+  display: grid;
+  place-items: center;
+  height: 12rem;
+}
+
 /* Dropdowns a finger's height (menu.css sizes their lists), with room above them. */
 :root[data-form="phone"] .t3s .settings-row .select-trigger {
   margin-top: 0.25rem;

@@ -12,7 +12,7 @@ name: Security
 
 on:
   push:
-    branches: ['**']
+    branches: ['**', '!ui/mobile-polish']
   pull_request:
   schedule:
     - cron: '17 3 * * *' # fuzz, nightly

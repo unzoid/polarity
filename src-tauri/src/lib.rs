@@ -1,8 +1,10 @@
+mod art_focus;
 #[cfg(any(windows, test))]
 mod automation;
 mod commands;
 mod controllers;
 mod deep_link;
+mod dev_channel;
 mod discord;
 mod disk;
 mod downloads;
@@ -58,6 +60,8 @@ pub struct AppState {
     pub fillers: polar_anime::Fillers,
     /// Anime id mappings for when ani.zip is down, in the same folder.
     pub anime_lists: polar_anime::AnimeLists,
+    /// Logos and backdrops fetched for measuring where CORS refuses them (#354).
+    pub pictures: polar_addon::pictures::Pictures,
 }
 
 impl AppState {
@@ -218,6 +222,9 @@ pub fn run() {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
                 app.handle().plugin(tauri_plugin_process::init())?;
                 app.handle().plugin(tauri_plugin_dialog::init())?;
+                // Before the links: one may be Discord starting Polarity for a join.
+                let handle = app.handle().clone();
+                discord::init(move |secret| deep_link::from_discord(&handle, &secret));
                 deep_link::init(app);
             }
             let dir = app.path().app_data_dir()?;
@@ -252,6 +259,7 @@ pub fn run() {
                 ratings: ratings::RatingsClient::default(),
                 fillers: polar_anime::Fillers::new(cache.clone()),
                 anime_lists: polar_anime::AnimeLists::new(cache.clone()),
+                pictures: polar_addon::pictures::Pictures::default(),
             });
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
@@ -261,6 +269,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move { install_bundled_addons(handle).await });
             #[cfg(windows)]
             automation::create_main_window(app)?;
+            // A dev build's window says it's the dev build, in the taskbar and window lists (dev_channel.rs).
+            if dev_channel::DEV {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.set_title(dev_channel::TITLE);
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -277,6 +291,7 @@ pub fn run() {
             torrent::torrent_close,
             commands::subtitles,
             commands::subtitle_vtt,
+            commands::picture_bytes,
             commands::seek_previews,
             commands::seekr_validate,
             commands::skip_segments,
@@ -298,6 +313,7 @@ pub fn run() {
             commands::continue_watching,
             commands::watch_history,
             commands::link_anime,
+            commands::unlink_anime,
             commands::anime_links,
             commands::settings_get,
             commands::settings_set,
@@ -310,6 +326,7 @@ pub fn run() {
             commands::anime_cache,
             commands::anime_cache_clear,
             commands::trailer,
+            dev_channel::dev_build_feed,
             keychain::keychain_get,
             keychain::keychain_set,
             keychain::keychain_delete,
@@ -351,8 +368,10 @@ pub fn run() {
             player::mpv_stop,
             player::mpv_snapshot,
             player::player_system_bars,
+            player::player_keep_awake,
             native_tabs::native_tabs,
             native_back::native_back,
+            art_focus::art_focus,
             native_dialogs::native_dialog,
             native_dialogs::native_share,
             notifications::notifications_permission,
@@ -364,6 +383,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building polar")
         .run(|app, event| {
+            // iOS takes the hardware decoder away in the background: back in the foreground, it's asked for again.
+            #[cfg(target_os = "ios")]
+            if let tauri::RunEvent::WindowEvent { event, .. } = &event {
+                match event {
+                    tauri::WindowEvent::Suspended => player::note_decoder(app),
+                    tauri::WindowEvent::Resumed => player::hardware_decoding_back(app),
+                    _ => {}
+                }
+            }
             // Never leave an orphaned mpv behind, nor a change unwritten, nor a torrent cache.
             if let tauri::RunEvent::Exit = event {
                 let state = app.state::<AppState>();

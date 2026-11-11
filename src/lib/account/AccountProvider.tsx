@@ -96,9 +96,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [signOutBlocked, setSignOutBlocked] = useState<number | null>(null);
   const statusRef = useRef(status);
   statusRef.current = status;
+  /** The signed-in account's profiles, as last listed: whose add-ons and keys a new profile may start with (#429). */
+  const siblings = useRef<string[]>([]);
 
   const setProfiles = useCallback((userId: string, list: Profile[]) => {
     setProfilesState(list);
+    siblings.current = list.map((p) => p.id);
     sync.setProfiles(list.map((p) => p.id));
     localStorage.setItem(profilesKey(userId), JSON.stringify(list));
   }, []);
@@ -107,10 +110,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     // Best effort: get the previous profile's last changes up first. Whatever doesn't make it
     // goes up in the background with the next profile's sync rounds.
     await Promise.race([sync.flush(), new Promise((r) => setTimeout(r, 3000))]);
+    // From here the store becomes the new profile's: a round still running for the old one must see that (plan 002).
+    sync.stop();
     await api.activateSpace(p.id);
-    await keepDeviceSettings(p.id).catch(warnFailed("Keeping this device's settings"));
-    // New to this device: none of the add-ons and keys of whoever was here before, unless they're shared (#80).
-    await startProfile(p.id).catch(warnFailed("Starting the profile without this device's add-ons and keys"));
+    const before = await keepDeviceSettings(p.id).catch(warnFailed("Keeping this device's settings"));
+    // New to this device: the add-ons and keys Settings → Account → Share add-ons and keys allows it (#80, #429).
+    await startProfile(p.id, before ?? null, siblings.current).catch(warnFailed("Starting the profile with this device's add-ons and keys"));
     // This profile's settings as this device last synced them; reinstalling
     // addons can take a moment, so don't hold the app for it.
     await Promise.race([restoreSettings(p.id).catch(warnFailed("Restoring the profile's settings")), new Promise((r) => setTimeout(r, 1500))]);

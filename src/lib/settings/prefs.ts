@@ -2,6 +2,7 @@ import { storeLocal } from "../errors";
 import { useSyncExternalStore } from "react";
 import { isRecord, likeTemplate, storedJson } from "../parse";
 import { settingsChanged } from "./changes";
+import { earlierCropMode, type CropMode } from "./cropMode";
 
 /** TV mode's interface sound packs (tv/sounds.ts renders them). */
 export type SoundPack = "ambient" | "soft" | "wood" | "glass" | "pluck" | "classic";
@@ -47,15 +48,16 @@ export interface Prefs {
   /** What the user's Discord profile shows while something plays: nothing, that Polarity is in use, or the title.
    * Starts at "app" (#150); a value already stored, Off included, stays as it was. */
   discordPresence: "off" | "app" | "title";
-  /** Who may join a watch party from the "Join watch party" button on the user's Discord profile (#154). */
+  /** Who may join a watch party from Join on the user's Discord profile (#154, #357). */
   discordJoin: "nobody" | "ask" | "anyone";
   /** Links meant for Stremio (`stremio://`) open in Polarity on this device (#163): its own choice, so it never syncs. */
   stremioLinks: boolean;
   /**
-   * A profile new to this device starts with the add-ons and API keys already here (#80). Off: it starts
-   * with none (its own from the account, once they sync) and Settings offers to copy a set from this device.
+   * What a profile new to this device starts with (#80, #429). "none": its own add-ons and API keys from the
+   * account, or none. "account": another profile of the same account's set on this device, if there is one, else
+   * as "none". "device": whatever add-ons and keys are on the device, whoever's they are.
    */
-  shareAddonsAndKeys: boolean;
+  shareSetup: ShareSetup;
   /** mpv: louder dialogue when surround is folded down to stereo. */
   dialogueBoost: boolean;
   /** mpv: even out loud and quiet scenes. */
@@ -64,14 +66,12 @@ export interface Prefs {
   hwdec: boolean;
   /** mpv: smooth colour banding. */
   deband: boolean;
-  /** mpv: crop black bars burnt into the picture, so it fills wide screens. */
-  autocrop: boolean;
+  /** Fit, Crop black bars (mpv's autocrop) or Fill window (#330, cropMode.ts). */
+  cropMode: CropMode;
   /** mpv, with autocrop: read ahead so a change of bars lands on the cut. */
   autocropLookahead: boolean;
   /** mpv, with autocrop, Windows, Linux and Android: our detector reads every frame (macOS and iOS always do). */
   autocropEveryFrame: boolean;
-  /** Phones and tablets: the picture fills the screen, its edges cropped, instead of fitting inside it (#149). */
-  videoFill: boolean;
   /** mpv read-ahead. */
   buffer: "small" | "normal" | "large";
   /** Torrent sources: most GB their cache on this device may hold; 0 = no limit. */
@@ -151,6 +151,8 @@ export interface Prefs {
  * 1080p stream needs, so peers get back roughly what playback takes, and it stays under half of a
  * slow cable or DSL line's upload (10 Mbit/s and less), leaving room for the download's own traffic.
  */
+export type ShareSetup = "none" | "account" | "device";
+
 export const TORRENT_UPLOAD_MBPS = 4;
 
 const DEFAULTS: Prefs = {
@@ -171,16 +173,15 @@ const DEFAULTS: Prefs = {
   pauseOnMinimize: false,
   discordPresence: "app",
   discordJoin: "ask",
-  stremioLinks: false,
-  shareAddonsAndKeys: false,
+  stremioLinks: true,
+  shareSetup: "account",
   dialogueBoost: false,
   volumeLeveling: false,
   hwdec: true,
   deband: false,
-  autocrop: false,
+  cropMode: "fit",
   autocropLookahead: true,
   autocropEveryFrame: false,
-  videoFill: false,
   buffer: "normal",
   torrentCacheGb: 20,
   torrentSpeedMbps: 0,
@@ -219,18 +220,31 @@ const DEFAULTS: Prefs = {
 const STORAGE = "polar.prefs";
 
 const stored = storedJson(localStorage, STORAGE);
-/** Installs from before #80 (prefs or an account's settings stored already) keep sharing add-ons and keys. */
-const earlier = (stored !== undefined || localStorage.getItem("polar.settingsOwner") !== null) && !(isRecord(stored) && "shareAddonsAndKeys" in stored);
-let prefs: Prefs = { ...DEFAULTS, ...(earlier ? { shareAddonsAndKeys: true } : {}), ...earlierUpload(stored), ...readPrefs(stored) };
+let prefs: Prefs = { ...DEFAULTS, ...earlierShare(stored), ...earlierUpload(stored), ...readPrefs(stored), ...earlierCrop(stored) };
 const listeners = new Set<() => void>();
 
 export const getPrefs = () => prefs;
+
+/**
+ * The sharing switch from before #429: Off is "none"; On, and installs from before the switch (#80, which
+ * shared), are "account", the safer of the two choices that keep sharing.
+ */
+function earlierShare(stored: unknown): Partial<Prefs> {
+  if (!isRecord(stored) || "shareSetup" in stored) return {};
+  return stored.shareAddonsAndKeys === false ? { shareSetup: "none" } : {};
+}
 
 /** Before #137 the speed limit capped upload too: one set then keeps upload at most that low. */
 function earlierUpload(stored: unknown): Partial<Prefs> {
   if (!isRecord(stored) || "torrentUploadMbps" in stored) return {};
   const speed = stored.torrentSpeedMbps;
   return typeof speed === "number" && speed > 0 ? { torrentUploadMbps: Math.min(speed, TORRENT_UPLOAD_MBPS) } : {};
+}
+
+/** The crop mode from prefs stored before #330 (autocrop and Fill), or one stored that isn't a mode. */
+function earlierCrop(stored: unknown): Partial<Prefs> {
+  if (!isRecord(stored)) return {};
+  return { cropMode: earlierCropMode(stored) ?? DEFAULTS.cropMode };
 }
 
 /** Stored or synced prefs: the known ones, each of the kind its default is (critique M9). */

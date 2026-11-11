@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   type AnimeCard as Media,
   aniZipQuery,
@@ -8,10 +9,13 @@ import {
   type EntryAction,
   prefetchAnime,
   FORMAT_LABEL,
+  reprioritiseAniList,
+  rowPriority,
   isMature,
   landscapeArt,
   posterArt,
   untilAiring,
+  useAnimePageArt,
   useAnimeScore,
   useAnimeTitle,
   useLinkedImdb,
@@ -20,7 +24,7 @@ import { usePrefs } from "../../lib/settings";
 import { useRouter } from "../../lib/router";
 import { menuPoint, openCardMenu } from "../CardMenu";
 import { api } from "../../lib/api";
-import { useCardIntent } from "../../lib/ui";
+import { useCardIntent, useViewportPlace } from "../../lib/ui";
 import { ArtTitle, Card } from "../title/Card";
 import { Star, Warning } from "../icons";
 import { openTrailer } from "../Trailer";
@@ -84,22 +88,17 @@ export function useOpenAnime(item: Media) {
  * An anime's poster: the cover with its own key colour behind it while it
  * loads and, as Settings → Anime has them, the AniList score and when the next
  * episode lands. `label` replaces the caption's facts (a relation type,
- * "Episode 5 · 18:30"). `onOpen` replaces opening its page (a season tab of the
- * page it's on); `current` marks the entry on screen. `action` is what a click
- * does instead of opening its page (lib/anime/franchiseEntry.ts); a manga or
- * novel always opens on the site Settings → Anime picks.
+ * "Episode 5 · 18:30"). `action` is what a click does instead of opening its
+ * page (lib/anime/franchiseEntry.ts); a manga or novel always opens on the
+ * site Settings → Anime picks.
  */
 export function AnimeCard({
   item,
   label,
-  onOpen,
-  current,
   action: given,
 }: {
   item: Media;
   label?: string;
-  onOpen?: (e: React.MouseEvent<HTMLElement>) => void;
-  current?: boolean;
   action?: EntryAction;
 }) {
   const title = useAnimeTitle()(item.title);
@@ -128,8 +127,7 @@ export function AnimeCard({
   return (
     <Card
       shape="poster"
-      className={current ? "anime-card anime-card-current" : "anime-card"}
-      aria-current={current || undefined}
+      className="anime-card"
       frameClass="anime-card-frame"
       art={art}
       artFallbacks={artFallbacks}
@@ -142,7 +140,6 @@ export function AnimeCard({
           : cardFacts(item))
       }
       {...click}
-      {...(onOpen && { onClick: onOpen })}
       style={{ "--cover": item.coverImage.color ?? undefined } as React.CSSProperties}
     >
       {prefs.matureContent === "blur" && isMature(item) && <MatureCover />}
@@ -157,19 +154,34 @@ export function AnimeCard({
   );
 }
 
-/** The widescreen card, for the shelves Home draws that way: the banner with the title over it. */
+/**
+ * The widescreen card, for the shelves the Anime tab draws that way: the backdrop and logo of the page it opens
+ * (#336), the franchise's with seasons grouped, else the entry's own page's, with the name where there's no logo.
+ */
 export function AnimeLandscapeCard({ item, label }: { item: Media; label?: string }) {
   const title = useAnimeTitle()(item.title);
   const open = useOpenAnime(item);
   const { matureContent, animeSeparateEntries: separate } = usePrefs();
-  // Wide art first (re-test N5), the entry's own with seasons as separate shows (#194); nothing until the links
-  // answer, so the picture doesn't change once drawn.
-  const imdb = useLinkedImdb(item.id);
+  // Worked out once the card comes near the screen (a page's worth of AniList requests per card), the ones on
+  // screen first; nothing until it's known, so the picture doesn't change once drawn.
+  const [ref, near, place] = useViewportPlace<HTMLElement>(reprioritiseAniList);
+  const priority = useCallback(() => rowPriority(place.current), [place]);
+  const page = useAnimePageArt(item, near, priority);
+  // Where AniList couldn't be asked: the card's own wide art (re-test N5, #194), once the links answer.
+  const imdb = useLinkedImdb(page === null ? item.id : 0);
+  const own = [item.bannerImage, item.coverImage.extraLarge];
   const [art, ...artFallbacks] =
-    imdb === undefined ? [] : landscapeArt({ imdb, bannerImage: item.bannerImage, cover: item.coverImage.extraLarge, separate });
+    page === null
+      ? imdb === undefined
+        ? []
+        : landscapeArt({ imdb, bannerImage: item.bannerImage, cover: item.coverImage.extraLarge, separate })
+      : page
+        ? [page.background, ...own].filter((u, i, all): u is string => !!u && all.indexOf(u) === i)
+        : [];
   if (matureContent === "hide" && isMature(item)) return null;
   return (
     <Card
+      ref={ref}
       shape="landscape"
       className="anime-card"
       frameClass="anime-card-frame"
@@ -180,7 +192,7 @@ export function AnimeLandscapeCard({ item, label }: { item: Media; label?: strin
       {...open}
       style={{ "--cover": item.coverImage.color ?? undefined } as React.CSSProperties}
     >
-      <ArtTitle name={title} />
+      {page !== undefined && <ArtTitle name={title} logo={page?.logo} logos={page?.logos} />}
       {matureContent === "blur" && isMature(item) && <MatureCover />}
     </Card>
   );

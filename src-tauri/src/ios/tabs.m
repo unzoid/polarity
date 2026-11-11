@@ -4,9 +4,11 @@
 // the video's view behind it: mpv_view.m) moves into whichever tab is current. One web view serves
 // every tab: the web app shows the section the tab bar says, and tells it which one that is. On
 // iOS 26 and later the bar is the floating Liquid Glass one, on older iOS the classic one, and on
-// an iPad from iOS 18 the tab bar that can turn into a sidebar. The tab with the id "search" is
-// the system's search tab from iOS 18 (on iOS 26 it floats apart from the others). The bar is part of the safe area
-// the web view sees, so the pages keep clear of it as they keep clear of the home indicator.
+// an iPad from iOS 18 the tab bar that can turn into a sidebar. The web app sends five tabs at most:
+// with more, an iPhone's bar puts its own More tab in their place, a list with a navigation bar
+// of its own (#449); Search and the Calendar are buttons in the app's top bar. The bar is part of
+// the safe area the web view sees, so the pages keep clear of it as they keep clear of the home
+// indicator.
 
 #import <UIKit/UIKit.h>
 
@@ -24,8 +26,6 @@ extern void polar_tab_chosen(const char *id);
 /// The tab the web app last said is current: a page that appears as anything else was picked by the user.
 @property(nonatomic, copy) NSString *current;
 @property(nonatomic) BOOL barHidden;
-/// The search tab (iOS 18 and later): UIKit gives it its own identifier, so it's kept to tell it apart.
-@property(nonatomic, strong) UITab *searchTab API_AVAILABLE(ios(18.0));
 @property(nonatomic) BOOL sidebarWasShown;
 - (void)hostIn:(UIViewController *)page;
 - (void)fitHost;
@@ -104,41 +104,44 @@ static PolarTabs *controller;
     polar_tab_chosen(tabId.UTF8String);
 }
 
-/// The page showing, also when it's one of those under More (more than five tabs on an iPhone).
+/// The page showing.
 - (UIViewController *)shownPage {
     UIViewController *vc = self.selectedViewController;
-    if ([vc isKindOfClass:UINavigationController.class]) vc = ((UINavigationController *)vc).topViewController;
     return [vc isKindOfClass:PolarTabPage.class] ? vc : nil;
 }
 
 - (void)setItems:(NSArray *)items {
-    NSMutableArray<PolarTabPage *> *list = [NSMutableArray array];
+    NSMutableArray<NSDictionary *> *valid = [NSMutableArray array];
     NSMutableString *signature = [NSMutableString string];
     for (id item in items) {
         if (![item isKindOfClass:NSDictionary.class]) continue;
         NSString *tabId = item[@"id"], *title = item[@"title"], *icon = item[@"icon"];
         if (![tabId isKindOfClass:NSString.class] || ![title isKindOfClass:NSString.class] || ![icon isKindOfClass:NSString.class]) continue;
         [signature appendFormat:@"%@\t%@\t%@\n", tabId, title, icon];
-        PolarTabPage *page = self.pages[tabId] ?: [PolarTabPage new];
+        [valid addObject:item];
+    }
+    if ([signature isEqualToString:self.signature]) return;
+    self.signature = signature;
+    // A new set of tabs (Anime turned on or off) gets pages of its own: a page the old tabs still hold can't be
+    // handed to a new one (UIKit stops the app over a view controller with two parents). The web app moves into
+    // the new page that shows (apply:, hostIn:).
+    NSMutableArray<PolarTabPage *> *list = [NSMutableArray array];
+    NSMutableDictionary<NSString *, PolarTabPage *> *pages = [NSMutableDictionary dictionary];
+    for (NSDictionary *item in valid) {
+        NSString *tabId = item[@"id"], *title = item[@"title"], *icon = item[@"icon"];
+        PolarTabPage *page = [PolarTabPage new];
         page.tabId = tabId;
         page.title = title;
-        self.pages[tabId] = page;
+        pages[tabId] = page;
         UIImage *image = [UIImage systemImageNamed:icon];
         UIImage *selected = [UIImage systemImageNamed:[icon stringByAppendingString:@".fill"]] ?: image;
         page.tabBarItem = [[UITabBarItem alloc] initWithTitle:title image:image selectedImage:selected];
         [list addObject:page];
     }
-    if ([signature isEqualToString:self.signature]) return;
-    self.signature = signature;
+    self.pages = pages;
     if (@available(iOS 18.0, *)) {
         NSMutableArray<UITab *> *tabs = [NSMutableArray array];
-        self.searchTab = nil;
         for (PolarTabPage *page in list) {
-            if ([page.tabId isEqualToString:@"search"]) {
-                self.searchTab = [[UISearchTab alloc] initWithViewControllerProvider:^UIViewController *(UITab *t) { return page; }];
-                [tabs addObject:self.searchTab];
-                continue;
-            }
             UITab *tab = [[UITab alloc] initWithTitle:page.title
                                                 image:page.tabBarItem.image
                                            identifier:page.tabId
@@ -157,7 +160,7 @@ static PolarTabs *controller;
     PolarTabPage *page = self.pages[tabId];
     if (!page) return;
     if (@available(iOS 18.0, *)) {
-        UITab *tab = [tabId isEqualToString:@"search"] ? self.searchTab : [self tabForIdentifier:tabId];
+        UITab *tab = [self tabForIdentifier:tabId];
         if (tab && self.selectedTab != tab) self.selectedTab = tab;
     } else if (self.shownPage != page) {
         self.selectedViewController = page;
@@ -186,6 +189,9 @@ static PolarTabs *controller;
     NSArray *items = [state[@"tabs"] isKindOfClass:NSArray.class] ? state[@"tabs"] : @[];
     NSString *selected = [state[@"selected"] isKindOfClass:NSString.class] ? state[@"selected"] : nil;
     BOOL hidden = [state[@"hidden"] isKindOfClass:NSNumber.class] && [state[@"hidden"] boolValue];
+    // The bar in the app's colour scheme (Settings → Appearance), which can differ from the system's.
+    NSString *scheme = [state[@"scheme"] isKindOfClass:NSString.class] ? state[@"scheme"] : nil;
+    if (scheme) self.overrideUserInterfaceStyle = [scheme isEqualToString:@"light"] ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
     if (items.count) [self setItems:items];
     self.current = selected;
     if (selected) [self select:selected];
@@ -201,7 +207,7 @@ static PolarTabs *controller;
 }
 
 - (BOOL)tabBarController:(UITabBarController *)tabs shouldSelectTab:(UITab *)tab API_AVAILABLE(ios(18.0)) {
-    if (tab == tabs.selectedTab) [self picked:tab == self.searchTab ? @"search" : tab.identifier];
+    if (tab == tabs.selectedTab) [self picked:tab.identifier];
     return YES;
 }
 

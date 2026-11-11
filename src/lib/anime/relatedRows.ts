@@ -2,9 +2,9 @@
  * What an anime page's Watch Order and Also in This Franchise rows hold (#193). Pure, so tests can
  * check with made-up franchises that no card leads back to the page it's on.
  *
- * On a franchise page (its seasons as tabs), Watch Order is the whole prequel/sequel chain, the
- * page's own tabs marked so their cards switch tabs; Also in This Franchise is what the page doesn't
- * hold. With Settings → Anime → Seasons as separate shows (#22), or a show with one entry, both
+ * On a franchise page (its seasons as tabs), Watch Order is the prequel/sequel chain without the
+ * page's own tabs, which already sit in watch order (#351); Also in This Franchise is what the page
+ * doesn't hold. With Settings → Anime → Seasons as separate shows (#22), or a show with one entry, both
  * rows come from the entry's own relations, as before.
  */
 import type { Anime, AnimeCard, RelationType } from "./anilist";
@@ -33,10 +33,6 @@ const WATCH_ORDER: RelationType[] = ["PREQUEL", "SEQUEL", "PARENT"];
 export interface RelatedCard {
   card: AnimeCard;
   label: string;
-  /** One of this page's season tabs: its card switches to the tab instead of opening a page. */
-  tab?: boolean;
-  /** The tab on screen now. */
-  current?: boolean;
 }
 
 export interface RelatedRows {
@@ -72,22 +68,16 @@ export function relatedRows(anime: Anime, franchise?: FranchiseTabs): RelatedRow
     return { watchOrder: watchOrder.map(edgeCard), also: edges.filter((e) => !watchOrder.includes(e)).map(edgeCard) };
   }
 
-  const tabs = new Map(franchise.seasons.map((s) => [s.card.id, s.label]));
+  const tabs = new Set(franchise.seasons.map((s) => s.card.id));
   // While the chain is still being walked, the order isn't known and a prequel or sequel may yet become a tab.
   const order = franchise.loading ? [] : (franchise.order ?? franchise.seasons.map((s) => s.card));
   const watchOrder: RelatedCard[] = order
-    .filter((c) => c.type !== "MANGA")
-    .map((c) => {
-      const tab = tabs.get(c.id);
-      if (tab === undefined) return { card: c, label: facts(c.format && FORMAT_LABEL[c.format], year(c)) };
-      const current = c.id === franchise.active;
-      return { card: c, label: current ? facts(tab, "Now showing") : tab, tab: true, current };
-    });
+    .filter((c) => c.type !== "MANGA" && !tabs.has(c.id))
+    .map((c) => ({ card: c, label: facts(c.format && FORMAT_LABEL[c.format], year(c)) }));
   const inOrder = new Set(order.map((c) => c.id));
   const also = edges
     .filter((e) => !tabs.has(e.node.id) && !inOrder.has(e.node.id))
     .filter((e) => !(franchise.loading && (e.relationType === "PREQUEL" || e.relationType === "SEQUEL") && e.node.type !== "MANGA"))
     .map(edgeCard);
-  // An order of this page's tabs alone repeats the tabs: no row.
-  return { watchOrder: watchOrder.some((c) => !c.tab) ? watchOrder : [], also };
+  return { watchOrder, also };
 }

@@ -173,6 +173,11 @@ pub struct StreamsResult {
     failed: Vec<String>,
     /// Sources left out by the filters in Settings → Sources.
     hidden: usize,
+    /// The addons asked (whatever they answered), for the player's start log: "none asked" and "asked,
+    /// nothing found" are different failures.
+    asked: Vec<String>,
+    /// The ids they were asked for: the episode's, then its other ids.
+    ids: Vec<String>,
 }
 
 /// Query every installed stream addon concurrently, then rank and dedupe.
@@ -185,11 +190,15 @@ pub async fn streams(
     alt_ids: Option<Vec<String>>,
     // The episode's absolute number(s), when the app knows them (an anime's): a file numbered that way is this episode.
     absolute: Option<Vec<u32>>,
+    // A later anime season's own titles: a file named by one without a season number is that season's.
+    season_names: Option<Vec<String>>,
 ) -> Result<StreamsResult> {
     let mut ids = vec![video_id];
     ids.extend(alt_ids.unwrap_or_default());
     // What every file is checked against: another episode's file is listed last and never picked by itself.
-    let wanted = WantedEpisode::from_ids(ids.iter().map(String::as_str), &absolute.unwrap_or_default());
+    let names = season_names.unwrap_or_default();
+    let wanted = WantedEpisode::from_ids(ids.iter().map(String::as_str), &absolute.unwrap_or_default())
+        .map(|w| w.with_names(names.iter().map(String::as_str)));
 
     // One request per (addon, id) the addon claims to serve.
     let jobs: Vec<(InstalledAddon, String)> = installed(&state)
@@ -236,9 +245,12 @@ pub async fn streams(
         .filter(|a| !answered.contains(&a.manifest_url) && named.insert(&a.manifest_url))
         .map(|a| a.manifest.name.clone())
         .collect();
+    let mut seen = std::collections::HashSet::new();
+    let asked: Vec<String> =
+        jobs.iter().filter(|(a, _)| seen.insert(&a.manifest_url)).map(|(a, _)| a.manifest.name.clone()).collect();
     let filter = state.store.locked().data.settings.stream_filter(&ty);
     let (streams, hidden) = rank_asked(all, &filter, wanted.as_ref());
-    Ok(StreamsResult { streams, failed, hidden })
+    Ok(StreamsResult { streams, failed, hidden, asked, ids })
 }
 
 #[derive(Serialize)]
@@ -452,11 +464,21 @@ pub async fn link_anime(state: State<'_, AppState>, mut link: AnimeLink) -> Resu
     Ok(changed)
 }
 
-/// The anime links of the active space.
+/// Takes back the link stored for an anime (#335, "Use Polarity's match"): it plays from what the
+/// id lists or the title search find again, and what the link moved goes back. The removal syncs.
+/// Returns whether there was a link to take back.
+#[tauri::command]
+pub async fn unlink_anime(state: State<'_, AppState>, anilist: u32) -> Result<bool> {
+    let mut changed = false;
+    state.persist(|d| changed = d.space_mut().unlink_anime(anilist, now()))?;
+    Ok(changed)
+}
+
+/// The anime links of the active space; removed ones say nothing, so they're left out.
 #[tauri::command]
 pub fn anime_links(state: State<'_, AppState>) -> Vec<AnimeLink> {
     let store = state.store.locked();
-    store.data.space().map(|s| s.links.values().cloned().collect()).unwrap_or_default()
+    store.data.space().map(|s| s.links.values().filter(|l| !l.removed).cloned().collect()).unwrap_or_default()
 }
 
 // --- Settings ------------------------------------------------------------
@@ -484,7 +506,8 @@ pub fn settings_get(state: State<'_, AppState>) -> SettingsView {
 }
 
 #[tauri::command]
-pub fn settings_set(state: State<'_, AppState>, settings: Settings) -> Result<SettingsView> {
+pub fn settings_set(state: State<'_, AppState>, mut settings: Settings) -> Result<SettingsView> {
+    settings.bound_custom_themes();
     let rebuild = {
         let store = state.store.locked();
         store.data.settings.tmdb_key != settings.tmdb_key || store.data.settings.language != settings.language
@@ -575,6 +598,21 @@ pub async fn subtitle_vtt(state: State<'_, AppState>, url: String) -> Result<Str
     }
     let bytes = state.addons.fetch_bytes(&url).await?;
     Ok(polar_addon::subs::to_vtt(&bytes))
+}
+
+/// A logo's or backdrop's bytes for the app to measure (#354), for hosts whose
+/// pictures the web view can't read (no CORS headers). Public `https` pictures
+/// only (`polar_addon::pictures`); a failure is logged with the host alone.
+#[tauri::command]
+pub async fn picture_bytes(state: State<'_, AppState>, url: String) -> Result<tauri::ipc::Response> {
+    match state.pictures.fetch(&url).await {
+        Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        Err(reason) => {
+            let host = reqwest::Url::parse(&url).ok().and_then(|u| u.host_str().map(str::to_owned)).unwrap_or_default();
+            tracing::warn!(target: "polar", "logo: no picture from {host} to measure: {reason}");
+            Err(CmdError::Upstream(reason))
+        }
+    }
 }
 
 // --- Seek previews (Seekr) -------------------------------------------------

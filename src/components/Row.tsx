@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "./icons";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { EdgeBlur } from "./EdgeBlur";
-import { useOffscreenMark } from "../lib/ui";
+import { useOffscreenMark, useTogether } from "../lib/ui";
 
 /**
  * A horizontal shelf. Native scrolling (wheel, trackpad momentum, scroll-snap)
@@ -15,6 +15,7 @@ export function Row({
   shape = "poster",
   order,
   loading = false,
+  placed = false,
   children,
 }: {
   title?: string;
@@ -26,11 +27,14 @@ export function Row({
   order?: string;
   /** Skeletons stand in for the cards: their shimmer pauses while the shelf is out of view. */
   loading?: boolean;
+  /** Its owner puts it where it should be (EpisodeShelf, at up next): it isn't sent back to its start. */
+  placed?: boolean;
   children: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const section = useRef<HTMLElement>(null);
   useOffscreenMark(section, loading);
+  const together = useTogether();
   const [edges, setEdges] = useState({ start: true, end: false });
   // Until someone scrolls it, a shelf shows its first title. Titles shown
   // higher up are taken out of it as they load; without this, scroll-snap
@@ -38,7 +42,7 @@ export function Row({
   const touched = useRef(false);
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
+    if (el && !placed && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
   });
 
   // Resuming a title moves it to the front of Continue Watching; the shelf kept
@@ -107,7 +111,8 @@ export function Row({
           {action}
         </header>
       )}
-      <div className="row-viewport" data-start={edges.start} data-end={edges.end}>
+      {/* The shelf's pictures come in as one (lib/ui/together.ts). */}
+      <div className="row-viewport" data-start={edges.start} data-end={edges.end} {...together}>
         <RowPaddle dir="prev" onPage={page} />
         <div className="row-scroller" ref={scroller}>
           {children}

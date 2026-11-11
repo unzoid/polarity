@@ -11,11 +11,14 @@ const ICONS: Record<string, string> = {
   "discover:movie": "film",
   anime: "sparkles",
   library: "books.vertical",
-  calendar: "calendar",
+  search: "magnifyingglass",
 };
 
-/** The search tab, after the sections: the system's own search tab from iOS 18 (ios/tabs.m), the search page and its field here. */
-export const SEARCH_TAB = { id: "search", title: "Search", icon: "magnifyingglass" };
+/**
+ * The most tabs iOS's tab bar holds on an iPhone: with a sixth it puts its own "More" tab in their place, a list with
+ * an Edit button and a navigation bar of its own (#449). Search and the Calendar are buttons in the top bar instead.
+ */
+export const MAX_NATIVE_TABS = 5;
 
 /** A section's id on both sides of the bridge: Movies and Series are both Discover, so the type tells them apart. */
 export function tabId(route: TabRoute): string {
@@ -23,12 +26,12 @@ export function tabId(route: TabRoute): string {
 }
 
 /**
- * What iOS's tab bar shows for these sections: the current one is the stack's root (a shelf's heading opens Movies
- * at a catalog, still Movies), Search when the search tab opened the stack, none when the root is no tab; hidden over the player and over anything
- * that covers the screen (`covered`).
+ * What iOS's tab bar shows for these sections, the first MAX_NATIVE_TABS of them: the current one is the stack's root
+ * (a shelf's heading opens Movies at a catalog, still Movies), none when the root is no tab (Search, the Calendar);
+ * hidden over the player and over anything that covers the screen (`covered`).
  */
 export function nativeTabsState(links: NavLink[], stack: Entry[], covered: boolean): NativeTabsState {
-  const tabs = [...links.map((l) => ({ id: tabId(l.route), title: l.label, icon: ICONS[tabId(l.route)] ?? "square" })), SEARCH_TAB];
+  const tabs = links.slice(0, MAX_NATIVE_TABS).map((l) => ({ id: tabId(l.route), title: l.label, icon: ICONS[tabId(l.route)] ?? "square" }));
   const root = tabId(rootTab(stack));
   const playing = stack[stack.length - 1].route.name === "player";
   return { tabs, selected: tabs.some((t) => t.id === root) ? root : null, hidden: playing || covered };
@@ -36,7 +39,6 @@ export function nativeTabsState(links: NavLink[], stack: Entry[], covered: boole
 
 /** The section a picked tab opens. */
 export function tabRoute(links: NavLink[], id: string): TabRoute | undefined {
-  if (id === SEARCH_TAB.id) return { name: "search" };
   return links.find((l) => tabId(l.route) === id)?.route;
 }
 

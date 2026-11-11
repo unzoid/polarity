@@ -26,6 +26,7 @@ export function Sheet({
   children,
   modal = true,
   forgiveMisses = false,
+  fit = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -36,11 +37,16 @@ export function Sheet({
   modal?: boolean;
   /** A click on the dim just left of a side sheet does nothing; only one clearly away from it closes it (#320). */
   forgiveMisses?: boolean;
+  /**
+   * Sized to what it holds (a menu), on an iPhone too: no detents, so it opens showing all of it rather than at half
+   * the screen with the rest cut off. It grows and shrinks with its content, up to nearly the screen's height.
+   */
+  fit?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const drag = useDragControls();
   const bottom = useFormFactor().form === "phone";
-  const detents = bottom && os === "ios";
+  const detents = bottom && os === "ios" && !fit;
   const x = useMotionValue(0);
   // A sheet with detents starts below the screen, and a closed one ends there, so it never shows a frame at the top.
   const y = useMotionValue(detents ? window.innerHeight : 0);

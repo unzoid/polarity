@@ -17,7 +17,7 @@ in §6.
 | `watch_progress` | profile, video id | meta id, type, name, background URL, poster URL, season, episode, episode title, position, duration (float8), updated ms, legacy `stream` jsonb | **every episode and movie ever started** |
 | `playlists` | id | name, titles packed in `bytea` (~4-5 B a title, `src/lib/library/playlistCodec.ts`) | playlists (≤ 100 a profile) |
 | `profile_settings` | profile | one jsonb document ≤ 16 KB | 1 a profile |
-| `anime_links` | profile, AniList id | canonical id, MAL, Kitsu, updated ms | anime opened |
+| `anime_links` | profile, AniList id | canonical id, MAL, Kitsu, deleted (#335: link taken back), updated ms | anime opened |
 
 Every per-profile table also carries `user_id` (16 B) with its own index, and a second index on
 `(profile_id, synced_at)` for pulls. Progress is by far the largest table and the only one that
@@ -235,10 +235,13 @@ setting (#89, §2.1 option D by default, C with a passphrase):
 - A profile's first round on a device takes the account's keys but keeps a key the account lacks,
   and no add-on is taken away (`firstDoc`).
 - **Per profile on a device** (#80): each profile's keys and add-ons are its own copy on the device,
-  put back when it's entered; the guest's are kept aside and put back at sign-out. Unless Settings →
-  Account shares add-ons and keys between profiles on the device (on for installs from before #80,
-  off for new ones), a profile the device has never synced starts with none of those in the store,
-  only the app's own add-ons (`startProfile`), so its first round sends nobody else's to its account.
+  put back when it's entered; the guest's are kept aside and put back at sign-out. A profile the
+  device has never synced starts as Settings → Account → Share add-ons and keys says (#429,
+  `startProfile`): "Between this account's profiles" (the default) keeps the store when it was another
+  profile's of the same account, else takes the set kept here for one of the account's profiles, else
+  starts like "Not shared": none of those in the store, only the app's own add-ons, so its first
+  round sends nobody else's to its account. "With every account on this device" keeps whatever is
+  in the store (what On did before #429).
   While it has none, Settings → Account offers to copy the guest's set or one of the account's other
   profiles' sets kept on the device (`copySetup`); copies sync like any change.
 - Versions from before #89 drop the `secrets` field when they write the document (the next newer
@@ -327,6 +330,7 @@ the project's 500 MB. The caps leave room for a real household: the heavy test p
 | `profile_settings` | 16 KB, a JSON object | 1 a profile | 5 × 16 KiB = 0.1 MiB |
 | `friend_settings` (#135) | a code and three switches | 1 a profile with Friends on | 5 × ~0.2 KiB |
 | `friendships` (#135) | two profile ids and a state | 100 a profile (50 friends, 20 requests waiting) | 500 × ~0.2 KiB = 0.1 MiB |
+| `friend_chosen` (#428) | a profile id | 1 a profile | 5 × ~0.1 KiB |
 | **Total** | | | **about 29 MiB** |
 
 Sizes are `pg_total_relation_size` (rows, TOAST and indexes) measured in PGlite with every row at
@@ -354,6 +358,10 @@ How the caps work:
   to 20 friend codes nobody has in an hour (`friend_request` answers `unknown` for one, then
   refuses with `friend_tries_limit`) and sends up to 30 invites in 10 minutes
   (`friend_invite_limit`); the tries are kept in `friend_tries` for an hour.
+  `supabase/migrations/20261112000000_friends_on_by_default.sql` (#428): `friend_default_on`
+  turns Friends on for a profile that never had it turned on or off (listed in `friend_chosen`,
+  which every profile from before the migration is), and new rows start with what the profile
+  watches hidden (`show_watching` false).
 - Inserts arriving at the same moment are counted one after the other: the profile limit and the
   row caps take a lock per account first, and friend requests and answers one per pair of profiles.
 - In the app (`sync.ts`, `AccountFullToast`): a kind that's full stays on the device and is tried
@@ -416,7 +424,8 @@ travels.
   the next request. Limits: 5 live requests per address; 10,000 live in all, past which the oldest unanswered ones
   make way for new ones; 10 tries per user per 10 minutes (every lookup, and every answer to a code that isn't
   there). Requests start one at a time (an advisory lock), so parallel ones can't get past the counts.
-- Deploy: apply the migration, then `supabase functions deploy tv-sign-in --no-verify-jwt` (the TV has no session
+- Deploy: CI applies the migration, then deploys the function with `--no-verify-jwt` (docs/dev-channel.md, "Database
+  changes"; by hand: `supabase functions deploy tv-sign-in --no-verify-jwt`) (the TV has no session
   yet; the function checks the user's token itself for look and answer). It reads `SUPABASE_URL` and
   `SUPABASE_SERVICE_ROLE_KEY`, which Supabase provides to functions.
 - Tests: `tests/sql/tvSignIn.test.ts` (PGlite), `tests/tvSignInFunction.test.ts` (the function's steps with an

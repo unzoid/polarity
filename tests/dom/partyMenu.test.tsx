@@ -2,11 +2,12 @@ import { afterEach, expect, test } from "bun:test";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { PartyMenu } from "../../src/components/party/PartyMenu";
 import { PartyHold } from "../../src/components/party/PartyUI";
-import { getParty, leaveParty, startParty, useParty, type PartyState } from "../../src/lib/party";
+import { getParty, leaveParty, startParty, useParty, type PartyMedia, type PartyState } from "../../src/lib/party";
 import { DEFAULT_RULES } from "../../src/lib/party/messages";
 import { queryClient } from "../../src/lib/net";
-import { RouterProvider, type Route } from "../../src/lib/router";
-import { byText, click, render } from "./render";
+import { RouterProvider, useRouter, type Route } from "../../src/lib/router";
+import { linkMedia } from "../../src/lib/party/links";
+import { byText, click, press, render } from "./render";
 
 // The party menu (#156) on the app's own room, opened by this member (so it hosts). No account backend
 // here, so nothing leaves the room: what's checked is what the menu shows and what its controls change.
@@ -24,6 +25,9 @@ const at = (route: Route, node = <Live />) => (
   </QueryClientProvider>
 );
 
+/** The menu's second page: sounds, the host's rules, the log, ending it. */
+const settingsPage = (root: ParentNode) => click(root.querySelector(".party-menu-settings"));
+
 const switchFor = (root: ParentNode, label: string) => byText(root, ".party-switch-text > span:first-child", label).closest("label")!.querySelector("input")!;
 
 afterEach(() => {
@@ -31,7 +35,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("away from the room's video: what's on, Go to the Current Stream, the code, and the host's controls", async () => {
+test("away from the room's video: what's on, Go to the Current Stream, the code, and the host's controls a page away", async () => {
   startParty(MEDIA, 754, true, { name: "Ash", avatar: "" });
   const { container } = await render(at({ name: "home" }));
   const text = container.textContent!;
@@ -41,7 +45,25 @@ test("away from the room's video: what's on, Go to the Current Stream, the code,
   expect(byText(container, "button", "Go to the Current Stream")).toBeTruthy();
   expect(text).not.toContain("Sync Now");
   expect(container.querySelectorAll(".party-code > span")).toHaveLength(6);
-  expect(text).toContain("Host controls");
+  expect(text).not.toContain("Host controls");
+  // The row says how many of the host's rules are on (the defaults: wait for everyone).
+  expect(container.querySelector(".party-menu-settings")!.textContent).toBe("Party Settings1 on");
+  await settingsPage(container);
+  expect(container.textContent).toContain("Host controls");
+  expect(container.textContent).not.toContain("Go to the Current Stream");
+});
+
+test("Back and Escape return from the settings to the room", async () => {
+  startParty(MEDIA, 0, false, { name: "Ash", avatar: "" });
+  const { container } = await render(at({ name: "home" }));
+  await settingsPage(container);
+  await click(byText(container, "button", "Watch Party"));
+  expect(container.querySelector(".party-menu")!.getAttribute("data-page")).toBe("room");
+  expect(document.activeElement).toBe(container.querySelector(".party-menu-settings"));
+  await settingsPage(container);
+  const e = await press("Escape", container.querySelector(".party-menu-back")!);
+  expect(e.defaultPrevented).toBe(true);
+  expect(container.querySelector(".party-menu")!.getAttribute("data-page")).toBe("room");
 });
 
 test("in the player on the room's video: Sync Now instead of going there", async () => {
@@ -54,6 +76,7 @@ test("in the player on the room's video: Sync Now instead of going there", async
 test("the host's switches change the room's rules, and mute is the viewer's own", async () => {
   startParty(MEDIA, 0, false, { name: "Ash", avatar: "" });
   const { container } = await render(at({ name: "home" }));
+  await settingsPage(container);
   await click(switchFor(container, "Lock party"));
   await click(switchFor(container, "Only I control playback"));
   await click(switchFor(container, "Wait for everyone"));
@@ -69,6 +92,7 @@ test("the host's switches change the room's rules, and mute is the viewer's own"
 test("End Party asks once more before ending it for everyone", async () => {
   startParty(MEDIA, 0, false, { name: "Ash", avatar: "" });
   const { container } = await render(at({ name: "home" }));
+  await settingsPage(container);
   await click(byText(container, "button", "End Party"));
   expect(getParty()).not.toBeNull();
   await click(byText(container, "button", "End for Everyone?"));
@@ -102,6 +126,12 @@ test("a member sees no host controls and no per-member actions; joiners waiting 
   expect(text).toContain("Host · Watching");
   expect(text).toContain("Disconnected");
   expect(byText(container, "button", "Leave Party")).toBeTruthy();
+  // Their settings: their own sounds and the log, nothing of the host's.
+  expect(container.querySelector(".party-menu-settings")!.textContent).toBe("Party Settings");
+  await settingsPage(container);
+  expect(container.textContent).toContain("Mute party sounds");
+  expect(container.textContent).not.toContain("Host controls");
+  expect(container.textContent).not.toContain("End Party");
 });
 
 test("Copy Party Log copies this device's log, with nothing personal in it (#203)", async () => {
@@ -110,6 +140,7 @@ test("Copy Party Log copies this device's log, with nothing personal in it (#203
   startParty(MEDIA, 754, true, { name: "Ash", avatar: "" });
   const code = getParty()!.code;
   const { container } = await render(at({ name: "home" }));
+  await settingsPage(container);
   await click(byText(container, "button", "Copy Party Log"));
   await new Promise((r) => setTimeout(r, 0));
   expect(copied).toContain("Polarity watch party log");
@@ -137,3 +168,50 @@ test("held for someone buffering, if the room pauses for that: the picture says 
   // Not pausing for stalls: a hold is someone loading, never Sam's buffering.
   expect((await hold({ ...held, rules: { ...DEFAULT_RULES, stall: false } })).textContent).not.toContain("Sam");
 });
+
+// Go to the Current Stream as a guest (#387): the player opens on the room's video, a link with its own URL to play.
+function Where() {
+  const { current } = useRouter();
+  return <output>{JSON.stringify(current)}</output>;
+}
+
+const guestOn = (media: PartyMedia): PartyState => ({
+  code: "K7MPQ4",
+  status: "live",
+  me: "m2",
+  hostId: "m1",
+  members: [
+    { id: "m1", name: "Ash", avatar: "", joinedAt: 1, waiting: false },
+    { id: "m2", name: "Bea", avatar: "", joinedAt: 2, waiting: false },
+  ],
+  playback: { v: 3, by: "m1", media, paused: false, held: false, position: 90, lag: 0, at: performance.now() },
+  notes: [],
+  rules: { ...DEFAULT_RULES, v: 2 },
+  knocking: false,
+  knockers: [],
+  positions: {},
+  quiet: false,
+  resync: 0,
+});
+
+for (const [kind, media, stream] of [
+  ["an episode", MEDIA, undefined],
+  ["a link", linkMedia("https://media.example.com/film.mkv"), "https://media.example.com/film.mkv"],
+  ["a YouTube link", linkMedia("https://www.youtube.com/watch?v=abcdefghijk"), "https://www.youtube.com/watch?v=abcdefghijk"],
+] as const)
+  test(`a guest out browsing goes back to the room's video, ${kind} (#387)`, async () => {
+    const party = guestOn(media);
+    const { container } = await render(
+      at(
+        { name: "home" },
+        <>
+          <PartyMenu party={party} />
+          <Where />
+        </>,
+      ),
+    );
+    await click(byText(container, "button", "Go to the Current Stream"));
+    const route = JSON.parse(container.querySelector("output")!.textContent!);
+    expect(route).toMatchObject({ name: "player", type: media.type, metaId: media.metaId, videoId: media.videoId });
+    expect(route.stream?.url).toBe(stream);
+  });

@@ -1,33 +1,37 @@
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  alignByAirDate,
   type Anime,
-  type AniZipEpisode,
   aniZipQuery,
+  comesOut,
   distinctLabels,
+  episodeMatcher,
   type FranchiseTabs,
-  matchVideo,
+  partDownloads,
+  PENDING_EPISODE,
   playContext,
   regularEpisodes,
   rememberStill,
-  stillFor,
+  shelfEpisodes,
   useAnimeTitle,
   useEpisodeFlags,
 } from "../../lib/anime";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../../lib/settings";
+import { useFormFactor } from "../../lib/ui";
 import type { PlayRequest } from "../../lib/playback";
 import type { Video } from "../../lib/types";
+import { BatchDownload } from "../BatchDownload";
 import { Dropdown } from "../Dropdown";
-import { LayoutList, LayoutRow } from "../icons";
+import { Check, LayoutList, LayoutRow } from "../icons";
 import { Segmented } from "../Segmented";
 import { EpisodeShelf } from "../title/EpisodeShelf";
 import { SeasonPicker } from "../title/SeasonPicker";
 import { SourcePicker, useSourcePicker } from "../title/SourcePicker";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { SearchField } from "../ui/SearchField";
-import { Switch } from "../ui/Switch";
+import { ExpandingSearch } from "../ui/ExpandingSearch";
+import { Chip } from "../ui/Chip";
+import { AnimeSeriesPick } from "./AnimeSeriesPick";
 import { useAnimePlayback } from "./useAnimePlayback";
 
 /** The franchise's seasons, which one is showing (lib/anime/relatedRows.ts), and how to show another. */
@@ -56,6 +60,9 @@ export function AnimeEpisodes({
 }) {
   const pb = useAnimePlayback(anime);
   const prefs = usePrefs();
+  const phone = useFormFactor().form === "phone";
+  // A grouped page's series pick is the selected part's, under its tabs (#327).
+  const pick = franchise && <PartPick anime={anime} pb={pb} />;
   const { data: flags } = useEpisodeFlags(pb.malId, [anime.title.english, anime.title.romaji]);
   const [layout, setLayout] = useEpisodeLayout();
   const sources = useSourcePicker();
@@ -63,22 +70,8 @@ export function AnimeEpisodes({
 
   const hasFiller = !!flags && [...flags.values()].some((f) => f.filler);
   // What the shelf can show: episodes you can play, and the ones still to air.
-  const list: Video[] = pb.episodes
-    .filter((e) => (e.video || e.upcoming) && !(prefs.animeHideRecaps && flags?.get(e.number)?.recap))
-    .map((e) => {
-      const f = flags?.get(e.number);
-      return {
-        id: e.video?.id ?? `${PENDING}${e.number}`,
-        title: e.title ?? e.video?.title ?? `Episode ${e.number}`,
-        season: 1,
-        episode: e.number,
-        released: e.airDate ?? e.video?.released,
-        // Another source's still when this one has none: the addon's, then one another entry's ani.zip record lined up (#192).
-        thumbnail: e.image ?? e.video?.thumbnail ?? (e.video && stillFor(e.video.id)),
-        overview: e.overview ?? e.video?.overview,
-        tag: f?.filler ? "Filler" : f?.recap ? "Recap" : undefined,
-      };
-    });
+  const list = useMemo(() => shelfEpisodes(pb.episodes, flags, prefs.animeHideRecaps), [pb.episodes, flags, prefs.animeHideRecaps]);
+  const downloads = useMemo(() => partDownloads(list), [list]);
 
   useEffect(() => {
     if (flags && pb.metaId)
@@ -116,7 +109,7 @@ export function AnimeEpisodes({
 
   // Nothing to play yet for a scheduled episode, nor before the entry is linked to an IMDb or Kitsu id.
   const request = (v: Video): PlayRequest | undefined =>
-    v.id.startsWith(PENDING) || !pb.metaId
+    v.id.startsWith(PENDING_EPISODE) || !pb.metaId
       ? undefined
       : {
           type: "series",
@@ -127,11 +120,13 @@ export function AnimeEpisodes({
         };
 
   if (!list.length) {
-    const empty = <EmptyState className="anime-no-episodes">{pb.loading || pb.metaLoading ? "Loading episodes…" : "No episodes to play yet."}</EmptyState>;
+    const coming = comesOut(anime);
+    const empty = <EmptyState className="anime-no-episodes">{coming ? `${coming}.` : pb.loading || pb.metaLoading ? "Loading episodes…" : "No episodes to play yet."}</EmptyState>;
     // A season that hasn't started yet still sits among the others.
     return franchise ? (
       <section className="seasons">
         <SeasonTabs franchise={franchise} />
+        {pick}
         {empty}
       </section>
     ) : (
@@ -165,23 +160,32 @@ export function AnimeEpisodes({
   ) : franchise ? null : (
     <h2 className="t-title2 anime-episode-count">Episodes</h2>
   );
+  // Downloads keyed like progress: under the id the anime plays from, as each episode's own.
+  const download = pb.meta && <BatchDownload item={pb.meta} videos={downloads} part={anime.id} />;
+  // A phone's season dropdown has room beside it: Download Season goes there, by the season it downloads.
+  const downloadBySeason = phone && !!franchise;
   const tools = (
     <div className="anime-episodes-tools">
-      {searchable && (
-        <SearchField
-          look="pill"
-          className="anime-episode-search"
-          value={query}
-          onChange={setQuery}
-          label="Find an episode by number or title"
-          placeholder="Find episode"
-        />
-      )}
       {hasFiller && (
-        <label className="anime-toggle t-callout">
-          <Switch checked={prefs.animeSkipFiller} onChange={(on) => setPrefs({ animeSkipFiller: on })} />
-          Skip filler
-        </label>
+        <Chip
+          className="anime-filler-chip toggle-chip"
+          pressed={prefs.animeSkipFiller}
+          onClick={() => setPrefs({ animeSkipFiller: !prefs.animeSkipFiller })}
+          title={prefs.animeSkipFiller ? "Filler episodes are hidden" : "Hide filler episodes"}
+        >
+          {/* ToggleChip's motion: the fill grows in, the check slides open in front of the label. */}
+          <span className="toggle-chip-check" aria-hidden>
+            <span>
+              <Check size={16} />
+            </span>
+          </span>
+          Skip Filler
+        </Chip>
+      )}
+      {!downloadBySeason && download}
+      {/* Beside the layout switch: it opens leftwards over the pills before it, never off the page's edge. */}
+      {searchable && (
+        <ExpandingSearch value={query} onChange={setQuery} label="Find an episode by number or title" placeholder="Episode number or title" />
       )}
       <Segmented
         label="Episode layout"
@@ -197,21 +201,14 @@ export function AnimeEpisodes({
 
   return (
     <section className="seasons">
-      {franchise && !picker ? (
-        // Nothing to page through: the tools share the season tabs' row, right above the episodes.
-        <div className="seasons-bar">
-          <SeasonTabs franchise={franchise} />
-          {tools}
-        </div>
-      ) : (
-        <>
-          {franchise && <SeasonTabs franchise={franchise} />}
-          <div className="seasons-bar">
-            <div className="seasons-picker">{picker}</div>
-            {tools}
-          </div>
-        </>
-      )}
+      {/* The tabs on a row of their own and the toolbar under them, whatever the season holds, so switching
+          tabs leaves the toolbar where it is (#426); the series pick under the toolbar, for the same reason. */}
+      {franchise && <SeasonTabs franchise={franchise}>{downloadBySeason && download}</SeasonTabs>}
+      <div className="seasons-bar anime-seasons-bar">
+        <div className="seasons-picker">{picker}</div>
+        {tools}
+      </div>
+      {pick}
       <EpisodeShelf
         // Downloads keyed like progress: under the id the anime plays from (test report 1, item 18).
         item={pb.meta}
@@ -242,15 +239,26 @@ export function AnimeEpisodes({
   );
 }
 
-/** Id prefix for an episode that's scheduled but has nothing to play yet. */
-const PENDING = "anime-pending:";
+/**
+ * "Wrong series?" or "Choose the series" for the selected part of a grouped page (#327), under its season
+ * tabs: a franchise's parts can play from different series, so it isn't in the page's top, which is the
+ * whole franchise's. Nothing while the part's link is being found, or when it came from the id lists.
+ */
+export function PartPick({ anime, pb }: { anime: Anime; pb: Pick<ReturnType<typeof useAnimePlayback>, "pickable" | "isMovie" | "metaId" | "malId" | "kitsu"> }) {
+  if (!pb.pickable) return null;
+  return (
+    <p className="anime-unavailable anime-part-pick t-caption">
+      <AnimeSeriesPick anime={anime} isMovie={pb.isMovie} current={pb.metaId} mal={pb.malId} kitsu={pb.kitsu} />
+    </p>
+  );
+}
 
 /**
  * The franchise's seasons (and films) as tabs, like a show's, on a row of
  * their own so long names (Paleblade's arcs) all show. Switching swaps the
  * page's season in place.
  */
-export function SeasonTabs({ franchise: { seasons, active, select, loading } }: { franchise: Franchise }) {
+export function SeasonTabs({ franchise: { seasons, active, select, loading }, children }: { franchise: Franchise; children?: ReactNode }) {
   const title = useAnimeTitle();
   const labels = distinctLabels(
     seasons.map((s) => [title(s.card.title), s.card.title.romaji, s.card.title.english]),
@@ -259,6 +267,7 @@ export function SeasonTabs({ franchise: { seasons, active, select, loading } }: 
   return (
     <div className="seasons-tabs">
       <SeasonPicker value={active} onChange={select} options={seasons.map((s, i) => ({ id: s.card.id, label: labels[i] }))} />
+      {children}
       {loading && (
         <span className="seasons-loading t-callout" role="status">
           Loading seasons…
@@ -284,7 +293,7 @@ function useFranchiseStills(ids: number[], metaId: string | undefined, videos: V
     if (!imdb || !videos?.length) return;
     for (const { data: zip } of zips) {
       if (!zip) continue;
-      const match = zip.mappings.imdb_id === imdb ? (e: AniZipEpisode) => matchVideo(e, videos) : alignByAirDate(regularEpisodes(zip), videos);
+      const match = episodeMatcher(zip, videos, imdb);
       for (const e of regularEpisodes(zip)) {
         const v = e.image ? match(e) : undefined;
         if (v) rememberStill(v.id, e.image!);

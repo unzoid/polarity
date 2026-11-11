@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimeCard } from "../components/anime/AnimeCard";
 import { PosterCard } from "../components/PosterCard";
 import { Shelf } from "../components/title/Shelf";
@@ -7,7 +7,6 @@ import { type AnimeCard as Card, retryTitle, useAnimeAliases, useAnimeGenreArt, 
 import { api } from "../lib/api";
 import {
   addRecentSearch,
-  BROWSE_GENRES,
   catalogKey,
   catalogTitle,
   clearRecentSearches,
@@ -16,14 +15,17 @@ import {
   SEARCH_ANIME,
   SEARCH_GENRES,
   searchMinLength,
+  searchRows,
+  type SearchRow,
   setSearchText,
   useAddonSearches,
   useRecentSearches,
+  useListable,
   useSearchText,
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
 import { useRouter } from "../lib/router";
-import { useFormFactor } from "../lib/ui";
+import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -32,7 +34,8 @@ import { Search as SearchIcon } from "../components/icons";
 
 /**
  * Results for whatever is typed, one row per kind so movies, series and anime all show without scrolling. A
- * search that names a genre ("horror") leads with that genre's titles. Add-ons whose catalogs take a search
+ * search that names a genre ("horror") leads with that genre's titles; one that names an anime genre alone
+ * ("isekai") leads with its anime (`searchRows`). Add-ons whose catalogs take a search
  * follow, a row each (#206).
  *
  * On a desktop or tablet the field is the navbar's. On a phone this is a page of its own, as in phone apps: a
@@ -41,7 +44,7 @@ import { Search as SearchIcon } from "../components/icons";
 export function Search() {
   const text = useSearchText().trim();
   const { animeEnabled } = usePrefs();
-  const searchTab = useRouter().stack.length === 1;
+  const alone = useRouter().stack.length === 1;
   const phone = useFormFactor().form === "phone";
 
   return (
@@ -51,8 +54,8 @@ export function Search() {
         phone ? (
           <SearchStart />
         ) : (
-          // Opened by iOS's search tab (the stack's root) with nothing typed yet: say what the field above is for.
-          searchTab && <EmptyState>{animeEnabled ? "Search for movies, series and anime." : "Search for movies and series."}</EmptyState>
+          // The stack's root with nothing typed yet: say what the field above is for.
+          alone && <EmptyState>{animeEnabled ? "Search for movies, series and anime." : "Search for movies and series."}</EmptyState>
         )
       ) : text.length < searchMinLength(text) ? (
         // One Latin letter matches half the catalog: ask for another rather than show an empty page.
@@ -64,7 +67,7 @@ export function Search() {
   );
 }
 
-/** The phone's large title and field. The field is the page's own, so leaving the page empties it. */
+/** The phone's field (its large title is the top bar's: NavBar). The field is the page's own, so leaving the page empties it. */
 function SearchHeader() {
   const text = useSearchText();
   const { animeEnabled } = usePrefs();
@@ -87,7 +90,6 @@ function SearchHeader() {
 
   return (
     <header className="search-head">
-      <h1 className="search-head-title">Search</h1>
       <SearchField
         ref={input}
         look="large"
@@ -112,9 +114,12 @@ function SearchHeader() {
 function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
-  const { data: animeArt } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
+  const { data: animeArt, isPending: animeArtPending } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
+  // The tiles come in as one, pictures and colours together (lib/ui/together.ts), not colour first and a
+  // picture here and there after.
+  const together = useTogether();
   return (
-    <div className="search-start">
+    <div className="search-start" {...together}>
       {recent.length > 0 && (
         <section className="search-start-section">
           <div className="search-start-head">
@@ -146,7 +151,7 @@ function SearchStart() {
           <h2 className="t-title2">Anime</h2>
           <div className="genre-tiles">
             {SEARCH_ANIME.map((g) => (
-              <GenreTile key={g} genre={g} image={animeArt?.[g]} />
+              <GenreTile key={g} genre={g} image={animeArt?.[g]} pending={animeArtPending} />
             ))}
           </div>
         </section>
@@ -155,22 +160,25 @@ function SearchStart() {
   );
 }
 
-/** Each tile's tint, so a grid of them reads as a set rather than one colour repeated. */
-const TILE_HUES: Record<string, number> = {
-  Action: 18,
-  Comedy: 45,
-  Drama: 215,
-  Horror: 350,
-  "Sci-Fi": 190,
-  Thriller: 265,
-  Romance: 330,
-  Documentary: 150,
-  Isekai: 200,
-  Shounen: 25,
-  "Slice of Life": 95,
-  Mecha: 230,
-  Iyashikei: 165,
-  Psychological: 285,
+/**
+ * Each tile's two hues, as Apple TV's genre tiles: the picture's light parts take the first, shading across to the
+ * second, and its shadows a deep shade of the second, so every tile is a pair of opposing colours of its own.
+ */
+const TILE_HUES: Record<string, [number, number]> = {
+  Action: [32, 345],
+  Comedy: [95, 185],
+  Drama: [200, 250],
+  Horror: [0, 285],
+  "Sci-Fi": [175, 225],
+  Thriller: [280, 210],
+  Romance: [330, 15],
+  Documentary: [140, 45],
+  Isekai: [195, 300],
+  Shounen: [20, 50],
+  "Slice of Life": [85, 330],
+  Mecha: [220, 165],
+  Iyashikei: [160, 95],
+  Psychological: [265, 320],
 };
 
 /**
@@ -178,16 +186,33 @@ const TILE_HUES: Record<string, number> = {
  * with, so a tap finds them already loaded.
  */
 function MovieGenreTile({ genre }: { genre: string }) {
-  const { data } = useGenreRow("movie", genre);
-  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} />;
+  const { data, isPending } = useGenreRow("movie", genre);
+  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} pending={isPending} />;
 }
 
-/** A genre to search by: its name over its picture, under the genre's tint (the tint alone until the picture's in). */
-function GenreTile({ genre, image }: { genre: string; image?: string }) {
-  const [loaded, setLoaded] = useState(false);
+/**
+ * A genre to search by: its name over its picture in the genre's two colours. Until its picture is in (and the
+ * set's, screens.css) it's a placeholder; a genre with no picture to be had shows its two colours alone.
+ */
+function GenreTile({ genre, image, pending }: { genre: string; image?: string; pending: boolean }) {
+  const [loaded, setLoaded] = useState<string>();
+  const [failed, setFailed] = useState<string>();
+  const [a, b] = TILE_HUES[genre] ?? [220, 280];
+  const art = image && failed !== image ? (loaded === image ? "ready" : "loading") : pending ? "loading" : "none";
   return (
-    <button className="genre-tile pressable" style={{ "--tile-hue": TILE_HUES[genre] ?? 220 } as CSSProperties} onClick={() => setSearchText(genre)}>
-      {image && <img src={image} alt="" loading="lazy" decoding="async" draggable={false} data-loaded={loaded} onLoad={() => setLoaded(true)} />}
+    <button className="genre-tile pressable" data-art={art} style={{ "--tile-a": a, "--tile-b": b } as CSSProperties} onClick={() => setSearchText(genre)}>
+      {image && failed !== image && (
+        <img
+          src={image}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          data-loaded={loaded === image}
+          onLoad={() => setLoaded(image)}
+          onError={() => setFailed(image)}
+        />
+      )}
       <span>{genre}</span>
     </button>
   );
@@ -221,25 +246,29 @@ function Results({ text }: { text: string }) {
   const aliases = useAnimeAliases();
   const fromAddons = useAddonSearches(hasQuery ? deferred : "");
 
-  // Titles without art are almost always stubs nobody's looking for.
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
-  const movies = withoutAnime(data?.movies.filter((m) => m.poster), anime.all, aliases);
-  const series = withoutAnime(data?.series.filter((m) => m.poster), anime.all, aliases);
+  const movies = withoutAnime(data?.movies, anime.all, aliases);
+  const series = withoutAnime(data?.series, anime.all, aliases);
   const waiting = !hasQuery || !data;
   const addonsBusy = fromAddons.some((r) => !r.items && !r.failed);
   const addonsFound = fromAddons.some((r) => r.items?.length);
+  const rows: Record<SearchRow, ReactNode> = {
+    movieGenre: genre && <GenreRow key="movieGenre" type="movie" genre={genre} />,
+    seriesGenre: genre && <GenreRow key="seriesGenre" type="series" genre={genre} />,
+    movies: <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
+    series: <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
+    anime: animeEnabled && (
+      <AnimeRow key="anime" title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />
+    ),
+  };
   const nothing = !waiting && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
 
   return (
     <>
       {/* Opening a result counts as running the search (Recent, in the search field). */}
       <div className="rows search-rows" onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}>
-        {genre && BROWSE_GENRES.movie.includes(genre) && <GenreRow type="movie" genre={genre} />}
-        {genre && BROWSE_GENRES.series.includes(genre) && <GenreRow type="series" genre={genre} />}
-        <ResultRow title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />
-        <ResultRow title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />
-        {animeEnabled && <AnimeRow title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />}
+        {searchRows(genre, !!anime.genre).map((row) => rows[row])}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
         {fromAddons.map((r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} />)}
       </div>
@@ -253,7 +282,9 @@ function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   return <ResultRow title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`} items={data} />;
 }
 
-function ResultRow({ title, items }: { title: string; items?: MetaPreview[] }) {
+/** Leaves out what can't play and has nothing to show (#337): a stub whose poster and backdrop don't load. */
+function ResultRow({ title, items: found }: { title: string; items?: MetaPreview[] }) {
+  const items = useListable(found);
   if (items && !items.length) return null;
   return <Shelf title={title} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
 }

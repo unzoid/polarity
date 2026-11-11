@@ -21,12 +21,20 @@ export function Card({ title, footer, children }: { title?: string; footer?: Rea
   );
 }
 
-/** A row's title and the caption under it. */
-export function RowText({ title, caption }: { title: string; caption?: ReactNode }) {
+/**
+ * A row's title and the caption under it. `status` (what the setting does right now) goes on a line
+ * of its own under the caption, so the caption wraps the same with it and without it.
+ */
+export function RowText({ title, caption, status }: { title: string; caption?: ReactNode; status?: string | null }) {
   return (
     <span className="settings-row-text">
       <span className="settings-row-title">{title}</span>
-      {caption && <span className="settings-row-caption">{caption}</span>}
+      {(caption || status) && (
+        <span className="settings-row-caption">
+          {caption}
+          {status && <span className="settings-row-status">{status}</span>}
+        </span>
+      )}
     </span>
   );
 }
@@ -36,6 +44,7 @@ export function ToggleRow({
   setting,
   title,
   caption,
+  status,
   checked,
   onChange,
   disabled,
@@ -44,13 +53,15 @@ export function ToggleRow({
   setting?: string;
   title: string;
   caption?: string;
+  /** What the setting does right now, on its own line under the caption. */
+  status?: string | null;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
 }) {
   return (
     <label className="settings-row" data-setting={setting}>
-      <RowText title={title} caption={caption} />
+      <RowText title={title} caption={caption} status={status} />
       <Switch checked={checked} disabled={disabled} onChange={onChange} />
     </label>
   );
@@ -208,6 +219,7 @@ export function ExpandRow({
   open,
   onToggle,
   setting,
+  accessory,
   children,
 }: Expandable & {
   /** The schema id (lib/settings/schema.ts) or another name the page finds the row by. */
@@ -217,16 +229,28 @@ export function ExpandRow({
   caption?: ReactNode;
   /** Short current state on the right ("On", a server address…). */
   value?: ReactNode;
+  /** A small button of its own beside the chevron (an add-on's Copy Link): over the row, not inside its button. */
+  accessory?: ReactNode;
   children: ReactNode;
 }) {
+  const row = (
+    <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle} data-accessory={accessory ? "" : undefined}>
+      {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
+      <RowText title={title} caption={caption} />
+      {value != null && <span className="settings-row-value">{value}</span>}
+      <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
+    </button>
+  );
   return (
     <div className="settings-expand" data-open={open} data-setting={setting}>
-      <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle}>
-        {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
-        <RowText title={title} caption={caption} />
-        {value != null && <span className="settings-row-value">{value}</span>}
-        <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
-      </button>
+      {accessory ? (
+        <div className="settings-expand-head">
+          {row}
+          <div className="settings-expand-accessory">{accessory}</div>
+        </div>
+      ) : (
+        row
+      )}
       {open && <div className="settings-expand-body">{children}</div>}
     </div>
   );

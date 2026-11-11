@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
 import { NameList } from "../components/title/NameList";
 import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
@@ -83,7 +83,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
         {trailer.node}
       </TvBackdrop>
       <div className="tv-detail-body" {...gate}>
-        <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" />
+        <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" pending={!meta && !isError} />
         <Facts facts={titleFacts(shown, [formatRuntime(meta?.runtime)])} />
         {shown.description && <p className="tv-detail-description">{shown.description}</p>}
         <Credits meta={meta} />
@@ -357,13 +357,16 @@ function EpisodesPanel({
   const episodes = meta.videos.filter((v) => v.season === season);
   const map = useMemo(() => progressMap(progress), [progress]);
   const entryId = (episodes.find((v) => v.id === next.video?.id) ?? episodes.find(isReleased))?.id;
+  // A long season draws only the episodes on and near the screen (#436).
+  const drawn = useEpisodeWindow(list, `${meta.id}|${season}`, episodes.length, Math.max(0, episodes.findIndex((v) => v.id === entryId)));
 
-  // A new season starts at its entry episode, not wherever the last one was scrolled to.
+  // A new season starts at its entry episode, not wherever the last one was scrolled to; again once a long season's
+  // gaps have their height (#436).
   useEffect(() => {
     const el = entryId ? list.current?.querySelector<HTMLElement>(`[data-video="${CSS.escape(entryId)}"]`) : null;
     if (el) reveal(el, false);
     else list.current?.scrollTo({ top: 0 });
-  }, [season, entryId]);
+  }, [season, entryId, drawn.pitch]);
 
   // Opening on season 14 of 20 (focus on its episode) still shows that season in the list.
   useEffect(() => {
@@ -392,8 +395,10 @@ function EpisodesPanel({
           ))}
         </div>
       </aside>
-      <div className="tv-scroll tv-episodes-list" ref={list} data-nav-scroll="center" data-nav-memory>
-        {episodes.map((v) => {
+      <div className="tv-scroll tv-episodes-list" ref={list} data-nav-scroll="center" data-nav-memory onFocus={drawn.focused}>
+        {drawn.from > 0 && <div className="tv-episode-gap" data-gap="before" style={{ height: drawn.space(drawn.from) }} aria-hidden />}
+        {episodes.slice(drawn.from, drawn.to).map((v, n) => {
+          const i = drawn.from + n;
           const p = map.get(v.id);
           const { released, openable, fraction, watched, inProgress } = episodeState(v, p, watchedFraction());
           const isEntry = v.id === entryId;
@@ -403,7 +408,7 @@ function EpisodesPanel({
               ? formatRemaining(p.position, p.duration)
               : [shortRuntime(meta.runtime), formatDate(v.released)].filter(Boolean).join(" · ");
           return (
-            <div key={v.id} className="tv-episode" data-nav-row data-video={v.id} data-unwatched={!watched}>
+            <div key={v.id} className="tv-episode" data-nav-row data-slot={i} data-video={v.id} data-unwatched={!watched}>
               <button
                 className="tv-episode-main"
                 disabled={!openable}
@@ -438,9 +443,77 @@ function EpisodesPanel({
             </div>
           );
         })}
+        {drawn.to < episodes.length && <div className="tv-episode-gap" data-gap="after" style={{ height: drawn.space(episodes.length - drawn.to) }} aria-hidden />}
       </div>
     </div>
   );
+}
+
+/** Seasons up to this long draw every episode. */
+const WHOLE = 40;
+/** Episodes drawn at first, from a little before the one the list opens at. */
+const FIRST = 24;
+/** Episodes drawn on past one that comes near or gets focus, so the remote always has a next one. */
+const AHEAD = 12;
+
+/**
+ * Which of a long season's episodes TV's list draws (from, to), as desktop's season row does (#397, #436): a stretch
+ * around the one it opens at, growing as the gap before or after it comes within a screen of view (a held remote's
+ * scroll, a wheel) and as focus nears either end. It never shrinks while the same season shows. Each gap is as tall as
+ * the episodes it stands for (`space`), so the list keeps its length and the scrollbar its place.
+ */
+function useEpisodeWindow(list: RefObject<HTMLDivElement | null>, key: string, count: number, anchor: number) {
+  const first = (): [number, number] => {
+    if (count <= WHOLE) return [0, count];
+    const from = Math.max(0, Math.min(anchor - 8, count - FIRST));
+    return [from, from + FIRST];
+  };
+  const [state, setState] = useState(() => ({ key, range: first() }));
+  const range = state.key === key ? state.range : first();
+  if (state.key !== key) setState({ key, range });
+  const [from, to] = range;
+  const grow = (i: number) =>
+    setState((s) => {
+      const [a, b] = s.key === key ? s.range : range;
+      const next: [number, number] = [Math.min(a, Math.max(0, i - AHEAD)), Math.max(b, Math.min(count, i + AHEAD + 1))];
+      return next[0] === a && next[1] === b && s.key === key ? s : { key, range: next };
+    });
+  // From one row's top to the next's (the row and the list's gap), measured once two are drawn.
+  const [pitch, setPitch] = useState<{ row: number; gap: number }>();
+  useLayoutEffect(() => {
+    if (pitch || to - from >= count) return;
+    const [a, b] = list.current?.querySelectorAll<HTMLElement>(".tv-episode") ?? [];
+    if (a && b) setPitch({ row: b.offsetTop - a.offsetTop, gap: b.offsetTop - a.offsetTop - a.offsetHeight });
+  });
+  const space = (n: number) => (pitch ? n * pitch.row - pitch.gap : 0);
+
+  useEffect(() => {
+    const root = list.current;
+    if (!root || !pitch || (from === 0 && to >= count)) return;
+    // The episode at the near edge of the screen, from where the scroll stands.
+    const at = (y: number) => Math.floor((y - (root.firstElementChild as HTMLElement).offsetTop) / pitch.row);
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const before = (e.target as HTMLElement).dataset.gap === "before";
+          grow(Math.max(0, Math.min(count - 1, at(before ? root.scrollTop : root.scrollTop + root.clientHeight))));
+        }
+      },
+      { root, rootMargin: "100% 0px" },
+    );
+    // Watched afresh after each change, so a gap still in view grows the stretch again.
+    for (const gap of root.querySelectorAll(".tv-episode-gap")) io.observe(gap);
+    return () => io.disconnect();
+    // `grow` is new each render; what it reads is in these.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, key, from, to, count, pitch]);
+
+  const focused = (e: FocusEvent) => {
+    const at = Number((e.target as HTMLElement).closest<HTMLElement>("[data-slot]")?.dataset.slot ?? -1);
+    if (at >= 0 && (at < from + 3 || at >= to - 3)) grow(at);
+  };
+  return { from, to, pitch: pitch?.row, space, focused };
 }
 
 /** Cast, scores and the facts, full screen. The links out are buttons like any other. */

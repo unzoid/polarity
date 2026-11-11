@@ -125,8 +125,27 @@ export function sourceRow(r: RankedStream) {
 const res = (r: RankedStream) => r.quality.resolution ?? 0;
 const size = (r: RankedStream) => r.quality.sizeBytes ?? 0;
 
-/** What Best Match weighs a list against (bestMatch.ts): this device, the connection, your settings, what played before. */
-export function useMatchContext(settings: Settings | undefined, runtimeSec?: number | null): MatchContext {
+/** When an episode aired (ms), from its show's meta: null for a film, or a date the meta doesn't give. */
+export function airedAt(meta: { videos?: { id: string; released?: string }[] } | undefined, videoId: string): number | null {
+  const released = meta?.videos?.find((v) => v.id === videoId)?.released;
+  const t = released ? Date.parse(released) : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+
+/** This device's language (ISO 639-1), from the system's: "" when it can't be told. */
+function deviceLanguage(): string {
+  try {
+    return (navigator.language || "").split("-")[0].toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * What Best Match weighs a list against (bestMatch.ts): this device, the connection, your settings, what played before.
+ * `original`: the language the title was made in (its details' originalLanguage), which "the file's own" audio means.
+ */
+export function useMatchContext(settings: Settings | undefined, runtimeSec?: number | null, aired?: number | null, original?: string | null): MatchContext {
   const { hwdec, animePreferredGroups } = usePrefs();
   const engine = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   const caps = useDeviceCaps(engine.isFetched ? (engine.data ? "mpv" : "html") : null, hwdec);
@@ -135,20 +154,27 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
   const groups = useMemo(() => preferredGroups(animePreferredGroups), [animePreferredGroups]);
   const tags = settings?.sourceAutoTags;
   const audio = settings?.audioLanguage ?? "";
+  const own = useMemo((): MatchContext["ownLanguage"] => {
+    if (original) return { code: original, from: "title" };
+    const device = deviceLanguage();
+    return device ? { code: device, from: "device" } : undefined;
+  }, [original]);
   return useMemo(
     () => ({
       device: { screen, preferScreen, ...caps },
       connectionMbps: connectionMbps(),
       runtimeSec: runtimeSec || null,
       audioLanguage: audio,
+      ownLanguage: own,
       preferredTags: tags ?? [],
       preferredGroups: groups,
       history: sourceRecord,
       now: Date.now(),
+      aired: aired ?? null,
     }),
     // The capabilities are a new object each render; their values are what count.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [screen, preferScreen, caps.hdr, caps.dolbyVision, caps.hevc, caps.av1, runtimeSec, audio, tags, groups],
+    [screen, preferScreen, caps.hdr, caps.dolbyVision, caps.hevc, caps.av1, runtimeSec, audio, own, tags, groups, aired],
   );
 }
 
@@ -279,9 +305,17 @@ export interface Facet<K extends string = string> {
  * in the player for it (while the player stays open), as long as that leaves
  * something here, and remembers what you change.
  *
- * `runtimeSec`: the title's length, for Best Match's bitrates.
+ * `runtimeSec`: the title's length, for Best Match's bitrates; `aired`: the episode's air date (airedAt), for its disc releases;
+ * `original`: the language it was made in, for Best Match's audio when the setting is the file's own.
  */
-export function useSourceFilters(streams: RankedStream[] | undefined, settings: Settings | undefined, show?: string, runtimeSec?: number | null) {
+export function useSourceFilters(
+  streams: RankedStream[] | undefined,
+  settings: Settings | undefined,
+  show?: string,
+  runtimeSec?: number | null,
+  aired?: number | null,
+  original?: string | null,
+) {
   const [filter, setFilter] = useState<SourceFilter>(NO_FILTER);
   const [sort, setSortState] = useState<SourceSort>(
     () => (show && playerChoices.get(show)?.sort) || (settings?.sourceSort && settings.sourceSort in SORTS ? settings.sourceSort : "best"),
@@ -311,7 +345,7 @@ export function useSourceFilters(streams: RankedStream[] | undefined, settings: 
   };
 
   const screenRes = useMemo(screenResKey, []);
-  const ctx = useMatchContext(settings, runtimeSec);
+  const ctx = useMatchContext(settings, runtimeSec, aired, original);
   // Settings → Sources: filters narrow the list, or only order it.
   const hide = settings?.sourceFiltersHide ?? false;
   const all = useMemo(() => streams ?? [], [streams]);

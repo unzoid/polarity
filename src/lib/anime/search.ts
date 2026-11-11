@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { call } from "../platform/bridge";
 import { cachedLookup } from "../net/queries";
@@ -12,7 +12,8 @@ import { keys } from "../net/queryKeys";
 const browse = (search: string, genre = "", tag = ""): BrowseFilters => ({ search, genre, tag, season: "", year: 0, format: "", status: "", sort: "POPULARITY_DESC" });
 
 /**
- * AniList's answer to a search: a genre or kind of show if it names one, otherwise a title search.
+ * AniList's answer to a search: a genre or kind of show if it names one (its most popular entries,
+ * "Popular <genre> Anime"; `genre` says which), otherwise a title search.
  * AniList's search is strict where Cinemeta's forgives a typo: when it finds nothing, `retry` (the
  * title of an animated show Cinemeta found for the same words) is searched for instead, so the
  * anime still comes up as itself (test report 1, items 1 and 28). `retryTitle` picks it.
@@ -30,7 +31,9 @@ export function useAnimeResults(query: string, retry?: string) {
   const searched = again ? retry! : query;
   const shown = useCardsShown();
   return {
-    title: genre || tag ? `${genre ?? tag} Anime` : "Anime",
+    title: genre || tag ? `Popular ${genre ?? tag} Anime` : "Anime",
+    /** The genre or kind of show the search names, asked for by popularity (#338). */
+    genre: genre ?? tag,
     items: items && shown(genre || tag ? items : byRelevance(items, searched)),
     /** Every entry found, before one per franchise: what hides the same shows' Cinemeta results (a later part listed on its own, test report 1, item 10). */
     all: items,
@@ -83,18 +86,24 @@ function byRelevance(items: AnimeCard[], query: string): AnimeCard[] {
     .map((x) => x.a);
 }
 
-/** {@link animeImdb} for a page, once ani.zip has answered: with the entry's other names (synonyms) once AniList has them. */
+/**
+ * {@link animeImdb} through the query cache, once ani.zip has answered (`zip`, the record the entry plays from:
+ * `usePlayedZip`): with the entry's other names (synonyms) once AniList has them. One answer per entry, shared
+ * by its page's hero, the page's art and the Anime tab's banner (#371).
+ */
+export const animeImdbQuery = (qc: QueryClient, a: AnimeCard | undefined, zip: AniZip | null | undefined) => ({
+  queryKey: keys.anime.imdb(a?.id ?? 0),
+  enabled: !!a && zip !== undefined,
+  staleTime: 6 * 60 * 60_000,
+  queryFn: async () => {
+    const full: Titled = "synonyms" in a! ? a : await qc.fetchQuery(animeQuery(a!.id)).catch(() => a!);
+    return animeImdb(full, zip ?? null, cachedLookup(qc));
+  },
+});
+
+/** {@link animeImdbQuery} for an entry's hero. */
 export function useAnimeImdb(a: AnimeCard, zip: AniZip | null | undefined) {
-  const qc = useQueryClient();
-  return useQuery({
-    queryKey: keys.anime.imdb(a.id),
-    enabled: zip !== undefined,
-    staleTime: 6 * 60 * 60_000,
-    queryFn: async () => {
-      const full: Titled = "synonyms" in a ? a : await qc.fetchQuery(animeQuery(a.id)).catch(() => a);
-      return animeImdb(full, zip ?? null, cachedLookup(qc));
-    },
-  });
+  return useQuery(animeImdbQuery(useQueryClient(), a, zip));
 }
 
 /** Where titles and episode lists come from: the app's addons, or a caller's cached copy of them. */
@@ -252,7 +261,13 @@ export async function findImdbId(
     });
     if (!results) continue;
     answered = true;
-    const named = results[type].filter((m) => m.id.startsWith("tt") && names.has(norm(m.name)));
+    // Several titles of one name (an anime and a live-action series of it): the animated one first, then the
+    // nearest year (#394).
+    const named = results[type]
+      .filter((m) => m.id.startsWith("tt") && names.has(norm(m.name)))
+      .map((m, i) => ({ m, i, rank: sameNameRank(m, year) }))
+      .sort((x, y) => x.rank - y.rank || x.i - y.i)
+      .map(({ m }) => m);
     for (const m of named) {
       if (tried.has(m.id)) continue;
       tried.add(m.id);
@@ -267,6 +282,14 @@ export async function findImdbId(
   }
   if (!answered && failed !== undefined) throw failed;
   return null;
+}
+
+/** Orders same-named results (#394): animated ones (genre Animation or Anime) before the rest, each by how far its year is off. */
+function sameNameRank(m: { genres?: string[]; releaseInfo?: string }, year: number | undefined): number {
+  const animated = m.genres?.some((g) => /^(animation|anime)$/i.test(g)) ?? false;
+  const y = Number(m.releaseInfo?.match(/\d{4}/)?.[0]);
+  const off = year && y ? Math.min(Math.abs(y - year), 99) : 50;
+  return (animated ? 0 : 100) + off;
 }
 
 /** AniList formats that are the show itself, for a Cinemeta series or movie. */

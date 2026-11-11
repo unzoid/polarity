@@ -35,7 +35,7 @@ const PULL_OVERLAP_MS = 10_000;
 /** Only the user's own data travels: ids, times, where they stopped; never names or pictures (docs/supabase-storage.md §3). */
 const LIBRARY_COLUMNS = "meta_id, kind, added_at, updated_at, synced_at";
 const PROGRESS_COLUMNS = "meta_id, kind, entries, updated_at, synced_at";
-const LINK_COLUMNS = "anilist, canonical, mal, kitsu, updated_at, synced_at";
+const LINK_COLUMNS = "anilist, canonical, mal, kitsu, deleted, updated_at, synced_at";
 /** How long the server's answer to "do you keep every episode?" holds before a push asks again. */
 const EVERY_EPISODE_TTL_MS = 10 * 60_000;
 /** Party channels being taken down, by topic: a new one on the same topic waits for its removal. */
@@ -161,6 +161,14 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
         const settings = listOf(rows, toFriendSettings)[0];
         if (!settings) throw new AccountError("unknown", "Friends didn't turn on. Try again.");
         return settings;
+      },
+      async defaultOn(p) {
+        const { data, error } = await db.rpc("friend_default_on", { p });
+        if (error && isMissingFunction(error)) return null;
+        if (error) throw dbError(error);
+        if (typeof data !== "string") return null;
+        const rows = await call<unknown[]>("friend_settings", { p });
+        return listOf(rows, toFriendSettings)[0] ?? null;
       },
       off: (p) => call<void>("friend_off", { p }),
       resetCode: (p) => call<string>("friend_code_reset", { p }),
@@ -355,12 +363,12 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
       async push(profileId, { library, progress, links }) {
         // A kind the account has no room left for (#110) is refused alone: the others still go.
         let full: PushResult["full"];
-        /** Upserts in chunks; false when the server has no `anime_links` table yet. */
+        /** Upserts in chunks; false when the server has no `anime_links` table yet, or one from before #335. */
         const send = async (kind: keyof SyncChanges, table: string, rows: object[], onConflict: string) => {
           for (const part of chunks(rows, 500)) {
             const { error } = await db.from(table).upsert(part, { onConflict });
             if (!error) continue;
-            if (table === "anime_links" && isMissingTable(error)) return false;
+            if (table === "anime_links" && (isMissingTable(error) || isMissingColumn(error))) return false;
             const e = dbError(error);
             if (!isLimit(e)) throw e;
             full = { kinds: [...(full?.kinds ?? []), kind], error: full?.error ?? e };
@@ -421,7 +429,7 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
     },
   };
 
-  /** `null` when the table isn't on the server yet (a schema older than this app). */
+  /** `null` when the table, or a column of it, isn't on the server yet (a schema older than this app). */
   async function unlessMissing<T>(rows: Promise<T[]>): Promise<T[] | null> {
     try {
       return await rows;
@@ -533,34 +541,44 @@ export const ONE_ENTRY_MAX = 512;
 /** Watched past the start (crates/library space.rs `Progress::started`): what Continue Watching counts. */
 const STARTED_S = 30;
 
+/** What a one-entry server's row for a title holds (toProgressRows): its newest started entry, then the resets since, newest first. */
+function oneEntryRow(list: Progress[]): Progress[] {
+  const started = list.filter((p) => p.position > STARTED_S).reduce<Progress | undefined>((a, b) => (!a || b.updatedAt > a.updatedAt ? b : a), undefined);
+  const resets = list.filter((p) => p.position === 0 && p.updatedAt > (started?.updatedAt ?? -1)).sort((a, b) => b.updatedAt - a.updatedAt);
+  return started ? [started, ...resets] : resets;
+}
+
 /**
- * Progress as `progress` rows, one per title. Unless `everyEpisode`, a row holds only the title's
- * newest entry watched past the start (what Continue Watching needs), so a few seconds of another
- * episode never take the place of the one being watched (test report 1, item 4); a title with no
- * such entry sends nothing. Other episodes stay on this device. A title whose entries can't be
- * packed is left out and listed in `unsent`, so it never holds back the others (#94). A title the
- * server would refuse (its id, or one entry past ONE_ENTRY_MAX: #110) stays on this device.
+ * Progress as `progress` rows, one per title. Unless `everyEpisode`, a row holds the title's newest
+ * entry watched past the start (what Continue Watching needs), so a few seconds of another episode
+ * never take the place of the one being watched (test report 1, item 4), and the entries taken back
+ * to the start since then (a reset or Mark as Unwatched, #468), newest first, as many as fit in
+ * ONE_ENTRY_MAX. A title with neither sends nothing. Other episodes stay on this device. A title
+ * whose entries can't be packed is left out and listed in `unsent`, so it never holds back the
+ * others (#94). A title the server would refuse (its id, or a row past ONE_ENTRY_MAX: #110) stays
+ * on this device.
  */
 export function toProgressRows(profileId: string, progress: Progress[], everyEpisode: boolean) {
   const titles = new Map<string, Progress[]>();
   for (const p of progress) {
-    if (!syncableId(p.metaId)) continue;
-    if (everyEpisode || p.position > STARTED_S) titles.set(p.metaId, [...(titles.get(p.metaId) ?? []), p]);
+    if (syncableId(p.metaId)) titles.set(p.metaId, [...(titles.get(p.metaId) ?? []), p]);
   }
   const rows = [];
   const unsent: string[] = [];
   for (const [metaId, list] of titles) {
-    const newest = list.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
-    const entries: EntryToPack[] = (everyEpisode ? list : [newest]).map((p) => ({
-      videoId: p.videoId,
-      season: p.season,
-      episode: p.episode,
-      position: p.position,
-      duration: p.duration,
-      updatedAt: p.updatedAt,
-    }));
+    const sent = everyEpisode ? list : oneEntryRow(list);
+    if (!sent.length) continue;
+    const newest = sent.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
+    const toPack = (ps: Progress[]): EntryToPack[] =>
+      ps.map((p) => ({ videoId: p.videoId, season: p.season, episode: p.episode, position: p.position, duration: p.duration, updatedAt: p.updatedAt }));
+    let entries = toPack(sent);
     try {
-      const packed = encodeEntries(metaId, entries);
+      let packed = encodeEntries(metaId, entries);
+      // Too much for a one-entry server: the oldest resets give way (`sent` keeps the started entry first).
+      for (let n = sent.length - 1; !everyEpisode && packed.length > ONE_ENTRY_MAX && n > 0; n--) {
+        entries = toPack(sent.slice(0, n));
+        packed = encodeEntries(metaId, entries);
+      }
       if (!everyEpisode && packed.length > ONE_ENTRY_MAX) continue;
       rows.push({
         profile_id: profileId,
@@ -602,6 +620,7 @@ export const toLinkRow = (profileId: string, l: AnimeLink) => ({
   canonical: l.canonical,
   mal: l.mal ?? null,
   kitsu: l.kitsu ?? null,
+  deleted: l.removed === true,
   updated_at: l.updatedAt,
 });
 
@@ -610,7 +629,7 @@ export function fromLinkRow(r: unknown): AnimeLink | undefined {
   if (!isRecord(r)) return;
   const [canonical, anilist, mal, kitsu, updatedAt] = [str(r.canonical), count(r.anilist), count(r.mal), count(r.kitsu), count(r.updated_at)];
   if (!canonical || anilist === undefined || updatedAt === undefined) return;
-  return { canonical, anilist, ...(mal !== undefined && { mal }), ...(kitsu !== undefined && { kitsu }), updatedAt };
+  return { canonical, anilist, ...(mal !== undefined && { mal }), ...(kitsu !== undefined && { kitsu }), updatedAt, ...(r.deleted === true && { removed: true }) };
 }
 
 /** A `playlists` row; `items` is the packed list as Postgres hex (`\x…`). */
@@ -629,6 +648,8 @@ function* chunks<T>(items: T[], size: number) {
 
 /** A table this version expects hasn't been migrated onto the server yet. */
 const isMissingTable = (e: PostgrestError) => e.code === "PGRST205" || e.code === "42P01";
+/** A column this version expects isn't on the server yet (e.g. `anime_links.deleted`, #335). */
+const isMissingColumn = (e: PostgrestError) => e.code === "PGRST204" || e.code === "42703";
 const isMissingFunction = (e: { code: string }) => e.code === "PGRST202" || e.code === "42883";
 
 /**
@@ -668,7 +689,8 @@ function authError(e: AuthError): AccountError {
       return new AccountError("captcha_needed", "Confirm you're a person to get a code.");
     case "otp_disabled":
     case "signup_disabled":
-      return new AccountError("unknown", "Email sign-in is turned off for this server.");
+      // Also an email the server has not invited while sign-ups are closed (a dev database, docs/dev-channel.md).
+      return new AccountError("unknown", "This server isn't taking sign-ins from this email. Ask whoever runs it to invite you.");
     case "over_email_send_rate_limit":
     case "over_request_rate_limit":
       return new AccountError("rate_limited", "Too many attempts. Try again in a few minutes.");
@@ -748,7 +770,7 @@ export function dbError(e: PostgrestError): AccountError {
   if (e.code === "23514" && /profile_settings/.test(e.message)) {
     return new AccountError("settings_too_large", "This profile's settings are too large to sync.");
   }
-  if (isMissingTable(e)) {
+  if (isMissingTable(e) || isMissingColumn(e)) {
     return new AccountError("not_set_up", e.message);
   }
   // The server answers every error with a code; postgrest-js reports a request that never got an answer with none.

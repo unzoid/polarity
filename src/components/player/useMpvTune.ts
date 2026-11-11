@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { call } from "../../lib/platform";
-import { usePrefs } from "../../lib/settings";
+import { cropsBars, usePrefs } from "../../lib/settings";
 import { warnFailed } from "../../lib/errors";
 import type { MpvMedia } from "./mpvMedia";
 
@@ -11,7 +11,8 @@ import type { MpvMedia } from "./mpvMedia";
  * (polar_player `Tune`).
  */
 export function useMpvTune(mpv: MpvMedia | null) {
-  const { dialogueBoost, volumeLeveling, hwdec, deband, autocrop, autocropLookahead, autocropEveryFrame, buffer } = usePrefs();
+  const { dialogueBoost, volumeLeveling, hwdec, deband, cropMode, autocropLookahead, autocropEveryFrame, buffer } = usePrefs();
+  const autocrop = cropsBars(cropMode);
 
   useEffect(() => {
     if (!mpv) return;

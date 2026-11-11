@@ -32,6 +32,7 @@ import {
 import {
   animePreview,
   type AnimeShelfId,
+  type AniZip,
   aniZipQuery,
   countdown,
   FORMAT_LABEL,
@@ -40,9 +41,11 @@ import {
   untilAiring,
   useCardsShown,
   useAnimeTitle,
+  slidesReady,
   useFranchiseBanners,
   useShelfVisible,
 } from "../lib/anime";
+import { PRIORITY } from "../lib/net";
 import { useViewportPlace } from "../lib/ui";
 import { usePrefs } from "../lib/settings";
 import { useRouter, type Route } from "../lib/router";
@@ -85,7 +88,7 @@ export function Anime() {
   }
 
   // The carousel's shows don't repeat on the shelf they came from.
-  const featured = new Set(hero.cards.map((a) => a.id));
+  const featured = new Set(hero.featured);
   // Each heading opens the grid with the filters its shelf asks AniList for (#48).
   const browse = (title: string, filters: Partial<BrowseFilters>): Route => ({ name: "anime-browse", title, ...filters });
   const seasonTitle = `Airing This ${SEASON_LABEL[now.season]}`;
@@ -195,36 +198,50 @@ const HERO_COUNT = 6;
 const HERO_POOL = 10;
 
 /**
- * The carousel's titles: trending shows with widescreen art, held back until ani.zip answers so the art doesn't swap mid-view.
- * With seasons grouped, each shows its franchise's base title's art and logo, as the page it opens does, and `parts` names
- * which part is trending (#325).
+ * The carousel's titles: trending shows with widescreen art, each held back until its ani.zip record answers so the art doesn't
+ * swap mid-view. With seasons grouped, each shows its franchise's base title's art and logo, as the page it opens does, and
+ * `parts` names which part is trending (#325).
+ * Slide by slide (#380): the carousel shows its first slide as soon as that one's art is known, and each later one joins once
+ * it and every one before it are known, so the order never changes and a drawn slide never changes. The first slide's
+ * requests go ahead of every shelf's (`PRIORITY.page`); the rest at `PRIORITY.visible`.
  */
 function useAnimeHero(trending?: Card[]) {
   const { animeTitles } = usePrefs();
   const pool = useMemo(() => trending?.slice(0, HERO_POOL), [trending]);
-  const zips = useQueries({ queries: (pool ?? []).map((a) => aniZipQuery(a.id)) });
-  const settled = !!pool && zips.every((z) => !z.isLoading);
-  const updated = zips.map((z) => z.dataUpdatedAt).join();
+  // Whether a show has art decides which shows are the slides: the first ones come first.
+  const zips = useQueries({ queries: (pool ?? []).map((a) => aniZipQuery(a.id, PRIORITY.page)) });
+  const updated = zips.map((z) => (z.isLoading ? "…" : z.dataUpdatedAt)).join();
   const picks = useMemo(() => {
-    if (!pool || !settled) return undefined;
-    return pool
-      .map((card, i) => ({ card, zip: zips[i]?.data }))
-      .filter(({ card, zip }) => card.bannerImage || zip?.images?.some((m) => m.coverType === "Fanart"))
-      .slice(0, HERO_COUNT);
+    if (!pool) return undefined;
+    // The shows decided so far, in order: one still being asked holds back the ones after it.
+    const out: { card: Card; zip: AniZip | null | undefined }[] = [];
+    for (let i = 0; i < pool.length && out.length < HERO_COUNT; i++) {
+      if (zips[i]?.isLoading) break;
+      const card = pool[i]!;
+      const zip = zips[i]?.data;
+      if (card.bannerImage || zip?.images?.some((m) => m.coverType === "Fanart")) out.push({ card, zip });
+    }
+    return out;
     // `zips` is a new array every render; `updated` says when its contents changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, settled, updated]);
+  }, [pool, updated]);
+  const settled = !!pool && zips.every((z) => !z.isLoading);
   const cards = useMemo(() => picks?.map((p) => p.card), [picks]);
-  const banners = useFranchiseBanners(cards);
+  const banners = useFranchiseBanners(cards, PRIORITY.visible, PRIORITY.page);
   return useMemo(() => {
-    if (!picks || !banners) return { items: undefined as MetaPreview[] | undefined, cards: [] as Card[], parts: [] as (string | undefined)[] };
-    const items = picks.map(({ card, zip }, i) => {
+    // The shelves leave out the featured shows once they're all picked, in one go rather than slide by slide.
+    const featured = settled && picks ? picks.map((p) => p.card.id) : [];
+    const none = { items: undefined as MetaPreview[] | undefined, cards: [] as Card[], parts: [] as (string | undefined)[], featured };
+    if (!picks || !banners) return none;
+    const shown = slidesReady(banners);
+    if (!shown) return none;
+    const items = picks.slice(0, shown).map(({ card, zip }, i) => {
       const own = animePreview(card, zip, animeTitles);
       const b = banners[i];
-      return b ? { ...own, name: b.name, background: b.background ?? own.background, logo: b.logo } : own;
+      return b ? { ...own, name: b.name, background: b.background ?? own.background, logo: b.logo, logos: b.logos } : own;
     });
-    return { items, cards: picks.map((p) => p.card), parts: banners.map((b) => b?.label) };
-  }, [picks, banners, animeTitles]);
+    return { items, cards: picks.slice(0, shown).map((p) => p.card), parts: banners.slice(0, shown).map((b) => b?.label), featured };
+  }, [picks, banners, animeTitles, settled]);
 }
 
 function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview; part?: string }) {
@@ -233,7 +250,7 @@ function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview;
   const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
   return (
     <div className="hero-content">
-      <TitleHeading name={item.name} logo={item.logo} backdrop={item.background} look="hero" />
+      <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
       {/* The franchise's logo above: which of its parts is trending (#325). */}
       {part && <p className="hero-part t-caption">{part}</p>}
       <p className="hero-kind t-callout tabular">

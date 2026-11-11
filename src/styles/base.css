@@ -48,6 +48,24 @@ body {
   font-family: "Twemoji Country Flags", "Segoe UI Variable Display", var(--font);
 }
 
+/* The other app fonts, all variable (weight axis) so every weight the app uses is a real one. Their
+   own features: Inter's character variants (body, above) don't apply to them. */
+:root[data-font="instrument"] {
+  --font: "Twemoji Country Flags", "Instrument Sans Variable", "Inter Variable", system-ui, sans-serif;
+}
+:root[data-font="hanken"] {
+  --font: "Twemoji Country Flags", "Hanken Grotesk Variable", "Inter Variable", system-ui, sans-serif;
+}
+:root[data-font="onest"] {
+  --font: "Twemoji Country Flags", "Onest Variable", "Inter Variable", system-ui, sans-serif;
+}
+:root[data-font="mona"] {
+  --font: "Twemoji Country Flags", "Mona Sans Variable", "Inter Variable", system-ui, sans-serif;
+}
+:root:is([data-font="instrument"], [data-font="hanken"], [data-font="onest"], [data-font="mona"]) body {
+  font-feature-settings: normal;
+}
+
 /* OpenDyslexic: heavier letter bottoms and distinct shapes (b/d, p/q) for
    readers with dyslexia. The app font option, and a subtitle font (mpv gets
    the .otf files from src-tauri/fonts). Unmodified official files, SIL Open
@@ -122,13 +140,13 @@ input {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--ink) / 0.12);
   border: 3px solid transparent;
   border-radius: var(--r-pill);
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(255 255 255 / 0.22);
+  background-color: rgb(var(--ink) / 0.22);
 }
 ::-webkit-scrollbar-track,
 ::-webkit-scrollbar-corner {
@@ -231,12 +249,25 @@ input {
 .img-fade[data-loaded="true"] {
   opacity: 1;
 }
+/* --- Pictures that come in together (lib/ui/together.ts): a shelf's, a grid's, a set of tiles'. While the group
+   is pending its pictures stay unseen, loaded or not, with what's drawn on them (logos, a tile's colours); once
+   it's ready they fade in as one. */
+.together-wait {
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+[data-together="pending"] :is(.img-fade, .together-wait, .art-after) {
+  opacity: 0 !important;
+  animation: none !important;
+}
 /* --- A title logo or name waits for the art it sits on (#173, lib/ui/artGate.ts): hidden while the art is
    pending, then it fades in with the art. Art that's in view and still not in after a short wait (1.2 s)
    lets it in anyway; a logo still loading keeps waiting for itself. An element inside a ready gate (a card on a
    page whose backdrop is still loading) isn't held back by the outer one. No script timers, nothing while idle. */
 .art-after {
-  transition: opacity var(--dur-base) var(--ease-std);
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    color var(--dur-base) var(--ease-std),
+    text-shadow var(--dur-base) var(--ease-std);
 }
 [data-art="pending"] .art-after.art-after:not([data-art="ready"] .art-after) {
   opacity: 0;
@@ -248,6 +279,24 @@ input {
   to {
     opacity: 1;
   }
+}
+/* A title's name waits unseen, keeping its place, while its logo isn't known yet (TitleHeading, LogoOrName; #343).
+   Only the ink goes, so screen readers still read it; it fades in when the wait ends. */
+.art-after[data-name-wait] {
+  color: transparent;
+  text-shadow: none;
+}
+/* A name in place of a logo that didn't load fades in. */
+.name-in {
+  animation: fade-in var(--dur-base) var(--ease-std);
+}
+/* A logo waits unseen, keeping its place, until it's known to be shaped like one (#371). */
+img[data-logo-pending] {
+  visibility: hidden;
+}
+/* A logo's heading (TitleHeading) draws no box: the logo sits in the layout as if on its own. */
+.title-heading {
+  display: contents;
 }
 /* A title logo that doesn't read on the art behind it (TitleLogo, #215): one
    dark ink becomes a white silhouette, keeping the soft shadow the logos carry;
@@ -332,7 +381,7 @@ img[data-logo-look="halo-dark"] {
   padding: 0 0.5rem 0 0.625rem;
   border-radius: var(--r-sm);
   border: 1px solid var(--hairline-strong);
-  background: rgb(255 255 255 / 0.035);
+  background: rgb(var(--ink) / 0.035);
   box-shadow:
     inset 0 1px 0 var(--fill-2),
     0 1px 2px rgb(0 0 0 / 0.05);
@@ -362,6 +411,12 @@ img[data-logo-look="halo-dark"] {
   font-weight: 650;
   letter-spacing: -0.018em;
 }
+/* The label clips its overflow (for the ellipsis), so it can't keep the pill's line height of 1: that cut the
+   line short of the font's descent and the bottom of a "g" was cut off (#353). The font's own line height holds
+   descenders and accents; the pill's min-height still sets its size. */
+.select-trigger[data-size="large"] .select-value {
+  line-height: normal;
+}
 .select-trigger[data-size="large"] .select-icon svg {
   width: 0.77em;
   height: 0.77em;
@@ -375,10 +430,10 @@ img[data-logo-look="halo-dark"] {
 }
 @media (hover: hover) and (pointer: fine) {
   .select-trigger:hover {
-    background: rgb(255 255 255 / 0.07);
+    background: rgb(var(--ink) / 0.07);
   }
   .select-trigger[data-size="large"]:hover {
-    background: #fff;
+    background: var(--pill-light-hover);
   }
 }
 /* Blue outline only while it's in use (open, or focused from the keyboard). */
@@ -417,9 +472,9 @@ img[data-logo-look="halo-dark"] {
   min-width: var(--anchor-width);
   border-radius: 10px;
   border: 1px solid var(--fill-3);
-  background: #121212;
+  background: var(--tone-1);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    inset 0 1px 0 rgb(var(--ink) / 0.05),
     0 12px 32px -12px var(--scrim-3);
   font-family: var(--font);
   color: var(--text);
@@ -459,7 +514,7 @@ img[data-logo-look="halo-dark"] {
   -webkit-backdrop-filter: var(--blur-popover);
   backdrop-filter: var(--blur-popover);
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 0 0 1px rgb(var(--ink) / 0.08),
     0 1.5rem 3.5rem -1rem var(--scrim-3);
   transform-origin: var(--transform-origin);
   transition:
@@ -509,7 +564,7 @@ img[data-logo-look="halo-dark"] {
   }
 }
 .select-item[data-highlighted] {
-  background: rgb(255 255 255 / 0.07);
+  background: rgb(var(--ink) / 0.07);
 }
 .select-item[data-selected] {
   font-weight: 600;
@@ -522,4 +577,32 @@ img[data-logo-look="halo-dark"] {
   display: grid;
   flex: none;
   opacity: 0.85;
+}
+
+/* A panel with views (components/ViewStack.tsx: the profile menu, the party menu). Between views its height
+   follows the content (FitHeight) while the new view comes in from the side it's on: a deeper view from the
+   right, back from the left. One movement, together. Popovers move a little faster than sheets (--fit-dur). */
+.fit-height {
+  overflow: hidden;
+  transition: height var(--fit-dur, 300ms) var(--ease-drawer);
+}
+[data-slide] {
+  animation: view-in 260ms var(--ease-out) both;
+}
+[data-slide="back"] {
+  --view-from: -20px;
+}
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--view-from, 20px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fit-height {
+    transition: none;
+  }
+  [data-slide] {
+    --view-from: 0px !important;
+  }
 }

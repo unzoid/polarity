@@ -6,6 +6,7 @@ import {
   getParty,
   leaveParty,
   openPartySurface,
+  partyRoute,
   setJoinPartyOpen,
   setPartyMenuOpen,
   useJoinPartyOpen,
@@ -21,7 +22,7 @@ import { Button, iconButtonClass } from "../ui/Button";
 import { JoinForm, LinkForm, PartyNotes } from "./PartyUI";
 import { LinkConfirm } from "./LinkConfirm";
 import { TogetherOffer } from "./TogetherOffer";
-import { useProfileSheetHosts } from "../profileSheetHost";
+import { useProfileMenuHosts } from "../profileSheetHost";
 import { DiscordJoin } from "./DiscordJoin";
 import { useTvMode } from "../../tv/tvMode";
 
@@ -46,13 +47,7 @@ export function PartyHost() {
 
   const go = (m: PartyMedia) => {
     if (current.name === "player" && current.videoId === m.videoId) return;
-    const route = {
-      name: "player",
-      type: m.type,
-      metaId: m.metaId,
-      videoId: m.videoId,
-      ...(m.url ? { stream: { url: m.url, name: m.label } } : {}),
-    } as const;
+    const route = partyRoute(m);
     if (current.name === "player") replace(route);
     else navigate(route);
   };
@@ -87,8 +82,8 @@ export function PartyHost() {
   const tv = useTvMode();
   const { profile } = useAccount();
   const inPlayer = current.name === "player";
-  // A phone's profile sheet asks for the code itself, as one of its views (ProfileMenu.tsx).
-  const inSheet = useProfileSheetHosts();
+  // The profile menu asks for the code itself, as one of its views (ProfileMenu.tsx), but on iOS.
+  const inSheet = useProfileMenuHosts();
 
   // A dialog that led into the player is gone before the player's own panel can open (#247).
   useEffect(() => {

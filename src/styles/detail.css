@@ -7,8 +7,59 @@
   /* Lets the fixed background layers follow the scroller's timeline. */
   timeline-scope: --detail;
 }
-.detail-loading {
-  height: 100%;
+/* --- Loading together (useReadyTogether): until every part of the page is in, the hero shows its skeleton
+       and the rest keeps its place unseen; then the art, the hero and what's below come in as one. The art
+       and the page below fade; the hero's own entrance (`rise`, below) starts at the same moment. */
+.detail-hero[data-ready="false"] :is(.detail-hero-main > :not(.hero-skeleton), .detail-credits) {
+  visibility: hidden;
+}
+.detail :is(.detail-bg, .seasons, .about, .anime-body) {
+  transition: opacity var(--dur-reveal) var(--ease-reveal);
+}
+.detail:has(.detail-hero[data-ready="false"]) :is(.detail-bg, .seasons, .about, .anime-body) {
+  opacity: 0;
+  visibility: hidden;
+}
+.detail-hero-main {
+  position: relative;
+}
+/* Unseen for its first moment: a page that's in within it never flashes a skeleton. */
+.hero-skeleton {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: fade-in var(--dur-base) var(--ease-out) 150ms both;
+}
+.detail-pending .hero-skeleton {
+  position: static;
+}
+.hero-skeleton-logo {
+  width: min(360px, 72%);
+  height: 7.5rem;
+  margin-bottom: 0.75rem;
+  border-radius: var(--r-md);
+}
+.hero-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+}
+.hero-skeleton-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.hero-skeleton-play {
+  width: 9.5rem;
+  height: 46px;
+  border-radius: var(--r-pill);
+}
+.hero-skeleton-round {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-round);
 }
 .detail-scroll {
   position: relative;
@@ -47,12 +98,32 @@
     opacity: 1;
   }
 }
+/* Light: the blurred copy is brightened instead of darkened, and a wash of the page fades in with it,
+   so below the hero the page is a pale tint of the art and the dark text reads all the way down. */
+:root[data-scheme="light"] .detail-bg-blur {
+  filter: blur(48px) saturate(140%) brightness(1.15);
+}
+:root[data-scheme="light"] .detail-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0;
+  animation: detail-wash linear both;
+  animation-timeline: --detail;
+  animation-range: 0 32vh;
+}
+@keyframes detail-wash {
+  to {
+    opacity: 0.78;
+  }
+}
 .detail-bg-scrim {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(to top, rgb(10 10 10 / 0.92) 0%, rgb(10 10 10 / 0.5) 26%, transparent 55%),
-    linear-gradient(to right, rgb(10 10 10 / 0.8) 0%, rgb(10 10 10 / 0.4) 36%, transparent 62%);
+    linear-gradient(to top, color-mix(in srgb, var(--bg) 92%, transparent) 0%, color-mix(in srgb, var(--bg) 50%, transparent) 26%, transparent 55%),
+    linear-gradient(to right, color-mix(in srgb, var(--bg) 80%, transparent) 0%, color-mix(in srgb, var(--bg) 40%, transparent) 36%, transparent 62%);
 }
 
 /* --- Fold: what's below the bottom edge goes softly out of focus - the
@@ -103,10 +174,10 @@
     background-color var(--dur-fast) var(--ease-std);
 }
 .btn.detail-trailer-btn svg {
-  filter: drop-shadow(0 1px 5px rgb(0 0 0 / 0.45));
+  filter: drop-shadow(0 1px 1.5px var(--text-halo));
 }
 .btn.detail-trailer-btn:active {
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(var(--ink) / 0.16);
 }
 @media (hover: hover) and (pointer: fine) {
   .btn.detail-trailer-btn:hover {
@@ -131,16 +202,28 @@
   flex-direction: column;
   gap: 1rem;
 }
-/* One entrance when the page opens: three groups, 40ms apart. Shorter than
+/* One entrance when the page is ready (all at once, above): three groups, 40ms apart. Shorter than
    the other reveals: a title page opens many times a day. */
-.detail-hero-main > * {
+.detail-hero:not([data-ready="false"]) :is(.detail-hero-main > *, .detail-hero-main > .title-heading > *) {
   animation: rise 300ms var(--ease-reveal) both;
 }
-.detail-hero-main > :nth-child(n + 2):nth-child(-n + 4) {
+.detail-hero:not([data-ready="false"]) .detail-hero-main > :nth-child(n + 2):nth-child(-n + 4) {
   animation-delay: var(--stagger);
 }
-.detail-hero-main > :nth-child(n + 5) {
+.detail-hero:not([data-ready="false"]) .detail-hero-main > :nth-child(n + 5) {
   animation-delay: calc(var(--stagger) * 2);
+}
+/* The credits come in with the last group, on top of their scroll-driven recede. */
+.detail-hero:not([data-ready="false"]) .detail-credits {
+  animation:
+    detail-recede linear both,
+    rise 300ms var(--ease-reveal) calc(var(--stagger) * 2) both;
+  animation-timeline: --detail, auto;
+  animation-range: 4vh 30vh, normal;
+}
+/* What's known only once sources answer (4K, HDR, CC) comes in softly when it does, not with a jump. */
+.format-badges {
+  animation: fade-in var(--dur-base) var(--ease-out) both;
 }
 /* Text comes into focus as it settles: the blur bridges "absent" and
    "present" so it reads as one motion instead of a fade. */
@@ -152,8 +235,11 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .detail-hero-main > * {
+  .detail-hero:not([data-ready="false"]) :is(.detail-hero-main > *, .detail-hero-main > .title-heading > *) {
     animation-name: fade-in;
+  }
+  .detail-hero:not([data-ready="false"]) .detail-credits {
+    animation-name: detail-recede, fade-in;
   }
 }
 .detail-logo {
@@ -180,7 +266,7 @@
   margin: 0;
 }
 .detail-description {
-  color: rgb(245 245 247 / 0.82);
+  color: rgb(var(--ink-text) / 0.82);
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
@@ -234,7 +320,7 @@
   fill: none;
 }
 .rating-ring-track {
-  stroke: rgb(255 255 255 / 0.16);
+  stroke: rgb(var(--ink) / 0.16);
 }
 .rating-ring-arc {
   stroke-linecap: round;
@@ -349,7 +435,7 @@
   box-shadow: none;
 }
 .seasons-bar > .segmented .segmented-active {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
 }
 .seasons-bar > .segmented .segmented-active .segmented-item {
   color: var(--text);
@@ -383,7 +469,7 @@
   height: 3px;
   border-radius: 2px;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(var(--ink) / 0.16);
 }
 .batch-download-bar > span {
   display: block;
@@ -428,7 +514,7 @@
   margin: 0;
 }
 .segmented[data-variant="large"] .segmented-item[aria-checked="false"] {
-  color: rgb(245 245 247 / 0.55);
+  color: rgb(var(--ink-text) / 0.55);
 }
 /* Roomier tabs. */
 .segmented[data-variant="large"] .segmented-item {
@@ -642,6 +728,11 @@
 .episode-card[data-layout="list"]:last-child {
   border-bottom: none;
 }
+/* A long season's cards not drawn yet (#397): a row's take their column, a list's about a card's height
+   (the still's, 16:9, and the padding). */
+.episode-slot[data-layout="list"] {
+  height: calc(clamp(10rem, 14vw, 15rem) * 9 / 16 + 1.5rem + 1px);
+}
 .episode-card[data-layout="list"] .episode-card-main {
   display: grid;
   /* The still grows with the window, like the shelf cards do. */
@@ -701,7 +792,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .episode-card[data-layout="list"] .episode-card-main:not(:disabled):hover {
-    background: rgb(255 255 255 / 0.09);
+    background: rgb(var(--ink) / 0.09);
   }
   .episode-card[data-layout="list"] .episode-card-main:hover .card-frame {
     transform: none;
@@ -909,7 +1000,7 @@
   margin-bottom: 0.5rem;
   overflow: hidden;
   border-radius: var(--r-round);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   color: var(--text-2);
   font-weight: 650;
 }
@@ -1004,8 +1095,8 @@
   height: 0.9375rem;
   padding: 0 0.25rem;
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgb(245 245 247 / 0.5);
-  color: rgb(245 245 247 / 0.75);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink-text) / 0.5);
+  color: rgb(var(--ink-text) / 0.75);
   font-size: 0.5625rem;
   font-weight: 700;
   line-height: 1;
@@ -1017,12 +1108,6 @@
   text-transform: uppercase;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .detail-hero-main > * {
-    animation-name: fade-in;
-  }
-}
-
 /* --- Phone: a title page as phone apps lay one out (Infuse, Apple TV). The page scrolls as one:
    the art is the top of it (Detail.tsx puts it inside the scroller) and leaves as you scroll,
    instead of staying behind the page while the text fades over it. Under the art, centred: the
@@ -1031,9 +1116,84 @@
 :root[data-form="phone"] .detail {
   --art-h: min(64svh, 150vw);
 }
+/* The page comes in whole (usePageTogether, Detail.tsx): its outline until everything is there, then the page
+   over it in one fade, the outline going as it comes. A page that's all there already shows at once. */
+:root[data-form="phone"] .detail[data-ready="pending"] .detail-scroll {
+  opacity: 0;
+}
+:root[data-form="phone"] .detail[data-ready="ready"] .detail-scroll {
+  animation: detail-together 320ms var(--ease-out);
+}
+@keyframes detail-together {
+  from {
+    opacity: 0;
+  }
+}
+.detail-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 320ms var(--ease-out);
+}
+.detail:not([data-ready="pending"]) .detail-skeleton {
+  opacity: 0;
+}
+/* Gone, it holds still: the shimmer would repaint every frame for nothing. */
+.detail:not([data-ready="pending"]) .detail-skeleton .skeleton {
+  animation: none;
+}
+.detail-skeleton-art {
+  height: var(--art-h);
+  -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent);
+  mask-image: linear-gradient(to bottom, black 55%, transparent);
+}
+/* Where the hero puts each part (.detail-hero on a phone, below). */
+.detail-skeleton-hero {
+  position: absolute;
+  inset: calc(var(--art-h) - 9rem) 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0 var(--gutter);
+}
+.detail-skeleton-logo {
+  width: 60%;
+  height: 4.5rem;
+  border-radius: var(--r-md);
+}
+.detail-skeleton-play {
+  width: 100%;
+  height: 3rem;
+  margin-top: 0.25rem;
+  border-radius: var(--r-pill);
+}
+.detail-skeleton-buttons {
+  display: flex;
+  gap: 1.5rem;
+}
+.detail-skeleton-button {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-round);
+}
+.detail-skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-self: stretch;
+  margin-top: 0.5rem;
+}
 :root[data-form="phone"] .detail-bg {
   inset: 0 0 auto 0;
   height: var(--art-h);
+}
+/* The strip of a wide backdrop a phone shows sits on the picture's subject, not its middle (DetailArt.tsx). */
+:root[data-form="phone"] .detail-bg img {
+  object-position: var(--art-x, 50%) 20%;
+  /* The page waits for the place (pageMotion.ts); when that took too long, the art eases over instead of jumping. */
+  transition: object-position 420ms var(--ease-out);
 }
 :root[data-form="phone"] .detail-bg-blur,
 :root[data-form="phone"] .detail-fold {
@@ -1044,6 +1204,29 @@
   background:
     linear-gradient(to bottom, rgb(0 0 0 / 0.45), transparent 22%),
     linear-gradient(to top, var(--bg) 0%, rgb(0 0 0 / 0.72) 22%, transparent 52%);
+}
+/* Light: the art fades into the near-white page through the page's own colour, on an eased curve (a straight
+   ramp shows its ends as edges), not through black: that drew a grey band between the art and the page. The top
+   is lifted the same way, as the navbar's own scrim is, so the bar's dark wordmark and icons read over the art. */
+:root[data-form="phone"][data-scheme="light"] .detail-bg-scrim {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--bg) 55%, transparent),
+      color-mix(in srgb, var(--bg) 22%, transparent) 10%,
+      transparent 22%
+    ),
+    linear-gradient(
+      to top,
+      var(--bg) 0%,
+      color-mix(in srgb, var(--bg) 94%, transparent) 9%,
+      color-mix(in srgb, var(--bg) 80%, transparent) 17%,
+      color-mix(in srgb, var(--bg) 60%, transparent) 26%,
+      color-mix(in srgb, var(--bg) 38%, transparent) 35%,
+      color-mix(in srgb, var(--bg) 18%, transparent) 44%,
+      color-mix(in srgb, var(--bg) 5%, transparent) 53%,
+      transparent 60%
+    );
 }
 :root[data-form="phone"] .detail .detail-hero {
   min-height: 0;
@@ -1114,12 +1297,31 @@
     flex-wrap: wrap;
     row-gap: 0.75rem;
   }
-  .seasons-picker,
-  .seasons-bar > .seasons-tabs {
+  .seasons-bar > .seasons-tabs,
+  .anime-seasons-bar > .seasons-picker {
     flex: 1 0 100%;
+  }
+  /* A show's season dropdown keeps its own width, so Download Season sits right beside it (the season it
+     downloads) and the layout switch at the row's end; a long name ellipsizes, or the rest wraps under it. */
+  .seasons-bar:not(.anime-seasons-bar) > .seasons-picker {
+    flex: 0 1 auto;
   }
   .seasons-bar > .segmented {
     margin-left: auto;
+  }
+  /* An anime's tools under its episode ranges: packed to the right edge, the layout switch last. */
+  .anime-seasons-bar > .anime-episodes-tools {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+  /* A franchise's season dropdown with Download Season beside it. */
+  .seasons-tabs:has(> :is(.batch-download, .batch-download-start)) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .seasons-tabs > :is(.batch-download, .batch-download-start) {
+    flex: none;
   }
   /* The season dropdown (always one on a phone: SeasonPicker.tsx) a size down, a long name ellipsized. */
   :is(.seasons-picker, .seasons-tabs) .select-trigger[data-size="large"] {
@@ -1172,4 +1374,125 @@
     left: auto;
     right: calc(0.25rem + 68px);
   }
+}
+
+/* The number before a listed episode's title: a phone's, which has no number column. */
+.episode-title-num {
+  display: none;
+}
+
+/* --- A phone's seasons, as phone apps lay them out (Netflix, Disney+): the season a compact menu button
+   in the controls' size, the tools one row of controls under it that wraps rather than running off the
+   edge, and the episodes down the page (EpisodeShelf's list on a phone): the still with the number, title
+   and air date beside it, the synopsis under both. */
+:root[data-form="phone"] :is(.seasons-picker, .seasons-tabs) .select-trigger[data-size="large"] {
+  max-width: 100%;
+  min-height: 2.25rem;
+  padding: 0 0.625rem 0 0.875rem;
+  gap: 0.375rem;
+  border-radius: var(--r-sm);
+  background: var(--fill-4);
+  color: var(--text);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+:root[data-form="phone"] .seasons-bar {
+  padding-bottom: 0.5rem;
+}
+/* One line: the season, Download Season's glyph beside it (BatchDownload.tsx), the row/list switch at the end. */
+:root[data-form="phone"] .seasons-bar > .seasons-picker {
+  flex: 0 1 auto;
+}
+:root[data-form="phone"] .anime-episodes-tools {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+:root[data-form="phone"] .anime-episode-search {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+:root[data-form="phone"] .episode-list {
+  padding-top: 0;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] {
+  border-bottom: none;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main,
+:root[data-form="phone"] .episode-card[data-layout="list"]:has(.download-reveal) .episode-card-main {
+  /* The rows around the text share what the still leaves, so the text sits in the middle beside it. */
+  grid-template-columns: 8.5rem minmax(0, 1fr) var(--episode-buttons, 4rem);
+  grid-template-rows: 1fr auto auto auto 1fr auto;
+  grid-template-areas:
+    "still . ."
+    "still kicker ."
+    "still title ."
+    "still meta ."
+    "still . ."
+    "over over over";
+  align-items: start;
+  column-gap: 0.875rem;
+  row-gap: 0.125rem;
+  /* Up next's fill reaches a little past the still and the synopsis; the still stays where the buttons expect it. */
+  margin: 0 -0.5rem;
+  padding: 0.75rem 0.5rem 0.75rem 0.75rem;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-text {
+  display: contents;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-number {
+  display: none;
+}
+:root[data-form="phone"] .episode-title-num {
+  display: inline;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-kicker {
+  grid-area: kicker;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-title {
+  grid-area: title;
+  font-size: var(--fs-base);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-text > .t-caption {
+  grid-area: meta;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-overview {
+  grid-area: over;
+  margin: 0.5rem 0 0;
+  -webkit-line-clamp: 3;
+}
+/* Download and Sources stand to the right of the title, level with the still's middle: plain glyphs on the
+   page, not chips on the picture. The text column gives them their room (more with Show in Folder there too). */
+:root[data-form="phone"] .episode-card[data-layout="list"]:has(.download-reveal) {
+  --episode-buttons: 6.25rem;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download) {
+  top: calc(0.75rem + 8.5rem * 9 / 32 - 18px);
+  left: auto;
+  width: 36px;
+  height: 36px;
+  margin-top: 0;
+  color: var(--text-2);
+  background: none;
+  backdrop-filter: none;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download):active {
+  background: var(--fill-3);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download) svg {
+  filter: none;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-sources {
+  right: -0.25rem;
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .episode-download {
+  right: calc(36px - 0.25rem);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon.episode-download.download-reveal {
+  right: calc(72px - 0.25rem);
 }

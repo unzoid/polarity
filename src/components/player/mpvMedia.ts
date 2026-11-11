@@ -1,5 +1,6 @@
 import { call, on } from "../../lib/platform";
 import { mpvVolume, type StartStage, type StepTone } from "../../lib/playback";
+import { WATCH_LOG } from "../../lib/playback/watchLog";
 import { listenProbe, nextProbeId, probeStep } from "./useStartLog";
 import { errorCode, errorMessage, warnFailed } from "../../lib/errors";
 import { playingTrack } from "./trackChoice";
@@ -57,6 +58,10 @@ const STEP_TIMEOUT_MS = 1500;
 /** How often a frame step asks where it has landed. */
 const STEP_POLL_MS = 25;
 
+let made = 0;
+/** A number for one MpvMedia that no other has, in this page or one loaded before it (the native side outlives a reload). */
+const newOwner = () => Date.now() * 1000 + (made++ % 1000);
+
 /**
  * An mpv-backed stand-in for an HTMLVideoElement.
  *
@@ -97,6 +102,9 @@ export class MpvMedia extends EventTarget implements MediaLike {
   private seekAt = 0;
   /** A frame step is under way: an older mpv's own step un-pauses for one frame, which isn't the viewer pressing play. */
   private stepping = false;
+  /** Autocrop holds playback for a screenshot (#424): mpv is paused, but not by anyone watching. */
+  private held = false;
+  private frameCounts: Record<string, number> = {};
 
   tracks: MpvTrack[] = [];
   /** Container chapters, when the file has any. */
@@ -109,8 +117,12 @@ export class MpvMedia extends EventTarget implements MediaLike {
 
   /** Resolves once this object is listening; loads wait on it. */
   private listening: Promise<void> = Promise.resolve();
-  /** mpv calls (stop/load) run strictly in order, so a stale stop can never land after a load. */
+  /** This object's mpv calls (stop/load) run strictly in order; between objects the native side keeps order by `owner`. */
   private queue: Promise<unknown> = Promise.resolve();
+  /** This player, as mpv_load and mpv_stop name it: the native side drops a load or stop of a player that was left. */
+  private readonly owner = newOwner();
+  /** Counts loads and stops: a load that comes back after a later one, or after a stop, changes nothing here. */
+  private turn = 0;
 
   /**
    * Start mirroring mpv events. Returns a disposer for *these* listeners only —
@@ -119,8 +131,10 @@ export class MpvMedia extends EventTarget implements MediaLike {
    */
   attach(): Promise<() => void> {
     const p = Promise.all([
-      on<{ name: string; data: unknown }>("mpv://property", (p) => this.onProperty(p.name, p.data)),
+      on<{ name: string; data: unknown; held?: boolean }>("mpv://property", (p) => this.onProperty(p.name, p.data, p.held)),
       on<{ event: string; reason?: string; file_error?: string }>("mpv://event", (p) => this.onEvent(p)),
+      // The engine's own lines for a dev build's watch log (autocrop, its lookahead).
+      ...(WATCH_LOG ? [on<{ text: string }>("mpv://watch", (p) => this.note(p.text))] : []),
     ]);
     this.listening = p.then(() => undefined);
     return p.then((fns) => () => fns.forEach((u) => u()));
@@ -128,7 +142,8 @@ export class MpvMedia extends EventTarget implements MediaLike {
 
   /** Stop playback (mpv stays alive, idle, for the next title). */
   stop() {
-    this.enqueue(() => call("mpv_stop"));
+    this.turn++;
+    this.enqueue(() => call("mpv_stop", { owner: this.owner }));
   }
 
   private enqueue<T>(fn: () => Promise<T>) {
@@ -137,11 +152,16 @@ export class MpvMedia extends EventTarget implements MediaLike {
     return next;
   }
 
-  /** Load and play. `start` avoids fetching the opening of a stream we'd seek past; `headers` are the add-on's (requestHeaders). */
-  load(url: string, start?: number, headers: Record<string, string> | null = null) {
+  /**
+   * Load and play. `start` avoids fetching the opening of a stream we'd seek past; `headers` are the add-on's (requestHeaders);
+   * `link`: a link the user chose (Watch a Link), where a short video isn't taken for a "not ready" clip (#474).
+   */
+  load(url: string, start?: number, headers: Record<string, string> | null = null, link = false) {
     this.loaded = false;
     this.isEnded = false;
     this.seekTarget = null;
+    this.held = false;
+    this.frameCounts = {};
     this.error = null;
     this.time = start ?? 0;
     this.stamp = performance.now();
@@ -151,14 +171,17 @@ export class MpvMedia extends EventTarget implements MediaLike {
     this.emit("chapters");
     this.reportedTracks = false;
     const probeId = nextProbeId();
+    const turn = ++this.turn;
     this.enqueue(async () => {
       await this.listening; // never load before we can hear mpv's answers
       const unlisten = await listenProbe(probeId, (e) => this.step(...probeStep(e)));
       try {
-        await call("mpv_load", { url, start, probeId, headers });
+        await call("mpv_load", { url, start, probeId, headers, link, owner: this.owner });
       } finally {
         unlisten();
       }
+      // Stopped or loaded again while the link was checked: this answer is for a load nobody is waiting for.
+      if (turn !== this.turn) return;
       this.running = true;
       // Paused before mpv was up (a watch party that's paused): mpv_load un-pauses, the pause below re-pauses.
       const pausedEarly = this.early.get("pause") === true;
@@ -172,6 +195,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
       this.stamp = performance.now();
       this.emit(pausedEarly ? "pause" : "play");
     }).catch((e) => {
+      if (turn !== this.turn) return;
       // The link check's verdict, or mpv not starting.
       const message = errorMessage(e);
       this.step(message, "fail", errorCode(e) === "source" ? "server" : "player");
@@ -234,11 +258,13 @@ export class MpvMedia extends EventTarget implements MediaLike {
   }
 
   get currentTime() {
-    if (this.isPaused || this.buffering || this.isEnded) return this.time;
+    if (this.isPaused || this.held || this.buffering || this.isEnded) return this.time;
     const t = this.time + ((performance.now() - this.stamp) / 1000) * this.rate;
     return Number.isFinite(this.dur) ? Math.min(t, this.dur) : t;
   }
   set currentTime(t: number) {
+    // Moved back from the end: no longer ended, as a <video>'s `ended` turns false on a seek.
+    if (this.isEnded && Number.isFinite(this.dur) && t < this.dur) this.isEnded = false;
     this.time = t;
     this.stamp = performance.now();
     this.seekTarget = t;
@@ -307,6 +333,11 @@ export class MpvMedia extends EventTarget implements MediaLike {
 
   // --- mpv → DOM events ------------------------------------------------------
 
+  /** A line for the watch log (#424), which only dev builds keep. */
+  private note(text: string) {
+    this.dispatchEvent(new CustomEvent<string>("watch", { detail: text }));
+  }
+
   private emit(type: string) {
     this.dispatchEvent(new Event(type));
   }
@@ -322,7 +353,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
     this.emit("error");
   }
 
-  private onProperty(name: string, data: unknown) {
+  private onProperty(name: string, data: unknown, held = false) {
     switch (name) {
       case "time-pos":
         if (typeof data === "number") {
@@ -348,6 +379,16 @@ export class MpvMedia extends EventTarget implements MediaLike {
         }
         break;
       case "pause":
+        // Autocrop's hold isn't a pause: nothing shows the controls or tells the watch party. Playing on from the
+        // viewer's own pause is a play, whatever the engine thought.
+        if (held && !(data !== true && this.isPaused)) {
+          this.time = this.currentTime;
+          this.stamp = performance.now();
+          this.held = data === true;
+          if (WATCH_LOG) this.note(this.held ? "autocrop held playback" : "autocrop played on");
+          break;
+        }
+        this.held = false;
         if (this.stepping && data !== true) break;
         this.time = this.currentTime;
         this.stamp = performance.now();
@@ -368,7 +409,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
         if (data === true && this.loaded) {
           this.isEnded = true;
           this.emit("ended");
-        }
+        } else if (data === false) this.isEnded = false;
         break;
       case "demuxer-cache-time":
         if (typeof data === "number") this.cacheEnd = data;
@@ -391,6 +432,16 @@ export class MpvMedia extends EventTarget implements MediaLike {
         this.chapters = Array.isArray(data) ? (data as MpvChapter[]) : [];
         this.emit("chapters");
         break;
+      // Only a build with the watch log observes these (#424): each rise is a line.
+      case "frame-drop-count":
+      case "decoder-frame-drop-count":
+      case "vo-delayed-frame-count":
+        if (WATCH_LOG && typeof data === "number") {
+          const was = this.frameCounts[name] ?? 0;
+          this.frameCounts[name] = data;
+          if (data > was) this.note(`${FRAME_COUNTS[name]}: ${data - was} more (${data} in all)`);
+        }
+        break;
       case "aid":
       case "sid":
         this[name] = typeof data === "number" ? data : data === false || data === "no" ? "no" : data === "auto" ? "auto" : null;
@@ -400,6 +451,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
   }
 
   private onEvent(e: { event: string; reason?: string; file_error?: string }) {
+    if (WATCH_LOG) this.note(`mpv: ${e.event}${e.reason ? ` (${e.reason})` : ""}`);
     if (e.event === "file-loaded") this.step("mpv opened the file", "ok", "player");
     if (e.event === "end-file" && e.reason === "error") {
       this.step(`mpv couldn't play it: ${e.file_error ?? "unknown error"}`, "fail", "player");
@@ -411,6 +463,13 @@ export class MpvMedia extends EventTarget implements MediaLike {
     }
   }
 }
+
+/** What the watch log calls mpv's frame counts. */
+const FRAME_COUNTS: Record<string, string> = {
+  "frame-drop-count": "frames dropped by the output",
+  "decoder-frame-drop-count": "frames dropped by the decoder",
+  "vo-delayed-frame-count": "frames shown late",
+};
 
 /** "Tracks: video hevc, 2 audio (eac3, aac), 3 subtitles". */
 function describeTracks(tracks: MpvTrack[]) {

@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { useMeta, useProgress, useStreams } from "../../lib/net";
+import { keys, useMeta, useProgress, useStreams } from "../../lib/net";
 import {
+  airedAt,
+  askedLine,
   autoPickOrder,
   describeStream,
   describeTorrent,
+  noneFound,
+  noSources,
   recordFail,
   recordTry,
+  savedDownload,
+  savedSource,
   torrentBlocked,
   torrentLimits,
   useMatchContext,
@@ -15,9 +22,10 @@ import {
   type TorrentStep,
 } from "../../lib/playback";
 import { runtimeSeconds } from "../../lib/format";
-import { batterySaver, on, onMobileData } from "../../lib/platform";
+import { batterySaver, on, onMobileData, torrentsPlayHere } from "../../lib/platform";
 import { getPrefs, setPrefs } from "../../lib/settings";
 import type { ContentType, Playable, Progress, Stream } from "../../lib/types";
+import { downloadedStream, useDownloads } from "../../lib/library";
 import { sameFile, type StreamHint } from "../../lib/party";
 import { errorMessage } from "../../lib/errors";
 import type { LogStep } from "./useStartLog";
@@ -28,8 +36,8 @@ export type SourceState =
   /** A torrent source waits for the user to read the one-time notice (`answerNotice`). */
   | { status: "notice"; stream: Stream; label?: string }
   | { status: "ready"; stream: Stream; url: string; label?: string }
-  /** `settings`: the reason names a setting there (Settings → Sources), so the screen links to it. */
-  | { status: "failed"; reason: string; settings?: "sources" };
+  /** `settings`: the reason names a Settings page (Sources for its filters, Add-ons when there's none), so the screen links to it. */
+  | { status: "failed"; reason: string; settings?: "sources" | "addons" };
 
 interface Candidate {
   stream: Stream;
@@ -45,7 +53,9 @@ let torrentSteps = 0;
  * Decides what to play, with no user decision required:
  *   1. the stream explicitly picked in the source sheet, else
  *   2. in a watch party, the file the room is on (from your own add-ons), else
- *   3. the stream this video was last played with (resume = same file), else
+ *   3. the stream this video was last played with (resume = same file), only when it was saved for this
+ *      title and episode and the add-ons still offer it for this episode, or it's the episode's download
+ *      (#394: never a source the Sources list couldn't offer), else
  *   4. the top-ranked streams, in order.
  * The decision is frozen once made — saving progress mid-playback must never
  * re-trigger source selection. `next()` falls through after a playback error.
@@ -68,18 +78,29 @@ export function useSource(
   log: LogStep,
   started: () => boolean = () => false,
 ) {
+  const qc = useQueryClient();
   const progress = useProgress(metaId);
   const [saved, setSaved] = useState<Progress | null | undefined>(undefined);
   useEffect(() => {
-    if (saved === undefined && progress.data) setSaved(progress.data.find((p) => p.videoId === videoId) ?? null);
-  }, [progress.data, saved, videoId]);
+    if (saved !== undefined) return;
+    if (progress.data) setSaved(progress.data.find((p) => p.videoId === videoId) ?? null);
+    // The saved position couldn't be read: play from the start rather than wait for it forever.
+    else if (progress.isError) setSaved(null);
+  }, [progress.data, progress.isError, saved, videoId]);
 
-  const needsRanking = !picked && (!!prefer || (saved !== undefined && !saved?.stream));
+  // A finished download the episode was last played from goes on without asking; any other saved source
+  // only once the add-ons' answer has it (savedSource).
+  const downloads = useDownloads();
+  const resumeLocal = useMemo(
+    () => savedDownload(saved, { metaId, videoId }, downloadedStream(downloads.data, videoId)),
+    [saved, metaId, videoId, downloads.data],
+  );
+  const needsRanking = !picked && !resumeLocal && (!!prefer || saved !== undefined);
   const streams = useStreams(type, needsRanking ? videoId : undefined);
   const { settings } = useTitleSettings(type, videoId);
   // Best Match for this device; the runtime gives the files' bitrates.
   const { data: meta } = useMeta(type, metaId, needsRanking);
-  const match = useMatchContext(settings, runtimeSeconds(meta?.runtime));
+  const match = useMatchContext(settings, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   const matchRef = useRef(match);
   matchRef.current = match;
   useEffect(() => {
@@ -87,6 +108,11 @@ export function useSource(
   }, [needsRanking, log]);
 
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  /** Why there's nothing to try, once the add-ons have answered with nothing to play. */
+  const none = useRef<{ reason: string; settings?: "sources" | "addons" } | undefined>(undefined);
+  // An answer kept from before that's being asked again (an add-on installed or removed since, or one with no
+  // sources, which is never kept fresh) doesn't count: the new answer does (#375).
+  const answer = streams.isStale && streams.isFetching ? undefined : streams.data;
   useEffect(() => {
     if (candidates) return;
     if (picked) {
@@ -94,42 +120,75 @@ export function useSource(
       return setCandidates([{ stream: picked }]);
     }
     if (!prefer) {
-      if (saved === undefined) return;
-      if (saved?.stream) {
-        log("Resuming with the source this was last played from", "info", "sources");
-        return setCandidates([{ stream: saved.stream }]);
+      if (saved === undefined || downloads.isPending) return;
+      if (resumeLocal) {
+        log("Resuming with this episode's download, the source it was last played from", "info", "sources");
+        return setCandidates([{ stream: resumeLocal }]);
       }
     }
-    if (streams.data) {
+    if (answer) {
       // Best match for this screen, narrowed by the filters you set in the player
       // for this show (next episode: the same kind of file), else by the source
       // preferences in Settings, when they leave something.
-      const ranked = autoPickOrder(streams.data.streams, settings, metaId, matchRef.current);
+      const ranked = autoPickOrder(answer.streams, settings, metaId, matchRef.current);
       // The room's file first, even past Settings' filters: same file, same timing.
-      const same = prefer ? streams.data.streams.find((r) => sameFile(r.stream, prefer)) : undefined;
-      const { streams: all, failed, hidden = 0 } = streams.data;
+      const same = prefer ? answer.streams.find((r) => sameFile(r.stream, prefer)) : undefined;
+      const { streams: all, failed, hidden = 0, asked, ids } = answer;
       const addons = new Set(all.map((r) => r.addon)).size;
       const filtered = all.length - ranked.length + hidden;
-      log(
-        `Found ${all.length + hidden} source${all.length + hidden === 1 ? "" : "s"} from ${addons} add-on${addons === 1 ? "" : "s"}` +
-          (filtered > 0 ? `; ${filtered} left out by your source filters` : ""),
-        all.length ? "ok" : "warn",
-        "sources",
-      );
+      const found = all.length + hidden;
+      // Which add-ons were asked, and for which ids: a source missing for one episode is most often asked for under another id (#360).
+      if (asked) log(askedLine(asked, ids ?? [videoId]), asked.length ? "info" : "warn", "sources");
+      if (found || !asked)
+        log(
+          `Found ${found} source${found === 1 ? "" : "s"} from ${addons} add-on${addons === 1 ? "" : "s"}` +
+            (filtered > 0 ? `; ${filtered} left out by your source filters` : ""),
+          all.length ? "ok" : "warn",
+          "sources",
+        );
+      // Nothing found: the add-ons asked answered with nothing (said here), or didn't answer (said next).
+      else if (asked.length > failed.length) log(noneFound(asked.length), "warn", "sources");
       if (failed.length) log(`No answer from: ${failed.join(", ")}`, "warn", "sources");
+      none.current = noSources({ asked: asked?.length, answered: asked ? asked.length - failed.length : undefined, found, filtered });
       const others = all.filter((r) => r.otherEpisode).length;
       if (others) log(`${others} of them ${others === 1 ? "is a file" : "are files"} of another episode, left for last and not tried`, "info", "sources");
       if (same) log("Using the watch party's file", "info", "sources");
+      // The source this episode was last played from, while the add-ons still offer it for this episode.
+      const resume = prefer ? undefined : savedSource(saved, { metaId, videoId }, all);
+      if (saved?.stream && !prefer)
+        log(
+          resume
+            ? `Resuming with the source this was last played from (${videoId})`
+            : `The source this was last played from isn't among the sources for ${videoId}: choosing again`,
+          resume ? "info" : "warn",
+          "sources",
+        );
+      const first = same ?? resume;
       setCandidates(
-        (same ? [same, ...ranked.filter((r) => r !== same)] : ranked)
+        (first ? [first, ...ranked.filter((r) => r !== first)] : ranked)
           .slice(0, 5)
           .map((s) => ({ stream: s.stream, label: s.label, addon: s.addon, group: s.quality.source })),
       );
-    } else if (streams.isError) {
+    } else if (streams.isError && !streams.isFetching) {
       log(`Couldn't ask the add-ons: ${errorMessage(streams.error)}`, "fail", "sources");
       setCandidates([]);
     }
-  }, [candidates, picked, prefer, saved, streams.data, streams.isError, streams.error, settings, metaId, log]);
+  }, [
+    candidates,
+    picked,
+    prefer,
+    saved,
+    resumeLocal,
+    downloads.isPending,
+    answer,
+    streams.isError,
+    streams.isFetching,
+    streams.error,
+    settings,
+    metaId,
+    videoId,
+    log,
+  ]);
 
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SourceState>({ status: "searching" });
@@ -144,23 +203,24 @@ export function useSource(
     if (!candidates) return;
     const candidate = candidates[attempt];
     if (!candidate) {
-      const reason = candidates.length ? "None of the sources could be played." : "No sources found. Install a stream add-on in Settings.";
-      // Out of sources: the attempts above say why; with none at all, it's the add-ons.
+      const empty = none.current ?? noSources({ found: 0, filtered: 0 });
+      const reason = candidates.length ? "None of the sources could be played." : empty.reason;
+      // Out of sources: the attempts above say why; with none at all, the add-ons or the filters.
       if (!candidates.length) log(reason, "fail", "sources");
-      setState({ status: "failed", reason });
+      setState({ status: "failed", reason, ...(!candidates.length && empty.settings && { settings: empty.settings }) });
       return;
     }
     let cancelled = false;
     const name = [candidate.label, candidate.addon].filter(Boolean).join(" · ");
     log(`Source ${attempt + 1} of ${candidates.length}${name ? `: ${name}` : ""}`, "info", "link");
-    const blocked = candidate.stream.infoHash ? torrentBlocked(getPrefs(), onMobileData()) : null;
+    const blocked = candidate.stream.infoHash ? torrentBlocked(getPrefs(), onMobileData(), torrentsPlayHere) : null;
     if (blocked) {
       if (attempt + 1 < candidates.length) {
-        log("A torrent on mobile data: passed over (Settings → Sources)", "warn", "link");
+        log(blocked.settings ? "A torrent on mobile data: passed over (Settings → Sources)" : `${blocked.reason} Passed over.`, "warn", "link");
         setAttempt(attempt + 1);
       } else {
-        log(blocked, "fail", "link");
-        setState({ status: "failed", reason: blocked, settings: "sources" });
+        log(blocked.reason, "fail", "link");
+        setState({ status: "failed", reason: blocked.reason, ...(blocked.settings && { settings: "sources" as const }) });
       }
       return;
     }
@@ -240,6 +300,20 @@ export function useSource(
     kind: (candidates?.[attempt] ?? {}) as SourceKind,
     /** The engine was stopped while the app was in the background (#207): the player's own error waits behind the reason. */
     halted: () => halted.current,
+    /**
+     * The error screen's Try again (#375): asks the add-ons afresh for this video, then starts over with the
+     * new answer (a picked or resumed source is tried again as it was).
+     */
+    retry: () => {
+      halted.current = false;
+      setState({ status: "searching" });
+      log("Asking your add-ons again", "info", "sources");
+      void qc.invalidateQueries({ queryKey: keys.streams(type, videoId), refetchType: "all" }).then(() => {
+        none.current = undefined;
+        setAttempt(0);
+        setCandidates(null);
+      });
+    },
     /** Try the next candidate after a playback error. False if none left (or `halted`). */
     next: () => {
       if (halted.current || !candidates || attempt + 1 >= candidates.length) return false;

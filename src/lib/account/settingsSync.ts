@@ -294,13 +294,15 @@ export function markDeviceSettings() {
  * back at sign-out (critique M12), then hand the store to the profile. The copy holds the keys and
  * add-ons in plain text, so signing out gives the device back exactly what it had.
  */
-export async function keepDeviceSettings(space: string) {
+export async function keepDeviceSettings(space: string): Promise<string | null> {
   await Promise.all([ready(DEVICE), ready(space)]);
-  if (localStorage.getItem(OWNER_KEY) === DEVICE) {
+  const before = localStorage.getItem(OWNER_KEY);
+  if (before === DEVICE) {
     const missing = load(DEVICE)?.missing ?? [];
     save(DEVICE, { doc: await current(null, missing), at: 0, missing });
   }
   storeLocal(OWNER_KEY, space);
+  return before;
 }
 
 /** Signed out: the device's settings back as they were before a profile was entered. */
@@ -310,15 +312,32 @@ export async function restoreDeviceSettings() {
 }
 
 /**
- * Entering a profile this device has never synced (#80): unless Settings → Account shares add-ons
- * and keys between profiles here, it starts with none of the ones in the store (the guest's, or the
- * profile's before it), only the add-ons the app installs itself. Its first round then takes the
- * account's own, and nothing of anyone else's goes up to its account. Settings offers to copy a set
- * from this device (`setupSources`, `copySetup`). Returns whether it cleared anything.
+ * Entering a profile this device has never synced (#80, #429), as Settings → Account → Share add-ons and
+ * keys says. "device": it keeps whatever the store holds. "account": it keeps the store when the store
+ * was another profile's of the same account (`siblings`, the account's profiles; `before`, whose the
+ * store was), else starts with the set this device last synced for one of those profiles, if any.
+ * Otherwise, and with "none": none of the ones in the store (the guest's, or another account's), only
+ * the add-ons the app installs itself; its first round then takes the account's own, and nothing of
+ * anyone else's goes up to its account. Settings offers to copy a set from this device (`setupSources`,
+ * `copySetup`). Returns whether it changed anything.
  */
-export async function startProfile(space: string): Promise<boolean> {
+export async function startProfile(space: string, before: string | null = null, siblings: string[] = []): Promise<boolean> {
   await ready(space);
-  if (load(space) || getPrefs().shareAddonsAndKeys) return false;
+  const share = getPrefs().shareSetup;
+  if (load(space) || share === "device") return false;
+  const mine = siblings.filter((id) => id !== space && id !== DEVICE);
+  if (share === "account" && before !== null && mine.includes(before)) return false;
+  const cleared = await clearSetup();
+  if (share !== "account") return cleared;
+  await setupSourcesReady(space, mine);
+  const from = setupSources(space, mine).find((s) => s.id !== DEVICE);
+  if (!from) return cleared;
+  await copySetup(from.id);
+  return true;
+}
+
+/** The store's add-ons and keys gone, but for the add-ons the app installs itself. Whether there was anything to clear. */
+async function clearSetup(): Promise<boolean> {
   const [settings, installed, bundled] = await Promise.all([api.settings(), api.addons(), api.bundledAddons().catch(() => [] as string[])]);
   const own = settings as unknown as Record<string, unknown>;
   const keyed = SECRET_KEYS.some((k) => own[k]);
@@ -400,9 +419,13 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
     setProblem({ notSetUp: false });
     if (!isActive()) return;
     const saved = load(space);
+    // The store below is the active profile's. After each wait, a profile that was left or signed
+    // out meanwhile must not be read from it, written to it, uploaded or saved (plan 002).
     const local = await current(saved);
+    if (!isActive()) return;
     let lock = readLock(space);
     const theirs = remote && (await fromWire(remote.data, [lock.passphrase, lock.previous].filter((p) => !!p) as string[], readDoc));
+    if (!isActive()) return;
     const { seal, forget } = sealing(lock, remote?.data ?? null);
     if (forget) writeLock(space, (lock = {}));
 
@@ -418,6 +441,7 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
     if (!saved && !seal && !next.unopened && secretsExposed(local.secrets)) noteFirstPlainSync(space);
     let missing = saved?.missing ?? [];
     if (theirs && !sameDoc(next, local)) missing = await apply(next);
+    if (!isActive()) return;
     setLocked(space, !!next.unopened);
     // Written: a passphrase set here is in force, one removed here is gone.
     const settled = () => lock.pending && writeLock(space, lock.pending === "set" ? { passphrase: lock.passphrase } : {});
@@ -430,6 +454,7 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
     }
 
     const data = await toWire(next, seal);
+    if (!isActive()) return;
     const sent = stable(data);
     if (sent === refused) return;
     // Later than anything stored, even a time another device's clock put ahead.
@@ -442,6 +467,7 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
       setProblem({ refused: sent });
       return;
     }
+    if (!isActive()) return;
     setProblem({ refused: null });
     if (stored !== null) {
       save(space, { doc: next, at: stored, missing });

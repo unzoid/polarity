@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { card, expect, partySurfaces, test } from "./fixtures";
+import { backPlace, barOverlaps, card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 
 // Phone width (Pixel 7: 412×915, touch). The same components as desktop in the phone layout (docs/ARCHITECTURE.md §4).
 
@@ -19,17 +19,30 @@ test("the phone layout: tab bar at the bottom, no window buttons", async ({ app 
   expect(await fitsWidth(app)).toBe(true);
 });
 
-test("tabs, a title page and the player by touch", async ({ app }) => {
+test("with the Calendar on, the tab bar keeps its four tabs and the Calendar is a top bar button (#449)", async ({ app }) => {
+  await app.goto("/fake.html?showCalendar=true");
   const tabs = app.getByRole("navigation", { name: "Primary" });
-  await tabs.getByRole("button", { name: "Series", exact: true }).tap();
+  await expect(tabs.getByRole("button", { name: "Library", exact: true })).toBeVisible();
+  await expect(tabs.locator(".navbar-link:not([data-overflow])")).toHaveText(["Home", "Anime", "Library", "Search"]);
+  // Series and Movies are the two buttons beside the profile.
+  await expect(app.locator(".navbar-actions").getByRole("button", { name: "Series", exact: true })).toBeVisible();
+  await expect(app.locator(".navbar-actions").getByRole("button", { name: "Movies", exact: true })).toBeVisible();
+  await expect(tabs.getByRole("button", { name: "Calendar", exact: true })).toHaveCount(0);
+  await app.locator(".navbar-actions").getByRole("button", { name: "Calendar", exact: true }).tap();
+  await expect(app.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
+});
+
+test("tabs, a title page and the player by touch", async ({ app }) => {
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Series" })).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
 
-  await tabs.getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await expect(app.getByRole("heading", { level: 1, name: "The Glass Orchard" })).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
 
+  const backOnPage = await backPlace(app, "navbar");
   await app.getByRole("button", { name: "Play", exact: true }).tap();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
@@ -43,11 +56,13 @@ test("tabs, a title page and the player by touch", async ({ app }) => {
   // An Android phone's volume buttons set the volume: no slider, Mute still there (#179).
   await expect(player.getByRole("slider", { name: "Volume" })).toHaveCount(0);
   await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
+  // Back is the title page's, in the same spot (#348).
+  expect(await backPlace(app, "player")).toBe(backOnPage);
   await player.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(player).toHaveCount(0);
 });
 
-test("search on a phone is a page of its own: genres to start from, results as you type, Back to where you were", async ({ app }) => {
+test("search on a phone is a tab of its own: genres to start from, results as you type, another tab to leave", async ({ app }) => {
   await app.getByRole("button", { name: "Search", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
   await expect(app.getByRole("button", { name: "Horror", exact: true })).toBeVisible();
@@ -55,7 +70,7 @@ test("search on a phone is a page of its own: genres to start from, results as y
   await app.getByRole("searchbox", { name: "Search" }).fill("orchard");
   await expect(card(app, "Orchard House")).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
-  await app.getByRole("button", { name: "Back", exact: true }).tap();
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Home", exact: true }).tap();
   await expect(app.getByRole("heading", { level: 1, name: "Search" })).toHaveCount(0);
 });
 
@@ -98,8 +113,7 @@ test("a sideways swipe on the featured card steps through the titles", async ({ 
 });
 
 test("a title page's action row fits a phone", async ({ app }) => {
-  const tabs = app.getByRole("navigation", { name: "Primary" });
-  await tabs.getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Kingsbridge").tap();
   const download = app.locator(".detail-actions").getByRole("button").last();
   await expect(download).toBeVisible();
@@ -108,7 +122,7 @@ test("a title page's action row fits a phone", async ({ app }) => {
 });
 
 test("on touch, an episode's Sources and Download buttons are always there, in the quiet style (#79)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Fieldwork").tap();
   const ep = app.locator(".episode-card:has(.episode-card-main:not([disabled]))").first();
   await expect(ep).toBeVisible();
@@ -122,20 +136,28 @@ test("a phone has no TV mode (#141)", async ({ app }) => {
   await expect(app.getByRole("button", { name: "TV mode" })).toHaveCount(0);
 });
 
-test("the season picker keeps its own row on a phone (#151)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).tap();
+test("the season picker is a compact button on one line with the tools, its name shown whole (#151)", async ({ app }) => {
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
   await card(app, "Kingsbridge").tap();
   const picker = app.locator(".seasons-picker");
   await expect(picker).toBeVisible();
-  const box = await picker.boundingBox();
-  // The whole bar's width, not squeezed beside Download Season and the layout switch.
-  expect(box!.width).toBeGreaterThan(app.viewportSize()!.width * 0.8);
+  // Beside Download Season and the layout switch (a phone's one line of tools), not squeezed to its first letter.
+  const name = picker.locator(".select-value");
+  expect(await name.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
   expect(await fitsWidth(app)).toBe(true);
+});
+
+test("the season dropdown shows a name's descenders and accents whole (#353)", async ({ app }) => {
+  await app.locator(".navbar").getByRole("button", { name: "Series", exact: true }).tap();
+  await card(app, "Kingsbridge").tap();
+  const value = app.locator(".seasons-picker .select-value");
+  await expect(value).toBeVisible();
+  for (const name of TALL_LABELS) expect(await labelShowsWhole(value, name), name).toBe(true);
 });
 
 test("settings on a phone: the sections, then one section with a way back", async ({ app }) => {
   await app.getByRole("button", { name: /^Profile/ }).tap();
-  // The profile menu is a sheet on a phone; Settings rises over it.
+  // The profile menu is a sheet on a phone; Settings is its next view, in the same sheet.
   const profiles = app.locator(".sheet");
   await profiles.getByRole("button", { name: "Settings" }).tap();
   // Not by name: on a phone the header shows only the open section, and that names the dialog ("Browsing").
@@ -147,12 +169,52 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   await expect(settings.getByRole("switch", { name: /^Show the Calendar/ })).toBeVisible();
   await expect(settings).toHaveAccessibleName("Browsing");
   await expect(browsing).toBeHidden();
-  await settings.getByRole("button", { name: "All settings" }).tap();
+  // The sheet's Back: from the section to the list of sections, then from the list back to the profiles.
+  await profiles.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(browsing).toBeVisible();
-  await settings.getByRole("button", { name: "Close settings" }).tap();
+  await profiles.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(settings).toHaveCount(0);
-  // Closing Settings leaves the profile sheet it rose over.
-  await expect(profiles).toBeVisible();
+  await expect(profiles.getByRole("button", { name: "Settings" })).toBeVisible();
+});
+
+/** Settings from the profile sheet (an iPhone's too), on the page `section`. */
+async function openSettingsPage(app: Page, section: string) {
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: section, exact: true }).tap();
+  await expect(settings).toHaveAccessibleName(section);
+  return settings;
+}
+
+test("a settings page on a phone: no stray arrow in its header, and Back goes to the list, then to the profiles (#455)", async ({ app }) => {
+  const settings = await openSettingsPage(app, "Appearance");
+  // Restore device defaults' arrow, alone and greyed, read as a Back that did nothing: not in a phone's header.
+  await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
+  // Android's back button and gesture arrive as Escape (lib/ui/systemBack.ts).
+  await app.keyboard.press("Escape");
+  await expect(settings.getByRole("button", { name: "Appearance", exact: true })).toBeVisible();
+  await expect(settings).toHaveAccessibleName(/^Settings/);
+  await app.keyboard.press("Escape");
+  await expect(settings).toHaveCount(0);
+  await expect(app.locator(".sheet").getByRole("button", { name: "Settings" })).toBeVisible();
+});
+
+test("an add-on's long name and description, unbroken words and a link among them, wrap inside Settings (#456)", async ({ app }) => {
+  await app.goto("/fake.html?worst=1");
+  await app.getByRole("button", { name: /^Profile/ }).tap();
+  await app.locator(".sheet").getByRole("button", { name: "Settings" }).tap();
+  const settings = app.locator(".t3s");
+  await settings.getByRole("button", { name: "Add-ons", exact: true }).tap();
+  const row = settings.getByRole("button", { name: /^Community Archive of Restored Public-Domain Cinema/ });
+  await row.tap();
+  const description = settings.getByText(/ExampleProvider1\/ExampleProvider2/);
+  await expect(description).toBeVisible();
+  expect(await fitsWidth(app)).toBe(true);
+  // The description itself stays on the screen: its words wrap rather than run off the right.
+  const box = await description.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(app.viewportSize()!.width);
+  expect(await description.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
 /** A notched phone's insets (in CSS px), set on the page as the webview would report them. */
@@ -172,14 +234,15 @@ async function controlsClearOf(page: Page, i: { top: number; right: number; bott
   expect(boxes.length).toBeGreaterThan(3);
   for (const b of boxes) {
     expect.soft(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(i.top);
-    expect.soft(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(height - i.bottom);
+    // The bottom row reaches 0.75rem into the home indicator's strip on a phone, as Netflix's does (player.css).
+    expect.soft(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(height - i.bottom + (i.bottom ? 12 : 0));
     expect.soft(b.left, `${b.name} right of the left inset`).toBeGreaterThanOrEqual(i.left);
     expect.soft(b.right, `${b.name} left of the right inset`).toBeLessThanOrEqual(width - i.right);
   }
 }
 
 async function openPlayer(page: Page) {
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await page.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(page, "The Glass Orchard").tap();
   await page.getByRole("button", { name: "Play", exact: true }).tap();
   const player = page.locator(".player");
@@ -194,11 +257,38 @@ test("the player's controls keep clear of the notch and the home indicator, upri
   await insets(app, upright);
   await openPlayer(app);
   await controlsClearOf(app, upright);
+  // Nor do they overlap each other or the title (#396).
+  expect(await barOverlaps(app)).toEqual([]);
 
   await app.setViewportSize({ width: 915, height: 412 });
   const sideways = { top: 0, right: 59, bottom: 21, left: 59 };
   await insets(app, sideways);
   await controlsClearOf(app, sideways);
+  expect(await barOverlaps(app)).toEqual([]);
+});
+
+test("Back stays in the title page's spot in the player around the notch, upright and sideways (#348)", async ({ app }) => {
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  const player = app.locator(".player");
+  for (const [size, i] of [
+    [{ width: 412, height: 915 }, { top: 59, right: 0, bottom: 34, left: 0 }],
+    [{ width: 915, height: 412 }, { top: 0, right: 59, bottom: 21, left: 59 }],
+  ] as const) {
+    await app.setViewportSize(size);
+    await insets(app, i);
+    const onPage = await backPlace(app, "navbar");
+    expect(Number(onPage.split(",")[0]), "clear of the cutout").toBeGreaterThanOrEqual(i.left);
+    await app.getByRole("button", { name: "Play", exact: true }).tap();
+    await expect(player).toHaveAttribute("data-started", "true");
+    // The controls hide on their own first: a tap while they show would hide them.
+    await expect(player).toHaveAttribute("data-chrome", "false");
+    await player.tap({ position: { x: 200, y: 200 } });
+    await expect(player).toHaveAttribute("data-chrome", "true");
+    expect(await backPlace(app, "player"), `${size.width}×${size.height}`).toBe(onPage);
+    await player.getByRole("button", { name: "Back", exact: true }).tap();
+    await expect(player).toHaveCount(0);
+  }
 });
 
 test("the trailer fits the screen at every phone width, upright and sideways, its controls inside the insets (#289)", async ({ app }) => {
@@ -254,7 +344,7 @@ test.describe("on a tablet", () => {
 });
 
 test("on a phone, a long press on a source opens its info; no i button shows (#229)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Choose source", exact: true }).tap();
   const row = app.locator(".sheet .stream-row").last();
@@ -268,16 +358,84 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
   // Best Match's table scrolls sideways inside the card, never the page (#274).
   await expect(panel.getByRole("table").getByRole("rowheader", { name: "Total" })).toBeAttached();
   expect(await fitsWidth(app)).toBe(true);
-  await panel.getByRole("button", { name: "Done" }).tap();
+  await panel.getByRole("button", { name: "Close" }).tap();
   await expect(panel).toHaveCount(0);
   await expect(app.locator(".sheet")).toBeVisible();
+});
+
+test("a phone on its side: each player panel starts under its X, nothing under it (#464)", async ({ app }) => {
+  await app.setViewportSize({ width: 915, height: 412 });
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const name of ["Subtitles & Audio", "Sources"]) {
+    const button = app.getByRole("button", { name, exact: true });
+    // The controls may have hidden: a tap on the picture brings them back.
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 450, y: 200 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    const close = overlay.locator(".options-close");
+    await expect(close).toBeVisible();
+    const x = (await close.boundingBox())!;
+    const columns = await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    expect(columns.length).toBeGreaterThan(0);
+    for (const c of columns) {
+      const apart = c.right <= x.x || c.left >= x.x + x.width || c.bottom <= x.y || c.top >= x.y + x.height;
+      expect(apart, `${name}: a column at ${c.left},${c.top} under the X at ${x.x},${x.y}`).toBe(true);
+      expect(c.bottom).toBeLessThanOrEqual(412);
+    }
+    await close.tap();
+    await expect(overlay).toHaveCount(0);
+  }
+});
+
+test("the player's Sources panel fits a phone upright and sideways, add-on picker and all (#462)", async ({ app }) => {
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  for (const [width, height] of [
+    [412, 915],
+    [915, 412],
+  ]) {
+    await app.setViewportSize({ width, height });
+    const button = app.getByRole("button", { name: "Sources", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: width / 2, y: height / 2 } });
+    await button.tap();
+    const column = app.locator('.options-overlay[data-open="true"] .options-column');
+    // The fake add-ons are two: the picker shows, as the issue asks.
+    await expect(column.locator(".srcf-addon")).toBeVisible();
+    const box = async (sel: string) => (await column.locator(sel).first().boundingBox())!;
+    const col = (await column.boundingBox())!;
+    const [title, head, list] = [await box(".options-title"), await box(".options-head"), await box(".options-list")];
+    const at = `${width}×${height}`;
+    expect(col.x, at).toBeGreaterThanOrEqual(0);
+    expect(col.x + col.width, at).toBeLessThanOrEqual(width);
+    expect(col.y + col.height, at).toBeLessThanOrEqual(height);
+    // The filters sit under the title, not squeezed beside it.
+    for (const sel of [".srcf-bar > :first-child", ".srcf-addon", ".srcf-filters"]) {
+      const b = await box(sel);
+      expect(b.y, `${at}: ${sel} under the title`).toBeGreaterThanOrEqual(title.y + title.height);
+      expect(b.x + b.width, `${at}: ${sel} inside the panel`).toBeLessThanOrEqual(col.x + col.width + 1);
+    }
+    // Every row is the panel's width at most, and the list starts under the filters (its fade reaches 12px up).
+    const rows = await column.locator(".options-item").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const right of rows) expect(right, at).toBeLessThanOrEqual(col.x + col.width + 1);
+    expect(list.y + 12, at).toBeGreaterThanOrEqual(head.y + head.height);
+    expect(list.height, `${at}: room for the list`).toBeGreaterThan(80);
+    expect(await fitsWidth(app)).toBe(true);
+    await app.locator('.options-overlay[data-open="true"] .options-close').tap();
+    await expect(column).toHaveCount(0);
+  }
 });
 
 test.describe("signed in, on a fresh profile", () => {
   test.use({ account: true });
 
   test("starting a watch party in the player leaves one party panel up, with the focus in it (#247)", async ({ app }) => {
-    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Play", exact: true }).tap();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -290,11 +448,107 @@ test.describe("signed in, on a fresh profile", () => {
   });
 });
 
+/** Movies (a top-bar button on a phone) → The Glass Orchard → Play, every source a made-up torrent. */
+async function playTorrentFilm(app: Page) {
+  await app.addInitScript(() => localStorage.setItem("polar.fakeTorrents", "1"));
+  await app.reload();
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+}
+
+test("the torrent notice fits a phone: the upload limit and both buttons inside the screen (#458)", async ({ app }) => {
+  await playTorrentFilm(app);
+  const notice = app.getByRole("dialog", { name: "Torrent playback" });
+  await expect(notice).toBeVisible();
+  const width = app.viewportSize()!.width;
+  for (const part of [notice.locator(".torrent-notice-card"), notice.getByRole("textbox", { name: "Upload limit" }), notice.getByRole("button", { name: "Cancel" }), notice.getByRole("button", { name: "Play", exact: true })]) {
+    const box = await part.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  }
+  expect(await fitsWidth(app)).toBe(true);
+});
+
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
 
+  test("a torrent source can't play here: no notice, the player says so, nothing is opened (#458)", async ({ app }) => {
+    await playTorrentFilm(app);
+    await expect(app.getByText("Torrent sources can't play on this device.").first()).toBeVisible({ timeout: 15_000 });
+    await expect(app.getByRole("dialog", { name: "Torrent playback" })).toHaveCount(0);
+    expect(await app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0)).toBe(0);
+  });
+
+  test("the back swipe on a settings page goes to the list; on the list it leaves Settings for the profiles (#455)", async ({ app }) => {
+    const swipe = () =>
+      app.evaluate(() => {
+        const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+        const width = window.innerWidth;
+        send({ phase: "begin", x: 4, width, velocity: 0 });
+        send({ phase: "move", x: width * 0.6, width, velocity: 0 });
+        send({ phase: "end", x: width * 0.6, width, velocity: 0 });
+      });
+    const settings = await openSettingsPage(app, "Add-ons");
+    await expect(settings.locator(".t3s-header .t3s-ghost")).toHaveCount(0);
+    await swipe();
+    await expect(settings.getByRole("button", { name: "Add-ons", exact: true })).toBeVisible();
+    await expect(settings).toHaveAccessibleName(/^Settings/);
+    await swipe();
+    await expect(settings).toHaveCount(0);
+  });
+
+  test("Subtitles & Audio opens the app's own panel, fitted to the phone, not an iOS menu (#465)", async ({ app }) => {
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Play", exact: true }).tap();
+    await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    const button = app.getByRole("button", { name: "Subtitles & Audio", exact: true });
+    if (!(await button.isVisible())) await app.locator(".player").tap({ position: { x: 200, y: 300 } });
+    await button.tap();
+    const overlay = app.locator('.options-overlay[data-open="true"]');
+    await expect(overlay).toBeVisible();
+    await expect(overlay.locator(".options-column").first()).toBeVisible();
+    const width = app.viewportSize()!.width;
+    for (const box of await overlay.locator(".options-column").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect))) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+    }
+    expect(await fitsWidth(app)).toBe(true);
+  });
+
+  test("four tabs in iOS's bar, Search the last, no More; the Calendar in the top bar; Back to the Library (#449)", async ({ app }) => {
+    // The Calendar turned on (Settings → Browsing): it stays out of the bar, as a sixth tab is what makes iOS add More.
+    await app.goto("/fake.html?showCalendar=true");
+    const nativeTabs = () => app.evaluate(() => (window as { __nativeTabs?: { tabs: { id: string }[]; hidden: boolean } }).__nativeTabs);
+    await expect(app.locator("html")).toHaveAttribute("data-native-tabs", "true");
+    await expect.poll(async () => (await nativeTabs())?.tabs.map((t) => t.id)).toEqual(["home", "anime", "library", "search"]);
+    expect((await nativeTabs())?.hidden).toBe(false);
+
+    const header = app.locator(".navbar-actions");
+    await header.getByRole("button", { name: "Calendar", exact: true }).tap();
+    await expect(app.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
+    await expect(header.getByRole("button", { name: "Calendar", exact: true })).toHaveAttribute("aria-current", "page");
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("search"));
+    await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
+
+    // A title opened from the Library goes back to it with the swipe in from the left edge.
+    await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("library"));
+    await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
+    await card(app, "Low Water Station").tap();
+    await expect(app.getByRole("heading", { level: 1, name: "Low Water Station" })).toBeVisible();
+    // iOS's own edge swipe (#451), past half the width.
+    await app.evaluate(() => {
+      const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+      const width = window.innerWidth;
+      send({ phase: "begin", x: 4, width, velocity: 0 });
+      send({ phase: "move", x: width * 0.6, width, velocity: 0 });
+      send({ phase: "end", x: width * 0.6, width, velocity: 0 });
+    });
+    await expect(app.getByRole("heading", { level: 1, name: "Library" })).toBeVisible();
+  });
+
   test("a sheet opens at half the screen, expands and closes like iOS's own (#174)", async ({ app }) => {
-    // Search is iOS's own tab here (the top bar's icon steps aside for it).
     await app.evaluate(() => (window as unknown as { __polarFakeNativeTab: (id: string) => void }).__polarFakeNativeTab("search"));
     await app.getByRole("searchbox", { name: "Search" }).fill("glass orchard");
     await card(app, "The Glass Orchard").tap();
@@ -333,6 +587,66 @@ test.describe("on an iPhone", () => {
   });
 });
 
+test.describe("on an iPhone, Back by swiping", () => {
+  test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("a title page follows the finger off the page under it, and stays when let go early (#451)", async ({ app }) => {
+    const swipe = (phase: string, x: number, velocity = 0) =>
+      app.evaluate(([phase, x, velocity]) => {
+        const send = (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe;
+        send({ phase, x, width: window.innerWidth, velocity });
+      }, [phase, x, velocity] as const);
+    const width = app.viewportSize()!.width;
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+    await card(app, "The Glass Orchard").tap();
+    const title = app.getByRole("heading", { level: 1, name: "The Glass Orchard" });
+    await expect(title).toBeVisible();
+    const top = app.locator(".page[data-active='true']");
+    const under = app.locator(".page[data-active='false']");
+    const matrix = (l: typeof top) => l.evaluate((el) => { const m = new DOMMatrix(getComputedStyle(el).transform); return { x: m.m41, scale: m.a }; });
+
+    // Moving: a title page opened from a card goes back the way it came (pageDrag.ts): it shrinks and follows the
+    // finger over Movies, which stays in place under it.
+    await swipe("begin", 4);
+    await swipe("move", 120);
+    await expect(top).toHaveAttribute("data-drag", "card");
+    await expect.poll(async () => (await matrix(top)).scale).toBeLessThan(1);
+    expect((await matrix(top)).x).toBeGreaterThan(0);
+    await expect(under).toHaveCSS("visibility", "visible");
+
+    // Let go before half the width, slowly: the page grows back and stays.
+    await swipe("end", 120);
+    await expect(top).not.toHaveAttribute("data-drag", /./);
+    await expect.poll(() => matrix(top)).toEqual({ x: 0, scale: 1 });
+    await expect(under).toHaveCSS("visibility", "hidden");
+    await expect(title).toBeVisible();
+
+    // Past half: it slides out and Movies is the page, with no page change played over it.
+    await swipe("begin", 4);
+    await swipe("move", width * 0.6);
+    await swipe("end", width * 0.6);
+    await expect(app.locator(".page")).toHaveCount(1);
+    await expect(app.locator(".page").first()).not.toHaveAttribute("data-motion", /./);
+    expect((await matrix(app.locator(".page").first())).x).toBe(0);
+    await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
+  });
+
+  test("over a sheet the swipe closes the sheet and leaves the page where it is (#451)", async ({ app }) => {
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
+    await card(app, "The Glass Orchard").tap();
+    await app.getByRole("button", { name: "Choose source", exact: true }).tap();
+    await expect(app.locator(".sheet")).toBeVisible();
+    for (const [phase, x] of [["begin", 4], ["move", 260], ["end", 260]] as const)
+      await app.evaluate(
+        ([phase, x]) => (window as unknown as { __polarFakeBackSwipe: (s: object) => void }).__polarFakeBackSwipe({ phase, x, width: window.innerWidth, velocity: 0 }),
+        [phase, x] as const,
+      );
+    await expect(app.locator(".sheet")).toHaveCount(0);
+    await expect(app.locator(".page[data-drag]")).toHaveCount(0);
+    await expect(app.getByRole("heading", { level: 1, name: "The Glass Orchard" })).toBeVisible();
+  });
+});
+
 test("on mobile data a torrent source doesn't start and says why, until the setting allows it (#207)", async ({ app }) => {
   await app.addInitScript(() => {
     localStorage.setItem("polar.fakeTorrents", "1");
@@ -341,7 +655,7 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
   await app.reload();
   const opens = () => app.evaluate(() => (window as { __torrentOpens?: number }).__torrentOpens ?? 0);
   const play = async () => {
-    await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+    await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Play", exact: true }).tap();
   };
@@ -360,9 +674,47 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
   await expect(allow).not.toBeChecked();
   await allow.tap();
   await expect(allow).toBeChecked();
-  await settings.getByRole("button", { name: "Close settings" }).tap();
+  // On a phone Settings is a view of the profile sheet, which has no Close of its own: the system Back (Escape) leaves it.
+  await expect(async () => {
+    await app.keyboard.press("Escape");
+    await expect(app.locator(".sheet")).toHaveCount(0, { timeout: 1000 });
+  }).toPass();
 
   // Allowed: the torrent goes on (to the one-time notice first).
   await play();
   await expect(app.getByRole("dialog", { name: "Torrent playback" })).toBeVisible();
+});
+
+test("each page starts right under the top bar, which sits right under the status bar, with or without a notch (#450)", async ({ app }) => {
+  const tabs = app.getByRole("navigation", { name: "Primary" });
+  for (const top of [0, 59]) {
+    await insets(app, { top, right: 0, bottom: top ? 34 : 0, left: 0 });
+    for (const [tab, first] of [
+      ["Home", ".hero-card"],
+      ["Series", ".discover-controls"],
+      ["Library", ".screen-header h1"],
+    ] as const) {
+      await (tab === "Series" ? app.locator(".navbar") : tabs).getByRole("button", { name: tab, exact: true }).tap();
+      const content = app.locator(first).first();
+      await expect(content).toBeVisible();
+      const [bar, logo, page] = await Promise.all([
+        app.locator(".navbar").boundingBox(),
+        app.locator(".brand-logo").boundingBox(),
+        content.boundingBox(),
+      ]);
+      // The bar's row begins where the status bar ends, the logo centred in it.
+      expect(Math.round(logo!.y + logo!.height / 2), `${tab}, inset ${top}`).toBe(Math.round(top + (bar!.height - top) / 2));
+      const gap = page!.y - (bar!.y + bar!.height);
+      expect(gap, `${tab}, inset ${top}`).toBeGreaterThanOrEqual(0);
+      expect(gap, `${tab}, inset ${top}`).toBeLessThanOrEqual(12);
+    }
+  }
+  // Anime with AniList not answering: its message stays clear of the bar too.
+  await app.route("https://graphql.anilist.co/**", (route) => route.fulfill({ status: 503, body: "" }));
+  await tabs.getByRole("button", { name: "Anime", exact: true }).tap();
+  const note = app.locator(".anime-unreachable");
+  await expect(note).toBeVisible({ timeout: 15_000 });
+  const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
+  // The text's own top, once the page has slid in.
+  await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
 });

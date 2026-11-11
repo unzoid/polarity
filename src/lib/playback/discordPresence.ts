@@ -4,11 +4,13 @@
  * and episode, the poster and the time left ("title"). The shell sends it to the Discord app on
  * this machine (src-tauri/src/discord.rs); without Discord, nothing happens.
  *
- * Others see up to two buttons on it (#153): "Watch in Polarity" (the same title, in their own
- * Polarity; "title" only, since "app" doesn't say what plays) and "Join watch party" (in a party
- * that can be joined from Discord, #154). Both link to the website's hand-over pages. Discord
- * builds the heading itself from the activity type and the application's name ("Watching
- * Polarity"); the closest an activity gets to "Watching on Polarity" is its first line.
+ * Others see a "Watch in Polarity" button on it (#153): the same title, in their own Polarity
+ * ("title" only, since "app" doesn't say what plays), through the website's hand-over page. In a
+ * party that can be joined from Discord (#154, #357) the activity carries the party and the join
+ * token instead, and Discord shows its own Join (or Ask to Join, with "Ask me"), which opens
+ * Polarity directly; Discord takes no buttons next to a join. Discord builds the heading itself
+ * from the activity type and the application's name ("Watching Polarity"); the closest an
+ * activity gets to "Watching on Polarity" is its first line.
  */
 
 export type DiscordPresence = "off" | "app" | "title";
@@ -23,13 +25,37 @@ export interface DiscordActivity {
   image?: string;
   imageText?: string;
   buttons?: { label: string; url: string }[];
+  /** Discord's own Join (#357): `size` members now and the most Discord shows room for. */
+  join?: { party: string; secret: string; size: [number, number]; ask: boolean };
 }
 
-/** The website pages behind the buttons; see lib/deepLink. */
+/** The party joinable from Discord: the desk's random party id and current token (lib/party/discordDesk.ts). */
+export interface PresenceJoin {
+  party: string;
+  secret: string;
+  members: number;
+  /** "Ask me": Ask to Join. */
+  ask: boolean;
+}
+
+/** The website page behind the button (see lib/deepLink), and the party to join. */
 export interface PresenceLinks {
   watch?: string;
-  party?: string;
+  join?: PresenceJoin;
 }
+
+/**
+ * The room Discord shows a party to have. A watch party has no limit, but Discord hides Join from a
+ * full party, so it shows this many, or one more than the members once there are as many.
+ */
+export const PARTY_ROOM = 10;
+
+const joinOf = (j: PresenceJoin): NonNullable<DiscordActivity["join"]> => ({
+  party: j.party,
+  secret: j.secret,
+  size: [j.members, Math.max(PARTY_ROOM, j.members + 1)],
+  ask: j.ask,
+});
 
 export interface Playing {
   name: string;
@@ -59,8 +85,9 @@ export function discordActivity(mode: DiscordPresence, p: Playing | null, now = 
     !p.paused && p.duration > 0 && Number.isFinite(p.duration)
       ? { start: Math.round(now - (p.current * 1000) / rate), end: Math.round(now + ((p.duration - p.current) * 1000) / rate) }
       : {};
-  const party = links.party ? [{ label: "Join watch party", url: links.party }] : [];
-  if (mode === "app") return { details: "Watching on Polarity", state: p.paused ? "Paused" : undefined, ...times, ...withButtons(party) };
+  // A join leaves the button out: Discord takes one or the other.
+  const offer = links.join ? { join: joinOf(links.join) } : null;
+  if (mode === "app") return { details: "Watching on Polarity", state: p.paused ? "Paused" : undefined, ...times, ...offer };
   const watch = links.watch ? [{ label: "Watch in Polarity", url: links.watch }] : [];
   const lines = [p.episode && episodeLine(p.episode), p.paused && "Paused"].filter(Boolean);
   return {
@@ -68,7 +95,7 @@ export function discordActivity(mode: DiscordPresence, p: Playing | null, now = 
     state: lines.length ? lines.join(" · ") : undefined,
     ...times,
     ...(sharedPoster(p.poster) ? { image: p.poster, imageText: p.name } : {}),
-    ...withButtons([...watch, ...party]),
+    ...(offer ?? withButtons(watch)),
   };
 }
 
@@ -99,5 +126,14 @@ export function sameActivity(a: DiscordActivity | null, b: DiscordActivity | nul
   if (!a || !b) return a === b;
   const near = (x?: number, y?: number) => (x === undefined || y === undefined ? x === y : Math.abs(x - y) < DRIFT_MS);
   const urls = (x: DiscordActivity) => (x.buttons ?? []).map((b) => b.url).join(" ");
-  return a.details === b.details && a.state === b.state && a.image === b.image && urls(a) === urls(b) && near(a.start, b.start) && near(a.end, b.end);
+  const join = (x: DiscordActivity) => (x.join ? [x.join.party, x.join.secret, ...x.join.size, x.join.ask].join(" ") : "");
+  return (
+    a.details === b.details &&
+    a.state === b.state &&
+    a.image === b.image &&
+    urls(a) === urls(b) &&
+    join(a) === join(b) &&
+    near(a.start, b.start) &&
+    near(a.end, b.end)
+  );
 }

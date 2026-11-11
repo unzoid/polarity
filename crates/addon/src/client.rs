@@ -331,7 +331,12 @@ impl RawVideo {
         let episode = self.episode.or(self.number)?;
         Some(Video {
             id: self.id.unwrap_or_else(|| format!("{meta_id}:{season}:{episode}")),
-            title: self.name.or(self.title).filter(|t| !t.is_empty()).unwrap_or_else(|| format!("Episode {episode}")),
+            // IMDb names an episode it knows nothing about yet "Episode #1.9": that says no more than "Episode 9" (#360).
+            title: self
+                .name
+                .or(self.title)
+                .filter(|t| !t.is_empty() && !is_placeholder_name(t))
+                .unwrap_or_else(|| format!("Episode {episode}")),
             season,
             episode,
             released: self.released.or(self.first_aired),
@@ -343,9 +348,28 @@ impl RawVideo {
     }
 }
 
+/// IMDb's name for an episode with no title yet: "Episode #" with its season and number, "Episode #1.9".
+fn is_placeholder_name(name: &str) -> bool {
+    let Some(rest) = name.trim().strip_prefix("Episode #") else { return false };
+    let mut parts = rest.split('.');
+    let number = |p: Option<&str>| p.is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    number(parts.next()) && number(parts.next()) && parts.next().is_none()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placeholder_names_become_the_episode_number() {
+        let raw =
+            |name: &str| RawVideo { season: Some(1), episode: Some(9), name: Some(name.into()), ..Default::default() };
+        assert_eq!(raw("Episode #1.9").normalise("tt0000000").unwrap().title, "Episode 9");
+        assert_eq!(raw(" Episode #12.103 ").normalise("tt0000000").unwrap().title, "Episode 9");
+        for kept in ["Episode #1", "Episode #1.9: The Return", "The Episode #1.9", "Episode 9", "Pilot"] {
+            assert_eq!(raw(kept).normalise("tt0000000").unwrap().title, kept);
+        }
+    }
 
     /// Answers one request on 127.0.0.1 with `body`, chunked so no length is announced.
     fn serve_once(body: Vec<u8>) -> String {

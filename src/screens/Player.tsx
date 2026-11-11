@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   Captions,
   Cast,
   Close,
@@ -21,8 +20,9 @@ import {
 } from "../components/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { ease, useFormFactor } from "../lib/ui";
-import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
+import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, keepScreenOn, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
 import { streamKey } from "../components/StreamList";
@@ -30,21 +30,34 @@ import { SourceFilterBar } from "../components/SourceFilters";
 import { TvSourceMenu, useSourceInfo } from "../components/SourceInfo";
 import { playingReport } from "../components/player/playingReport";
 import {
+  airedAt,
   autoplayStreak,
   countAutoplay,
+  describeStream,
   requestHeaders,
   videoFile,
   READY_CHECKS,
   readinessNote,
   recordFail,
+  recallTracks,
   rememberLanguage,
+  rememberTracks,
   resetAutoplay,
   sliderAmplitude,
   sourceRow,
+  trackMemoryKey,
   useReadiness,
   useResetAutoplayOnInput,
   useSourceFilters,
   useTitleSettings,
+  CAPTIONS_NOTE,
+  CAPTIONS_OFF,
+  SPEED_ONE_NOTE,
+  SPEED_PARTY_NOTE,
+  captionChoices,
+  speedChoices,
+  resumeFrom,
+  startPosition,
 } from "../lib/playback";
 import { downloadedStream, episodeState, isLocalFile, nextVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
@@ -52,14 +65,15 @@ import { Scrubber } from "../components/player/Scrubber";
 import { useSource } from "../components/player/useSource";
 import { useSourceRecord, useThroughput } from "../components/player/useSourceRecord";
 import { SkipButton, useSkipSegments } from "../components/player/SkipSegments";
-import { OptionsOverlay, type OptionItem } from "../components/player/OptionsOverlay";
+import { OptionsOverlay, type OptionColumn, type OptionItem } from "../components/player/OptionsOverlay";
 import { VolumeHud, type VolumePing } from "../components/player/VolumeHud";
 import { EpisodeRail } from "../components/player/EpisodeRail";
 import { Dropdown } from "../components/Dropdown";
 import { SkipTransport } from "../components/player/SkipTransport";
 import { useTracks } from "../components/player/useTracks";
+import { useKeyboardFocus } from "../components/player/useKeyboardFocus";
 import { usePinch } from "../components/player/usePinch";
-import { pickedSpeed, pickedTrack, speedLabel, speedMenu, tracksMenu } from "../components/player/nativeMenus";
+import { pickedSpeed, speedLabel, speedMenu } from "../components/player/nativeMenus";
 import {
   DEFAULT_SUBTITLE_STYLE,
   SubtitlePreview,
@@ -69,12 +83,25 @@ import {
   subtitleCueVars,
 } from "../components/player/SubtitleSettings";
 import { isMpv, MpvMedia, type MediaLike, type StepDetail } from "../components/player/mpvMedia";
-import { createFrameStepper, DEFAULT_FPS, FRAME_SHOWN_MS, measureFps, stepFrame } from "../components/player/frameStep";
+import { createFrameStepper, DEFAULT_FPS, measureFps, stepFrame } from "../components/player/frameStep";
+import { useStepping } from "../components/player/useStepping";
 import { createWindowPin } from "../components/player/windowPin";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
+import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
-import { getPrefs, openSettings, setPrefs, shortcutText, useEpisodeLayout, usePrefs, withShortcut } from "../lib/settings";
+import {
+  cropModeLabel,
+  getPrefs,
+  nextCropMode,
+  openSettings,
+  setPrefs,
+  shortcutText,
+  shownCropMode,
+  useEpisodeLayout,
+  usePrefs,
+  withShortcut,
+} from "../lib/settings";
 import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
@@ -84,7 +111,7 @@ import { useRouter } from "../lib/router";
 import type { ContentType, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
-import { useTvMode } from "../tv/tvMode";
+import { setTvMode, useTvMode } from "../tv/tvMode";
 import { usePadGlyph } from "../tv/TvChrome";
 import { fileId, filePlace, fileStream, isFileId, recentPosition, useRecentFiles } from "../lib/localFiles";
 import {
@@ -103,19 +130,24 @@ import {
   useJoinDesk,
   youtubeId,
 } from "../lib/party";
-import { partyPage, watchPage } from "../lib/deepLink";
+import { watchPage } from "../lib/deepLink";
 import { setWatching } from "../lib/friends";
 import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
-import { LinkForm, PartyBadge, PartyHold, PartyNotes, PartyStart } from "../components/party/PartyUI";
+import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
-import { Pin, WatchParty } from "../components/icons";
-import { Button, IconButton } from "../components/ui/Button";
+import { More, Pin, Pinned, WatchParty } from "../components/icons";
+import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
+import { MenuCheckItem, MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
+import { watch, watchLog } from "../lib/playback/watchLog";
+import { useWatchLog, watchLogText } from "../components/player/useWatchLog";
+import { useBarFit } from "../components/player/useBarFit";
 import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
 import { PlayerStatus } from "../components/player/PlayerStatus";
+import { useLoadingArt } from "../components/player/useLoadingArt";
 import { TorrentNotice } from "../components/player/TorrentNotice";
-import { PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
+import { FrameLabel, PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
 import { useMediaTime } from "../components/player/useMediaTime";
 import { usePlayerChrome } from "../components/player/usePlayerChrome";
 import { usePlayerKeyboard } from "../components/player/usePlayerKeyboard";
@@ -128,6 +160,11 @@ const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+/** What Subtitles & Audio and Speed say for a YouTube video outside TV mode: they're YouTube's own controls there (#384). TV mode has menus for them (#434). */
+const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
+const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
+/** How long the party's hold lasts before YouTube's bar comes out to say so: longer than over a picture (400 ms), as the bar moves YouTube's. */
+const HOLD_SHOWS_MS = 1200;
 /** With "Up next" set to the very end, it appears this many seconds before. */
 const NEXT_UP_AT_END = 12;
 
@@ -146,7 +183,7 @@ export function Player({
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
-  const { back, replace } = useRouter();
+  const { back, replace, tab } = useRouter();
   // TV mode keeps the window fullscreen: no fullscreen toggle, and Esc simply goes back.
   const tv = useTvMode();
   // With a controller in TV mode, controls show the button that triggers them.
@@ -163,13 +200,18 @@ export function Player({
   const ytId = link ? youtubeId(link) : undefined;
   // On Android YouTube's player can't go in a frame (lib/platform canEmbedOtherSites): the video opens in YouTube.
   const ytOutside = ytId && !canEmbedOtherSites() ? ytId : undefined;
+  // Otherwise it plays in the app with YouTube's own controls, and nothing of ours over it (#384: YouTube's
+  // terms forbid drawing over any part of an embedded player): a bar above it, the party panel beside it.
+  const ytFramed = !!ytId && !ytOutside;
   // A video file on this device (#204): its title is the file or its folder (lib/localFiles), its
   // source the file itself, and where it stopped is kept on this device; nothing is looked up online.
   const local = isFileId(metaId);
-  const { data: meta } = useMeta(type, metaId, !isLinkId(metaId) && !local);
+  const { data: meta, isPending: metaPending } = useMeta(type, metaId, !isLinkId(metaId) && !local);
+  // The loading screen draws the title page's logo and backdrop (#391).
+  const art = useLoadingArt(meta, metaPending && !isLinkId(metaId) && !local, videoId);
   // Its languages are Settings → Anime's for an anime (#235).
   const { settings, anime, original } = useTitleSettings(type, videoId);
-  const { touch } = useFormFactor();
+  const { touch, form, compact } = useFormFactor();
   // Engine: embedded mpv when installed (plays every codec, AC3/DTS audio, every
   // subtitle format), else the WebView's own <video>.
   const engineQuery = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
@@ -178,6 +220,10 @@ export function Player({
   const yt = useMemo(() => new YouTubeMedia(), []);
   const [ytFrame, setYtFrame] = useState<HTMLIFrameElement | null>(null);
   useEffect(() => (ytFrame ? yt.attach(ytFrame) : undefined), [yt, ytFrame]);
+  // TV's Captions menu (#434): the language YouTube's embed loads with captions on (null for its own default),
+  // and whether it starts by itself: loaded again while paused, it stays paused.
+  const [ytEmbed, setYtEmbed] = useState<{ captions: string | null; autoplay: boolean }>({ captions: null, autoplay: true });
+  const ytSpeed = useYouTubeSpeed(yt);
   // Watch party: signed-in profiles only. Joining the room's video, look for the file it's on.
   const { profile } = useAccount();
   const canParty = partyAvailable() && !!profile;
@@ -218,6 +264,13 @@ export function Player({
   const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state });
   useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
   useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
+  // A phone or tablet doesn't dim and lock while the video plays; paused, it does in its own time.
+  const playingNow = started && !paused;
+  useEffect(() => {
+    if (!playingNow) return;
+    keepScreenOn(true);
+    return () => keepScreenOn(false);
+  }, [playingNow]);
 
   // --- AirPlay (#19) ----------------------------------------------------------
   const playingUrl = source.state.status === "ready" && started ? source.state : undefined;
@@ -230,6 +283,8 @@ export function Player({
     enabled: !party && engine !== "youtube",
   });
   const media: MediaLike | null = airplay.media ?? baseMedia;
+  // What the player did while it played, for "Copy Watch Log" (dev builds only, #424).
+  useWatchLog(media, videoId);
   videoRef.current = media;
   /** Why the link check turned the built-in player's source down (mpv reports its own). */
   const linkError = useRef<string | null>(null);
@@ -274,13 +329,20 @@ export function Player({
   const countdown = Math.max(3, settings?.autoplayCountdown ?? 8);
   const timeDisplay = settings?.timeDisplay ?? "remaining";
   useMpvTune(engine === "mpv" ? mpv : null);
-  // Subtitle look (saved) and timing offset (this video only).
+  // Subtitle look (saved) and timing offset (this source of this episode, remembered on this device, #418).
   const subStyle = settings?.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE;
+  const playingStream = source.state.status === "ready" ? source.state.stream : undefined;
+  const memoryKey = trackMemoryKey(videoId, playingStream);
   const [subDelay, setSubDelay] = useState(0);
+  useEffect(() => setSubDelay(recallTracks(memoryKey)?.delay ?? 0), [memoryKey]);
+  const changeSubDelay = (delay: number) => {
+    setSubDelay(delay);
+    rememberTracks(memoryKey, videoId, { delay });
+  };
   const [subSettingsOpen, setSubSettingsOpen] = useState(false);
 
   // Subtitle add-ons match on the file's size and name (React Query compares keys by value).
-  const playingFile = videoFile(source.state.status === "ready" ? source.state.stream : undefined);
+  const playingFile = videoFile(playingStream);
   const tracks = useTracks(
     media,
     type,
@@ -294,6 +356,7 @@ export function Player({
     playingFile,
     // Subtitles beside a file on this device load with it (mpv's sub-auto); add-ons aren't asked.
     !local,
+    memoryKey,
   );
   useEffect(() => {
     if (engine !== "mpv") return;
@@ -326,9 +389,22 @@ export function Player({
   });
 
   // --- Chrome visibility --------------------------------------------------
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter);
+  // Paused on a stepped frame, the controls hide after the set time, not the paused wait (#346).
+  const frameSteps = useStepping(paused, buffering);
+  // YouTube's bar stays out of the way while paused too: showing it moves the picture (#384).
+  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping && !ytFramed);
+  // The focus ring shows only for focus moved by the keyboard, never after a click (#329).
+  const keyFocus = useKeyboardFocus();
   const ready = source.state.status === "ready" && !error;
-  const chromeVisible = chrome.visible || paused || !!options || nativeMenu || !ready;
+  // The top bar's "More" menu (#396) keeps the controls up while it's open.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready;
+  // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
+  const [ytPlayed, setYtPlayed] = useState(false);
+  useEffect(() => {
+    if (ytFramed && started && !paused) setYtPlayed(true);
+  }, [ytFramed, started, paused]);
+  const partyHold = useLasting(ytFramed && party && ready && started ? partyHoldText(party, videoId) : null, HOLD_SHOWS_MS);
   // Whether the controls showed when the press on the picture began: the
   // player's own pointerdown shows them before the click, so a tap that should
   // bring them back would otherwise hide them again at once.
@@ -348,6 +424,13 @@ export function Player({
   }, [meta, type, videoId, animeSkipFiller]);
   // A YouTube video is called by its own title once its player says it.
   const [ytTitle, setYtTitle] = useState<string | null>(null);
+  // YouTube's player is up with its own controls (#384): the loading screen leaves them clear, even before it plays.
+  const [ytShown, setYtShown] = useState(false);
+  useEffect(() => {
+    const onReady = () => setYtShown(true);
+    yt.addEventListener("playerready", onReady);
+    return () => yt.removeEventListener("playerready", onReady);
+  }, [yt]);
   useEffect(() => {
     const onTitle = () => setYtTitle(yt.title);
     yt.addEventListener("titlechange", onTitle);
@@ -357,7 +440,6 @@ export function Player({
   const heading = local ? (current?.title ?? title) : current ? `${episodeCode(current.season, current.episode)} · ${current.title}` : title;
 
   // --- Watch party ------------------------------------------------------------
-  const playingStream = source.state.status === "ready" ? source.state.stream : undefined;
   // A link is its own file: no release name for others to look for.
   const hint = useMemo(() => (link ? undefined : streamHint(playingStream)), [link, playingStream]);
   const partyMedia = link ? linkMedia(link) : { type, metaId, videoId, label: heading || undefined };
@@ -399,11 +481,11 @@ export function Player({
 
   // --- Load source ----------------------------------------------------------
   /** Where to pick up (Settings → Playback: resume on/off, rewind), or undefined to start over. */
-  const resumePoint = (r?: Pick<Progress, "position" | "duration">) => {
-    if (settings?.resumePlayback === false || !r || r.position <= 30 || r.position / r.duration >= watchedFraction()) return undefined;
-    return Math.max(0, r.position - (settings?.resumeRewind ?? 0));
-  };
+  const resumePoint = (r?: Pick<Progress, "position" | "duration">) =>
+    resumeFrom(r, { resume: settings?.resumePlayback !== false, rewind: settings?.resumeRewind ?? 0, watchedFraction: watchedFraction() });
   const resumed = useRef(false);
+  /** Where a source that failed had got to: the next one carries on from there (not from where the episode was opened). */
+  const reached = useRef<number | undefined>(undefined);
   useEffect(() => {
     // Always the app's own player: handing over to AirPlay and back isn't a new source.
     const v = baseRef.current;
@@ -411,13 +493,14 @@ export function Player({
     resumed.current = false;
     setError(null);
     setBuffering(true);
+    watch(`source: ${describeStream(source.state.stream, source.state.url)}, ${engine}`);
     v.volume = sliderAmplitude(volume);
     if (v instanceof MpvMedia) {
       // Start at the resume point (or where the watch party is) directly: no
       // fetching the opening of a network stream only to seek away from it.
-      const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
+      const start = startPosition(partyPosition(videoId), reached.current, resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined)));
       resumed.current = true;
-      v.load(source.state.url, start, requestHeaders(source.state.stream));
+      v.load(source.state.url, start, requestHeaders(source.state.stream), !!link);
     } else if (v instanceof YouTubeMedia) {
       resumed.current = true;
       v.load(partyPosition(videoId) ?? null);
@@ -434,7 +517,7 @@ export function Player({
       const id = nextProbeId();
       const unlisten = listenProbe(id, (e) => logStep(...probeStep(e)));
       api
-        .streamProbe(url, id, requestHeaders(source.state.stream))
+        .streamProbe(url, id, requestHeaders(source.state.stream), !!link)
         .then(
           (final) => !cancelled && play(final),
           (e) => {
@@ -510,13 +593,18 @@ export function Player({
   }, [settings, tv]);
 
   // Settings → Playback → "Pause when minimized".
-  const { pauseOnMinimize, discordPresence } = usePrefs();
+  const { pauseOnMinimize, discordPresence, discordJoin } = usePrefs();
   // A file on this device stays private: its name isn't shown on Discord.
-  // Buttons (#153): this title in the viewer's own Polarity (only where the title is shown), and the party's join link.
-  const joinToken = useJoinDesk().token;
+  // The button (#153): this title in the viewer's own Polarity (only where the title is shown); in a party joinable
+  // from Discord, Discord's own Join instead (#357).
+  const { token: joinToken, party: joinParty } = useJoinDesk();
+  const partyMembers = party?.members.length ?? 0;
   const presenceLinks = useMemo(
-    () => ({ watch: (discordPresence === "title" && watchPage(type, metaId)) || undefined, party: joinToken ? partyPage(joinToken) : undefined }),
-    [discordPresence, type, metaId, joinToken],
+    () => ({
+      watch: (discordPresence === "title" && watchPage(type, metaId)) || undefined,
+      join: joinToken && joinParty ? { party: joinParty, secret: joinToken, members: Math.max(1, partyMembers), ask: discordJoin !== "anyone" } : undefined,
+    }),
+    [discordPresence, type, metaId, joinToken, joinParty, partyMembers, discordJoin],
   );
   useDiscordPresence(media, meta, videoId, local ? "off" : discordPresence, presenceLinks);
   // What friends may see playing (#135); the same rule: never a file on this device.
@@ -545,7 +633,8 @@ export function Player({
     play: () => {
       setPaused(false);
       setEnded(false);
-      poke();
+      // YouTube's bar collapses once it plays, wherever the play came from (#384).
+      if (!ytFramed) poke(false, "play");
     },
     pause: () => {
       setPaused(true);
@@ -560,10 +649,18 @@ export function Player({
       if (!startedRef.current) logStep("Playing", "ok", "player");
       setStarted(true);
     },
-    canplay: () => setBuffering(false),
+    canplay: () => {
+      setBuffering(false);
+      // YouTube's player stopped with the video loaded (held by the party, or its autoplay refused) has its
+      // picture up: the loading screen goes and the party can count it in. Its first frame may never "play" (#383).
+      if (videoRef.current instanceof YouTubeMedia && videoRef.current.paused) {
+        if (!startedRef.current) logStep("Ready, paused", "ok", "player");
+        setStarted(true);
+      }
+    },
     loadedmetadata: () => {
       const v = videoRef.current!;
-      const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
+      const start = startPosition(partyPosition(videoId), reached.current, resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined)));
       if (!resumed.current && start != null) v.currentTime = start;
       resumed.current = true;
       if (!startedRef.current) {
@@ -580,6 +677,11 @@ export function Player({
       setEnded(true);
       save();
     },
+    seeking: () => {
+      // Gone back from the end to watch again: the "up next" countdown must not go on behind it.
+      const v = videoRef.current;
+      if (v && Number.isFinite(v.duration) && v.currentTime < v.duration - 1) setEnded(false);
+    },
     error: () => {
       // The torrent engine was stopped in the background (#207): its reason stays on screen.
       if (source.halted()) return;
@@ -593,6 +695,9 @@ export function Player({
         const kinds = ["", "loading was stopped", "network error", "couldn't decode it", "format not supported"];
         logStep(`Built-in player: ${kinds[el.error.code] ?? `error ${el.error.code}`}${el.error.message ? ` (${el.error.message})` : ""}`, "fail", "player");
       }
+      // Only once a picture was up, and never 0: a source that fails before it starts leaves the last place alone.
+      const at = videoRef.current?.currentTime;
+      if (startedRef.current && at != null && Number.isFinite(at) && at > 0) reached.current = at;
       if (!exited && source.next()) {
         logStep("Trying the next source", "warn");
         flashNotice("That source didn't load. Trying the next best one.", 3500);
@@ -628,14 +733,26 @@ export function Player({
     else v.pause();
   }, []);
 
-  const seekBy = useCallback((delta: number) => {
-    const v = videoRef.current;
-    if (v?.duration) v.currentTime = Math.min(v.duration - 1, Math.max(0, v.currentTime + delta));
-  }, []);
+  // A seek leaves the stepped frame: the frame number goes with it.
+  const { leave: leaveStep } = frameSteps;
+  const seekBy = useCallback(
+    (delta: number) => {
+      const v = videoRef.current;
+      watch(`seek by the viewer: ${delta > 0 ? "+" : ""}${delta} s`);
+      if (v?.duration) v.currentTime = Math.min(v.duration - 1, Math.max(0, v.currentTime + delta));
+      leaveStep();
+    },
+    [leaveStep],
+  );
 
-  const seekTo = useCallback((t: number) => {
-    if (videoRef.current) videoRef.current.currentTime = t;
-  }, []);
+  const seekTo = useCallback(
+    (t: number, by = "the viewer") => {
+      watch(`seek by ${by}: to ${formatTime(t)}`);
+      if (videoRef.current) videoRef.current.currentTime = t;
+      leaveStep();
+    },
+    [leaveStep],
+  );
 
   // --- Frame stepping (#243, #273): desktop only, with the keys -----------------
   // The rate frames are counted in: what mpv reads in the file, or what the built-in player measures as it plays.
@@ -652,29 +769,24 @@ export function Player({
   }, [media, started, videoEl]);
   const fpsRef = useRef(DEFAULT_FPS);
   fpsRef.current = fps ?? DEFAULT_FPS;
-  /** Stepped a moment ago: the clock shows the frame for a few seconds after each step, or until playback resumes. */
-  const [stepping, setStepping] = useState(false);
-  const steppingTimer = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (paused) return;
-    window.clearTimeout(steppingTimer.current);
-    setStepping(false);
-  }, [paused]);
-  useEffect(() => () => window.clearTimeout(steppingTimer.current), []);
+  const { begin: beginStep, end: endStep } = frameSteps;
   const stepper = useMemo(
     () =>
       createFrameStepper(async (direction) => {
         const v = videoRef.current;
         // YouTube's player seeks to whole moments, not frames.
         if (!v?.duration || !startedRef.current || v instanceof YouTubeMedia) return;
-        window.clearTimeout(steppingTimer.current);
-        setStepping(true);
-        await stepFrame(v, direction, fpsRef.current);
-        steppingTimer.current = window.setTimeout(() => setStepping(false), FRAME_SHOWN_MS);
+        beginStep();
+        try {
+          await stepFrame(v, direction, fpsRef.current);
+        } finally {
+          endStep();
+        }
       }),
-    [],
+    [beginStep, endStep],
   );
 
+  const skipTo = useCallback((t: number) => seekTo(t, "a skip (intro, recap or credits)"), [seekTo]);
   const onAutoSkipped = useCallback((label: string) => flashNotice(label, 2500), [flashNotice]);
   const { preferFileChapters, autoSkipDelay } = usePrefs();
   const skip = useSkipSegments({
@@ -684,24 +796,32 @@ export function Player({
     autoSkipDelay,
     media,
     preferFile: preferFileChapters,
-    seekTo,
+    seekTo: skipTo,
     onAutoSkipped,
     online: !link && !local,
   });
 
-  // Fit or Fill (#148, #149, #183): the picture inside the screen or window, or covering it with its
-  // edges cropped. A phone or tablet has no window to make fullscreen, so its button there does this;
-  // desktop has its own button and shortcut. Kept on this device. Autocrop (Settings → Advanced)
-  // takes the bars in the video off first, then Fill crops what's left to the window's shape (the
-  // autocrop loop reads mpv's panscan).
-  const { videoFill } = usePrefs();
-  const fill = videoFill;
+  // Crop mode (#148, #149, #183, #330): Fit, Crop black bars or Fill window, one setting (lib/settings/cropMode.ts)
+  // the button, its shortcut, TV's binding and Settings → Advanced share. A phone or tablet has no window to make
+  // fullscreen, so its button there does this. Autocrop takes the bars in the video off; Fill then crops what's
+  // left to the window's shape (mpv's panscan, which the autocrop loop reads). Without mpv there's no autocrop:
+  // the button skips Crop black bars and Fill covers the window with the whole frame. Kept on this device.
+  const { cropMode } = usePrefs();
+  const canCrop = engine === "mpv";
+  const crop = shownCropMode(cropMode, canCrop);
+  const fill = crop === "fill";
+  const nextCrop = nextCropMode(cropMode, canCrop);
   useEffect(() => {
     if (engine === "mpv") void mpv.set("panscan", fill ? 1 : 0);
   }, [engine, mpv, fill]);
-  const toggleFill = useCallback(() => setPrefs({ videoFill: !getPrefs().videoFill }), []);
+  // Each press says which mode it is now: the picture alone doesn't always show it.
+  const cycleCrop = useCallback(() => {
+    const next = nextCropMode(getPrefs().cropMode, canCrop);
+    setPrefs({ cropMode: next });
+    flashNotice(cropModeLabel(next), 1500);
+  }, [canCrop, flashNotice]);
   const pinch = usePinch((direction) => {
-    if (!isDesktop) setPrefs({ videoFill: direction === "out" });
+    if (!isDesktop) setPrefs({ cropMode: direction === "out" ? "fill" : "fit" });
   });
 
   // --- Pin window (#266): desktop only, where the system lets an app stay on top ---
@@ -746,6 +866,20 @@ export function Player({
     back();
     if (fs) window.setTimeout(() => void win.setFullscreen(false), PLAYER_EXIT_MS);
   }, [back, tv]);
+
+  /**
+   * The Settings page a playback problem names. In TV mode (#435): Sources is TV's own Sources settings; Add-ons, which
+   * TV mode has no page for, is desktop mode's.
+   */
+  const openSettingsPage = useCallback(
+    (page: "sources" | "addons") => {
+      if (tv && page === "sources") return tab({ name: "settings", page: "sources" });
+      void exit();
+      if (tv) setTvMode(false);
+      openSettings(page);
+    },
+    [tv, tab, exit],
+  );
 
   const playVideo = useCallback(
     (id: string, s?: Stream) => {
@@ -822,7 +956,7 @@ export function Player({
   // title page. Ids stay the index into the ranked list, so selection works
   // regardless of the view. Kept for this show while the player stays open,
   // through picking a source or moving to another episode (each rebuilds it).
-  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime));
+  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   const hiddenSources = streams.data?.hidden ?? 0;
   // The first few sources get a look ahead of time while the panel is open (#21).
   const readiness = useReadiness(
@@ -888,25 +1022,15 @@ export function Player({
     setOptionsByKey(true);
     setOptions((open) => (open === o ? null : o));
   };
-  // A tap on Speed or Subtitles & Audio: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker.
+  // A tap on Speed: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker. Every other
+  // button, Subtitles & Audio included (#465), opens the app's own panel everywhere.
   const openOptions = (o: NonNullable<typeof options>, from: Element) => {
-    if (!nativeDialogsAvailable || (o !== "speed" && o !== "tracks")) return setOptions(o);
-    const menu = o === "speed" ? speedMenu(SPEEDS, rate) : tracksMenu(tracks);
+    if (!nativeDialogsAvailable || o !== "speed") return setOptions(o);
     setNativeMenu(true);
-    showNativeDialog({ ...menu, anchor: anchorOf(from) })
+    showNativeDialog({ ...speedMenu(SPEEDS, rate), anchor: anchorOf(from) })
       .then((id) => {
-        if (o === "speed") {
-          const r = pickedSpeed(id);
-          if (r != null && r !== rate) setRate(r);
-          return;
-        }
-        const pick = pickedTrack(id);
-        if (pick === "settings") {
-          setSubSettingsOpen(true);
-          setOptions("tracks");
-        } else if (pick && "audio" in pick) {
-          if (pick.audio !== tracks.audioId) tracks.selectAudio(pick.audio);
-        } else if (pick && pick.subtitle !== tracks.subId) void tracks.selectSubtitle(pick.subtitle);
+        const r = pickedSpeed(id);
+        if (r != null && r !== rate) setRate(r);
       })
       .catch(warnFailed("menu"))
       .finally(() => setNativeMenu(false));
@@ -957,9 +1081,8 @@ export function Player({
           togglePin();
           return true;
         case "fill":
-          toggleFill();
-          // TV mode has no button showing it: say which it is now.
-          if (tv) flashNotice(getPrefs().videoFill ? "Fill" : "Fit", 1500);
+          if (ytFramed) return false;
+          cycleCrop();
           return true;
         case "skip":
           skip.skipActive();
@@ -973,6 +1096,12 @@ export function Player({
           return true;
         case "tracks":
         case "speed":
+          // YouTube's player has them in its own controls, and nothing may open over it (#384). A remote
+          // can't reach those: TV mode has its own menus, beside the player (#434).
+          if (ytFramed && !tv) {
+            flashNotice(action === "tracks" ? YT_CAPTIONS : YT_SPEED, 4000);
+            return true;
+          }
           toggleOptions(action);
           return true;
         case "episodes":
@@ -999,11 +1128,14 @@ export function Player({
     },
     // TV: volume keys show only the volume HUD, not the whole player.
     (action) => {
-      if (tv && (action === "volumeUp" || action === "volumeDown" || action === "mute")) return;
+      // YouTube's bar comes back for any of them (#384): there's no HUD or skip button over its player.
+      if (tv && !ytFramed && (action === "volumeUp" || action === "volumeDown" || action === "mute")) return;
       // A seek with the controls hidden shows just its skip button and the "+10" (SkipTransport), not the controls.
-      if (!chromeVisible && (action === "seekBack" || action === "seekForward")) return;
-      poke(true);
+      if (!chromeVisible && !ytFramed && (action === "seekBack" || action === "seekForward")) return;
+      poke(true, `key (${action})`);
     },
+    // Any other key brings the controls back too, with the focus ring where the keyboard left it (#329).
+    () => poke(true, "key"),
   );
 
   // Warm the next episode's sources well before the credits.
@@ -1054,14 +1186,198 @@ export function Player({
 
   const VolumeIcon = muted || volume === 0 ? VolumeMuted : Volume;
 
+  // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
+  const topBar = useRef<HTMLDivElement>(null);
+  const actionRow = useRef<HTMLDivElement>(null);
+  const showPin = canPin && !fullscreen;
+  const showFill = !tv && isDesktop;
+  const barFit = useBarFit(
+    topBar,
+    actionRow,
+    Number(showPin) + Number(showFill),
+    !tv && form !== "phone" && !compact,
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local].join("|"),
+    !!watchLog,
+  );
+  const more = barFit.more;
+  // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
+  const [volumeOpen, setVolumeOpen] = useState(false);
+  const sliderFolded = !barFit.slider && !systemVolume;
+  useEffect(() => {
+    if (!chromeVisible || !sliderFolded) setVolumeOpen(false);
+  }, [chromeVisible, sliderFolded]);
+
+  // The Watch Party panel: over the picture, or beside YouTube's player (#384).
+  const partyColumns: OptionColumn[] = canParty
+    ? [
+        ...(party
+          ? [
+              {
+                title: "Watch Party",
+                size: "medium" as const,
+                options: [],
+                onSelect: () => {},
+                // Focus comes to Copy Invite when the party starts: what it replaces is gone (#247).
+                content: <PartyRoomPane party={party} onGo={() => setOptions(null)} autoFocus />,
+              },
+              {
+                title: "Settings",
+                size: "medium" as const,
+                options: [],
+                onSelect: () => {},
+                // TV mode: no pasting on a remote; links others put on still play there.
+                content: (
+                  <PartySettingsPane party={party} link={tv ? undefined : <LinkForm me={profile!} onDone={() => setOptions(null)} />} />
+                ),
+              },
+            ]
+          : [{ title: "Watch Party", size: "medium" as const, options: [], onSelect: () => {}, content: <PartyStart me={profile!} onStart={local ? undefined : startHere} /> }]),
+        // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
+        ...(party || tv
+          ? []
+          : [
+              {
+                title: "Watch a Link",
+                size: "medium" as const,
+                options: [],
+                onSelect: () => {},
+                content: (
+                  <div className="party-pane">
+                    <p className="party-lede">
+                      Start a party on a YouTube video, or a video file or stream from the web. Everyone's app opens the link itself, after seeing it.
+                    </p>
+                    <LinkForm me={profile!} onDone={() => setOptions(null)} />
+                  </div>
+                ),
+              },
+            ]),
+      ]
+    : [];
+
+  // A YouTube video in the app (#384): YouTube's player with its own controls, a bar above it and the party panel
+  // beside it. Nothing of ours is drawn over the frame; the loading screen only until YouTube's player is up.
+  if (ytFramed) {
+    // TV's Captions and Speed menus (#434), beside the player as the party's panel is.
+    const ytMenu = tv && (options === "tracks" || options === "speed") ? options : null;
+    const ytSpeeds = speedChoices(ytSpeed.speeds, SPEEDS);
+    const ytMenuColumns: OptionColumn[] =
+      ytMenu === "tracks"
+        ? [
+            // What stays in YouTube's player, above the long list where it's seen.
+            { title: "What stays in YouTube's player", titleHidden: true, size: "medium", options: [], onSelect: () => {}, content: <p className="party-lede">{CAPTIONS_NOTE}</p> },
+            {
+              title: "Captions",
+              value: ytEmbed.captions ?? CAPTIONS_OFF,
+              options: captionChoices(settings?.subtitleLanguage),
+              onSelect: (id) => {
+                const captions = id === CAPTIONS_OFF ? null : id;
+                if (captions === ytEmbed.captions) return;
+                // The embed loads again with the new parameters, and goes on where it was.
+                const autoplay = !yt.paused;
+                yt.reload();
+                setYtEmbed({ captions, autoplay });
+              },
+            },
+          ]
+        : [
+            {
+              title: "Playback Speed",
+              value: String(ytSpeed.rate),
+              options: party || ytSpeeds.length < 2 ? [] : ytSpeeds.map((r) => ({ id: String(r), label: speedLabel(r) })),
+              empty: party ? SPEED_PARTY_NOTE : SPEED_ONE_NOTE,
+              onSelect: (id) => setRate(Number(id)),
+            },
+          ];
+    const latestNote = party?.notes.at(-1);
+    const message =
+      notice ??
+      partyHold ??
+      (latestNote ? (latestNote.system || !latestNote.who ? latestNote.text : `${latestNote.who.name} ${latestNote.text}`) : null);
+    // Out until it plays; then it collapses to a strip along the top edge, and the pointer there, a key or a message brings it back.
+    const barShown = !ytPlayed || chrome.visible || options === "party" || !!ytMenu || !!message;
+    const failed = !ready && (!!error || source.state.status === "failed");
+    return (
+      <div
+        className="player player-yt"
+        data-engine="youtube"
+        data-chrome={barShown}
+        data-key-focus={keyFocus || undefined}
+        data-options={options === "party" || !!ytMenu}
+        data-started={started}
+        data-buffering={frameSteps.spinner && ready}
+        onPointerMove={() => poke()}
+        onPointerDown={() => poke()}
+      >
+        <div className="player-yt-main">
+          <div
+            className="player-yt-bar"
+            data-shown={barShown}
+            data-tauri-drag-region={pinned ? undefined : true}
+            onPointerEnter={() => (overControls.current = true)}
+            onPointerLeave={() => (overControls.current = false)}
+          >
+            <BackButton className="player-back" onClick={() => void exit()} />
+            <p className="player-yt-message t-callout" role="status" aria-live="polite" data-tauri-drag-region={pinned ? undefined : true}>
+              {message}
+            </p>
+            {/* A remote reaches these, not YouTube's own controls (#434). */}
+            {tv && (
+              <>
+                <IconButton variant="player" label="Captions" title="Captions" aria-pressed={ytMenu === "tracks"} onClick={() => toggleOptions("tracks")}>
+                  <Captions size={22} />
+                </IconButton>
+                {!party && (
+                  <IconButton variant="player" label={`Speed (${ytSpeed.rate}x)`} title="Speed" aria-pressed={ytMenu === "speed"} onClick={() => toggleOptions("speed")}>
+                    <Speed size={22} />
+                  </IconButton>
+                )}
+              </>
+            )}
+            {party && <PartyBadge party={party} onOpen={() => setOptions((o) => (o === "party" ? null : "party"))} />}
+            {!fullscreen && !tv && <WindowControls pinned={pinned} />}
+          </div>
+          <iframe
+            ref={setYtFrame}
+            className="player-youtube"
+            data-hidden={failed || undefined}
+            src={youtubeEmbed(ytId, { api: true, ...ytEmbed })}
+            title={title}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            // It runs its own page and nothing more: no popups, no taking the app's window elsewhere.
+            sandbox="allow-scripts allow-same-origin allow-presentation"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+          <AnimatePresence>
+            {!(ready && (started || ytShown)) && (
+              <PlayerStatus
+                key="status"
+                state={source.state}
+                error={error}
+                name={title}
+                steps={steps}
+                backend="YouTube's embedded player"
+                onSettings={openSettingsPage}
+                onRetry={source.retry}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+        {canParty && <OptionsOverlay beside open={options === "party"} onClose={() => setOptions(null)} media={media} columns={partyColumns} />}
+        {tv && <OptionsOverlay beside open={!!ytMenu} onClose={() => setOptions(null)} media={media} columns={ytMenuColumns} />}
+      </div>
+    );
+  }
+
   return (
     <div
       className="player"
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
-      data-buffering={buffering && ready}
+      data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
       data-instant={chrome.instant}
+      data-key-focus={keyFocus || undefined}
       data-options={!!options}
       data-options-instant={optionsByKey}
       data-started={started}
@@ -1070,19 +1386,6 @@ export function Player({
     >
       {engine === "html" && (
         <video ref={setVideoEl} className="player-video" playsInline style={subtitleCueVars(subStyle)} />
-      )}
-      {ytId && !ytOutside && (
-        // YouTube's own player, its controls off: the player's controls (and the party) drive it through its API.
-        <iframe
-          ref={setYtFrame}
-          className="player-video player-youtube"
-          src={youtubeEmbed(ytId, { controls: false, api: true })}
-          title={title}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          // It runs its own page and nothing more: no popups, no taking the app's window elsewhere.
-          sandbox="allow-scripts allow-same-origin allow-presentation"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
       )}
       {/* Click target over either engine: tap to play/pause, double-click for
           fullscreen (on touch, a side's double-tap seeks), wheel for volume. */}
@@ -1099,8 +1402,8 @@ export function Player({
         }}
         onClick={() => {
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
-          if (chromeAtPress.current) hideChrome();
-          else poke();
+          if (chromeAtPress.current) hideChrome("tap");
+          else poke(false, "tap");
         }}
         // A finger double-taps the left or right third to skip back or ahead, as phone players do;
         // the middle (and a mouse anywhere) toggles fullscreen.
@@ -1110,9 +1413,9 @@ export function Player({
           if (touch && (x < third || x > third * 2)) {
             seekBy((x < third ? -1 : 1) * seekStep);
             kick(x < third ? "back" : "forward");
-            return poke(true);
+            return poke(true, "double tap");
           }
-          if (!isDesktop) return toggleFill();
+          if (!isDesktop) return cycleCrop();
           // Pinned, the window stays as it is (#266).
           if (pinner.pinned) return;
           void toggleFullscreen();
@@ -1125,7 +1428,7 @@ export function Player({
             setVolume((v) => Math.min(1, Math.max(0, +(v - Math.sign(e.deltaY) * 0.05).toFixed(2))));
             setMuted(false);
           }
-          poke(true);
+          poke(true, "wheel");
         }}
       />
 
@@ -1137,20 +1440,16 @@ export function Player({
             key="status"
             state={source.state}
             error={ytOutside ? "On Android, YouTube videos play in YouTube." : error}
-            logo={meta?.logo}
+            logo={art.logo}
+            logos={art.logos}
+            artPending={art.pending}
             name={link ? title : meta?.name}
-            background={meta?.background}
+            background={art.background}
             steps={steps}
             backend={engine === "html" ? "built-in" : engine === "youtube" ? "YouTube's embedded player" : (engine ?? "not chosen yet")}
             onSources={link || local ? undefined : () => setOptions("sources")}
-            onSettings={
-              tv
-                ? undefined
-                : () => {
-                    void exit();
-                    openSettings("sources");
-                  }
-            }
+            onSettings={openSettingsPage}
+            onRetry={source.retry}
             onYouTube={ytOutside ? () => void api.openExternal(youtubeUrl(ytOutside)) : undefined}
           />
         )}
@@ -1168,8 +1467,7 @@ export function Player({
               ? undefined
               : () => {
                   source.answerNotice(false);
-                  void exit();
-                  openSettings("sources");
+                  openSettingsPage("sources");
                 }
           }
         />
@@ -1194,75 +1492,123 @@ export function Player({
 
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
       {/* Pinned (#266), nothing moves the window. */}
-      <div className="player-top" data-tauri-drag-region={pinned ? undefined : true}>
-        <IconButton variant="player" onClick={() => void exit()} label="Back" title="Back (Esc)">
-          <ArrowLeft size={26} />
-        </IconButton>
+      <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true}>
+        <BackButton className="player-back" onClick={() => void exit()} />
+        {/* Between Back and the controls: centred while it fits, off-centre when it would meet them, then cut short (#396). */}
         <div className="player-heading" data-tauri-drag-region={pinned ? undefined : true}>
           <span className="player-heading-title">{heading}</span>
           {current && <span className="player-heading-show">{title}</span>}
         </div>
-        <div className="player-top-actions">
-          {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
-          <div className="player-volume">
-            <IconButton variant="player" onClick={() => setMuted((m) => !m)} label={muted ? "Unmute" : "Mute"} title={withShortcut("Mute", "mute")}>
-              <VolumeIcon size={22} />
-            </IconButton>
-            {!systemVolume && (
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={muted ? 0 : volume}
-                onChange={(e) => {
-                  setVolume(Number(e.target.value));
-                  setMuted(false);
-                }}
-                aria-label="Volume"
-                style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
-              />
+        <div className="player-top-end">
+          <div className="player-top-actions">
+            {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
+            <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
+              <IconButton
+                variant="player"
+                onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
+                label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
+                aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
+                title={withShortcut("Mute", "mute")}
+              >
+                <VolumeIcon size={22} />
+              </IconButton>
+              {!systemVolume && (
+                <span className="player-volume-slider">
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={muted ? 0 : volume}
+                    onChange={(e) => {
+                      setVolume(Number(e.target.value));
+                      setMuted(false);
+                    }}
+                    aria-label="Volume"
+                    style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
+                  />
+                </span>
+              )}
+            </div>
+            {airplay.available && (
+              <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
+                <Cast size={22} />
+              </IconButton>
+            )}
+            {showPin && !more && (
+              <IconButton
+                variant="player"
+                onClick={togglePin}
+                label="Pin window"
+                aria-pressed={pinned}
+                title={withShortcut(pinned ? "Unpin window" : "Pin window on top", "pinWindow")}
+              >
+                {pinned ? <Pinned size={22} /> : <Pin size={22} />}
+              </IconButton>
+            )}
+            {showFill && !more && (
+              <IconButton
+                variant="player"
+                onClick={cycleCrop}
+                label={`Crop: ${cropModeLabel(crop)}`}
+                data-crop={crop}
+                title={withShortcut(`${cropModeLabel(crop)} (next: ${cropModeLabel(nextCrop)})`, "fill")}
+              >
+                <FillWindow size={22} />
+              </IconButton>
+            )}
+            {(more || watchLog) && (
+              <MenuRoot modal={false} onOpenChange={setMoreOpen}>
+                <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More">
+                  <More size={22} />
+                </MenuTrigger>
+                <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="More">
+                  {more && showPin && (
+                    <MenuCheckItem checked={pinned} onCheckedChange={togglePin} meta={shortcutText("pinWindow")}>
+                      Pin window on top
+                    </MenuCheckItem>
+                  )}
+                  {more && showFill && (
+                    <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
+                      {`Crop: ${cropModeLabel(crop)}`}
+                    </MenuCheckItem>
+                  )}
+                  {watchLog && (
+                    <MenuItem
+                      onClick={() =>
+                        void watchLogText(engine ?? "not chosen yet")
+                          .then((text) => navigator.clipboard.writeText(text))
+                          .then(
+                            () => flashNotice("Watch log copied", 2000),
+                            () => flashNotice("Couldn't copy the watch log", 2500),
+                          )
+                      }
+                    >
+                      Copy Watch Log
+                    </MenuItem>
+                  )}
+                </MenuPopup>
+              </MenuRoot>
+            )}
+            {!tv && isDesktop && (
+              <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
+                {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
+              </IconButton>
+            )}
+            {!tv && !isDesktop && (
+              <IconButton
+                variant="player"
+                onClick={cycleCrop}
+                label={`Crop: ${cropModeLabel(crop)}`}
+                data-crop={crop}
+                title={`${cropModeLabel(crop)} (next: ${cropModeLabel(nextCrop)})`}
+              >
+                {fill ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
+              </IconButton>
             )}
           </div>
-          {airplay.available && (
-            <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
-              <Cast size={22} />
-            </IconButton>
-          )}
-          {canPin && !fullscreen && (
-            <IconButton
-              variant="player"
-              onClick={togglePin}
-              label="Pin window"
-              aria-pressed={pinned}
-              title={withShortcut(pinned ? "Unpin window" : "Pin window on top", "pinWindow")}
-            >
-              <Pin size={22} />
-            </IconButton>
-          )}
-          {!tv && isDesktop && (
-            <IconButton
-              variant="player"
-              onClick={toggleFill}
-              label="Fill window"
-              aria-pressed={fill}
-              title={withShortcut(fill ? "Fit to window" : "Fill window", "fill")}
-            >
-              <FillWindow size={22} />
-            </IconButton>
-          )}
-          {!tv && isDesktop && (
-            <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
-              {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
-            </IconButton>
-          )}
-          {!tv && !isDesktop && (
-            <IconButton variant="player" onClick={toggleFill} label={fill ? "Fit to screen" : "Fill screen"} aria-pressed={fill}>
-              {fill ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
-            </IconButton>
-          )}
+          {!fullscreen && !tv && <WindowControls pinned={pinned} />}
         </div>
-        {!fullscreen && !tv && <WindowControls pinned={pinned} />}
       </div>
 
       {/* Centre transport, Netflix-style: bare glyphs, no button chrome. */}
@@ -1277,7 +1623,7 @@ export function Player({
             title={withShortcut(`Back ${seekStep}s`, "seekBack")}
           />
           <IconButton variant="transport" className="player-transport-main" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut("Play/Pause", "playPause")}>
-            {buffering ? (
+            {frameSteps.spinner ? (
               <Spinner className="player-spinner" size={52} label="Buffering" />
             ) : paused ? (
               <Play size={64} fill="currentColor" strokeWidth={0} />
@@ -1296,6 +1642,9 @@ export function Player({
         </div>
       )}
 
+      {/* Paused on a stepped frame: once the controls hide, its number stays where the clock was (#346). */}
+      {frameSteps.stepping && <FrameLabel media={media} fps={fps ?? DEFAULT_FPS} />}
+
       {/* Bottom: timeline with time left, then labelled text actions. */}
       <div
         className="player-bottom"
@@ -1304,9 +1653,9 @@ export function Player({
       >
         <div className="player-timeline">
           <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} onSeek={seekTo} />
-          <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={stepping ? (fps ?? DEFAULT_FPS) : null} />
+          <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
-        <div className="player-actions">
+        <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (
             <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
           )}
@@ -1397,7 +1746,7 @@ export function Player({
                 style={subStyle}
                 onChange={(patch) => updateSettings.mutate({ subtitleStyle: { ...subStyle, ...patch } })}
                 delay={subDelay}
-                onDelay={setSubDelay}
+                onDelay={changeSubDelay}
                 canPosition={engine === "mpv"}
               />
             ) : undefined,
@@ -1472,49 +1821,7 @@ export function Player({
           open={options === "party"}
           onClose={() => setOptions(null)}
           media={media}
-          columns={[
-            ...(party
-              ? [
-                  {
-                    title: "Watch Party",
-                    size: "medium" as const,
-                    options: [],
-                    onSelect: () => {},
-                    // Focus comes to Copy Invite when the party starts: what it replaces is gone (#247).
-                    content: <PartyRoomPane party={party} onGo={() => setOptions(null)} autoFocus />,
-                  },
-                  {
-                    title: "Settings",
-                    size: "medium" as const,
-                    options: [],
-                    onSelect: () => {},
-                    // TV mode: no pasting on a remote; links others put on still play there.
-                    content: (
-                      <PartySettingsPane party={party} link={tv ? undefined : <LinkForm me={profile!} onDone={() => setOptions(null)} />} />
-                    ),
-                  },
-                ]
-              : [{ title: "Watch Party", size: "medium" as const, options: [], onSelect: () => {}, content: <PartyStart me={profile!} onStart={local ? undefined : startHere} /> }]),
-            // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
-            ...(party || tv
-              ? []
-              : [
-                  {
-                    title: "Watch a Link",
-                    size: "medium" as const,
-                    options: [],
-                    onSelect: () => {},
-                    content: (
-                      <div className="party-pane">
-                        <p className="party-lede">
-                          Start a party on a YouTube video, or a video file or stream from the web. Everyone's app opens the link itself, after seeing it.
-                        </p>
-                        <LinkForm me={profile!} onDone={() => setOptions(null)} />
-                      </div>
-                    ),
-                  },
-                ]),
-          ]}
+          columns={partyColumns}
         />
       )}
 
@@ -1698,6 +2005,17 @@ function savedVolume() {
   if (systemVolume) return 1;
   const v = Number(localStorage.getItem("polar.volume") ?? 1);
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+}
+
+/** `value` once it has stayed the same for `ms`, else null: a blip never shows. */
+function useLasting<T>(value: T | null, ms: number): T | null {
+  const [lasting, setLasting] = useState<T | null>(null);
+  useEffect(() => {
+    if (value == null) return setLasting(null);
+    const t = window.setTimeout(() => setLasting(value), ms);
+    return () => window.clearTimeout(t);
+  }, [value, ms]);
+  return value == null ? null : lasting === value ? lasting : null;
 }
 
 /** A short message over the player (a source skipped, an intro skipped) that clears itself. */

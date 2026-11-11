@@ -14,13 +14,14 @@
 // has every file tauri.windows.conf.json bundles (the Rust build fails without them). Otherwise only
 // the player is fetched, not the source archive. Builds and releases still pin the version and take both.
 // Without CI's copy (gh missing or signed out, the artifact expired), a dev run takes the player the
-// newest release attaches (Polarity_<version>_x64_mpv.zip, public, no sign-in), even an older build.
+// newest release attaches (Tools-Polarity-<version>-Windows-x64-mpv.zip, public, no sign-in), even an older build.
 //
 //   bun scripts/fetch-mpv.ts [--from <dir>] [--dev]
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PLAYER_ZIP } from "./releaseAssets";
 import { mpvVersion, vendoredMpvVersion } from "./windowsMpv";
 
 const REPO = "unzoid/polarity";
@@ -112,12 +113,12 @@ function downloadZip(artifact: Artifact, file: string): Promise<void> {
   });
 }
 
-/** The player attached to the newest published release (`Polarity_<version>_x64_mpv.zip`): public, no sign-in. */
+/** The player attached to the newest published release (`Tools-Polarity-<version>-Windows-x64-mpv.zip`, up to 0.18.0 `Polarity_<version>_x64_mpv.zip`): public, no sign-in. */
 async function releasedPlayer(): Promise<{ name: string; url: string; size: number } | undefined> {
   const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } }).catch(() => undefined);
   if (!r?.ok) return undefined;
   const release = (await r.json()) as { assets?: { name: string; browser_download_url: string; size: number }[] };
-  const asset = release.assets?.find((a) => /_x64_mpv\.zip$/.test(a.name));
+  const asset = release.assets?.find((a) => PLAYER_ZIP.test(a.name));
   return asset && { name: asset.name, url: asset.browser_download_url, size: asset.size };
 }
 
@@ -171,7 +172,7 @@ async function fromCi(into: string) {
 /** A dev build without CI's copy: the newest release's player, which may be an older mpv build. */
 async function fromRelease(into: string, why: string) {
   const asset = await releasedPlayer();
-  if (!asset) fail(`${why}\n\nNo published release has the player (Polarity_<version>_x64_mpv.zip) to fall back on either.`);
+  if (!asset) fail(`${why}\n\nNo published release has the player (Tools-Polarity-<version>-Windows-x64-mpv.zip) to fall back on either.`);
   console.log(`CI's copy of the Windows player isn't available here: ${why.split("\n")[0]}`);
   console.log(`Downloading it from the newest release instead (${asset.name}, ${mb(asset.size)}), no sign-in needed. It's kept for later runs.`);
   const zip = join(into, asset.name);

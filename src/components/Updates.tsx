@@ -70,13 +70,13 @@ export function UpdateToast({ hidden }: { hidden: boolean }) {
         >
           {s.phase === "available" && (
             <>
-              <strong>Polarity {s.version} is available</strong>
+              <strong>{s.name} is available</strong>
               <span>You're on an older version.</span>
             </>
           )}
           {s.phase === "downloading" && (
             <>
-              <strong>Downloading Polarity {s.version}…</strong>
+              <strong>Downloading {s.name}…</strong>
               <span>{s.progress == null ? "Starting" : `${Math.round(s.progress * 100)}%`} · keep watching, it's in the background</span>
               <span className="update-progress" aria-hidden>
                 <span style={{ transform: `scaleX(${s.progress ?? 0.04})` }} />
@@ -85,13 +85,13 @@ export function UpdateToast({ hidden }: { hidden: boolean }) {
           )}
           {s.phase === "ready" && (
             <>
-              <strong>Polarity {s.version} is ready</strong>
+              <strong>{s.name} is ready</strong>
               <span>Restart to finish. It takes a few seconds and you'll be right back.</span>
             </>
           )}
           {s.phase === "installing" && (
             <>
-              <strong>Installing Polarity {s.version}…</strong>
+              <strong>Installing {s.name}…</strong>
               <span>Polarity will reopen by itself.</span>
             </>
           )}
@@ -123,21 +123,21 @@ export function UpdatePill() {
   if (!("version" in s) || dismissed !== s.version) return null;
   if (s.phase === "available")
     return (
-      <button className="navbar-update pressable" onClick={() => void downloadUpdate()} title={`Download Polarity ${s.version}`}>
+      <button className="navbar-update pressable" onClick={() => void downloadUpdate()} title={`Download ${s.name}`}>
         <span className="navbar-update-dot" aria-hidden />
         Update
       </button>
     );
   if (s.phase === "downloading")
     return (
-      <span className="navbar-update" data-busy title={`Downloading Polarity ${s.version}`}>
+      <span className="navbar-update" data-busy title={`Downloading ${s.name}`}>
         <span className="navbar-update-dot" aria-hidden />
         {s.progress == null ? "Updating…" : `${Math.round(s.progress * 100)}%`}
       </span>
     );
   if (s.phase === "ready")
     return (
-      <button className="navbar-update pressable" onClick={() => void installUpdate()} title={`Install Polarity ${s.version} and restart`}>
+      <button className="navbar-update pressable" onClick={() => void installUpdate()} title={`Install ${s.name} and restart`}>
         <span className="navbar-update-dot" aria-hidden />
         Restart to update
       </button>

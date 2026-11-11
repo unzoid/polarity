@@ -13,6 +13,10 @@ time the page is opened (`usePlayback` in `src/screens/AnimeDetail.tsx`, `TvAnim
 (`src/lib/anime/search.ts`), which can override ani.zip's link with a Cinemeta title search
 (also, since #78, for a part with a part name, "… 1st Stage", "… 2nd - 3rd Stage", that IMDb lists
 as a series of its own: the entry plays from that series, its episodes matched by air date).
+Since #360 an episode that hasn't aired yet goes on from the aired ones instead of by its own date
+(`episodeMatcher` in `src/lib/anime/anizip.ts`): the catalogs list it under a placeholder name with a
+guessed date. A split part's second entry, which borrows its prequel's ani.zip record, is also asked
+for by its own Kitsu id from the id lists.
 
 Nothing remembers that choice. So the same show splits into several items when:
 
@@ -76,6 +80,19 @@ has most of them by air date; one the catalogs have no dated episodes for yet co
 When nothing matches, the anime page says it isn't linked and offers "Choose the series": the
 user's pick is stored as the entry's link. A link found by title or stored is offered for
 change ("Wrong series?"); one a mapping gives is not.
+
+**Taking a pick back** (#335). Right after a pick a notice says which series the anime plays from
+now, with Undo: the link from before the pick is made again (none before: the stored link is
+taken back). With a link stored, "Wrong series?" offers "Use Polarity's match" first, which takes
+it back (`unlink_anime`, `Space::unlink_anime`): the entry plays from what the id lists or the
+title search find again. A removal stays in `Space.links` as the link marked `removed` (the
+`deleted` column of `anime_links`), so it syncs like a link; it says nothing about aliases, and
+`anime_links()` leaves it out. Whenever an entry's IMDb title changes (another pick, Undo, or the
+removal), `Space::unkey` moves back what the old link moved onto it: progress whose video id was
+played under one of the link's other ids (`kitsu:5:3`), and the library item it moved there,
+known by its stamp (`rekey` stamps a moved item and its old id's removal alike; a merge with the
+series' own item one ms later, so that item stays and the show's comes back beside it). The IMDb
+title's own rows never move. Pulled links go through the same step, so every device ends the same.
 
 **Anime links.** For each canonical anime title Polarity stores one small record, the *link*:
 `{ anilist, mal?, kitsu? }`, plus `imdb` when canonical is a `tt`. It is the persisted form of

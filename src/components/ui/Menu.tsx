@@ -86,9 +86,12 @@ export function MenuCheckItem({
   meta?: ReactNode;
 }) {
   return (
-    <Base.CheckboxItem className="menu-item" checked={checked} closeOnClick={false} onCheckedChange={onCheckedChange}>
-      <span className="menu-check">{checked && <Check />}</span>
-      <span>{children}</span>
+    <Base.CheckboxItem className="menu-item menu-check-item" checked={checked} closeOnClick={false} onCheckedChange={onCheckedChange}>
+      {/* Always there, so it can fade; unchecked, the label slides over its place (menu.css). */}
+      <span className="menu-check" aria-hidden>
+        <Check />
+      </span>
+      <span className="menu-check-label">{children}</span>
       {meta != null && <span className="menu-meta tabular">{meta}</span>}
     </Base.CheckboxItem>
   );

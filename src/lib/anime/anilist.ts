@@ -7,6 +7,7 @@ import { readCached, writeCached } from "../net/deviceCache";
 import { isRecord, listOf, str } from "../parse";
 import { id as idOf, readAnime, readChained, readLinked, readPage, readRecommendations, readSlot } from "./responses";
 import { walkSeasons, type SeasonWalk } from "./seasons";
+import { createBatcher, isTooComplex, mediaBatchQuery, SplitBatch, TooComplex } from "./batch";
 import { cardsShown } from "./franchise";
 
 /**
@@ -22,9 +23,15 @@ import { cardsShown } from "./franchise";
  */
 const ENDPOINT = "https://graphql.anilist.co";
 
-/** How long the Anime page's rows, and an entry's page, are drawn from the device before they must be asked again. */
+/**
+ * How long answers are kept on the device and used without asking again (#430): the Anime page's rows half a day,
+ * an entry's page and its franchise links a day (an hour for one still airing: its schedule moves), airing
+ * schedules an hour. A query's `staleTime` is the same age, so a second visit or a restart asks nothing until then.
+ */
 const ROWS_ON_DEVICE = 12 * 60 * 60_000;
 const PAGE_ON_DEVICE = 24 * 60 * 60_000;
+const AIRING_ON_DEVICE = 60 * 60_000;
+const LINK_ON_DEVICE = 24 * 60 * 60_000;
 
 /** One request's place on the device: the query's text (hashed) with its variables. */
 function deviceKey(query: string, variables: Record<string, unknown>) {
@@ -38,6 +45,8 @@ export interface Ask {
   priority?: Priority;
   /** Keep the answer on the device for {@link fromDevice}. */
   keep?: boolean;
+  /** Take what came even if some of it is missing (a batch where AniList lacks an entry answers the rest, #430). */
+  partial?: boolean;
 }
 
 /** The `data` of AniList's answer, unread: callers take what they asked for through lib/anime/responses.ts. */
@@ -45,7 +54,7 @@ export async function gql(
   query: string,
   variables: Record<string, unknown> = {},
   signal?: AbortSignal,
-  { priority, keep = false }: Ask = {},
+  { priority, keep = false, partial = false }: Ask = {},
 ): Promise<Record<string, unknown>> {
   const res = await limitedFetch(
     anilistLimiter,
@@ -60,8 +69,9 @@ export async function gql(
   );
   const json: unknown = await res.json().catch(() => null);
   const data = isRecord(json) && isRecord(json.data) ? json.data : undefined;
-  if (!res.ok || !data) {
-    const error = isRecord(json) && Array.isArray(json.errors) && isRecord(json.errors[0]) ? str(json.errors[0].message) : undefined;
+  const error = isRecord(json) && Array.isArray(json.errors) && isRecord(json.errors[0]) ? str(json.errors[0].message) : undefined;
+  if (error && isTooComplex(error)) throw new TooComplex(error);
+  if (!data || (!res.ok && !partial)) {
     throw new Error(error ?? `AniList answered ${res.status}`);
   }
   if (keep) writeCached(deviceKey(query, variables), data);
@@ -84,6 +94,30 @@ function fromDevice<T>(query: string, variables: Record<string, unknown>, maxAge
     return seed;
   };
   return { initialData: () => get().data, initialDataUpdatedAt: () => get().at };
+}
+
+/**
+ * Single entries' `fields`, asked together with others asked within a moment (lib/anime/batch.ts, #430): each
+ * answer is the entry's `Media` record, unread. `max` keeps a request under AniList's complexity limit (a bigger
+ * one is split when AniList says it's too complex).
+ */
+function mediaBatcher(fields: () => string, max: number) {
+  return createBatcher<Record<string, unknown>>({
+    max,
+    wait: 20,
+    send: async (ids, priority) => {
+      const data = await gql(mediaBatchQuery(ids, fields()), {}, undefined, { priority, partial: true });
+      const out = new Map<number, Record<string, unknown>>();
+      for (const id of ids) {
+        const m = data[`m${id}`];
+        if (isRecord(m)) out.set(id, m);
+      }
+      // One entry AniList doesn't have leaves the whole batch empty (its 404 answers every alias with null):
+      // asked again in parts, the others come and the missing one fails alone.
+      if (ids.length > 1 && out.size === 0) throw new SplitBatch("AniList left out the whole batch");
+      return out;
+    },
+  });
 }
 
 const subscribeBusy = (listener: () => void) => anilistLimiter.subscribe(listener);
@@ -272,7 +306,7 @@ export function useAnimeHome() {
     [shown],
   );
   const seed = useMemo(() => fromDevice(HOME_QUERY, homeVariables(), ROWS_ON_DEVICE, readHome), []);
-  return useQuery({ queryKey: keys.anime.home, staleTime: 30 * 60_000, queryFn: ({ signal }) => fetchAnimeHome(signal), select, ...seed });
+  return useQuery({ queryKey: keys.anime.home, staleTime: ROWS_ON_DEVICE, queryFn: ({ signal }) => fetchAnimeHome(signal), select, ...seed });
 }
 
 const homePage = (args: string) => `Page(perPage: 24) { media(type: ANIME, isAdult: false, ${args}) { ${LISTED} } }`;
@@ -328,6 +362,12 @@ const level = (p: Priority) => (typeof p === "function" ? p() : p);
 /** A row's priority from where it is on the page (lib/ui/viewport.ts useViewportPlace): far away it's background work. */
 export const rowPriority = (place: "in" | "near" | "far") => (place === "in" ? PRIORITY.visible : place === "near" ? PRIORITY.near : PRIORITY.background);
 
+/** `priority`, but a page's while entry `id`'s page is open: work a card started for it goes first once you open it. */
+export const pageWhenOpened =
+  (id: number, priority: Priority): Priority =>
+  () =>
+    opened.has(id) ? PRIORITY.page : level(priority);
+
 /** A row moved: AniList's queue looks at the priorities again. */
 export const reprioritiseAniList = () => anilistLimiter.wake();
 
@@ -359,7 +399,7 @@ export function useAnimeGenre(genre: string, enabled: boolean, priority: Priorit
   });
   const all = useQuery({
     queryKey: keys.anime.genre(genre),
-    staleTime: 60 * 60_000,
+    staleTime: ROWS_ON_DEVICE,
     enabled: enabled && (haveAll || first.isFetched),
     queryFn: ({ signal }) => genreShelf(genre, GENRE_ALL, signal, () => level(priority) + 0.5),
     select,
@@ -417,8 +457,11 @@ export function useAnimeSeasons(anime: Anime | undefined) {
   return useQuery(seasonsQuery(useQueryClient(), anime));
 }
 
-/** The query behind {@link useAnimeSeasons}, for walking several franchises at once (the Anime tab's banner, #325). */
-export function seasonsQuery(client: QueryClient, anime: Anime | undefined) {
+/**
+ * The query behind {@link useAnimeSeasons}, for walking several franchises at once (the Anime tab's banner, #325,
+ * and wide cards, #336). `priority` places the walk's requests in AniList's queue (a visible row's by default).
+ */
+export function seasonsQuery(client: QueryClient, anime: Anime | undefined, priority?: Priority) {
   return {
     queryKey: keys.anime.seasons(anime?.id),
     enabled: !!anime,
@@ -429,15 +472,16 @@ export function seasonsQuery(client: QueryClient, anime: Anime | undefined) {
         client.fetchQuery({
           queryKey: keys.anime.link(id),
           staleTime: 24 * 60 * 60_000,
-          queryFn: async ({ signal }) => {
-            const data = await gql(
-              `query ($id: Int) { Media(id: $id, type: ANIME) { ${CARD} relations { edges { relationType(version: 2) node {
-                ${CARD} relations { edges { relationType(version: 2) node { id type format } } } } } } } }`,
-              { id },
-              signal,
-            );
-            const linked = readLinked(data.Media);
-            if (!linked) throw new Error(`AniList has no anime ${id}`);
+          queryFn: async () => {
+            // Kept on the device a day: a walk after a restart asks nothing (#430).
+            const kept = readCached(linkKey(id), LINK_ON_DEVICE);
+            let linked = kept && readLinked(kept.data);
+            if (!linked) {
+              const raw = await linkBatch.ask(id, priority);
+              linked = readLinked(raw);
+              if (!linked) throw new Error(`AniList has no anime ${id}`);
+              writeCached(linkKey(id), raw);
+            }
             // The neighbours came whole: later walks through them start from the cache.
             for (const e of linked.relations.edges) if (e.node.full) client.setQueryData(keys.anime.link(e.node.id), e.node.full);
             return linked;
@@ -447,6 +491,14 @@ export function seasonsQuery(client: QueryClient, anime: Anime | undefined) {
     },
   };
 }
+
+/** One step of a season walk: the entry and its neighbours with their own links. */
+const LINK_FIELDS = `${CARD} description(asHtml: false) relations { edges { relationType(version: 2) node {
+  ${CARD} description(asHtml: false) relations { edges { relationType(version: 2) node { id type format } } } } } }`;
+const linkKey = (id: number) => `anilist.link.${id}`;
+/** Several franchises walked at once (the banner's, #325; wide cards, #336): each level's steps in one request. */
+const LINK_MOST = 6;
+const linkBatch = mediaBatcher(() => LINK_FIELDS, LINK_MOST);
 
 /**
  * An anime's full page data. `keepPrevious`: while another entry loads, keep
@@ -474,7 +526,7 @@ const opened = new Map<number, number>();
 export function animeQuery(id: number, priority: Priority = PRIORITY.page) {
   return {
     queryKey: keys.anime.media(id),
-    staleTime: 30 * 60_000,
+    staleTime: pageAge,
     queryFn: ({ signal }: { signal: AbortSignal }) => fetchAnime(id, signal, priority),
     ...fromDevice(ANIME_QUERY, { id }, PAGE_ON_DEVICE, (data) => readAnime(data.Media)),
   };
@@ -501,15 +553,26 @@ export async function anilistForMal(mal: number, signal?: AbortSignal): Promise<
   return idOf(isRecord(data.Media) ? data.Media.id : undefined) ?? null;
 }
 
-export async function fetchAnime(id: number, signal?: AbortSignal, priority: Priority = PRIORITY.page): Promise<Anime> {
-  const data = await gql(ANIME_QUERY, { id }, signal, { priority, keep: true });
-  const media = readAnime(data.Media);
+/** How long an entry's page is used as it came: a day, an hour while it airs (its schedule moves, #430). */
+function pageAge(q: { state: { data?: Anime } }) {
+  return q.state.data?.status === "RELEASING" || q.state.data?.status === "NOT_YET_RELEASED" ? AIRING_ON_DEVICE : PAGE_ON_DEVICE;
+}
+
+/** Entries' pages asked within a moment of each other (the banner's slides, #325) go in one request (#430). */
+const PAGE_MOST = 2;
+const pageBatch = mediaBatcher(() => ANIME_FIELDS, PAGE_MOST);
+
+// `signal` is left: an answer shared with other entries isn't cancelled for one of them.
+export async function fetchAnime(id: number, _signal?: AbortSignal, priority: Priority = PRIORITY.page): Promise<Anime> {
+  const raw = await pageBatch.ask(id, priority);
+  const media = readAnime(raw);
   if (!media) throw new Error(`AniList has no anime ${id}`);
+  // Kept as the single request's answer, which the page draws from at once next time (fromDevice).
+  writeCached(deviceKey(ANIME_QUERY, { id }), { Media: raw });
   return media;
 }
 
-const ANIME_QUERY = `query ($id: Int) {
-      Media(id: $id, type: ANIME) {
+const ANIME_FIELDS = `
         ${CARD}
         description(asHtml: false)
         synonyms source hashtag meanScore favourites isAdult countryOfOrigin
@@ -530,8 +593,14 @@ const ANIME_QUERY = `query ($id: Int) {
         externalLinks { site url type color icon language }
         rankings { rank type context allTime season year }
         airingSchedule(perPage: 50) { nodes { episode airingAt } }
-      }
-    }`;
+`;
+const ANIME_QUERY = `query ($id: Int) { Media(id: $id, type: ANIME) { ${ANIME_FIELDS} } }`;
+
+/**
+ * The batches' fields and their most entries, for the check against AniList's complexity limit of 500
+ * (tests/dom/anilistComplexity.test.ts). In November 2026 AniList counted 181 for an entry's page and 72 for a link.
+ */
+export const batchShapes = () => ({ page: { fields: ANIME_FIELDS, most: PAGE_MOST }, link: { fields: LINK_FIELDS, most: LINK_MOST } });
 
 /**
  * An entry's second page of recommendations, for when grouping by franchise left its first too few to
@@ -561,17 +630,27 @@ export interface AiringSlot {
   media: AnimeCard & { isAdult?: boolean; countryOfOrigin?: string | null };
 }
 
+/** The name the schedule's pages are kept under on the device. */
+const SCHEDULE_KEPT = "airingSchedules";
+
 /** Everything airing between two moments (unix seconds), in order. */
 export function useAiringSchedule(from: number, to: number, enabled = true) {
   const { animeScheduleAll } = usePrefs();
+  // Its pages are kept together on the device an hour (#430), as the answer to one request.
+  const seed = useMemo(
+    () => fromDevice(SCHEDULE_KEPT, { from, to }, AIRING_ON_DEVICE, (data) => (Array.isArray(data.items) ? listOf(data.items, readSlot) : undefined)),
+    [from, to],
+  );
   return useQuery({
     queryKey: keys.anime.schedule(from, to),
-    staleTime: 10 * 60_000,
+    staleTime: AIRING_ON_DEVICE,
     enabled,
+    ...seed,
     // Never adult titles; the long tail of shorts nobody's tracking only if Settings → Anime asks.
     select: (slots: AiringSlot[]) => slots.filter((s) => !s.media.isAdult && (animeScheduleAll || (s.media.popularity ?? 0) >= 500)),
     queryFn: async ({ signal }) => {
       const out: AiringSlot[] = [];
+      const kept: unknown[] = [];
       for (let page = 1; page <= 6; page++) {
         const data = await gql(
           `query ($page: Int, $from: Int, $to: Int) {
@@ -587,8 +666,10 @@ export function useAiringSchedule(from: number, to: number, enabled = true) {
         );
         const { items, hasNextPage } = readPage(data, "airingSchedules");
         out.push(...listOf(items, readSlot));
+        if (Array.isArray(items)) kept.push(...items);
         if (!hasNextPage) break;
       }
+      writeCached(deviceKey(SCHEDULE_KEPT, { from, to }), { items: kept });
       return out;
     },
   });

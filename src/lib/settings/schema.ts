@@ -1,5 +1,6 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
 import { isMac } from "../platform/device";
+import { CROP_MODES, cropModeLabel } from "./cropMode";
 import type { Prefs } from "./prefs";
 import type { Settings } from "../types";
 import type { PageId } from "./pages";
@@ -146,13 +147,18 @@ export const SETTINGS: SettingDef[] = [
   { id: "manageProfiles", page: "account", title: "Manage profiles", keywords: "edit add remove avatar" },
   { id: "secrets", page: "account", title: "API keys and addons", keywords: "sync encrypt encrypted passphrase keys addons secret" },
   {
-    id: "shareAddonsAndKeys",
+    id: "shareSetup",
     page: "account",
-    title: "Share add-ons and keys between profiles on this device",
-    caption: "On: a profile new to this device starts with the add-ons and API keys already here. Off: it starts with its own from your account, or none.",
-    keywords: "profiles addons api keys device shared separate per profile",
-    bind: p("shareAddonsAndKeys"),
-    control: toggle,
+    title: "Share add-ons and keys",
+    caption:
+      "What a profile new to this device starts with. With every account on this device, add-ons and API keys reach other accounts' profiles signed in here, and sync to their accounts.",
+    keywords: "profiles addons api keys device shared separate per profile account accounts",
+    bind: p("shareSetup"),
+    control: choice([
+      { value: "none", label: "Not shared" },
+      { value: "account", label: "Between this account's profiles" },
+      { value: "device", label: "With every account on this device" },
+    ]),
   },
   { id: "copySetup", page: "account", title: "Add-ons and Keys", keywords: "copy addons api keys profile guest device start" },
   { id: "stremioImport", page: "account", title: "Import from Stremio", keywords: "import move switch library history watched progress addons export json file" },
@@ -314,7 +320,8 @@ export const SETTINGS: SettingDef[] = [
     id: "discordJoin",
     page: "playback",
     title: "Who can join from Discord",
-    caption: "In a watch party, a Join watch party button on your Discord profile. Ask me: you allow or decline each request.",
+    caption:
+      "In a watch party, Join on your Discord profile opens the party in your friends' Polarity. Friends without Polarity can't join from Discord. Ask me: you allow or decline each request.",
     keywords: "discord watch party join invite ask friends button",
     bind: p("discordJoin"),
     control: choice([
@@ -583,18 +590,9 @@ export const SETTINGS: SettingDef[] = [
   { id: "subtitleBackground", page: "subtitles", title: "Background", keywords: "subtitle box" },
 
   // Appearance
-  { id: "accentColor", page: "appearance", title: "Accent colour", keywords: "color theme highlight" },
-  {
-    id: "theme",
-    page: "appearance",
-    title: "Background",
-    keywords: "theme black oled dark",
-    bind: s("theme", "dark"),
-    control: choice([
-      { value: "dark", label: "Dark" },
-      { value: "black", label: "Black (OLED)" },
-    ]),
-  },
+  // Drawn by components/settings/ThemePicker (grids of pictures, not schema controls).
+  { id: "colorScheme", page: "appearance", title: "Colour scheme", keywords: "color light dark mode system appearance white" },
+  { id: "theme", page: "appearance", title: "Theme", keywords: "colour color accent highlight background black oled dark create custom" },
   { id: "uiScale", page: "appearance", title: "Interface size", keywords: "zoom scale bigger smaller text" },
   {
     id: "cardSize",
@@ -613,10 +611,14 @@ export const SETTINGS: SettingDef[] = [
     id: "uiFont",
     page: "appearance",
     title: "Font",
-    keywords: "text typeface inter system opendyslexic dyslexia dyslexic accessibility readability",
+    keywords: "text typeface inter instrument hanken grotesk onest mona system opendyslexic dyslexia dyslexic accessibility readability",
     bind: s("uiFont", "inter"),
     control: choice([
       { value: "inter", label: "Inter" },
+      { value: "instrument", label: "Instrument Sans" },
+      { value: "hanken", label: "Hanken Grotesk" },
+      { value: "onest", label: "Onest" },
+      { value: "mona", label: "Mona Sans" },
       { value: "system", label: "System" },
       { value: "opendyslexic", label: "OpenDyslexic" },
     ]),
@@ -1162,21 +1164,22 @@ export const SETTINGS: SettingDef[] = [
     control: toggle,
   },
   {
-    id: "autocrop",
+    id: "cropMode",
     page: "advanced",
-    title: "Crop black bars",
+    title: "Crop",
     caption:
-      "Some files carry black bars inside the picture. This finds and trims them so the film fills a wide or ultrawide screen. Uses a little more CPU.",
-    keywords: "autocrop crop letterbox black bars ultrawide 21:9 aspect",
-    bind: p("autocrop"),
-    control: toggle,
-    tv: "Crop Black Bars",
+      "Fit shows the whole picture. Crop black bars trims bars that are part of the video, so a film fills a wide or ultrawide screen (uses a little more CPU). Fill window trims them too, then crops the picture's edges so it covers the window. The player's crop button switches between them.",
+    keywords: "autocrop crop letterbox black bars ultrawide 21:9 aspect fit fill window zoom pan scan",
+    bind: p("cropMode"),
+    control: choice(CROP_MODES.map((value) => ({ value, label: cropModeLabel(value) }))),
+    tv: "Crop",
   },
   {
     id: "autocropLookahead",
     page: "advanced",
     title: "Look ahead for bar changes",
-    caption: "Reads a little of the video ahead, so a change of black bars happens exactly on the scene cut. Uses some extra data.",
+    caption:
+      "Reads a little of the video ahead, so a change of black bars happens exactly on the frame it belongs to, also after a seek or when stepping frame by frame. Uses some extra data. Off, a change can come a few frames late.",
     keywords: "autocrop crop black bars lookahead scene cut",
     bind: p("autocropLookahead"),
     control: toggle,
@@ -1186,7 +1189,7 @@ export const SETTINGS: SettingDef[] = [
     page: "advanced",
     title: "Check every frame for black bars",
     caption:
-      "Reads every frame for bars, not only when they seem to change, so bars that move with the picture are followed exactly. For powerful computers: uses more CPU and writes about 150 MB a second to disk for 1080p video (600 MB for 4K).",
+      "Reads every frame for bars, not only when they seem to change, so bars that move with the picture are followed exactly. For powerful computers: uses more GPU and CPU (each frame is copied back from the graphics card) and writes about 150 MB a second to disk for 1080p video (600 MB for 4K).",
     keywords: "autocrop crop black bars every frame detector cpu disk",
     bind: p("autocropEveryFrame"),
     control: toggle,
@@ -1261,6 +1264,7 @@ export const SETTINGS: SettingDef[] = [
   { id: "privacyPolicy", page: "about", title: "Privacy Policy", keywords: "privacy data gdpr personal delete export" },
   { id: "termsOfUse", page: "about", title: "Terms of Use", keywords: "terms conditions rules legal" },
   { id: "animeCache", page: "about", title: "Anime data", keywords: "cache clear filler recap anime-lists ids storage disk anilist shelves" },
+  { id: "pickedTracks", page: "about", title: "Picked tracks", keywords: "remembered audio subtitles subtitle delay per source clear forget" },
 ];
 
 const BY_ID = new Map(SETTINGS.map((d) => [d.id, d]));

@@ -1,5 +1,6 @@
 import type { Playback } from "../../lib/party";
 import type { MediaLike } from "./mpvMedia";
+import { watch } from "../../lib/playback/watchLog";
 
 /** Within this, leave it alone. */
 const IN_SYNC = 0.12;
@@ -18,6 +19,18 @@ export const SEEK_SETTLE_MS = 300;
 export const FOLLOW_MS = 250;
 /** What a frame step (frameStep.ts) fires on the media once it has landed: a paused seek, however small. */
 export const FRAME_STEP_EVENT = "framestep";
+
+/** A stall shorter than this (a catch-up seek loading) isn't worth showing the room. */
+const BUFFERING_SHOWN_MS = 1000;
+/**
+ * Buffering that begins this soon after a play or a seek is that start loading (YouTube's player buffers on
+ * every one): it's a stall only once it has lasted START_BUFFER_MS (#383).
+ */
+export const START_GRACE_MS = 2000;
+export const START_BUFFER_MS = 3000;
+
+/** How long buffering lasts before the room hears of it as a stall, `sinceStart` ms after the last play or seek. */
+export const stallShownAfter = (sinceStart: number) => (sinceStart < START_GRACE_MS ? START_BUFFER_MS : BUFFERING_SHOWN_MS);
 
 export interface FollowerDeps {
   media: MediaLike;
@@ -72,11 +85,13 @@ export function createPartyFollower(d: FollowerDeps) {
     if (seekSent != null) return; // let the last one land
     commanded.seekAt = seekSent = d.now();
     commanded.seekTo = t;
+    watch(`watch party: catching up, seek to ${t.toFixed(1)} s`);
     m.currentTime = t;
   };
   const command = (paused: boolean) => {
     if (m.paused === paused) return;
     commanded = { ...commanded, paused, at: d.now() };
+    watch(`watch party: ${paused ? "pause" : "play"}`);
     if (paused) m.pause();
     else m.play().catch(() => {});
   };

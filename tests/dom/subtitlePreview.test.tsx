@@ -10,6 +10,7 @@ const settle = () => act(async () => new Promise((r) => setTimeout(r, 20)));
 function fakeMpv(props: Record<string, unknown>) {
   const asked: string[] = [];
   const mpv = Object.create(MpvMedia.prototype) as MpvMedia;
+  mpv.tracks = [];
   mpv.command = async (...args: unknown[]) => {
     const name = String(args[1]);
     asked.push(name);

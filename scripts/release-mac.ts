@@ -16,12 +16,13 @@
 //
 // The app is ad-hoc signed, not notarized: without an Apple Developer ID,
 // people open it the first time with right-click → Open.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { requireAccountEnv } from "./accountEnv";
 import { packMacSources } from "./macSources";
+import { releaseFile } from "./releaseAssets";
 
 const REPO = "unzoid/polarity";
 const root = join(import.meta.dir, "..");
@@ -58,7 +59,7 @@ if (!flags.has("--no-build")) requireAccountEnv(root, flags);
 
 // 1. Build.
 if (!flags.has("--no-build")) {
-  const env: Record<string, string> = { CI: "true" }; // no Finder scripting for the DMG window
+  const env: Record<string, string> = { CI: "true", VITE_POLAR_CHANNEL: "release" }; // CI: no Finder scripting for the DMG window; the channel: updates from the releases (src/lib/platform/build.ts)
   if (!process.env.TAURI_SIGNING_PRIVATE_KEY) {
     const keyPath = join(homedir(), ".tauri", "polar.key");
     if (!existsSync(keyPath)) {
@@ -92,23 +93,29 @@ for (const f of [dmg, update, `${update}.sig`, formulae]) {
   }
 }
 // The exact source of mpv and every library bundled with it, attached to the release.
-const sources = join(bundle, `Polarity_${version}_aarch64_mpv-sources.tar`);
+const sources = join(bundle, releaseFile(`Polarity_${version}_aarch64_mpv-sources.tar`, version)!.name);
 console.log("> packing the bundled libraries' sources");
 packMacSources(formulae, sources, join(bundle, "mpv-sources"));
+// The DMG and the update archive under their release names (scripts/releaseAssets.ts).
+const dmgOut = join(bundle, releaseFile(`Polarity_${version}_aarch64.dmg`, version)!.name);
+const updateOut = join(bundle, releaseFile(`Polarity_${version}_aarch64.app.tar.gz`, version)!.name);
+copyFileSync(dmg, dmgOut);
+copyFileSync(update, updateOut);
+copyFileSync(`${update}.sig`, `${updateOut}.sig`);
 const minos = (() => {
   const plist = join(bundle, "macos", "Polarity.app", "Contents", "Info.plist");
   return readFileSync(plist, "utf8").match(/LSMinimumSystemVersion<\/key>\s*<string>([^<]+)/)?.[1];
 })();
 const body = `Polarity for macOS (Apple Silicon${minos ? `, macOS ${minos} or later` : ""}). A preview of the Mac app.
 
-**Install:** download \`Polarity_${version}_aarch64.dmg\`, open it and drag Polarity to Applications. The app isn't notarized yet, so the first time, right-click Polarity in Applications and choose **Open**, then **Open** again. If macOS still says it's damaged, run \`xattr -cr /Applications/Polarity.app\` in Terminal.
+**Install:** download \`${basename(dmgOut)}\`, open it and drag Polarity to Applications. The app isn't notarized yet, so the first time, right-click Polarity in Applications and choose **Open**, then **Open** again. If macOS still says it's damaged, run \`xattr -cr /Applications/Polarity.app\` in Terminal.
 
 mpv is built in (no Homebrew needed).
 
 ### What's new
 ${notes}
 
-mpv and its libraries are bundled (GPLv2+). Their licences are in \`Polarity.app/Contents/Resources/licenses/mpv\`; their exact source code, with Homebrew's build recipes, is \`Polarity_${version}_aarch64_mpv-sources.tar\` below.
+mpv and its libraries are bundled (GPLv2+). Their licences are in \`Polarity.app/Contents/Resources/licenses/mpv\`; their exact source code, with Homebrew's build recipes, is \`${basename(sources)}\` below.
 `;
 const bodyPath = join(bundle, "release-body-mac.md");
 writeFileSync(bodyPath, body);
@@ -120,6 +127,6 @@ run("gh", [
   "--notes-file", bodyPath,
   "--prerelease",
   ...(flags.has("--draft") ? ["--draft"] : []),
-  dmg, update, `${update}.sig`, sources,
+  dmgOut, updateOut, `${updateOut}.sig`, sources,
 ]);
 console.log(`\nPublished Polarity ${version} for Mac (pre-release).`);

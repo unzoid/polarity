@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import "./storageStub";
-import { FACTOR_LABELS, NEUTRAL, scoreOne, scoreSources, WEIGHTS, type Device, type Factor, type MatchContext, type SourceRecord } from "../src/lib/playback/bestMatch";
+import { FACTOR_LABELS, NEUTRAL, NEW_EPISODE_DAYS, scoreOne, scoreSources, WEIGHTS, type Device, type Factor, type MatchContext, type SourceRecord } from "../src/lib/playback/bestMatch";
 import { deviceCaps } from "../src/lib/playback/device";
 import { autoPickOrder } from "../src/lib/playback/sources";
 import {
@@ -120,6 +120,22 @@ test("preferences are weights: audio language, tags, release groups", () => {
   expect(["FIRST-CREW", "Second Crew", "Third", "Fourth", "Fifth", "Nobody"].map(g)).toEqual([12, 9, 6, 3, 3, undefined]);
 });
 
+test("the file's own audio means the title's language: a dub into another one doesn't win on picture alone", () => {
+  const dub = source("Paper.Moon.Road.2031.2160p.WEB-DL.RUS-MADEUP", { languages: ["ru"], resolution: 2160 });
+  const eng = source("Paper.Moon.Road.2031.1080p.WEB-DL-MADEUP", { languages: ["en"] });
+  const plain = source("Paper.Moon.Road.2031.1080p.BluRay-MADEUP");
+  // Setting left on the file's own, the title made in English.
+  const c = ctx({ audioLanguage: "", ownLanguage: { code: "en", from: "title" } });
+  expect(reasons(dub, c)["Audio in Russian, not English"]).toBe(WEIGHTS.audioOtherLanguage);
+  expect(reasons(eng, c)["Audio in English, the title's own"]).toBe(WEIGHTS.audioLanguage);
+  expect(top([dub, eng, plain], c)).toBe(eng.label);
+  // A file that says nothing about its audio isn't taken for a dub.
+  expect(top([dub, plain], c)).toBe(plain.label);
+  // Its language unknown, the device's stands in; an explicit setting is "your language" and outranks both.
+  expect(reasons(eng, ctx({ ownLanguage: { code: "en", from: "device" } }))["Audio in English, this device's language"]).toBe(WEIGHTS.audioLanguage);
+  expect(top([dub, eng], ctx({ audioLanguage: "ru", ownLanguage: { code: "en", from: "title" } }))).toBe(dub.label);
+});
+
 test("the best compromise wins when nothing matches every preference", () => {
   // Italian audio and Remux preferred; no source has both.
   const ita = source("Low.Tide.2031.1080p.WEB-DL.ITA-MADEUP", { languages: ["it"], sizeBytes: 5 * GB });
@@ -161,6 +177,21 @@ test("a file of another episode never ranks at the top, nor a CAM", () => {
   const right = source("Harbor.Lights.S01E05.480p.WEB-NOTREAL", { resolution: 480 });
   expect(reasons(other, ctx())["The file says S01E06"]).toBe(WEIGHTS.otherEpisode);
   expect(top([other, cam, right], ctx())).toBe(right.label);
+});
+
+test("#422: a disc release of an episode that aired days ago, or not yet, ranks down", () => {
+  const day = 86_400_000;
+  const disc = source("[Group] Harbor Lights - 06 [BDRip 1080p HEVC]", { tags: ["BluRay"], codec: "HEVC" });
+  const web = source("[Group] Harbor Lights - 06 [WEB 720p]", { resolution: 720 });
+  const aired = (days: number) => ctx({ aired: 1e12 - days * day });
+  expect(reasons(disc, aired(1))["A disc release, but the episode aired 1 day ago"]).toBe(WEIGHTS.notOutYet);
+  expect(reasons(disc, aired(-3))["A disc release, but the episode hasn't aired yet"]).toBe(WEIGHTS.notOutYet);
+  expect(top([disc, web], aired(1))).toBe(web.label);
+  // Long enough ago, or a film (no air date): the disc release is what it says.
+  expect(Object.keys(reasons(disc, aired(NEW_EPISODE_DAYS + 1)))).not.toContain("A disc release, but the episode aired 29 days ago");
+  expect(top([disc, web], aired(NEW_EPISODE_DAYS + 1))).toBe(disc.label);
+  expect(top([disc, web], ctx())).toBe(disc.label);
+  expect(Object.keys(reasons(web, aired(1))).some((r) => r.startsWith("A disc release"))).toBe(false);
 });
 
 // --- Whole lists: who's watching where ---------------------------------------

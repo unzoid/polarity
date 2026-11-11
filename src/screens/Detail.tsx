@@ -1,22 +1,24 @@
 import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
 import { NameList } from "../components/title/NameList";
-import { useArtGate, useFoldSnap, useFormFactor } from "../lib/ui";
+import { useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
+import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
+import { DetailSkeleton } from "../components/title/DetailSkeleton";
 import { useEpisodeLayout } from "../lib/settings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
 import { FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
-import { episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
+import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 import { Img } from "../components/Img";
-import { TitleHeading } from "../components/title/TitleHeading";
+import { TitleHeading, useHeadingReady } from "../components/title/TitleHeading";
 import { RatingRing } from "../components/RatingRing";
 import { Segmented } from "../components/Segmented";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
-import { episodeCode, formatRuntime, isReleased, joinFacts, seasonLabel } from "../lib/format";
+import { episodeCode, formatRuntime, joinFacts, seasonLabel } from "../lib/format";
 import { type PlayRequest, trailerFor, useFileTrailer, usePlayTarget } from "../lib/playback";
 import { prefetchStreams, useMeta, useProgress, useRatings, useStreams } from "../lib/net";
 import type { ContentType, Meta, MetaPreview, Video } from "../lib/types";
@@ -25,7 +27,7 @@ import { SimklPanel } from "../components/title/SimklPanel";
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
 import { BatchDownload } from "../components/BatchDownload";
-import { Skeleton } from "../components/ui/Skeleton";
+import { DetailArt } from "../components/DetailArt";
 import { errorMessage } from "../lib/errors";
 
 /**
@@ -57,22 +59,35 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   // A phone's page scrolls as one: the art sits at its top and leaves with it (detail.css), instead
   // of staying behind the page as on a big screen.
   const phone = useFormFactor().form === "phone";
+  // On a phone the page comes in whole: its outline until the details, the art (placed on its subject) and the
+  // logo are all there, then everything at once (detail.css).
+  const together = usePageTogether(!!meta || isError);
 
   if (isError && !shown) return <EmptyState>Couldn't load this title: {errorMessage(error)}</EmptyState>;
-  if (!shown) return <Skeleton className="detail-loading" />;
+  if (!shown) return phone ? <div className="detail" ref={together.ref} data-ready={together.state}><DetailSkeleton /></div> : <DetailPending />;
 
   const art = (
-    <div className="detail-bg" aria-hidden>
+    <DetailArt src={shown.background}>
       <Img src={shown.background} alt="" loading="eager" className="detail-bg-sharp" />
       {trailer.node}
       {/* No backdrop (or it fails): the poster, blurred, rather than plain black. */}
       <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
       <div className="detail-bg-scrim" />
-    </div>
+    </DetailArt>
   );
 
   return (
-    <div className="detail" ref={root} data-trailer={trailer.visible} data-type={type}>
+    <div
+      className="detail"
+      ref={(node) => {
+        root.current = node;
+        together.ref(node);
+      }}
+      data-trailer={trailer.visible}
+      data-type={type}
+      data-ready={phone ? together.state : undefined}
+    >
+      {phone && <DetailSkeleton />}
       {!phone && art}
       <div
         className="scroll detail-scroll"
@@ -80,7 +95,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
         onScroll={(e) => setScrolledAway(e.currentTarget.scrollTop > e.currentTarget.clientHeight * 0.25)}
       >
         {phone && art}
-        <DetailHero item={shown} meta={meta} onSheet={onSheet} trailer={trailer} />
+        <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
         {type === "movie" && meta && (
           <section className="about">
@@ -98,11 +113,14 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
 function DetailHero({
   item,
   meta,
+  metaPending,
   onSheet,
   trailer,
 }: {
   item: MetaPreview;
   meta?: Meta;
+  /** The full metadata hasn't answered yet: the preview's missing logo may still come (#343). */
+  metaPending: boolean;
   onSheet: (open: boolean) => void;
   trailer: { visible: boolean; muted: boolean; toggleMute: () => void };
 }) {
@@ -111,7 +129,9 @@ function DetailHero({
   const isSeries = item.type === "series";
   const { next, videoId, resumeAt, label: primaryLabel } = usePlayTarget(item, meta);
   const { data: fileTrailer } = useFileTrailer(item.id);
-  const { data: ratings } = useRatings(item.type, item.id);
+  const { data: ratings, isLoading: ratingsLoading } = useRatings(item.type, item.id);
+  // Which season a show opens on waits for this too (Seasons): the page below the fold comes in with the rest.
+  const { data: progress } = useProgress(item.id);
 
   // Sources for the primary action load as soon as the page opens, so Play
   // (or the source list) is ready by the time the user reaches for it.
@@ -127,11 +147,27 @@ function DetailHero({
   const facts = joinFacts([item.releaseInfo, formatRuntime(meta?.runtime)]);
   // The logo or name waits for the backdrop (or the poster blurred in its place, as the page draws it; #173).
   const gate = useArtGate(item.background, [item.poster]);
+  // The page loads together: the art, the heading, the details, the scores and the episodes come in as one,
+  // over a skeleton until then (detail.css, `[data-ready]`). Sources aren't waited for: they take seconds.
+  const heading = useHeadingReady({ logo: item.logo, logos: item.logos, backdrop: item.background, look: "detail", pending: metaPending });
+  const ready = useReadyTogether(
+    !metaPending && !ratingsLoading && gate["data-art"] === "ready" && heading.ready && (!isSeries || progress !== undefined),
+    item.id,
+  );
 
   return (
-    <section className="detail-hero" {...gate}>
+    <section className="detail-hero" {...gate} data-ready={ready}>
       <div className="detail-hero-main">
-        <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="detail" />
+        {!ready && <HeroSkeleton />}
+        <TitleHeading
+          name={item.name}
+          logo={item.logo}
+          logos={item.logos}
+          backdrop={item.background}
+          look="detail"
+          pending={metaPending}
+          onSettled={heading.onSettled}
+        />
         {item.description && <p className="detail-description t-callout">{item.description}</p>}
         <p className="detail-facts t-callout tabular">
           {/* The score row carries IMDb's when a ratings key found it. */}
@@ -268,7 +304,3 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
     </section>
   );
 }
-
-/** The episodes a season or show download takes (#24): released ones, specials aside, in order. */
-const downloadableEpisodes = (videos: Video[]) =>
-  videos.filter((v) => v.season > 0 && isReleased(v)).sort((a, b) => a.season - b.season || a.episode - b.episode);

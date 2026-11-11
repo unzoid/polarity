@@ -21,6 +21,8 @@ pub const ALLOWED_PROPERTIES: &[&str] = &[
     "sid",
     "sub-text",
     "sub-ass-override",
+    // Styled subtitles: restyle only their dialogue styles (#347). Style fields and script info only, no files.
+    "sub-ass-style-overrides",
     "sub-font",
     "sub-scale",
     "sub-pos",
@@ -31,6 +33,8 @@ pub const ALLOWED_PROPERTIES: &[&str] = &[
     "sub-shadow-offset",
     "sub-back-color",
     "sub-delay",
+    // Fill window (#183, #330): the picture covers the window; the autocrop loop reads it too.
+    "panscan",
 ];
 
 /// Properties the UI only reads (`get_property`): what the subtitle preview
@@ -43,6 +47,8 @@ pub const READ_ONLY_PROPERTIES: &[&str] = &[
     "sub-scale-by-window",
     "sub-scale-with-window",
     "sub-use-margins",
+    // A styled track's header: which styles carry the dialogue, and their font (#347).
+    "sub-ass-extradata",
     // Frame stepping: where a step landed (time reports are throttled) and the frame rate it counts frames in.
     "time-pos",
     "container-fps",
@@ -110,6 +116,21 @@ pub fn check_readable(name: &str) -> Result<(), String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn fill_reaches_mpv() {
+        // The player's Fill window sets panscan (#330: refused before, so the button did nothing).
+        assert!(check_property("panscan").is_ok());
+        assert!(check_command(&[json!("set"), json!("panscan"), json!(1)]).is_ok());
+    }
+
+    #[test]
+    fn styled_subtitles_reach_mpv() {
+        // #347: the dialogue styles are restyled by name, read from the track's header.
+        assert!(check_property("sub-ass-style-overrides").is_ok());
+        assert!(check_command(&[json!("get_property"), json!("sub-ass-extradata")]).is_ok());
+        assert!(check_command(&[json!("set"), json!("sub-ass-extradata"), json!("x")]).is_err());
+    }
 
     #[test]
     fn only_player_commands_pass() {

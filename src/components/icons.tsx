@@ -2,11 +2,12 @@
  * The app's icon set: Heroicons, solid, under names that say what they're for.
  * Each takes a `size` in px and draws the cut Heroicons made for that size:
  * micro (16px grid) up to 16, mini (20px grid) up to 20, the 24px set above.
+ * The few Heroicons lack are drawn below in their style.
  */
 import * as S16 from "@heroicons/react/16/solid";
 import * as S20 from "@heroicons/react/20/solid";
 import * as S24 from "@heroicons/react/24/solid";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 
 type HeroIcon = ComponentType<SVGProps<SVGSVGElement>>;
 export type IconProps = Omit<SVGProps<SVGSVGElement>, "ref"> & { size?: number | string };
@@ -35,7 +36,10 @@ export const ChevronDown = icon(S24.ChevronDownIcon, S20.ChevronDownIcon, S16.Ch
 export const ChevronLeft = icon(S24.ChevronLeftIcon, S20.ChevronLeftIcon, S16.ChevronLeftIcon);
 export const ChevronRight = icon(S24.ChevronRightIcon, S20.ChevronRightIcon, S16.ChevronRightIcon);
 export const Close = icon(S24.XMarkIcon, S20.XMarkIcon, S16.XMarkIcon);
-export const Copy = icon(S24.DocumentDuplicateIcon, S20.DocumentDuplicateIcon, S16.DocumentDuplicateIcon);
+export const Copy = icon(S24.Square2StackIcon, S20.Square2StackIcon, S16.Square2StackIcon);
+export const LinkIcon = icon(S24.LinkIcon, S20.LinkIcon, S16.LinkIcon);
+export const Share = icon(S24.ArrowUpOnSquareIcon, S20.ArrowUpOnSquareIcon, S16.ArrowUpOnSquareIcon);
+export const LogIcon = icon(S24.DocumentTextIcon, S20.DocumentTextIcon, S16.DocumentTextIcon);
 export const Controls = icon(S24.CommandLineIcon, S20.CommandLineIcon, S16.CommandLineIcon);
 export const Desktop = icon(S24.ComputerDesktopIcon, S20.ComputerDesktopIcon, S16.ComputerDesktopIcon);
 export const Bell = icon(S24.BellIcon, S20.BellIcon, S16.BellIcon);
@@ -49,6 +53,8 @@ export const Grid = icon(S24.Squares2X2Icon, S20.Squares2X2Icon, S16.Squares2X2I
 export const Hidden = icon(S24.EyeSlashIcon, S20.EyeSlashIcon, S16.EyeSlashIcon);
 export const Info = icon(S24.InformationCircleIcon, S20.InformationCircleIcon, S16.InformationCircleIcon);
 export const Download = icon(S24.ArrowDownTrayIcon, S20.ArrowDownTrayIcon, S16.ArrowDownTrayIcon);
+/** A whole season or show at once (BatchDownload), set apart from one episode's Download. */
+export const DownloadAll = icon(S24.ArrowDownOnSquareStackIcon, S20.ArrowDownOnSquareStackIcon, S16.ArrowDownOnSquareStackIcon);
 export const Instant =icon(S24.BoltIcon, S20.BoltIcon, S16.BoltIcon);
 export const LayoutList = icon(S24.ListBulletIcon, S20.ListBulletIcon, S16.ListBulletIcon);
 export const LayoutRow = icon(S24.ViewColumnsIcon, S20.ViewColumnsIcon, S16.ViewColumnsIcon);
@@ -58,8 +64,6 @@ export const More = icon(S24.EllipsisHorizontalIcon, S20.EllipsisHorizontalIcon,
 export const Warning = icon(S24.ExclamationTriangleIcon, S20.ExclamationTriangleIcon, S16.ExclamationTriangleIcon);
 export const Pause = icon(S24.PauseIcon, S20.PauseIcon, S16.PauseIcon);
 export const Picture = icon(S24.PhotoIcon, S20.PhotoIcon, S16.PhotoIcon);
-/** The player's Pin window (#266). */
-export const Pin = icon(S24.MapPinIcon, S20.MapPinIcon, S16.MapPinIcon);
 export const PlaylistIcon = icon(S24.ListBulletIcon, S20.ListBulletIcon, S16.ListBulletIcon);
 export const Play =icon(S24.PlayIcon, S20.PlayIcon, S16.PlayIcon);
 export const Plus = icon(S24.PlusIcon, S20.PlusIcon, S16.PlusIcon);
@@ -104,3 +108,53 @@ export function Gamepad({ size = 24, fill: _fill, strokeWidth: _stroke, ...rest 
     </svg>
   );
 }
+
+/** One cut of an icon drawn for the app: its grid (24, 20 or 16) and its filled shapes. */
+type Cut = { grid: number; shape: ReactNode };
+
+/** An icon Heroicons lacks, drawn solid in their style with a cut for each size, picked as `icon()` picks. */
+function drawn(large: Cut, mini: Cut, micro: Cut): Icon {
+  function DrawnIcon({ size = 24, fill: _fill, strokeWidth: _stroke, ...rest }: IconProps) {
+    const px = typeof size === "number" ? size : 24;
+    const cut = px <= 16 ? micro : px <= 20 ? mini : large;
+    return (
+      <svg viewBox={`0 0 ${cut.grid} ${cut.grid}`} width={size} height={size} fill="currentColor" aria-hidden {...rest}>
+        {cut.shape}
+      </svg>
+    );
+  }
+  return DrawnIcon;
+}
+
+// A pushpin, upright: its cap, the body flaring to a collar, the needle. Each grid has its own proportions.
+const PIN_24 = (
+  <>
+    <path d="M8.25 2.25h7.5a1.5 1.5 0 0 1 0 3h-7.5a1.5 1.5 0 0 1 0-3Z" />
+    <path d="M9 4.5h6v5.25l3.97 3.53a1.5 1.5 0 0 1 .53 1.14v.08a.75.75 0 0 1-.75.75H5.25a.75.75 0 0 1-.75-.75v-.08a1.5 1.5 0 0 1 .53-1.14L9 9.75Z" />
+    <path d="M11.25 15h1.5v5.25a.75.75 0 0 1-1.5 0Z" />
+  </>
+);
+const PIN_20 = (
+  <>
+    <path d="M6.75 2h6.5a1.25 1.25 0 0 1 0 2.5h-6.5a1.25 1.25 0 0 1 0-2.5Z" />
+    <path d="M7.5 4h5v4.25l3.25 2.9a1.5 1.5 0 0 1 .5 1.1.75.75 0 0 1-.75.75h-11a.75.75 0 0 1-.75-.75 1.5 1.5 0 0 1 .5-1.1l3.25-2.9Z" />
+    <path d="M9.25 13h1.5v3.75a.75.75 0 0 1-1.5 0Z" />
+  </>
+);
+const PIN_16 = (
+  <>
+    <path d="M5 1.5h6a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z" />
+    <path d="M6 3h4v3.5l2.6 2.3a1.2 1.2 0 0 1 .4.7.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5 1.2 1.2 0 0 1 .4-.7L6 6.5Z" />
+    <path d="M7.25 10h1.5v3.75a.75.75 0 0 1-1.5 0Z" />
+  </>
+);
+// Tilted a quarter turn to the right, moved down and left by `shift` so the tilted shape sits in the middle of its grid.
+const tilted = (grid: number, shape: ReactNode, shift: number): Cut => ({
+  grid,
+  shape: <g transform={`translate(${-shift} ${shift}) rotate(45 ${grid / 2} ${grid / 2})`}>{shape}</g>,
+});
+
+/** The player's Pin window (#266) while the window isn't pinned: a pushpin at rest, tilted. */
+export const Pin = drawn(tilted(24, PIN_24, 1.5), tilted(20, PIN_20, 1.25), tilted(16, PIN_16, 1));
+/** The player's Pin window once the window is pinned: the pushpin upright, pushed in. */
+export const Pinned = drawn({ grid: 24, shape: PIN_24 }, { grid: 20, shape: PIN_20 }, { grid: 16, shape: PIN_16 });

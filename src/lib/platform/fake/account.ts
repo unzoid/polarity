@@ -11,7 +11,7 @@ import { normalizeTvCode, type TvClaim } from "../../account/tvSignIn";
  * Friends (#135) live here too, off until turned on: Sam, a friend in a watch party on an open film, and Alex, who has sent
  * a request (online, watching nothing shown, once accepted). Any other code sends a request to Kai,
  * who doesn't answer. `__polarFakeFriendInvite()` has Sam invite this profile into Sam's party;
- * `fake.html?account=1&friends=1` starts with Friends on.
+ * `fake.html?account=1&friends=1` starts with Friends on; `friends=new` is a profile that never chose, which gets Friends on (#428).
  *
  * `fake.html?account=signed-out` starts signed out, for the sign-in screens. Signing in on a TV
  * (#133) works in the page too: `__polarFakeTv.answer(true)` answers the code this page shows, and
@@ -72,7 +72,10 @@ const online: Record<string, FriendPresence> = {
   [ALEX]: { id: ALEX, seq: 1 },
 };
 const FRIENDS_ON: FriendSettings = { code: "FAKE2345", online: true, watching: true, join: true };
-let friendSettings: FriendSettings | null = new URLSearchParams(location.search).get("friends") ? { ...FRIENDS_ON } : null;
+const friendsParam = new URLSearchParams(location.search).get("friends");
+let friendSettings: FriendSettings | null = friendsParam && friendsParam !== "new" ? { ...FRIENDS_ON } : null;
+/** Whether Friends was turned on or off for the profile; a profile new to Friends (`friends=new`) gets the default (#428). */
+let friendsChosen = friendsParam !== "new";
 let friendList: FriendEntry[] = [
   { ...people[SAM], state: "accepted", incoming: false },
   { ...people[ALEX], state: "pending", incoming: true },
@@ -150,8 +153,19 @@ export const fakeAccount: AccountBackend = {
   },
   friends: {
     settings: async () => friendSettings && { ...friendSettings },
-    on: async () => ({ ...(friendSettings ??= { ...FRIENDS_ON }) }),
-    off: async () => void (friendSettings = null),
+    on: async () => {
+      friendsChosen = true;
+      return { ...(friendSettings ??= { ...FRIENDS_ON }) };
+    },
+    defaultOn: async () => {
+      if (friendsChosen) return null;
+      friendsChosen = true;
+      return { ...(friendSettings ??= { ...FRIENDS_ON, watching: false }) };
+    },
+    off: async () => {
+      friendsChosen = true;
+      friendSettings = null;
+    },
     resetCode: async () => (friendSettings ? (friendSettings.code = "NEWC2345") : ""),
     setPrivacy: async (_p, v) => void (friendSettings &&= { ...friendSettings, ...v }),
     list: async () => friendList.map((f) => ({ ...f })),

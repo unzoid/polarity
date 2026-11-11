@@ -2,8 +2,10 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 
 import * as fx from "./fixtures";
+import { SAGA_FILLER } from "./longAnime";
 import { fakeAccount, startSignedOut } from "./account";
 import type { Download } from "../../library/downloads";
+import type { NativeDialog } from "../nativeDialogs";
 import type { AnimeLink } from "../../library/identity";
 import type { LibraryItem, MetaPreview, Progress, Settings } from "../../types";
 
@@ -30,6 +32,7 @@ const params = new URLSearchParams(location.search);
 params.delete("worst"); // fixtures.ts's worst-case switch, not a setting
 params.delete("films"); // and its README-screenshot switch
 params.delete("downloads"); // and #15's many-downloads switch
+params.delete("logos"); // and #437's every-title-has-a-logo switch
 const secretsPlace = params.get("secretsPlace") ?? "keychain"; // Settings → Account's "On this device"
 params.delete("secretsPlace");
 // `fake.html?account=1`: signed in, with watch parties in this page (account.ts); read by lib/account in dev builds only.
@@ -38,6 +41,10 @@ if (params.get("account")) (globalThis as { __polarFakeAccount?: unknown }).__po
 if (params.get("account") === "signed-out") startSignedOut();
 params.delete("account");
 params.delete("friends"); // `&friends=1`: the profile starts with Friends on (account.ts)
+// `?sources=filtered`: Settings → Sources' filters left out every source the add-ons found; `?sources=none`: no
+// add-on was asked (#435).
+const sourcesCase = params.get("sources");
+params.delete("sources");
 let settings: Settings = { ...fx.settings, ...Object.fromEntries(params) };
 
 type Args = Record<string, unknown>;
@@ -61,7 +68,7 @@ const commands: Record<string, (a: Args) => unknown> = {
     const q = String(a.query).toLowerCase();
     const hit = (m: MetaPreview) => m.name.toLowerCase().includes(q);
     if (fx.WORST === "empty") return { movies: [], series: [] };
-    return { movies: fx.movies.filter(hit), series: fx.series.filter(hit) };
+    return { movies: [...fx.movies, ...fx.searchStubs.movies].filter(hit), series: [...fx.series, ...fx.searchStubs.series].filter(hit) };
   },
   search_movies: (a) => {
     const q = String(a.query).toLowerCase();
@@ -70,9 +77,11 @@ const commands: Record<string, (a: Args) => unknown> = {
   meta: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   // TMDB title N is the fixtures' Nth movie or show here (tt9100000 + N, tt9200000 + N); from 900000 on there's no IMDb id (#208).
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
-  streams: () => fx.streams(),
+  streams: () =>
+    sourcesCase === "filtered" ? { streams: [], failed: [], hidden: 5 } : sourcesCase === "none" ? { streams: [], failed: [], asked: [] } : fx.streams(),
   subtitles: () => [],
-  skip_segments: () => ({}),
+  // `polar.fakeIntro` in localStorage: every video opens with an 80-second intro to skip (#331).
+  skip_segments: () => (localStorage.getItem("polar.fakeIntro") ? { intro: { start: 0, end: 80 } } : {}),
   // A linked MyAnimeList list (#84): a made-up account with a short list; sign-ins aren't faked.
   mal_api: (a) => fakeMal(a as { method: string; path: string; token: string }),
   mal_token: () => Promise.reject({ code: "upstream", message: "not in the fake shell" }),
@@ -97,6 +106,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   },
   // Open Stremio links in Polarity (#163): each change is kept for browser tests to read.
   stremio_links_set: (a) => void ((window as { __stremioLinks?: boolean[] }).__stremioLinks ??= []).push(!!a.on),
+  // What iOS's tab bar was last told to show (components/NativeTabs.tsx).
+  native_tabs: (a) => void ((window as { __nativeTabs?: unknown }).__nativeTabs = a.tabs),
   addon_catalog: (a) => fx.addonCatalog(String(a.addon), String(a.ty), String(a.id), a.extra as [string, string][]),
   addons_bundled: () => [],
   library_list: () => library,
@@ -125,10 +136,21 @@ const commands: Record<string, (a: Args) => unknown> = {
     animeLinks.set(link.anilist, { ...link, updatedAt: Date.now() });
     return true;
   },
+  unlink_anime: (a) => animeLinks.delete((a as { anilist: number }).anilist),
   anime_ids: () => null,
-  anime_episode_flags: () => ({ filler: [], recap: [] }),
+  // The invented two-series franchise's long series has filler (its tab's toolbar has Skip filler, #426).
+  anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),
   downloads_list: () => downloads,
+  // iOS's own menus and sheets (nativeDialogs.ts): the action a test named in __polarFakeDialogPick is tapped, once;
+  // otherwise the dialog goes away untouched.
+  native_dialog: (a) => {
+    const w = window as { __polarFakeDialogPick?: string };
+    const pick = w.__polarFakeDialogPick;
+    w.__polarFakeDialogPick = undefined;
+    const all = (a.dialog as NativeDialog).actions.flatMap((x) => [x, ...(x.children ?? [])]);
+    return all.find((x) => x.label === pick)?.id ?? null;
+  },
   // Files on this device (#204): none opened, and the file dialog is cancelled.
   local_recent: () => [],
   local_pick: () => [],
@@ -228,6 +250,10 @@ mockIPC(
 
 // A tab picked in iOS's tab bar, as the native shell reports it (components/NativeTabs.tsx).
 (window as { __polarFakeNativeTab?: (id: string) => void }).__polarFakeNativeTab = (id) => void emit("native://tab", id);
+
+
+// A step of the swipe in from the left edge, as iOS's shell reports it (lib/platform/backSwipe.ts, #451).
+(window as { __polarFakeBackSwipe?: (swipe: object) => void }).__polarFakeBackSwipe = (swipe) => void emit("native://back-swipe", swipe);
 
 // A click on a note, as the native shell reports it (#209).
 (window as { __polarFakeNoteClick?: (payload: string) => void }).__polarFakeNoteClick = (payload) => void emit("notification://click", payload);

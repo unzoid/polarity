@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { MetaPreview, RankedStream, Video } from "../types";
 import type { DownloadState } from "./downloads";
+import { isReleased } from "../format";
 
 /**
  * A whole season or show downloaded as one batch (#24): one episode at a time, in order, each
@@ -47,12 +48,16 @@ const put = (b: Batch) => {
   for (const l of listeners) l();
 };
 
-/** A batch by key (`<show id>` or `<show id>:<season>`), while the app runs. */
+/** A batch by key (`<show id>`, `<show id>:<season>` or `<show id>:anilist-<entry>`), while the app runs. */
 export const batchFor = (key: string) => batches.get(key);
 export const useBatch = (key: string) => useSyncExternalStore(subscribe, () => batches.get(key));
 
-/** The key of a season's batch, or the show's. */
-export const batchKey = (showId: string, season?: number) => (season === undefined ? showId : `${showId}:${season}`);
+/** The episodes a season or show download takes (#24): released ones, specials aside, in order. */
+export const downloadableEpisodes = (videos: Video[]) =>
+  videos.filter((v) => v.season > 0 && isReleased(v)).sort((a, b) => a.season - b.season || a.episode - b.episode);
+
+/** The key of a season's batch, or the show's; an anime season tab's is keyed by its AniList entry (#352). */
+export const batchKey = (showId: string, season?: number | string) => (season === undefined ? showId : `${showId}:${season}`);
 
 export function pauseBatch(key: string) {
   const b = batches.get(key);

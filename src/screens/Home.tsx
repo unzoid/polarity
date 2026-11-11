@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { AmbientWash } from "../components/AmbientWash";
+import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
@@ -31,6 +32,7 @@ import {
   useAddonCatalogRow,
   useFeatured,
   useHomeCatalogs,
+  useListable,
   useSeeds,
   useShownAbove,
   type AddonCatalog,
@@ -114,6 +116,7 @@ export function HeroCarousel({
   handlers?: (item: MetaPreview) => { onClick: () => void; onContextMenu: (e: React.MouseEvent<HTMLElement>) => void };
 }) {
   const { navigate } = useRouter();
+  const phone = useFormFactor().form === "phone";
   const [paused, setPaused] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const count = items?.length ?? 0;
@@ -167,13 +170,18 @@ export function HeroCarousel({
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colours: a heavily
-          blurred copy of each backdrop, cross-fading with it. */}
-      <div className="hero-ambient" aria-hidden>
-        {items.map((it, i) => (
-          <AmbientWash key={it.id} src={it.background} current={i === index} />
-        ))}
-      </div>
+      {/* The page around the card takes on the art's colour: on a phone its most prominent one glowing in from the
+          top right corner (Netflix's); elsewhere its main colour, one dimmed tint per backdrop, fading down from the
+          top and cross-fading with it. */}
+      {phone ? (
+        <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} />
+      ) : (
+        <div className="hero-ambient" aria-hidden>
+          {items.map((it, i) => (
+            <AmbientWash key={it.id} src={it.background} current={i === index} flat />
+          ))}
+        </div>
+      )}
       <div className="hero-stage">
       {count > 1 && <HeroPeek item={items[(index - 1 + count) % count]} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />}
       <div
@@ -327,17 +335,22 @@ function HeroContent({ item }: { item: MetaPreview }) {
 const MIN_FRESH = 6;
 
 function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
-  const { title, shape } = shelf;
+  const { title } = shelf;
+  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
+  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
+  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
   const { data, isLoading, isError } = isCatalog ? catalog : recommended;
   const { navigate } = useRouter();
   const to = shelfRoute(shelf);
+  // Nothing to play and nothing to show (#337) stays out.
+  const shown = useListable(data);
   const items = useMemo(() => {
-    const fresh = (data ?? []).filter((m) => !exclude.has(m.id));
-    return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (data ?? []);
-  }, [data, exclude, shelf.kind]);
+    const fresh = (shown ?? []).filter((m) => !exclude.has(m.id));
+    return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (shown ?? []);
+  }, [shown, exclude, shelf.kind]);
 
   if (isError) return null; // one failing catalog shouldn't break the page
   // Nothing good to recommend: leave the row out rather than show a stub.
@@ -370,7 +383,8 @@ function LazyShelf({ shelf, eager, exclude }: { shelf: HomeShelf; eager: boolean
  */
 function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   const [ref, near] = useNearViewport<HTMLDivElement>();
-  const { data, isError } = useAddonCatalogRow(catalog, near);
+  const { data: found, isError } = useAddonCatalogRow(catalog, near);
+  const data = useListable(found);
   const { navigate } = useRouter();
   return (
     <div ref={ref} data-addon-row={catalog.id}>
@@ -411,7 +425,8 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
   const openDetail = () => navigate({ name: "detail", type: p.type, id: opens });
   // Which page it opens on is known before the click (mostly a stored anime link: no network).
   useEffect(() => prefetchTitlePage(p.type, opens), [p.type, opens]);
-  const resume = () => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId, stream: p.stream });
+  // The player goes on with the saved source only while the add-ons still offer it (#394).
+  const resume = () => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId });
   const fraction = p.duration ? p.position / p.duration : 0;
   const meta = useQuery({ queryKey: keys.meta(p.type, p.metaId), queryFn: () => api.meta(p.type, p.metaId), staleTime: 60 * 60_000 });
   const logo = meta.data?.logo;
@@ -447,7 +462,7 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
       }
     >
       {/* The logo names the show; an entry of it goes by its own name. */}
-      <ArtTitle name={item.name} logo={entry ? undefined : logo} />
+      <ArtTitle name={item.name} logo={entry ? undefined : logo} pending={!entry && meta.isLoading} />
       {/* Where you are, on the picture like Apple TV's: a short bar and the time left, over a gradient (#38). */}
       <div className="card-resume">
         <ProgressBar fraction={fraction} />

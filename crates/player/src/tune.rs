@@ -28,7 +28,7 @@ pub struct Tune {
     #[serde(default = "on")]
     pub lookahead: bool,
     /// With autocrop, where mpv is its own process (Windows, Linux): our
-    /// detector reads a screenshot of every frame instead of cropdetect
+    /// detector reads a screenshot of every frame, besides cropdetect
     /// (docs/autocrop.md §2). Off: screenshots only around cropdetect's
     /// changes. macOS and iOS always read every frame, in memory.
     #[serde(default)]
@@ -48,13 +48,15 @@ const FRAMES_IN_MEMORY: bool = cfg!(any(target_os = "macos", target_os = "ios"))
 /// and VideoToolbox's frames in 8-bit NV12. mpv draws with OpenGL ES there, which can only take
 /// 8-bit frames from VideoToolbox: a 10-bit video (HEVC Main 10, HDR) left in VideoToolbox's
 /// own 10-bit format couldn't be shown, and the picture was one blue colour. VideoToolbox
-/// converts on the GPU; the colours (HDR included) are still mapped by mpv.
+/// converts on the GPU; the colours (HDR included) are still mapped by mpv. VideoToolbox's frames are
+/// copied back to memory before mpv draws them ([`Tune::ios_hwdec`]).
 pub const IOS_ARGS: &[&str] = &[
     "--demuxer-max-bytes=64MiB",
     "--demuxer-max-back-bytes=16MiB",
     "--ao=audiounit",
     "--tls-verify=yes",
     "--hwdec-image-format=nv12",
+    "--hwdec=videotoolbox-copy",
 ];
 
 #[derive(Debug, Clone, Copy, serde::Deserialize, PartialEq)]
@@ -96,19 +98,22 @@ impl Tune {
 
     /// Whether autocrop runs cropdetect inside mpv. Not on macOS and iOS, where
     /// libmpv hands our detector every frame (and the iOS build, being LGPL, has
-    /// no cropdetect), nor with [`Tune::every_frame`].
+    /// no cropdetect). With [`Tune::every_frame`] it runs too: its reading of
+    /// each frame comes on time, so animated bars are followed on their frame.
     pub fn cropdetect(&self) -> bool {
         self.cropdetect_on(FRAMES_IN_MEMORY)
     }
 
     fn cropdetect_on(&self, frames_in_memory: bool) -> bool {
-        self.autocrop && !self.every_frame && !frames_in_memory
+        self.autocrop && !frames_in_memory
     }
 
     /// Which frames our detector reads, with autocrop on ([`crate::sampler`]).
     pub fn sampling(&self) -> Sampling {
-        if self.every_frame || FRAMES_IN_MEMORY {
+        if FRAMES_IN_MEMORY {
             Sampling::EveryFrame
+        } else if self.every_frame {
+            Sampling::EveryFrameAndCropdetect
         } else {
             Sampling::AroundChanges
         }
@@ -148,6 +153,18 @@ impl Tune {
             other => other,
         }
     }
+
+    /// [`Tune::hwdec_mode`] for mpv on iPhones and iPads: VideoToolbox decodes, and its frames are
+    /// copied back to memory, never handed to OpenGL ES as they are. Drawn straight from VideoToolbox
+    /// the picture had green and purple patches on an iPhone, and was right once mpv had fallen back
+    /// to decoding in software (#416). No cropdetect there, so autocrop changes nothing.
+    pub fn ios_hwdec(&self) -> &'static str {
+        if self.hwdec {
+            "videotoolbox-copy"
+        } else {
+            "no"
+        }
+    }
 }
 
 #[cfg(test)]
@@ -182,20 +199,23 @@ mod tests {
     }
 
     #[test]
-    fn every_frame_replaces_cropdetect_and_its_copy_back() {
+    fn every_frame_keeps_cropdetect_and_its_copy_back() {
         let on = Tune { autocrop: true, ..Tune::default() };
         let every = Tune { every_frame: true, ..on };
-        assert!(!every.cropdetect());
-        assert_eq!(every.sampling(), Sampling::EveryFrame);
-        assert_eq!(every.hwdec_mode(), "auto-safe");
         assert!(!Tune { autocrop: false, ..on }.cropdetect());
         if FRAMES_IN_MEMORY {
-            assert!(!on.cropdetect());
-            assert_eq!(on.sampling(), Sampling::EveryFrame);
+            for t in [on, every] {
+                assert!(!t.cropdetect());
+                assert_eq!(t.sampling(), Sampling::EveryFrame);
+                assert_eq!(t.hwdec_mode(), "auto-safe");
+            }
         } else {
-            assert!(on.cropdetect());
+            for t in [on, every] {
+                assert!(t.cropdetect());
+                assert_eq!(t.hwdec_mode(), "auto-copy-safe");
+            }
             assert_eq!(on.sampling(), Sampling::AroundChanges);
-            assert_eq!(on.hwdec_mode(), "auto-copy-safe");
+            assert_eq!(every.sampling(), Sampling::EveryFrameAndCropdetect);
         }
     }
 
@@ -212,7 +232,7 @@ mod tests {
         let on = Tune::default();
         assert_eq!(on.android_hwdec(), "mediacodec,mediacodec-copy");
         assert_eq!(Tune { autocrop: true, ..on }.android_hwdec(), "mediacodec-copy");
-        assert_eq!(Tune { autocrop: true, every_frame: true, ..on }.android_hwdec(), "mediacodec,mediacodec-copy");
+        assert_eq!(Tune { autocrop: true, every_frame: true, ..on }.android_hwdec(), "mediacodec-copy");
         assert_eq!(Tune { hwdec: false, ..on }.android_hwdec(), "no");
     }
 
@@ -221,5 +241,15 @@ mod tests {
         // iOS's OpenGL ES can't map VideoToolbox's 10-bit frames: the picture was one blue colour (#172).
         assert!(IOS_ARGS.contains(&"--hwdec-image-format=nv12"));
         assert!(IOS_ARGS.contains(&"--ao=audiounit"));
+    }
+
+    #[test]
+    fn ios_copies_videotoolbox_frames_back() {
+        // Drawn straight from VideoToolbox the picture was tinted (#416); at launch as when the setting changes.
+        let on = Tune::default();
+        assert_eq!(on.ios_hwdec(), "videotoolbox-copy");
+        assert!(IOS_ARGS.contains(&format!("--hwdec={}", on.ios_hwdec()).as_str()));
+        assert_eq!(Tune { autocrop: true, ..on }.ios_hwdec(), "videotoolbox-copy");
+        assert_eq!(Tune { hwdec: false, ..on }.ios_hwdec(), "no");
     }
 }

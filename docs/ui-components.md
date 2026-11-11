@@ -205,7 +205,7 @@ markup rather than a shared component.
 |---|---|
 | Buttons | `.btn`, `.btn-primary`, `.btn-glass`, `.btn-icon` (`base.css:197-261`); `.btn-danger` defined only in `settings-overlay.css`; account screens `.auth-btn`/`.auth-btn-primary` (`account.css:145`), `.auth-primary` (`:378`), `.profiles-done`/`.profiles-manage` (`:678`); TV `.tv-pill` (`tv.css:730-835`). |
 | Icon buttons | `.btn-icon`, `.navbar-icon`, `.player-icon` (44 px), `.player-transport`, `.options-head-btn` (34), `.options-close` (32), `.party-dialog-close` (32), `.t3s-icon-btn`, `.shortcut-tool`, `.row-paddle`, `.btn-icon.quiet-btn`, `.confirm-delete`; four separate small "×" clear buttons (`.market-search-clear`, `.navbar-search-clear`, `.t3s-search-clear`, `.shortcut-capture-cancel`). |
-| Text links | `.settings-link`, `.anime-row-link`, `.library-see-all`, `.playlist-back`, `.auth-link`, `.auth-link-quiet`, `.auth-back`, `.account-bar-link`. |
+| Text links | `.settings-link`, `.anime-row-link`, `.playlist-back`, `.auth-link`, `.auth-link-quiet`, `.auth-back`, `.account-bar-link`. |
 | Text inputs | `.settings-input`, `.shortcut-search`, `.market-search` (identical rules, `screens.css:373,450`, `marketplace.css:10`); `.auth-input`, `.auth-field input`, `.profile-editor-name`, `.playlist-name-input`, `.anime-search`; TV `TvKeyboard` (`tv/TvKeyboard.tsx:20`). |
 | Search fields | `.navbar-search` (opens out of an icon), `.t3s-search` (kbd hint), `.market-search` (also in `Anime.tsx:435`), `.shortcut-search`, `.srcf-chiprow-search`, `.pill-search` (`AnimeDetail.tsx:495`). Esc-to-clear is written 3× (`SettingsOverlay.tsx:133`, `ShortcutSettings.tsx:46`, `NavBar.tsx:271`). |
 | Segmented / tabs | `Segmented` (`components/Segmented.tsx:19`, clip-path pill; re-skinned in `detail.css:337`, `anime.css:424`, `sheet.css:210`); hand-made `role=tab` strips: hero dots `Home.tsx:170`, anime days `Anime.tsx:320`, anime ranges `AnimeDetail.tsx:482` (M31: they are radio groups). |
@@ -235,7 +235,7 @@ markup rather than a shared component.
 | Element | Where | Notes |
 |---|---|---|
 | Player root, chrome auto-hide, click surface | `screens/Player.tsx` (root, click surface), `components/player/usePlayerChrome.ts` (auto-hide) | State through `data-*` on `.player`. |
-| Top bar, centre transport, bottom bar | `screens/Player.tsx` | Volume slider, `SkipTransport` (`components/player/SkipTransport.tsx`), `EpisodeRail` (`components/player/EpisodeRail.tsx`), `ActionButton` row; the clock is `PlayerClock` (`components/player/PlayerClock.tsx`). |
+| Top bar, centre transport, bottom bar | `screens/Player.tsx` | Back is `BackButton` (`components/BackButton.tsx`), the navbar's own, at the navbar's spot (#348); volume slider, `SkipTransport` (`components/player/SkipTransport.tsx`), `EpisodeRail` (`components/player/EpisodeRail.tsx`), `ActionButton` row; the clock is `PlayerClock` (`components/player/PlayerClock.tsx`). |
 | Up Next card | `screens/Player.tsx` (`.next-up`) | `.next-up`, motion slide. |
 | Start-up screen, step log, copy details | `components/player/PlayerStatus.tsx` | `PlayerStatus`, `StartSteps`, `CopyDetails` (T-022). |
 | `OptionsOverlay` + `Row` | `components/player/OptionsOverlay.tsx:54,172` | Speed, Tracks, Party, Episodes, Sources. |
@@ -661,9 +661,13 @@ code draws, not what's on screen.
    a TV card whose art failed now tries again when better art arrives (a playlist entry filling in), as the
    desktop cards do (§6 item 6). `TvAnimeCard` is a `TvCard` already.
    `IconButton variant="player" | "transport"` emits the player's own classes (`player-icon pressable`,
-   `player-transport pressable`) for the top bar's Back, Mute and Fullscreen, the options close and the three
+   `player-transport pressable`) for the top bar's Mute and Fullscreen, the options close and the three
    centre transport glyphs, so they get `label` as their name like every other icon button; same elements and
    classes. The labelled `player-action` buttons stay `ActionButton` in `Player.tsx` (text + glyph, one place).
+   Back is one component for the navbar and the player (#348): `BackButton` (`components/BackButton.tsx`,
+   `.back-button`), the same chevron, size, hover and press in both. The player puts it where the navbar
+   does from the same variables (`--nav-start`, `--back-top` in `shell.css`), so it doesn't move between a
+   title page and the player.
    `Still` (episode stills: TV's episodes panel, the player's episode rows) is on `useCardArt` too, instead of
    its own failed flag reset one render late.
    TV layouts kept as they are (§4 "TV": TV shares primitives and logic, not layout), each already on

@@ -102,7 +102,11 @@ export function EpisodeCard({
               {upNext && released ? `Up Next · Episode ${v.episode}` : `Episode ${v.episode}`}
             </span>
           )}
-          <span className="t-headline episode-card-title">{v.title}</span>
+          <span className="t-headline episode-card-title">
+            {/* A phone's list has no number column: the number leads the title instead (detail.css). */}
+            {layout === "list" && <span className="episode-title-num tabular">{v.episode}. </span>}
+            {v.title}
+          </span>
           {v.overview && <p className="t-callout episode-card-overview">{v.overview}</p>}
           <span className="t-caption faint tabular">
             {airLabel(v)}

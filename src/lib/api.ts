@@ -68,25 +68,33 @@ export const api = {
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
-  /** Also asked by the episode's other ids; files are checked against its absolute number too (anime). */
+  /** Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime). */
   streams: (type: ContentType, videoId: string) => {
     const absolute = playContext.absolute(videoId);
-    return call<StreamsResult>("streams", { ty: type, videoId, altIds: playContext.altIds(videoId) ?? null, absolute: absolute === undefined ? null : [absolute] });
+    return call<StreamsResult>("streams", {
+      ty: type,
+      videoId,
+      altIds: playContext.altIds(videoId) ?? null,
+      absolute: absolute === undefined ? null : [absolute],
+      seasonNames: playContext.seasonNames(videoId) ?? null,
+    });
   },
   resolveStream: (stream: Stream) => call<Playable>("resolve_stream", { stream }),
   /** Start playing a torrent source (replacing the one playing); its steps arrive as `player://torrent` with `stepId`. */
   torrentOpen: (stream: Stream, limits: TorrentLimits, stepId: number) => call<TorrentLink>("torrent_open", { stream, limits, stepId }),
   /** The player closed: stop the torrent and delete its files, unless the user keeps sharing. */
   torrentClose: (limits: TorrentLimits) => call<void>("torrent_close", { limits }),
-  /** The link check mpv_load runs, for the built-in player: the URL to open, or why it won't play. */
-  streamProbe: (url: string, probeId: number, headers: Record<string, string> | null = null) =>
-    call<string>("stream_probe", { url, probeId, headers }),
+  /** The link check mpv_load runs, for the built-in player: the URL to open, or why it won't play. `link`: as MpvMedia.load's. */
+  streamProbe: (url: string, probeId: number, headers: Record<string, string> | null = null, link = false) =>
+    call<string>("stream_probe", { url, probeId, headers, link }),
   /** One look at a source's link ahead of time (#21): ready to play, or why not. */
   streamReady: (url: string, headers: Record<string, string> | null = null) => call<Readiness>("stream_ready", { url, headers }),
   /** `file`: the playing stream's size and name, when its add-on gave them (subtitle add-ons match on them). */
   subtitles: (type: ContentType, videoId: string, file: VideoFile = {}) =>
     call<SubtitleOption[]>("subtitles", { ty: type, videoId, videoSize: file.size ?? null, filename: file.name ?? null }),
   subtitleVtt: (url: string) => call<string>("subtitle_vtt", { url }),
+  /** A logo's or backdrop's bytes, for measuring a picture whose host sends no CORS headers (#354). */
+  pictureBytes: (url: string) => call<ArrayBuffer>("picture_bytes", { url }),
   seekPreviews: (videoId: string, durationMs: number) =>
     call<SeekTrack | null>("seek_previews", { videoId, durationMs }),
   skipSegments: (videoId: string) => call<SkipSegments>("skip_segments", { videoId }),
@@ -123,6 +131,7 @@ export const api = {
    */
   linkAnime: (link: Omit<AnimeLink, "updatedAt">) =>
     call<boolean>("link_anime", { link: { ...link, updatedAt: 0 } }),
+  unlinkAnime: (anilist: number) => call<boolean>("unlink_anime", { anilist }),
   animeLinks: () => call<AnimeLink[]>("anime_links"),
 
   // Profile spaces & sync (src-tauri/src/sync.rs). `space` = profile id.

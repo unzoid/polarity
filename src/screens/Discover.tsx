@@ -5,7 +5,7 @@ import { PosterGrid } from "../components/title/PosterGrid";
 import { Segmented } from "../components/Segmented";
 import { Dropdown } from "../components/Dropdown";
 import { api } from "../lib/api";
-import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catalogTitle, useAddonCatalogs } from "../lib/catalog";
+import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catalogTitle, useAddonCatalogs, useListable } from "../lib/catalog";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { keys } from "../lib/net";
@@ -63,12 +63,14 @@ export function Discover({
   // Dedupe across pages — upstream catalogs occasionally repeat items.
   const seen = new Set<string>();
   const all = query.data?.pages.flat() ?? [];
-  const items = own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id));
+  // Nothing to play and nothing to show (#337) stays out.
+  const items = useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id))) ?? [];
 
   return (
     <div className="scroll">
-      <header className="screen-header">
-        <h1 className="t-title1">{type === "movie" ? "Movies" : "Series"}</h1>
+      <header className="screen-header discover-header">
+        {/* The selected tab already says which this is; the heading stays for screen readers. */}
+        <h1 className="discover-title">{type === "movie" ? "Movies" : "Series"}</h1>
         <div className="discover-controls">
           {!!lists.length && (
             <Dropdown
@@ -86,7 +88,12 @@ export function Discover({
               options={[...(own?.genreRequired ? [] : [{ value: "", label: "All Genres" }]), ...genres.map((g) => ({ value: g, label: g }))]}
             />
           )}
-          {!own && <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />}
+          {!own && (
+            // Its own row on a phone, scrolling from one screen edge to the other (shell.css).
+            <div className="discover-catalogs">
+              <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />
+            </div>
+          )}
         </div>
       </header>
       <PosterGrid pager={query} stale={query.isPlaceholderData}>

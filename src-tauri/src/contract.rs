@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 
 use super::{CacheInfo, CmdError, Imported, Playable, SearchResults, SettingsView, StreamsResult, SubtitleOption};
 use crate::downloads::{Download, DownloadState};
-use crate::store::{InstalledAddon, Settings, SubtitleStyle};
+use crate::store::{CustomTheme, InstalledAddon, Settings, SubtitleStyle};
 use crate::sync::LocalChanges;
 
 fn keys<T: Serialize>(value: &T) -> Value {
@@ -40,6 +40,7 @@ fn field_names_match_contract() {
     // What settings_get/settings_set/settings_reset return: the stored settings and the metadata source.
     add("Settings", keys(&SettingsView { settings: Settings::default(), metadata_source: "cinemeta" }));
     add("SubtitleStyle", keys(&SubtitleStyle::default()));
+    add("CustomTheme", keys(&CustomTheme::default()));
     let manifest = Manifest {
         id: "a".into(),
         version: "1".into(),
@@ -79,7 +80,10 @@ fn field_names_match_contract() {
         }),
     );
     add("LocalChanges", keys(&LocalChanges { changes: Changes::default(), pulled_at: s("2026-01-01") }));
-    add("StreamsResult", keys(&StreamsResult { streams: vec![], failed: vec![], hidden: 0 }));
+    add(
+        "StreamsResult",
+        keys(&StreamsResult { streams: vec![], failed: vec![], hidden: 0, asked: vec![], ids: vec![] }),
+    );
     add("TorrentLink", keys(&crate::torrent::TorrentLink { url: "http://127.0.0.1:1/t/1/video.mkv".into(), size: 1 }));
     add("Playable.url", keys(&Playable::Url { url: "https://a.io".into() }));
     add("Playable.external", keys(&Playable::External { url: "https://a.io".into() }));

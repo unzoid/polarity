@@ -1,6 +1,9 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   type Anime,
   type AnimeCard,
+  type FranchisePart,
+  franchiseSummary,
   cleanDescription,
   countdown,
   FORMAT_LABEL,
@@ -15,32 +18,48 @@ import { joinFacts } from "../../lib/format";
 import { usePrefs } from "../../lib/settings";
 import { Star, Volume, VolumeMuted } from "../icons";
 import { IconButton } from "../ui/Button";
-import { useEffect } from "react";
-import { useArtGate } from "../../lib/ui";
+import { useArtGate, useReadyTogether } from "../../lib/ui";
+import { HeroSkeleton } from "../title/HeroSkeleton";
 import { SourcePicker, useSourcePicker } from "../title/SourcePicker";
 import { TitleActions } from "../title/TitleActions";
 import { SimklPanel } from "../title/SimklPanel";
 import { TraktNotSent } from "../title/TraktRating";
-import { TitleHeading } from "../title/TitleHeading";
+import { TitleHeading, useHeadingReady } from "../title/TitleHeading";
 import { openTrailer } from "../Trailer";
 import { AnimeSeriesPick } from "./AnimeSeriesPick";
 import { useAnimePlayback } from "./useAnimePlayback";
 import { Skeleton } from "../ui/Skeleton";
 
+/** A grouped page's franchise (#327): the top describes all of it, the same on every season tab. */
+export interface HeroFranchise {
+  /** Its parts in order, with their season tab labels. */
+  parts: FranchisePart[];
+  /** The part Play carries on with: the one played last, else the first. */
+  play: AnimeCard;
+  /** The part after it, which Play goes on to once `play` is all watched. */
+  following?: AnimeCard;
+}
+
 /**
  * The top of an anime's page: its name (or logo), the facts line, the next
  * episode's airing time, the first paragraph of its story and the action row,
- * playing whatever is up next.
+ * playing whatever is up next. On a grouped page (`franchise`) it's the base
+ * title's (`item`, `anime`) with the franchise's facts, and Play carries on
+ * wherever you left off in the franchise, whichever tab is picked (#327).
  */
 export function AnimeHero({
   item,
   facts = item,
   anime,
   logo,
+  logos,
+  logoPending,
   background,
   name,
   onImdb,
   trailer,
+  franchise,
+  pickInTabs = !!franchise,
 }: {
   item: AnimeCard;
   /** The entry the facts line (format, season, length, status) describes: a grouped page's base title (#246). */
@@ -48,14 +67,25 @@ export function AnimeHero({
   anime?: Anime;
   /** The franchise's logo (`franchiseArt`), the same on every season tab: this entry's name shows under it. */
   logo?: string;
+  /** Every logo to choose from, `logo` first (`franchiseArt`): the first shaped like a logo that reads shows (#371). */
+  logos?: string[];
+  /** The logo isn't known yet (`franchiseArt`): neither it nor the name shows for now (#343). */
+  logoPending?: boolean;
   /** The page's backdrop: the logo or name waits for it (#173), and the logo is measured against it (#215). */
   background?: string;
   name: string;
   /** The id it plays from: undefined until known, null when there's none (the page's backdrop trailer is that title's). */
   onImdb?: (id: string | null | undefined) => void;
   trailer?: { visible: boolean; muted: boolean; toggleMute: () => void };
+  franchise?: HeroFranchise;
+  /** The series pick sits under the season tabs instead (a grouped page, #327). */
+  pickInTabs?: boolean;
 }) {
-  const pb = useAnimePlayback(anime ?? item);
+  const playing = franchise?.play ?? anime ?? item;
+  const first = useAnimePlayback(playing);
+  const after = useAnimePlayback(franchise?.following ?? playing);
+  const pb = franchise?.following && first.next.finished ? after : first;
+  const summary = useMemo(() => franchise && franchiseSummary(franchise.parts), [franchise]);
   useEffect(() => onImdb?.(pb.loading ? undefined : (pb.metaId ?? null)), [onImdb, pb.loading, pb.metaId]);
   const picker = useSourcePicker();
   const prefs = usePrefs();
@@ -78,17 +108,42 @@ export function AnimeHero({
       : !pb.metaLoading && pb.metaId && !target && !pb.isMovie
         ? "No episodes to play yet"
         : undefined;
-  const subtitle = heroSubtitle(item.title, prefs.animeTitles, !!logo);
+  // A logo that won't show leaves the name as the heading: the line under it then names it in the other script.
+  const [noLogo, setNoLogo] = useState<string>();
+  const subtitle = heroSubtitle(item.title, prefs.animeTitles, !!logo && noLogo !== logo);
   const score = useAnimeScore()(item.averageScore);
   const studio = anime?.studios.edges.find((e) => e.isMain && e.node.isAnimationStudio)?.node.name;
-  const next = item.nextAiringEpisode;
+  const next = summary ? summary.airing : item.nextAiringEpisode;
+  const factsLine = summary
+    ? [summary.years, summary.parts, summary.status, studio]
+    : [
+        facts.format && FORMAT_LABEL[facts.format],
+        facts.season && facts.seasonYear ? `${SEASON_LABEL[facts.season]} ${facts.seasonYear}` : facts.seasonYear,
+        facts.format === "MOVIE" ? facts.duration && `${facts.duration} min` : facts.episodes && `${facts.episodes} episodes`,
+        facts.status && STATUS_LABEL[facts.status],
+        studio,
+      ];
   const paragraphs = cleanDescription(anime?.description);
   const gate = useArtGate(background);
+  // The page loads together (as a title page does, Detail.tsx): the art, the heading, the entry's details and
+  // what Play plays come in as one, over a skeleton until then.
+  const heading = useHeadingReady({ logo, logos, backdrop: background, look: "detail", pending: logoPending });
+  const ready = useReadyTogether(!!anime && !pb.loading && gate["data-art"] === "ready" && heading.ready, String(item.id));
 
   return (
-    <section className="detail-hero anime-hero" {...gate}>
+    <section className="detail-hero anime-hero" {...gate} data-ready={ready}>
       <div className="detail-hero-main">
-        <TitleHeading name={name} logo={logo} backdrop={background} look="detail" />
+        {!ready && <HeroSkeleton />}
+        <TitleHeading
+          name={name}
+          logo={logo}
+          logos={logos}
+          backdrop={background}
+          look="detail"
+          pending={logoPending}
+          onLogoFail={() => setNoLogo(logo)}
+          onSettled={heading.onSettled}
+        />
         {subtitle && <p className="anime-native t-callout">{subtitle}</p>}
         <p className="detail-facts anime-meta-line t-callout tabular">
           {score && (
@@ -96,17 +151,13 @@ export function AnimeHero({
               <Star size={13} /> {score}
             </span>
           )}
-          {joinFacts([
-            facts.format && FORMAT_LABEL[facts.format],
-            facts.season && facts.seasonYear ? `${SEASON_LABEL[facts.season]} ${facts.seasonYear}` : facts.seasonYear,
-            facts.format === "MOVIE" ? facts.duration && `${facts.duration} min` : facts.episodes && `${facts.episodes} episodes`,
-            facts.status && STATUS_LABEL[facts.status],
-            studio,
-          ])}
+          {joinFacts(factsLine)}
         </p>
         {next && (
           <p className="anime-next t-callout tabular" title={new Date(next.airingAt * 1000).toLocaleString()}>
-            <span className="anime-next-ep">Episode {next.episode}</span>{" "}
+            <span className="anime-next-ep">
+              {summary?.airing ? `${summary.airing.label} · ` : ""}Episode {next.episode}
+            </span>{" "}
             {new Date(next.airingAt * 1000).toLocaleDateString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" })}
             {" · in "}
             {countdown(untilAiring(next.airingAt))}
@@ -150,10 +201,11 @@ export function AnimeHero({
             </IconButton>
           )}
         </TitleActions>
-        {(unavailable || pb.pickable) && (
+        {/* A grouped page picks each part's series under its season tabs (AnimeEpisodes.tsx). */}
+        {(unavailable || (pb.pickable && !pickInTabs)) && (
           <p className="anime-unavailable t-caption">
             {unavailable}
-            {pb.pickable && <AnimeSeriesPick anime={item} isMovie={pb.isMovie} current={pb.metaId} mal={pb.malId} kitsu={pb.kitsu} />}
+            {pb.pickable && !pickInTabs && <AnimeSeriesPick anime={item} isMovie={pb.isMovie} current={pb.metaId} mal={pb.malId} kitsu={pb.kitsu} />}
           </p>
         )}
         <TraktNotSent id={pb.metaId} />

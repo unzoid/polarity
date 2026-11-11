@@ -47,10 +47,11 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
 
 | Platform | File | Needs |
 |---|---|---|
-| Windows | `Polarity_<version>_x64-setup.exe`, or the `.msi` | Windows 10 or 11, 64-bit. The installer adds Microsoft's WebView2 if it's missing. |
-| macOS | `Polarity_<version>_aarch64.dmg` | macOS 11 or later on Apple Silicon |
-| Linux | `.AppImage`, `.deb` or `.rpm` | 64-bit, with glibc as new as Ubuntu 22.04's. The `.deb` and `.rpm` install mpv with it. |
-| Android, iOS | not released yet | Built in CI on every push |
+| Windows | `Polarity-<version>-Windows-x64-setup.exe`, or the `.msi` | Windows 10 or 11, 64-bit. The installer adds Microsoft's WebView2 if it's missing. |
+| macOS | `Polarity-<version>-macOS-arm64.dmg` | macOS 11 or later on Apple Silicon |
+| Linux | `Polarity-<version>-Linux-x64.AppImage`, `.deb` or `.rpm` | 64-bit, with glibc as new as Ubuntu 22.04's. The `.deb` and `.rpm` install mpv with it. |
+| Android (preview) | `Polarity-<version>-Android-arm64-debug.apk` | A debug build for 64-bit phones; doesn't update itself yet |
+| iOS (preview) | `Polarity-<version>-iOS-arm64-unsigned.ipa` | Unsigned: installs only once you sign it yourself |
 
 > [!NOTE]
 > Not every release carries every platform yet: the releases page lists what each one has. The Windows
@@ -106,7 +107,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
       <ul>
         <li>Optional accounts and profiles with their own avatars, synced between your devices</li>
         <li>Watch parties that keep everyone's player in step, with a code to join and host controls</li>
-        <li>Show on Discord that you're watching (the default, desktop), what you're watching, or nothing, with buttons to watch the same title or join your watch party</li>
+        <li>Show on Discord that you're watching (the default, desktop), what you're watching, or nothing, with a button to watch the same title, and Discord's own Join for your watch party</li>
         <li>TV mode for the couch, with a controller or the arrow keys</li>
       </ul>
     </td>

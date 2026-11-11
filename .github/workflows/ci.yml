@@ -15,9 +15,12 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
+# ui/mobile-polish (temporary): only the iOS build runs there, for a test IPA; drop this before merging.
+
 jobs:
   frontend:
     name: Frontend (typecheck, tests, build)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -30,11 +33,15 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test
       - run: bun run build
+      # A release build has none of the dev-only parts (dev database, watch log), and a dev build has them all (#425).
+      - name: Release bundle leaves out dev-only parts
+        run: bun scripts/releaseBundle.ts
 
   # The browser extension (extension/, #208): its own tests, typecheck and build;
   # the Chrome and Firefox folders are kept for loading unpacked.
   extension:
     name: Browser extension (tests, typecheck, build)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -58,11 +65,18 @@ jobs:
           retention-days: 14
 
   # The web build in real browsers against the fake shell (playwright.config.ts):
-  # desktop in Chromium and WebKit, TV and phone sizes in Chromium.
+  # desktop in Chromium and WebKit, TV and phone sizes in Chromium. In two halves side by side (#481): the whole
+  # suite on one runner took 20 minutes and a slow runner nearly twice that, past the time limit with every test
+  # passing. Each half takes about half, which leaves a slow runner room under the same limit.
   e2e-web:
-    name: End to end (web build)
+    name: End to end (web build, ${{ matrix.shard }}/2)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     # Playwright's own image for the version in bun.lock (1.64.1), pinned by digest: the browsers'
     # system packages are already installed, so no run depends on Ubuntu's package mirror. Running
     # as the runner's user (1001) follows Playwright's guide for GitHub Actions. When @playwright/test
@@ -92,12 +106,13 @@ jobs:
             echo "::warning::Installing the browsers failed or stalled (attempt $attempt of 3)"
           done
           exit 1
-      - run: bun run e2e
+      - run: bun run e2e --shard=${{ matrix.shard }}/2
+      # Also when the time limit stops the job, so what failed before then can be read.
       - name: Keep the report, traces and screenshots
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-report
+          name: e2e-report-${{ matrix.shard }}
           path: |
             e2e/.report
             e2e/.results
@@ -105,6 +120,7 @@ jobs:
 
   rust:
     name: Rust tests (${{ matrix.os }})
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     strategy:
       fail-fast: false
       matrix:
@@ -169,6 +185,7 @@ jobs:
   # the sources they're built from are kept with the APK.
   android:
     name: Android build (debug and unsigned release)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -220,11 +237,12 @@ jobs:
         run: cp -R "$RUNNER_TEMP/libmpv/out/jniLibs" "$RUNNER_TEMP/libmpv/out/assets" src-tauri/gen/android/app/src/main/
       # Pull requests build the debug APK for arm64 only (what phones run); master builds both. The
       # emulator test in e2e-app.yml builds its own x86_64 APK.
-      # The account backend (scripts/accountEnv.ts), so the APK has sign-in; empty on forks' pull requests.
+      # The account backend (scripts/accountEnv.ts), so the APK has sign-in: master and tags only. Other branches
+      # (dev too) and pull requests build without it, so no artifact outside a release carries production's settings.
       - name: Build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_URL || '' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_PUBLISHABLE_KEY || '' }}
         run: bun run tauri android build --ci --debug --apk ${{ github.ref == 'refs/heads/master' && '--target x86_64 --target aarch64' || '--target aarch64' }}
       - name: Keep the APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -310,10 +328,14 @@ jobs:
           bun run tauri ios init --ci
           bun run tauri icon src-tauri/icons/icon.png --output "$RUNNER_TEMP/icons"
           cp "$RUNNER_TEMP"/icons/ios/*.png src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/
+      # The account backend: master and tags only, as for the APK. ui/mobile-polish's test IPA (temporary, with the
+      # rest of this branch's CI) is a dev build instead, with no database built in: a tester connects one with a
+      # connection code in Settings → Advanced → Database (src/lib/account/devDatabase.ts).
       - name: Build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_URL || '' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_PUBLISHABLE_KEY || '' }}
+          VITE_POLAR_CHANNEL: ${{ github.ref == 'refs/heads/ui/mobile-polish' && 'dev' || '' }}
         run: bun run tauri ios build --ci --no-sign
       - name: Keep the IPA
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -329,9 +351,91 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+  # Revyl requires a simulator-slice app, not the device IPA above. Keep this
+  # branch-only so normal iOS releases don't pay for the extra simulator build.
+  ios-simulator:
+    name: iOS Simulator build (arm64, debug)
+    if: github.ref == 'refs/heads/ui/mobile-polish'
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use Xcode 26 or later
+        run: |
+          xcode=$(ls -d /Applications/Xcode_[0-9]*.app | grep -iv beta | sort -V | tail -1)
+          case "$(basename "$xcode")" in Xcode_2[6-9]*|Xcode_[3-9][0-9]*) ;; *) echo "::error::no Xcode 26 or later here"; ls -d /Applications/Xcode*.app; exit 1 ;; esac
+          sudo xcode-select -s "$xcode"
+          echo "$xcode: iOS Simulator SDK $(xcrun --sdk iphonesimulator --show-sdk-version)"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ios-simulator
+          save-if: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Install build tools
+        run: brew install meson ninja pkgconf xcodegen
+      - name: Restore simulator libmpv
+        id: libmpv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ios-libmpv/out
+          key: ios-libmpv-simulator-${{ hashFiles('scripts/ios-mpv.sh') }}
+      - name: Build simulator libmpv
+        if: steps.libmpv.outputs.cache-hit != 'true'
+        run: scripts/ios-mpv.sh "$RUNNER_TEMP/ios-libmpv" simulator
+      - name: Put libmpv in the app
+        run: |
+          mkdir -p src-tauri/vendor/ios
+          cp -R "$RUNNER_TEMP/ios-libmpv/out/frameworks" "$RUNNER_TEMP/ios-libmpv/out/licenses" src-tauri/vendor/ios/
+      - name: Generate the Xcode project
+        run: |
+          bun run tauri ios init --ci
+          bun run tauri icon src-tauri/icons/icon.png --output "$RUNNER_TEMP/icons"
+          cp "$RUNNER_TEMP"/icons/ios/*.png src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/
+      - name: Build simulator app
+        env:
+          VITE_SUPABASE_URL: ''
+          VITE_SUPABASE_PUBLISHABLE_KEY: ''
+        run: bun run tauri ios build --ci --no-sign --debug --target aarch64-sim
+      - name: Verify simulator app slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=src-tauri/gen/apple/build/arm64-sim/Polarity.app
+          binary="$app/Polarity"
+          test -d "$app"
+          test -f "$binary"
+          archs=$(lipo -archs "$binary")
+          [[ " $archs " == *" arm64 "* ]]
+          xcrun vtool -show-build "$binary" | grep -q 'platform IOSSIMULATOR'
+      - name: Package simulator app
+        run: ditto -c -k --keepParent src-tauri/gen/apple/build/arm64-sim/Polarity.app Polarity-iOS-simulator-arm64.app.zip
+      - name: Keep simulator app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-simulator-app
+          path: Polarity-iOS-simulator-arm64.app.zip
+          retention-days: 14
+      - name: Keep libmpv's simulator sources
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-simulator-mpv-sources
+          path: ${{ runner.temp }}/ios-libmpv/out/polarity-ios-mpv-sources.tar.xz
+          compression-level: 0
+          retention-days: 14
+
 
   fmt:
     name: Rust formatting
+    if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

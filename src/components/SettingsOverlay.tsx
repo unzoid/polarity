@@ -4,17 +4,21 @@ import { Avatar } from "./Avatar";
 import { ChevronLeft, ChevronRight, Close, Reset, SignOut } from "./icons";
 import { iconButtonClass } from "./ui/Button";
 import { useNativeBack } from "./NativeBack";
-import { dismissDepth, onDismissDepth, useFormFactor } from "../lib/ui";
+import { dismissDepth, isTextField, onDismissDepth, useFormFactor } from "../lib/ui";
 import { tvModeAvailable } from "../tv/tvMode";
 import { SearchField } from "./ui/SearchField";
 import { useAccount } from "../lib/account";
+import { buildChannel } from "../lib/platform";
 import { closeSettings, type PageId, prefsCustomized, resetPrefs, searchSettings, type SettingEntry, usePrefs, useSettingsOverlay } from "../lib/settings";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
 
-/** Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. */
+/**
+ * Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. Account isn't listed: the profile
+ * button at the foot of the sidebar opens it (#340), and search still reaches its rows.
+ */
 const GROUPS: { heading?: string; pages: PageId[] }[] = [
-  { pages: ["account", "playback", "subtitles", "appearance", "browsing", "anime", "notifications"] },
+  { pages: ["playback", "subtitles", "appearance", "browsing", "anime", "notifications"] },
   { heading: "Input", pages: ["controls", "controller"] },
   { heading: "Sources", pages: ["sources", "marketplace", "addons", "services"] },
   { heading: "System", pages: ["advanced", "about"] },
@@ -34,17 +38,48 @@ function revealSetting(root: HTMLElement, entry: SettingEntry) {
   if (!label) return;
   const box = marked ?? label.closest<HTMLElement>(ROW_BOXES) ?? label;
   box.scrollIntoView({ block: "center" });
+  clearTimeout(hitTimers.get(box));
   box.removeAttribute("data-search-hit");
   void box.offsetWidth; // restart the highlight if it's already running
   box.setAttribute("data-search-hit", "");
-  box.addEventListener("animationend", () => box.removeAttribute("data-search-hit"), { once: true });
+  // The mark goes once the highlight has played, however it ends: an interrupted animation (page left,
+  // Settings closed, window hidden) fires animationcancel or nothing, and a mark left behind would
+  // play the highlight again each time the row is shown.
+  const unmark = () => {
+    clearTimeout(hitTimers.get(box));
+    box.removeEventListener("animationend", unmark);
+    box.removeEventListener("animationcancel", unmark);
+    box.removeAttribute("data-search-hit");
+  };
+  box.addEventListener("animationend", unmark);
+  box.addEventListener("animationcancel", unmark);
+  hitTimers.set(box, setTimeout(unmark, SEARCH_HIT_MS));
 }
+
+/** How long the highlight plays (`t3s-search-hit` in settings-overlay.css). */
+const SEARCH_HIT_MS = 1400;
+const hitTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+/** What a sheet holding Settings shows in its header (`embedded`): the view's name, and where its Back goes. */
+export type SettingsHead = { label: string; back: () => void };
 
 /**
  * Settings as a window over the app (T3 Code, Discord, Obsidian): sidebar of
  * sections on the left, breadcrumb header and one scrolling page on the right.
+ *
+ * `embedded` (a phone): the next view of the profile sheet (ProfileMenu.tsx) rather than a sheet of its own, so
+ * it's the same drawer, in its look. The sheet draws the header: `onHead` says what it shows (Settings, or the
+ * section open, with Back to the list), and the list's Back is `onExit` (back to the profiles).
  */
-export function SettingsOverlay() {
+export function SettingsOverlay({
+  embedded = false,
+  onExit,
+  onHead,
+}: {
+  embedded?: boolean;
+  onExit?: () => void;
+  onHead?: (head: SettingsHead) => void;
+} = {}) {
   const { open, page: requested } = useSettingsOverlay();
   const account = useAccount();
   const prefs = usePrefs();
@@ -58,18 +93,48 @@ export function SettingsOverlay() {
   // sections first, as a phone's own Settings app does. Back (or Escape) goes from a page to the list.
   const phone = useFormFactor().form === "phone";
   const [view, setView] = useState<"list" | "page">("list");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
   const backButton = useRef<HTMLButtonElement>(null);
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers === 0, ["Settings"], () => setView("list"));
+  // The layers Settings rose over (the profile sheet it opens from stays open below it): only those opened on it cover it.
+  const [below, setBelow] = useState(0);
+  useEffect(() => {
+    if (open) setBelow(dismissDepth());
+  }, [open]);
+  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], () => setView("list"));
+  // Back on a phone's page goes to the list; on the list it closes Settings (#455). The system's Back (iOS's swipe,
+  // Android's button and gesture) arrives as Escape (lib/ui/systemBack.ts), so Escape is taken here, before the
+  // dialog would close on it (or the sheet below would). A menu open on the page closes first, as it always does.
+  useEffect(() => {
+    if (!open || !phone) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || dismissDepth() > below) return;
+      // A menu's popup (outside the sheet) holding the focus is what Escape closes first.
+      const at = document.activeElement;
+      if (at && at !== document.body && !at.closest(".t3s")) return;
+      // A search with something in it clears itself first.
+      if (isTextField(at) && "value" in at && at.value) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (view === "page") setView("list");
+      else if (onExit) onExit();
+      else closeSettings();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, phone, view, below, onExit]);
 
-  // Each opening lands on the requested page (or where it was left), search cleared.
+  // Each opening lands on the requested page (or where it was left, unless that was Account), search cleared.
   useEffect(() => {
     if (!open) return;
     const asked = !!requested && pages.some((p) => p.id === requested);
     if (asked) setPage(requested);
+    else if (page === "account") setPage(fallback);
     setView(asked ? "page" : "list");
     setQuery("");
+    setTarget(null);
   }, [open, requested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -77,6 +142,11 @@ export function SettingsOverlay() {
   }, [page]);
 
   const current = pages.find((p) => p.id === page) ?? pages[0];
+  // The sheet holding it names the view and takes its Back.
+  useEffect(() => {
+    if (!onHead) return;
+    onHead(view === "page" ? { label: current.label, back: () => setView("list") } : { label: "Settings", back: () => (onExit ?? closeSettings)() });
+  }, [onHead, onExit, view, current.label]);
   const pageOf = (id: PageId) => pages.find((p) => p.id === id) ?? pages[0];
   const searching = query.trim() !== "";
   const results = useMemo(
@@ -100,7 +170,11 @@ export function SettingsOverlay() {
   useEffect(() => {
     if (!target || !scroller.current) return;
     const root = scroller.current;
-    const frame = requestAnimationFrame(() => revealSetting(root, target.entry));
+    // Revealed once: coming back to the page later shows it as it is, without the highlight.
+    const frame = requestAnimationFrame(() => {
+      revealSetting(root, target.entry);
+      setTarget(null);
+    });
     return () => cancelAnimationFrame(frame);
   }, [target, page]);
 
@@ -117,13 +191,193 @@ export function SettingsOverlay() {
     setTarget({ entry }); // a fresh object, so picking the same one again still scrolls
   };
 
+  // The sections and the page, the same in the window and in the sheet; only the chrome round them differs.
+  const body = (
+    <>
+      <nav className="t3s-sidebar" aria-label="Settings sections">
+        {phone && !embedded && (
+          <div className="t3s-list-head">
+            <h2 className="t3s-list-title">Settings</h2>
+            <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">
+              <Close size={18} strokeWidth={2.2} />
+            </Dialog.Close>
+          </div>
+        )}
+        <SearchField
+          ref={searchInput}
+          look="plain"
+          className="t3s-search"
+          value={query}
+          onChange={setQuery}
+          label="Search settings"
+          placeholder="Search"
+          kbd="/"
+          role="combobox"
+          aria-expanded={searching}
+          aria-controls="t3s-results"
+          aria-activedescendant={searching && results.length ? `t3s-result-${selected}` : undefined}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              if (!results.length) return;
+              e.preventDefault();
+              const step = e.key === "ArrowDown" ? 1 : -1;
+              setSelected((i) => (i + step + results.length) % results.length);
+            }
+            if (e.key === "Enter" && results[selected]) pick(results[selected]);
+          }}
+        />
+
+        <div className="t3s-groups">
+          {searching ? (
+            results.length ? (
+              <div className="t3s-results" id="t3s-results" role="listbox" aria-label="Matching settings" ref={resultsList}>
+                {results.map((entry, i) => {
+                  const p = pageOf(entry.page);
+                  return (
+                    <div
+                      key={entry.id}
+                      id={`t3s-result-${i}`}
+                      data-index={i}
+                      className="t3s-result"
+                      role="option"
+                      aria-selected={i === selected}
+                      onMouseMove={() => i !== selected && setSelected(i)}
+                      onMouseDown={(e) => e.preventDefault()} // keep focus in the search field
+                      onClick={() => pick(entry)}
+                    >
+                      <p.icon size={16} strokeWidth={2} />
+                      <span className="t3s-result-text">
+                        <span className="t3s-result-title">{entry.title}</span>
+                        <span className="t3s-result-page">{p.label}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="t3s-empty">No settings match “{query.trim()}”.</p>
+            )
+          ) : (
+            GROUPS.map((g, i) => {
+              const items = pages.filter((p) => g.pages.includes(p.id));
+              if (!items.length) return null;
+              return (
+                <div className="t3s-group" role="group" aria-label={g.heading} key={g.heading ?? i}>
+                  {g.heading && <h3 className="t3s-group-heading">{g.heading}</h3>}
+                  {items.map((p) => (
+                    <NavItem key={p.id} page={p} active={!phone && p.id === page} chevron={phone} onClick={() => go(p.id)} />
+                  ))}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* A phone's list of sections: the device's defaults back, once there's something to restore (#455). */}
+        {phone && prefsCustomized(prefs) && (
+          <div className="t3s-group">
+            <button className="t3s-nav-item" onClick={resetPrefs} title="Interface sounds and controller notices on this device">
+              <Reset size={16} strokeWidth={2} />
+              <span>Restore device defaults</span>
+            </button>
+          </div>
+        )}
+        {!account.enabled && buildChannel === "dev" && (
+          <div className="t3s-sidebar-foot">
+            <button className="t3s-nav-item" onClick={() => go("advanced")}>
+              <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
+              <span>No database: connect one</span>
+            </button>
+          </div>
+        )}
+        {account.enabled && (
+          <div className="t3s-sidebar-foot">
+            {account.status === "guest" ? (
+              <button className="t3s-nav-item" onClick={account.showSignIn}>
+                <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
+                <span>Sign in to sync</span>
+              </button>
+            ) : account.profile ? (
+              <button
+                className="t3s-nav-item"
+                data-active={!phone && page === "account"}
+                aria-current={!phone && page === "account" ? "page" : undefined}
+                onClick={() => go("account")}
+              >
+                <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
+                <span>{account.profile.name}</span>
+              </button>
+            ) : null}
+          </div>
+        )}
+      </nav>
+
+      <div className="t3s-main">
+        {!embedded && (
+          <header className="t3s-header">
+            {phone && (
+              <button
+                ref={backButton}
+                className={iconButtonClass("settings", "t3s-back")}
+                data-native-back={nativeBack || undefined}
+                aria-label="All settings"
+                onClick={() => setView("list")}
+              >
+                <ChevronLeft size={20} strokeWidth={2.2} />
+              </button>
+            )}
+            <Dialog.Title className="t3s-crumbs">
+              <span className="t3s-crumb-root">Settings</span>
+              <span className="t3s-crumb-sep" aria-hidden>
+                /
+              </span>
+              <span className="t3s-crumb-page">{current.label}</span>
+            </Dialog.Title>
+            <div className="t3s-header-actions">
+              {/* On a phone its label doesn't fit here, and its arrow alone read as a Back that did nothing (#455):
+                      it's at the foot of the list of sections there. */}
+              {!phone && (
+                <button
+                  className="t3s-ghost"
+                  disabled={!prefsCustomized(prefs)}
+                  onClick={resetPrefs}
+                  title="Interface sounds and controller notices on this device"
+                >
+                  <Reset size={14} strokeWidth={2.2} />
+                  <span className="t3s-ghost-label">Restore device defaults</span>
+                </button>
+              )}
+              <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">
+                <Close size={16} strokeWidth={2.2} />
+              </Dialog.Close>
+            </div>
+          </header>
+        )}
+
+        <div className="t3s-scroll" ref={scroller}>
+          <div className="t3s-page" key={page}>
+            <SettingsPageBody page={page} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  if (embedded)
+    return (
+      // Named as the window is: by the section open, else Settings.
+      <div className="t3s" data-embedded="" data-view={view} role="region" aria-label={view === "page" ? current.label : "Settings"}>
+        {body}
+      </div>
+    );
+
   return (
     <Dialog.Root
-      open={open}
-      onOpenChange={(o, details) => {
-        if (o) return;
-        if (phone && view === "page" && details.reason === "escape-key") return setView("list");
-        closeSettings();
+      // Drawn closed first: a dialog that's open from its first render (the first time Settings is asked for,
+      // before App.tsx has it loaded) shows without its opening motion.
+      open={open && mounted}
+      onOpenChange={(o) => {
+        if (!o) closeSettings();
       }}
     >
       <Dialog.Portal>
@@ -146,144 +400,7 @@ export function SettingsOverlay() {
               <div className="t3s-grabber" />
             </div>
           )}
-          <nav className="t3s-sidebar" aria-label="Settings sections">
-            {phone && (
-              <div className="t3s-list-head">
-                <h2 className="t3s-list-title">Settings</h2>
-                <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">
-                  <Close size={18} strokeWidth={2.2} />
-                </Dialog.Close>
-              </div>
-            )}
-            <SearchField
-              ref={searchInput}
-              look="plain"
-              className="t3s-search"
-              value={query}
-              onChange={setQuery}
-              label="Search settings"
-              placeholder="Search"
-              kbd="/"
-              role="combobox"
-              aria-expanded={searching}
-              aria-controls="t3s-results"
-              aria-activedescendant={searching && results.length ? `t3s-result-${selected}` : undefined}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                  if (!results.length) return;
-                  e.preventDefault();
-                  const step = e.key === "ArrowDown" ? 1 : -1;
-                  setSelected((i) => (i + step + results.length) % results.length);
-                }
-                if (e.key === "Enter" && results[selected]) pick(results[selected]);
-              }}
-            />
-
-            <div className="t3s-groups">
-              {searching ? (
-                results.length ? (
-                  <div className="t3s-results" id="t3s-results" role="listbox" aria-label="Matching settings" ref={resultsList}>
-                    {results.map((entry, i) => {
-                      const p = pageOf(entry.page);
-                      return (
-                        <div
-                          key={entry.id}
-                          id={`t3s-result-${i}`}
-                          data-index={i}
-                          className="t3s-result"
-                          role="option"
-                          aria-selected={i === selected}
-                          onMouseMove={() => i !== selected && setSelected(i)}
-                          onMouseDown={(e) => e.preventDefault()} // keep focus in the search field
-                          onClick={() => pick(entry)}
-                        >
-                          <p.icon size={16} strokeWidth={2} />
-                          <span className="t3s-result-text">
-                            <span className="t3s-result-title">{entry.title}</span>
-                            <span className="t3s-result-page">{p.label}</span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="t3s-empty">No settings match “{query.trim()}”.</p>
-                )
-              ) : (
-                GROUPS.map((g, i) => {
-                  const items = pages.filter((p) => g.pages.includes(p.id));
-                  if (!items.length) return null;
-                  return (
-                    <div className="t3s-group" role="group" aria-label={g.heading} key={g.heading ?? i}>
-                      {g.heading && <h3 className="t3s-group-heading">{g.heading}</h3>}
-                      {items.map((p) => (
-                        <NavItem key={p.id} page={p} active={!phone && p.id === page} chevron={phone} onClick={() => go(p.id)} />
-                      ))}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {account.enabled && (
-              <div className="t3s-sidebar-foot">
-                {account.status === "guest" ? (
-                  <button className="t3s-nav-item" onClick={account.showSignIn}>
-                    <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
-                    <span>Sign in to sync</span>
-                  </button>
-                ) : account.profile ? (
-                  <button className="t3s-nav-item" onClick={() => go("account")}>
-                    <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
-                    <span>{account.profile.name}</span>
-                  </button>
-                ) : null}
-              </div>
-            )}
-          </nav>
-
-          <div className="t3s-main">
-            <header className="t3s-header">
-              {phone && (
-                <button
-                  ref={backButton}
-                  className={iconButtonClass("settings", "t3s-back")}
-                  data-native-back={nativeBack || undefined}
-                  aria-label="All settings"
-                  onClick={() => setView("list")}
-                >
-                  <ChevronLeft size={20} strokeWidth={2.2} />
-                </button>
-              )}
-              <Dialog.Title className="t3s-crumbs">
-                <span className="t3s-crumb-root">Settings</span>
-                <span className="t3s-crumb-sep" aria-hidden>
-                  /
-                </span>
-                <span className="t3s-crumb-page">{current.label}</span>
-              </Dialog.Title>
-              <div className="t3s-header-actions">
-                <button
-                  className="t3s-ghost"
-                  disabled={!prefsCustomized(prefs)}
-                  onClick={resetPrefs}
-                  title="Interface sounds and controller notices on this device"
-                >
-                  <Reset size={14} strokeWidth={2.2} />
-                  <span className="t3s-ghost-label">Restore device defaults</span>
-                </button>
-                <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">
-                  <Close size={16} strokeWidth={2.2} />
-                </Dialog.Close>
-              </div>
-            </header>
-
-            <div className="t3s-scroll" ref={scroller}>
-              <div className="t3s-page" key={page}>
-                <SettingsPageBody page={page} />
-              </div>
-            </div>
-          </div>
+          {body}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

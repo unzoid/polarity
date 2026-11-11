@@ -9,6 +9,7 @@ import type { AnimeLink } from "./library/identity";
 import type {
   CacheInfo,
   CatalogExtra,
+  CustomTheme,
   Imported,
   ExternalRatings,
   InstalledAddon,
@@ -151,7 +152,7 @@ export const contract = {
   } satisfies Keys<StreamQuality>,
   Video: { episode: true, id: true, overview: true, rating: true, released: true, season: true, tag: true, thumbnail: true, title: true } satisfies Keys<Video>,
   // contract/library.json (crates/library)
-  AnimeLink: { anilist: true, canonical: true, kitsu: true, mal: true, updatedAt: true } satisfies Keys<AnimeLink>,
+  AnimeLink: { anilist: true, canonical: true, kitsu: true, mal: true, removed: true, updatedAt: true } satisfies Keys<AnimeLink>,
   LibraryItem: { addedAt: true, id: true, name: true, poster: true, type: true, updatedAt: true } satisfies Keys<LibraryItem>,
   Progress: {
     background: true,
@@ -230,7 +231,9 @@ export const contract = {
     cardRatingPosition: true,
     cardSize: true,
     clickAction: true,
+    colorScheme: true,
     controlsHideSecs: true,
+    customThemes: true,
     episodeLayout: true,
     excludeKeywords: true,
     heroAutoplay: true,
@@ -279,12 +282,14 @@ export const contract = {
     wheelAction: true,
   } satisfies Keys<Settings>,
   Span: { end: true, start: true } satisfies Keys<Span>,
-  StreamsResult: { failed: true, hidden: true, streams: true } satisfies Keys<StreamsResult>,
+  StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true } satisfies Keys<StreamsResult>,
+  CustomTheme: { accent: true, base: true, id: true, name: true, tint: true } satisfies Keys<CustomTheme>,
   SubtitleOption: { addon: true, id: true, lang: true, url: true } satisfies Keys<SubtitleOption>,
   SubtitleStyle: {
     background: true,
     color: true,
     font: true,
+    fontFromSubtitles: true,
     opacity: true,
     outline: true,
     outlineColor: true,

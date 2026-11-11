@@ -78,31 +78,40 @@ function weightedMedian(values: number[], weight: number[], total: number) {
  * Where a heading's logo sits over its backdrop (fractions of the picture, as `object-fit: cover` shows it on a wide
  * window) and how much of the page's gradient covers it there (`rgb(10 10 10 / scrim)`). They follow the scrims in
  * cards.css (.hero-scrim), detail.css (.detail-bg-scrim) and tv.css (the TV art fades out towards the logo).
+ * `onPage`: the gradient is the page's colour, near-white in light mode (the detail page); the others stay dark.
  */
 export const LOGO_SPOTS = {
   hero: { x0: 0.03, y0: 0.45, x1: 0.4, y1: 0.8, scrim: 0.5 },
-  detail: { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7 },
+  detail: { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7, onPage: true },
   "tv-stage": { x0: 0.03, y0: 0.5, x1: 0.35, y1: 0.85, scrim: 0.8 },
   "tv-detail": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
   "tv-panel": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
 } as const;
 
-export type LogoSpot = { x0: number; y0: number; x1: number; y1: number; scrim: number };
+export type LogoSpot = { x0: number; y0: number; x1: number; y1: number; scrim: number; onPage?: boolean };
 
-/** The scrim's colour (the page background, #0a0a0a). */
+/** The scrim's colour (the dark page background, #0a0a0a). */
 const SCRIM = 10;
+/** The light page's grey (lib/theme LIGHT_BASE, #f4f4f6). */
+const LIGHT_SCRIM = 244;
+
+/** The grey a spot's gradient is made of right now: the light page's for an `onPage` spot in light mode. */
+export function scrimLevel(spot: Pick<LogoSpot, "onPage">): number {
+  const light = typeof document !== "undefined" && document.documentElement.dataset.scheme === "light";
+  return spot.onPage && light ? LIGHT_SCRIM : SCRIM;
+}
 
 /** The luminance behind a logo when the backdrop can't be measured, or there's none: the app's dark page. */
 export const DARK_PAGE = luminance(SCRIM, SCRIM, SCRIM);
 
 /**
  * The mean luminance of a backdrop's pixels (already cut to the logo's spot) under the page's gradient of
- * `scrim` (0-1), blended in sRGB as CSS does.
+ * `scrim` (0-1) in the grey `level`, blended in sRGB as CSS does.
  */
-export function backdropLuminance(px: ArrayLike<number>, scrim: number) {
+export function backdropLuminance(px: ArrayLike<number>, scrim: number, level = SCRIM) {
   let sum = 0;
   let n = 0;
-  const over = (c: number) => c * (1 - scrim) + SCRIM * scrim;
+  const over = (c: number) => c * (1 - scrim) + level * scrim;
   for (let i = 0; i < px.length; i += 4) {
     sum += luminance(over(px[i]), over(px[i + 1]), over(px[i + 2]));
     n++;
@@ -148,13 +157,51 @@ export function pickLogo(inks: (Ink | null)[], behind: number): { index: number;
   return { index: first, look: logoLook(inks[first]!, behind) };
 }
 
+/** A logo picture's size, and the share of its pixels that are see-through (null when they can't be read). */
+export interface LogoShape {
+  width: number;
+  height: number;
+  clear: number | null;
+}
+
+/** A logo is clearly wider than tall: at least this many times (a stacked two-line logo still is). */
+export const LOGO_ASPECT = 1.2;
+/** And mostly see-through around its lettering: at least this share of its pixels (a cover has none). */
+export const LOGO_CLEAR = 0.25;
+
 /**
- * What a heading shows once measuring has answered: the logo to show and how, or "unsure" (the name in text)
- * when neither the logos nor the backdrop could be measured. `behind` is null when the backdrop couldn't be;
+ * Whether a picture handed over as a title's logo is shaped like one (#371): a cover or poster passed off as a
+ * logo is square or upright, or has nothing see-through. Transparency counts only when the pixels could be read.
+ */
+export function logoShaped(shape: LogoShape): boolean {
+  return shape.width >= LOGO_ASPECT * shape.height && (shape.clear === null || shape.clear >= LOGO_CLEAR);
+}
+
+/** The share of RGBA pixels that are mostly see-through. */
+export function clearShare(px: ArrayLike<number>): number {
+  let clear = 0;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 128) clear++;
+  return px.length ? clear / (px.length / 4) : 0;
+}
+
+/**
+ * What a heading shows once measuring has answered: the logo to show and how, "none" when no candidate is shaped
+ * like a logo (`shapes`, null where a picture couldn't be loaded at all), or "unsure" when neither the logos nor
+ * the backdrop could be measured; for both the name shows in text. `behind` is null when the backdrop couldn't be;
  * with no backdrop to measure the caller passes `DARK_PAGE`, and an unmeasured logo is then left as it is.
  */
-export function chooseLogo(candidates: string[], inks: (Ink | null)[], behind: number | null): { src: string; look: LogoLook } | "unsure" {
-  const picked = pickLogo(inks, behind ?? DARK_PAGE);
-  if (picked) return { src: candidates[picked.index], look: picked.look };
-  return behind === null ? "unsure" : { src: candidates[0], look: "as-is" };
+export function chooseLogo(
+  candidates: string[],
+  inks: (Ink | null)[],
+  behind: number | null,
+  shapes: (LogoShape | null)[] = [],
+): { src: string; look: LogoLook } | "unsure" | "none" {
+  const kept = candidates.map((_, i) => i).filter((i) => !shapes[i] || logoShaped(shapes[i]));
+  if (!kept.length) return "none";
+  const picked = pickLogo(
+    kept.map((i) => inks[i] ?? null),
+    behind ?? DARK_PAGE,
+  );
+  if (picked) return { src: candidates[kept[picked.index]], look: picked.look };
+  return behind === null ? "unsure" : { src: candidates[kept[0]], look: "as-is" };
 }

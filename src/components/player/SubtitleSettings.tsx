@@ -7,9 +7,14 @@ import { isMpv, type MediaLike, type MpvMedia } from "./mpvMedia";
 import { CUE_LINE_HEIGHT, cueFontSize, fontSizeForLine, MPV_SUB_DEFAULTS, mpvSubtitleBox, type MpvSubOptions, type OsdDimensions } from "./subtitleSize";
 import { Dropdown } from "../Dropdown";
 import { Chip } from "../ui/Chip";
+import { dialogueOverrides, dialogueStyles, parseAssHeader, type DialogueLook } from "./assStyles";
 
-// The platform's own UI face: what the player shows before you pick one.
+// The platform's own UI face: plain-text subtitles use it unless you pick another.
 const DEFAULT_FONT = isMac ? "Helvetica Neue" : "Segoe UI Semibold";
+/** What the default used to be called on either platform (styles sync between devices). */
+const EARLIER_DEFAULT_FONTS = ["Segoe UI Semibold", "Helvetica Neue"];
+/** The Font menu's "From the subtitles": only in the menu, saved as `fontFromSubtitles`. */
+const FROM_SUBTITLES = "from-subtitles";
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   size: 100,
@@ -20,11 +25,22 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   outlineColor: "#000000",
   background: 0,
   font: DEFAULT_FONT,
+  fontFromSubtitles: true,
 };
 
+/**
+ * Whether styled subtitles keep their release's font. Styles saved before the
+ * choice existed had the platform face as their default, which styled
+ * subtitles never showed until something else was changed: those keep the
+ * release's font now; a font picked from the list stays forced.
+ */
+const keepsReleaseFont = (style: SubtitleStyle) => style.fontFromSubtitles ?? (!style.font || EARLIER_DEFAULT_FONTS.includes(style.font));
+
 /** Styles saved before a setting existed are missing it: fill in the defaults. */
-const complete = (style: SubtitleStyle): Required<SubtitleStyle> =>
-  ({ ...DEFAULT_SUBTITLE_STYLE, ...style, font: style.font || DEFAULT_FONT }) as Required<SubtitleStyle>;
+const complete = (style: SubtitleStyle): Required<SubtitleStyle> => {
+  const fromSubtitles = keepsReleaseFont(style);
+  return { ...DEFAULT_SUBTITLE_STYLE, ...style, font: fromSubtitles ? DEFAULT_FONT : style.font || DEFAULT_FONT, fontFromSubtitles: fromSubtitles } as Required<SubtitleStyle>;
+};
 const isDefaultStyle = (style: SubtitleStyle) => JSON.stringify(complete(style)) === JSON.stringify(complete(DEFAULT_SUBTITLE_STYLE));
 
 /**
@@ -35,10 +51,12 @@ const isDefaultStyle = (style: SubtitleStyle) => JSON.stringify(complete(style))
  */
 const DYSLEXIC = { value: OPEN_DYSLEXIC, label: "OpenDyslexic" };
 const MAC_FONTS = ["Arial", "Avenir Next", "Verdana", "Trebuchet MS", "Futura", "Georgia", "Times New Roman", "Menlo", "Comic Sans MS", "Impact"];
+const FROM = { value: FROM_SUBTITLES, label: "From the subtitles" };
 const FONTS = isMac
-  ? [{ value: DEFAULT_FONT, label: "Helvetica Neue (Default)" }, DYSLEXIC, ...MAC_FONTS.map((f) => ({ value: f, label: f }))]
+  ? [FROM, { value: DEFAULT_FONT, label: "Helvetica Neue" }, DYSLEXIC, ...MAC_FONTS.map((f) => ({ value: f, label: f }))]
   : [
-  { value: DEFAULT_FONT, label: "Segoe UI (Default)" },
+  FROM,
+  { value: DEFAULT_FONT, label: "Segoe UI" },
   DYSLEXIC,
   { value: "Arial", label: "Arial" },
   { value: "Calibri", label: "Calibri" },
@@ -56,7 +74,7 @@ const FONTS = isMac
 
 /** CSS for the chosen font: the default face is a semibold family of its own; the rest are drawn regular, as mpv does. */
 const fontVars = (font: string) => ({
-  "--sub-font": `"${font}"`,
+  "--sub-font": `"${font.replace(/["\\]/g, "")}"`,
   "--sub-weight": font === DEFAULT_FONT ? 600 : 400,
 });
 
@@ -97,31 +115,68 @@ const mpvColor = (hex: string, opacity = 100) => `#${alphaHex(opacity)}${hex.rep
 /** mpv `sub-shadow-offset`: a bare line (no outline, no box) gets none. */
 const shadowOffset = (style: Required<SubtitleStyle>) => (style.outline === "none" && !style.background ? 0 : 1);
 
-/** The `sub-ass-override` last given to each player. */
-const assOverride = new WeakMap<MpvMedia, string>();
-/** A (re)started mpv has its own idea of the override again. */
-export const forgetAssOverride = (mpv: MpvMedia) => assOverride.delete(mpv);
+/** The `sub-ass-override` and `sub-ass-style-overrides` last given to each player. */
+const assGiven = new WeakMap<MpvMedia, { override: string; overrides: string }>();
+/** Each restyle of a player, so a header read for an earlier one is dropped. */
+const assRuns = new WeakMap<MpvMedia, number>();
+/** A (re)started mpv has its own idea of the overrides again. */
+export const forgetAssOverride = (mpv: MpvMedia) => assGiven.delete(mpv);
+
+/** Changing either makes mpv rebuild the subtitle renderer and re-read the stream (a stall of a second or more): only when they change. */
+function giveAss(mpv: MpvMedia, override: string, overrides: string) {
+  const given = assGiven.get(mpv);
+  assGiven.set(mpv, { override, overrides });
+  if (given?.overrides !== overrides) void mpv.set("sub-ass-style-overrides", overrides);
+  if (given?.override !== override) void mpv.set("sub-ass-override", override);
+}
+
+/** What a styled track's dialogue takes from the style: only what differs from the default, so the rest stays as the release made it. */
+export function dialogueLook(saved: SubtitleStyle): DialogueLook {
+  const style = complete(saved);
+  const d = DEFAULT_SUBTITLE_STYLE as Required<SubtitleStyle>;
+  const faded = style.opacity !== d.opacity;
+  return {
+    font: style.fontFromSubtitles ? undefined : style.font,
+    text: style.color !== d.color || faded ? { color: style.color, opacity: style.opacity } : undefined,
+    outline:
+      style.outline !== d.outline || style.outlineColor !== d.outlineColor || faded
+        ? { width: OUTLINE_PX[style.outline], color: style.outlineColor, opacity: style.opacity }
+        : undefined,
+    box: style.background || undefined,
+  };
+}
 
 /**
- * Push the style (and this video's delay) to mpv. Embedded ASS subtitles keep
- * their own styling unless the user has changed something, so typeset signs
- * still look as the release intended by default.
+ * A styled track: only its dialogue styles change, named in mpv's
+ * `sub-ass-style-overrides`, so signs and other typesetting keep the release's
+ * look and font, and the font only changes when one is picked. Size and
+ * position apply through `sub-scale` and `sub-pos`, which "scale" keeps.
  *
- * Changing `sub-ass-override` makes mpv rebuild the subtitle renderer and
- * re-read the stream (a network stall of a second or more), so it's only
- * forced for ASS/SSA tracks; plain-text subtitles (SRT, WebVTT…) follow the
- * sub-* options either way.
+ * mpv older than 0.37 can't show the header: a picked font is then forced on
+ * everything as before, and the rest goes to the usual "Default" style.
+ */
+async function restyleAss(mpv: MpvMedia, saved: SubtitleStyle) {
+  const run = (assRuns.get(mpv) ?? 0) + 1;
+  assRuns.set(mpv, run);
+  const extradata = await mpv.command("get_property", "sub-ass-extradata").catch(() => null);
+  if (assRuns.get(mpv) !== run) return;
+  const header = typeof extradata === "string" && extradata.trim() ? parseAssHeader(extradata) : null;
+  const look = dialogueLook(saved);
+  if (!header && look.font) giveAss(mpv, "force", "");
+  else giveAss(mpv, "scale", dialogueOverrides(header ?? parseAssHeader(""), look).join(","));
+}
+
+/**
+ * Push the style (and this video's delay) to mpv. Plain-text subtitles (SRT,
+ * WebVTT…) follow the sub-* options; styled ones (ASS/SSA) see `restyleAss`.
  */
 export function applySubtitleStyleToMpv(mpv: MpvMedia, saved: SubtitleStyle, delay: number) {
   const style = complete(saved);
-  const custom = !isDefaultStyle(style);
   const codec = mpv.playing("sub")?.codec;
-  const ass = codec === "ass" || codec === "ssa";
-  // Only when it changes: each change stalls the stream while mpv re-reads it.
-  const override = custom && ass ? "force" : "scale";
-  if (assOverride.get(mpv) !== override) {
-    assOverride.set(mpv, override);
-    void mpv.set("sub-ass-override", override);
+  if (codec === "ass" || codec === "ssa") void restyleAss(mpv, style);
+  else {
+    assRuns.set(mpv, (assRuns.get(mpv) ?? 0) + 1);
+    giveAss(mpv, "scale", "");
   }
   void mpv.set("sub-font", style.font);
   void mpv.set("sub-scale", style.size / 100);
@@ -208,8 +263,13 @@ export function SubtitleSettings({
           />
         </Setting>
       )}
-      <Setting label="Font">
-        <Dropdown label="Subtitle font" value={style.font || DEFAULT_FONT} options={FONTS} onChange={(font) => onChange({ font })} />
+      <Setting label="Font" caption={keepsReleaseFont(style) ? "Styled subtitles keep their own font" : undefined}>
+        <Dropdown
+          label="Subtitle font"
+          value={keepsReleaseFont(style) ? FROM_SUBTITLES : style.font || DEFAULT_FONT}
+          options={FONTS}
+          onChange={(font) => onChange(font === FROM_SUBTITLES ? { font: DEFAULT_FONT, fontFromSubtitles: true } : { font, fontFromSubtitles: false })}
+        />
       </Setting>
       <Setting label="Size">
         <Stepper value={style.size} step={10} min={50} max={200} format={(v) => `${v}%`} onChange={(size) => onChange({ size })} label="Size" />
@@ -398,6 +458,40 @@ function useFontExtent(font: string, weight: number) {
   return extent;
 }
 
+/**
+ * The font the playing styled track gives its dialogue, read from its header
+ * whenever the track changes (checked every half second). Fonts the release
+ * carries inside the file aren't the browser's, which then falls back to the
+ * platform face.
+ */
+function useReleaseFont(mpv: MpvMedia | null) {
+  const [font, setFont] = useState<string | null>(null);
+  useEffect(() => {
+    setFont(null);
+    if (!mpv) return;
+    let alive = true;
+    let track: unknown;
+    const check = () => {
+      const sub = mpv.playing("sub");
+      const id = sub && (sub.codec === "ass" || sub.codec === "ssa") ? sub.id : null;
+      if (id === track) return;
+      track = id;
+      if (id === null) return setFont(null);
+      mpv
+        .command("get_property", "sub-ass-extradata")
+        .then((text) => alive && track === id && setFont((typeof text === "string" && dialogueStyles(parseAssHeader(text).styles)[0]?.font) || null))
+        .catch(() => alive && setFont(null));
+    };
+    check();
+    const timer = window.setInterval(check, 500);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [mpv]);
+  return font;
+}
+
 /** The overlay's size in CSS pixels: the player's window. */
 function useViewport() {
   const read = () => ({ w: window.innerWidth, h: window.innerHeight });
@@ -427,8 +521,10 @@ export function SubtitlePreview({ style: saved, media }: { style: SubtitleStyle;
   const [osd, setOsd] = useState<OsdDimensions | null>(null);
   const [read, setRead] = useState<Partial<MpvSubOptions>>({});
   const viewport = useViewport();
-  const weight = style.font === DEFAULT_FONT ? 600 : 400;
-  const extent = useFontExtent(style.font, weight);
+  const releaseFont = useReleaseFont(style.fontFromSubtitles ? mpv : null);
+  const font = releaseFont ?? style.font;
+  const weight = font === DEFAULT_FONT ? 600 : 400;
+  const extent = useFontExtent(font, weight);
 
   useEffect(() => {
     setRead({});
@@ -506,7 +602,7 @@ export function SubtitlePreview({ style: saved, media }: { style: SubtitleStyle;
     "--sub-bottom": `${box.bottom}px`,
     "--sub-side": `${box.side}px`,
     "--sub-pad": `${box.pad}px`,
-    ...fontVars(style.font),
+    ...fontVars(font),
   } as CSSProperties;
   return (
     <div className="sub-preview" style={vars} data-engine={mpv ? "mpv" : "built-in"} aria-hidden>

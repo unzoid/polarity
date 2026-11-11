@@ -13,21 +13,28 @@ const zip = { background: "https://art.example/series/1/fanart.jpg", logo: "http
 const general = { background: "https://art.example/background/large/tt0000001/img", logo: "https://art.example/logo/medium/tt0000001/img" };
 
 test("every season of a franchise shows its linked general title's background and logo (#27)", () => {
-  expect(franchiseArt({ imdb: "tt0000001", meta: general, metaLoading: false, first: zip })).toEqual(general);
+  expect(franchiseArt({ imdb: "tt0000001", meta: general, metaLoading: false, first: zip })).toMatchObject(general);
   // A later season's own ani.zip art never comes in: `first` is always the first entry's.
-  expect(franchiseArt({ imdb: "tt0000001", meta: general, metaLoading: false, first: {} })).toEqual(general);
+  expect(franchiseArt({ imdb: "tt0000001", meta: general, metaLoading: false, first: {} })).toMatchObject(general);
 });
 
 test("while the link or the general title loads, no art and no logo, so a logo in another script never flashes", () => {
-  expect(franchiseArt({ imdb: undefined, meta: undefined, metaLoading: false, first: zip })).toEqual({ background: undefined, logo: undefined });
-  expect(franchiseArt({ imdb: "tt0000001", meta: undefined, metaLoading: true, first: zip })).toEqual({ background: undefined, logo: undefined });
+  expect(franchiseArt({ imdb: undefined, meta: undefined, metaLoading: false, first: zip })).toEqual({ background: undefined, logo: undefined, logos: [], pending: true });
+  expect(franchiseArt({ imdb: "tt0000001", meta: undefined, metaLoading: true, first: zip })).toEqual({ background: undefined, logo: undefined, logos: [], pending: true });
 });
 
 test("the first entry's ani.zip art where the general title has none, or there's no general title", () => {
-  expect(franchiseArt({ imdb: "tt0000001", meta: { background: general.background }, metaLoading: false, first: zip })).toEqual({ background: general.background, logo: zip.logo });
-  expect(franchiseArt({ imdb: "tt0000001", meta: undefined, metaLoading: false, first: zip })).toEqual(zip);
-  expect(franchiseArt({ imdb: "kitsu:1", meta: general, metaLoading: false, first: zip })).toEqual(zip);
-  expect(franchiseArt({ imdb: null, meta: undefined, metaLoading: false, first: zip })).toEqual(zip);
+  expect(franchiseArt({ imdb: "tt0000001", meta: { background: general.background }, metaLoading: false, first: zip })).toMatchObject({ background: general.background, logo: zip.logo });
+  expect(franchiseArt({ imdb: "tt0000001", meta: undefined, metaLoading: false, first: zip })).toMatchObject(zip);
+  expect(franchiseArt({ imdb: "kitsu:1", meta: general, metaLoading: false, first: zip })).toMatchObject(zip);
+  expect(franchiseArt({ imdb: null, meta: undefined, metaLoading: false, first: zip })).toMatchObject(zip);
+});
+
+test("every logo to choose from: the general title's, then ani.zip's, each once (#371)", () => {
+  const logos = ["https://art.example/logo/en/tt0000001.png", "https://art.example/logo/ja/tt0000001.png"];
+  expect(franchiseArt({ imdb: "tt0000001", meta: { ...general, logo: logos[0], logos }, metaLoading: false, first: zip }).logos).toEqual([...logos, zip.logo]);
+  expect(franchiseArt({ imdb: "tt0000001", meta: { logo: zip.logo }, metaLoading: false, first: zip }).logos).toEqual([zip.logo]);
+  expect(franchiseArt({ imdb: null, meta: undefined, metaLoading: false, first: {} }).logos).toEqual([]);
 });
 
 const glass = { english: "Tower of Glass", romaji: "Garasu no Tou", native: "ガラスの塔" };

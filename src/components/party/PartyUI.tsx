@@ -23,7 +23,8 @@ import {
 import { Avatar } from "../Avatar";
 import { BusyLabel } from "../BusyLabel";
 import { Spinner } from "../Spinner";
-import { Check, Minus, More, Star, WatchParty } from "../icons";
+import { SwapIcon } from "../SwapIcon";
+import { Check, Copy, Minus, More, Share, Star, WatchParty } from "../icons";
 import { Button, iconButtonClass } from "../ui/Button";
 import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
 
@@ -128,34 +129,12 @@ export function LinkForm({ me, onDone }: { me: Me; onDone?: () => void }) {
 
 /** In a party: the code to share, and leaving (unless the menu has its own Leave); `autoFocus` focuses sharing it. */
 export function PartyInvite({ party, leave = true, autoFocus }: { party: PartyState; leave?: boolean; autoFocus?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<number>(undefined);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-  const invite = `Watch with me on Polarity. Party code: ${party.code}`;
-  const copy = () => {
-    void navigator.clipboard.writeText(invite).then(() => {
-      setCopied(true);
-      window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setCopied(false), 1800);
-    });
-  };
+  const { invite, copied, copy } = useInviteCopy(party);
   return (
     <div className="party-pane party-swap">
       <span className="party-kicker">Party code</span>
-      <div className="party-code tabular" aria-label={`Party code ${party.code.split("").join(" ")}`}>
-        {party.code.split("").map((c, i) => (
-          <span key={i}>{c}</span>
-        ))}
-      </div>
-      <p className="party-lede">
-        {party.error
-          ? party.error
-          : party.status === "error"
-          ? "Connection lost. Reconnecting…"
-          : party.status === "connecting"
-            ? "Opening the room…"
-            : "Friends join from their profile menu with this code."}
-      </p>
+      <PartyCode party={party} />
+      <p className="party-lede">{roomTrouble(party) ?? "Friends join from their profile menu with this code."}</p>
       <div className="party-buttons">
         {/* In the menu, going back to the stream is the main action. */}
         {nativeDialogsAvailable ? (
@@ -185,6 +164,73 @@ export function PartyInvite({ party, leave = true, autoFocus }: { party: PartySt
       </div>
     </div>
   );
+}
+
+/**
+ * The party menu's code: one wide chip, sharing it an icon inside (a check for a moment once copied; iOS's
+ * share sheet there). Says only what's wrong, if anything: how friends join is the profile menu's to say.
+ */
+export function PartyCodeChip({ party }: { party: PartyState }) {
+  const { invite, copied, copy } = useInviteCopy(party);
+  const trouble = roomTrouble(party);
+  return (
+    <div className="party-pane">
+      <span className="party-kicker">Party code</span>
+      <div className="party-code-chip">
+        <PartyCode party={party} />
+        {nativeDialogsAvailable ? (
+          <button
+            type="button"
+            className="party-code-copy"
+            aria-label="Share invite"
+            title="Share invite"
+            onClick={(e) => void shareNatively({ text: invite, anchor: anchorOf(e.currentTarget) }).catch(warnFailed("share sheet"))}
+          >
+            <Share size={16} />
+          </button>
+        ) : (
+          <button type="button" className="party-code-copy" aria-label={copied ? "Copied" : "Copy invite"} title={copied ? "Copied" : "Copy invite"} onClick={copy}>
+            <SwapIcon state={copied ? "copied" : "copy"}>{copied ? <Check size={16} /> : <Copy size={16} />}</SwapIcon>
+          </button>
+        )}
+      </div>
+      {trouble && <p className="party-lede">{trouble}</p>}
+    </div>
+  );
+}
+
+function PartyCode({ party }: { party: PartyState }) {
+  return (
+    <div className="party-code tabular" aria-label={`Party code ${party.code.split("").join(" ")}`}>
+      {party.code.split("").map((c, i) => (
+        <span key={i}>{c}</span>
+      ))}
+    </div>
+  );
+}
+
+/** What's wrong with the room right now, if anything. */
+function roomTrouble(party: PartyState) {
+  if (party.error) return party.error;
+  if (party.status === "error") return "Connection lost. Reconnecting…";
+  if (party.status === "connecting") return "Opening the room…";
+  return null;
+}
+
+/** The invite to share, and copying it ("Copied" for a moment). */
+function useInviteCopy(party: PartyState) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const invite = `Watch with me on Polarity. Party code: ${party.code}`;
+  const copy = () => {
+    void navigator.clipboard.writeText(invite).then(() => {
+      setCopied(true);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setCopied(false), 1800);
+    });
+  };
+  return { invite, copied, copy };
 }
 
 /** "Watching · 4 s behind": the status, and how far behind the room when it's worth saying. */
@@ -406,24 +452,28 @@ export function PartyBadge({ party, onOpen }: { party: PartyState; onOpen: () =>
  * Appears only if it lasts (CSS delay), so a blip never flashes it.
  */
 export function PartyHold({ party, videoId }: { party: PartyState; videoId: string }) {
-  const pb = party.playback;
-  // Stalled, if the room pauses for that (#238): as presence says, or sooner as its position report says.
-  const stalled = (m: Member) => party.rules.stall && (m.buffering || party.positions[m.id]?.stalled);
-  const waiters = party.members.filter((m) => (m.waiting || stalled(m)) && !m.away && m.id !== party.me);
-  const text =
-    party.error
-      ? "Watch party unavailable"
-      : party.status === "error"
-      ? "Reconnecting to the party…"
-      : pb?.held && pb.media.videoId === videoId && waiters.length
-        ? `Waiting for ${waiters.length === 1 ? waiters[0].name : `${waiters.length} people`}…`
-        : null;
+  const text = partyHoldText(party, videoId);
   return (
     <div className="party-hold t-callout" data-shown={!!text} role="status" aria-live="polite">
       <Spinner size={16} />
       <span>{text}</span>
     </div>
   );
+}
+
+/** What PartyHold says, if anything: the room waiting on someone, or the connection dropping. */
+export function partyHoldText(party: PartyState, videoId: string): string | null {
+  const pb = party.playback;
+  // Stalled, if the room pauses for that (#238): as presence says, or sooner as its position report says.
+  const stalled = (m: Member) => party.rules.stall && (m.buffering || party.positions[m.id]?.stalled);
+  const waiters = party.members.filter((m) => (m.waiting || stalled(m)) && !m.away && m.id !== party.me);
+  return party.error
+    ? "Watch party unavailable"
+    : party.status === "error"
+    ? "Reconnecting to the party…"
+    : pb?.held && pb.media.videoId === videoId && waiters.length
+      ? `Waiting for ${waiters.length === 1 ? waiters[0].name : `${waiters.length} people`}…`
+      : null;
 }
 
 /** "Sam paused", "Alex joined": brief, bottom-left, newest at the bottom. */

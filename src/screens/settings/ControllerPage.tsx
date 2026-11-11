@@ -16,6 +16,7 @@ import {
   type PadButton,
 } from "../../tv/padBindings";
 import { PadGlyph } from "../../tv/TvChrome";
+import { useTvMode } from "../../tv/tvMode";
 import { ActionRow, Card, RowText } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 
@@ -46,7 +47,10 @@ function usePressedButton() {
 
 function PadBindingRow({ layout, button, lit }: { layout: Layout; button: PadButton; lit: boolean }) {
   const bindings = usePadBindings();
-  const actions: { id: string; label: string }[] = layout === "nav" ? NAV_ACTIONS : PLAYER_ACTIONS;
+  const tv = useTvMode();
+  // TV mode is always full screen: there Fullscreen does nothing, so it isn't offered (#431).
+  const actions: { id: string; label: string }[] =
+    layout === "nav" ? NAV_ACTIONS : PLAYER_ACTIONS.filter((a) => !(tv && a.id === "fullscreen" && bindings.player[button] !== "fullscreen"));
   // A button that's alone in doing Select or Back can only trade it for another button's job.
   const options = actions
     .filter((a) => canBind(bindings, layout, button, a.id as never))

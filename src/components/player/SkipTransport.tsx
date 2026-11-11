@@ -48,7 +48,7 @@ export function SkipTransport({
   return (
     <button className={iconButtonClass("transport", "skip-transport")} data-dir={direction} data-out={out} onClick={onSkip} aria-label={label} title={title}>
       <svg className="skip-arrow" width={56} height={56} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <g transform={flip ? "translate(24 0) scale(-1 1)" : undefined} stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+        <g transform={flip ? "translate(24 0) scale(-1 1)" : undefined} stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
           <path d="M21 3v5h-5" />
         </g>

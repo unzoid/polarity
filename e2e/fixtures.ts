@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import { serveMedia } from "./media";
 
 /**
@@ -70,9 +70,86 @@ export const clock = (page: Page) => page.locator(".player-remaining").textConte
 
 /**
  * The watch party's dialogs and panels on screen (#247): the join dialog, a link to confirm, "Watch party over",
- * the party menu (top bar popover, TV panel) and the player's Watch Party panel. Never more than one.
+ * the party menu (top bar popover, TV panel), the profile menu at its Join or Friends view, and the player's
+ * Watch Party panel. Never more than one.
  */
 export const partySurfaces = (page: Page) =>
   page
-    .locator(".party-dialog, .party-link-confirm, .party-popover, .tv-party, .tv-join, .options-overlay[data-open=true]:has(.party-pane, .party-column)")
+    .locator(
+      ".party-dialog, .party-link-confirm, .party-popover, .profile-pop:has(.profile-pop-view:not([data-view=list])), .tv-party, .tv-join, .tv-friends, .options-overlay[data-open=true]:has(.party-pane, .party-column)",
+    )
     .filter({ visible: true });
+
+/** Season names whose letters reach below the baseline, and above the capitals (#353). */
+export const TALL_LABELS = ["Gypsy Jig Spring", "Ça Ÿ Été Ñ Å"];
+
+/**
+ * Puts `text` in a label and says whether all of it shows (#353): its glyph box, from the font's ascent to its
+ * descent, inside the nearest box that clips it. A line height of 1 under `overflow: hidden` cut off the "g".
+ */
+export const labelShowsWhole = (label: Locator, text: string) =>
+  label.evaluate((el, text) => {
+    el.textContent = text;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const glyphs = range.getBoundingClientRect();
+    let clip: Element | null = el;
+    while (clip && getComputedStyle(clip).overflowY === "visible") clip = clip.parentElement;
+    if (!clip) return true;
+    const box = clip.getBoundingClientRect();
+    const top = box.top + clip.clientTop;
+    return glyphs.top >= top - 0.5 && glyphs.bottom <= top + clip.clientHeight + 0.5;
+  }, text);
+
+/**
+ * Where the shown Back button is (#348): the navbar's on a page (`.navbar-back`), the player's in the player (`.player-back`),
+ * rounded to the pixel, once it has settled. Each must be the shared BackButton (`.back-button`).
+ */
+export const backPlace = async (page: Page, which: "navbar" | "player") => {
+  const back = page.locator(which === "navbar" ? ".navbar-back.back-button" : ".player-top > .player-back.back-button");
+  await expect(back).toBeVisible();
+  // Read once the page has settled: after two frames have been drawn (WebKit can leave the layout where it was between
+  // reads, so two reads in a row agreed half a pixel short of where the navbar's slide-in lands), with no transition or
+  // animation running on it or anything it sits in.
+  const place = () =>
+    back.evaluate(async (el) => {
+      await new Promise((frame) => requestAnimationFrame(() => requestAnimationFrame(frame)));
+      for (let at: Element | null = el; at; at = at.parentElement) if (at.getAnimations().some((a) => a.playState === "running")) return "moving";
+      const r = el.getBoundingClientRect();
+      return [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+    });
+  // And until two reads agree, for whatever moves it without an animation (a page still laying out).
+  let last = "";
+  await expect.poll(async () => (last === (last = await place()) ? last : "moving")).not.toBe("moving");
+  return last;
+};
+
+/**
+ * Every pair of things in the player's top or bottom bar whose boxes meet (#396): the controls, and the title and show
+ * lines as drawn (cut short to their box). Hidden controls (a folded slider, words of an icon-only action) don't count;
+ * neither does a control sticking out of the window. Empty when nothing overlaps.
+ */
+export const barOverlaps = (page: Page) =>
+  page.locator(".player").evaluate((player) => {
+    const shown = (el: Element) => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return s.visibility !== "hidden" && s.opacity !== "0" && r.width > 0 && r.height > 0;
+    };
+    const problems: string[] = [];
+    for (const bar of player.querySelectorAll(".player-top, .player-bottom")) {
+      const parts = [...bar.querySelectorAll("button, input, .player-heading > *")]
+        .filter((el) => shown(el) && !el.closest(".player-volume[data-folded] .player-volume-slider"))
+        .map((el) => ({ name: el.getAttribute("aria-label") ?? el.textContent?.slice(0, 24) ?? el.tagName, box: el.getBoundingClientRect() }));
+      for (const { name, box } of parts) {
+        if (box.left < -0.5 || box.right > innerWidth + 0.5) problems.push(`${name} leaves the window`);
+      }
+      for (let i = 0; i < parts.length; i++)
+        for (let j = i + 1; j < parts.length; j++) {
+          const [a, b] = [parts[i].box, parts[j].box];
+          if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5)
+            problems.push(`${parts[i].name} overlaps ${parts[j].name}`);
+        }
+    }
+    return problems;
+  });

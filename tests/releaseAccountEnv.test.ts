@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,8 +11,22 @@ function project(files: Record<string, string>) {
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
   return dir;
 }
+// Bun reads the repository's .env into process.env, and Vite's loadEnv reads process.env too:
+// without this the test would see the developer's own account settings as the project's.
+const KEYS = ["VITE_SUPABASE_URL", "VITE_SUPABASE_PUBLISHABLE_KEY"] as const;
+const own: Record<string, string | undefined> = {};
+beforeEach(() => {
+  for (const k of KEYS) {
+    own[k] = process.env[k];
+    delete process.env[k];
+  }
+});
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  for (const k of KEYS) {
+    if (own[k] === undefined) delete process.env[k];
+    else process.env[k] = own[k];
+  }
 });
 
 const env = { PATH: "/usr/bin" };

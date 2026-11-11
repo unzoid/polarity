@@ -10,6 +10,7 @@ const ENDED = 0;
 const PLAYING = 1;
 const PAUSED = 2;
 const BUFFERING = 3;
+const CUED = 5;
 
 /** What YouTube's player error codes mean for the viewer. */
 export function youtubeError(code: number): string {
@@ -29,9 +30,11 @@ const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === "obj
  *
  * It talks to the embed (youtube-nocookie.com, `enablejsapi=1`) with the IFrame Player API's messages,
  * without loading YouTube's script into the app: commands go in as `{event: "command", func, args}`,
- * and the player's `infoDelivery`, `onStateChange` and `onError` come back as the DOM events a <video>
- * fires (play, pause, waiting, playing, loadedmetadata, timeupdate, ended, error). So the controls and
- * the watch party's sync drive it like any other player.
+ * and the player's `infoDelivery`, `onStateChange`, `onPlaybackRateChange` and `onError` come back as the
+ * DOM events a <video> fires (play, pause, waiting, playing, loadedmetadata, timeupdate, ratechange, ended,
+ * error), "playerready" once the embed answers, and "speedschange" when it says which speeds the video has.
+ * So the keyboard, TV's menus (#434) and the watch party's sync drive it like any other player, next to
+ * YouTube's own controls (#384).
  *
  * Time comes from the player a few times a second; between reports `currentTime` runs on from the rate.
  */
@@ -42,6 +45,8 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
   private state = -1;
   private loadedFraction = 0;
   private rate = 1;
+  /** The speeds YouTube's player has for this video, slowest first (`getAvailablePlaybackRates`); empty until it says. */
+  private speeds: number[] = [];
   private vol = 1;
   private isMuted = false;
   private ready = false;
@@ -86,6 +91,17 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
     };
   }
 
+  /**
+   * The embed is about to load again (its address changed: captions, #434). Once the new player is ready it
+   * goes on from here, playing or paused as now, at the same speed.
+   */
+  reload() {
+    if (!this.ready) return;
+    this.ready = false;
+    this.startAt = this.currentTime;
+    this.wantPaused = this.paused;
+  }
+
   /** Start at `start` seconds (the watch party's place), once the player is ready. */
   load(start: number | null) {
     this.startAt = start;
@@ -105,8 +121,9 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
       case "onReady":
         if (this.ready) return;
         this.ready = true;
-        for (const name of ["onStateChange", "onError"]) this.command("addEventListener", name);
+        for (const name of ["onStateChange", "onError", "onPlaybackRateChange"]) this.command("addEventListener", name);
         this.begin();
+        this.emit("playerready");
         break;
       case "initialDelivery":
       case "infoDelivery":
@@ -114,6 +131,9 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
         break;
       case "onStateChange":
         if (finite(msg.info)) this.setState(msg.info);
+        break;
+      case "onPlaybackRateChange":
+        if (finite(msg.info)) this.reportRate(msg.info);
         break;
       case "onError":
         if (finite(msg.info)) {
@@ -139,10 +159,18 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
       if (!this.loaded) {
         this.loaded = true;
         this.emit("loadedmetadata");
+        if (this.state === PAUSED || this.state === CUED) this.emit("canplay");
       } else this.emit("durationchange");
     }
     if (finite(info.videoLoadedFraction)) this.loadedFraction = info.videoLoadedFraction;
-    if (finite(info.playbackRate) && info.playbackRate > 0) this.rate = info.playbackRate;
+    if (finite(info.playbackRate)) this.reportRate(info.playbackRate);
+    if (Array.isArray(info.availablePlaybackRates)) {
+      const speeds = info.availablePlaybackRates.filter((r): r is number => finite(r) && r > 0).sort((a, b) => a - b);
+      if (speeds.join() !== this.speeds.join()) {
+        this.speeds = speeds;
+        this.emit("speedschange");
+      }
+    }
     if (isRecord(info.videoData) && typeof info.videoData.title === "string" && info.videoData.title && info.videoData.title !== this.title) {
       this.title = info.videoData.title.slice(0, 200);
       this.emit("titlechange");
@@ -163,6 +191,15 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
     }
   }
 
+  /** The speed YouTube's player says it plays at, which may not be the one asked for (it rounds to one it has). */
+  private reportRate(r: number) {
+    if (!(r > 0) || r === this.rate) return;
+    this.time = this.currentTime;
+    this.stamp = performance.now();
+    this.rate = r;
+    this.emit("ratechange");
+  }
+
   private setState(s: number) {
     if (s === this.state) return;
     const was = this.state;
@@ -170,15 +207,29 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
     this.time = this.currentTime;
     this.stamp = performance.now();
     this.state = s;
+    // Leaving a stop says "play", as a video element does, whether it plays at once or buffers first: YouTube
+    // starts (and resumes) through buffering, and without it a play pressed here never reached the party (#383).
+    const resumed = was !== PLAYING && was !== BUFFERING;
     if (s === PLAYING) {
-      if (was !== BUFFERING) this.emit("play");
+      if (resumed) this.emit("play");
       this.emit("playing");
     } else if (s === PAUSED) this.emit("pause");
-    else if (s === BUFFERING) this.emit("waiting");
+    else if (s === BUFFERING) {
+      if (resumed) this.emit("play");
+      this.emit("waiting");
+    }
     else if (s === ENDED) {
       if (was === PLAYING || was === BUFFERING) this.emit("pause");
       this.emit("ended");
     }
+    // Stopped with the picture there (paused, cued, a buffer that ended paused): no longer loading. YouTube
+    // only ever says so by its state, and a buffer that ended paused left the player buffering for good (#383).
+    if (this.loaded && (s === PAUSED || s === CUED || (was === BUFFERING && s === ENDED))) this.emit("canplay");
+  }
+
+  /** YouTube's player is up, its own controls with it ("playerready" says when): nothing may cover it from then on (#384). */
+  get playerReady() {
+    return this.ready;
   }
 
   get currentTime() {
@@ -229,6 +280,10 @@ export class YouTubeMedia extends EventTarget implements MediaLike {
     this.isMuted = m;
     if (this.ready) this.command(m ? "mute" : "unMute");
     this.emit("volumechange");
+  }
+  /** The speeds YouTube's player has for this video, slowest first; empty until it says (#434). */
+  get playbackRates(): readonly number[] {
+    return this.speeds;
   }
   get playbackRate() {
     return this.rate;

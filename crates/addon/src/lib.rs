@@ -5,6 +5,7 @@
 //! * [`client`] — fetches remote addons and normalises their (loose) JSON.
 //! * [`numbering`] — TMDB episodes renumbered onto IMDb's, by air date.
 //! * [`probe`] — checks a stream link before the player opens it, step by step.
+//! * [`pictures`] — logos and backdrops fetched for measuring, where CORS would refuse them.
 //! * [`episode`] — which episode a stream's file is, checked against the one asked for.
 //! * [`rank`] — parses stream titles into structured quality info and scores them,
 //!   so the player can pick the best source without the user reading 40 rows.
@@ -15,6 +16,7 @@ mod contract;
 pub mod episode;
 pub mod numbering;
 pub mod offered;
+pub mod pictures;
 pub mod probe;
 pub mod rank;
 pub mod subs;

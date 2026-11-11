@@ -5,16 +5,40 @@ import { api } from "../../lib/api";
 import tmdbLogo from "../../assets/tmdb-short.svg";
 import { CREDITS, PRIVACY_URL, TERMS_URL, TMDB_NOTICE } from "../../lib/settings";
 import { ReleaseNotes } from "../../components/Updates";
-import { appVersion, checkForUpdates, downloadUpdate, installUpdate, releaseUrl, useUpdate } from "../../lib/updater";
+import {
+  appVersion,
+  checkForUpdates,
+  devBuilds,
+  downloadUpdate,
+  installDevBuild,
+  installUpdate,
+  releaseUrl,
+  setDevUpdatesPaused,
+  useDevUpdatesPaused,
+  useUpdate,
+} from "../../lib/updater";
 import { Button } from "../../components/ui/Button";
-import { ActionRow, Card, ExpandRow, LinkRow, PickRow, RowText, useExpanded } from "../../components/settings/rows";
+import { ActionRow, Card, ExpandRow, LinkRow, PickRow, RowText, ToggleRow, useExpanded, type Expandable } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { cachedBytes, clearCached, keys } from "../../lib/net";
+import { appName, appUpdates, buildChannel, buildCommit, buildLabel } from "../../lib/platform";
+import { errorMessage } from "../../lib/errors";
+import { forgetTracks, rememberedSources } from "../../lib/playback";
+
+/** Where this build's updates come from (lib/platform/build.ts, docs/dev-channel.md). */
+const FOOTER = {
+  release: "Updates are signed and come straight from Polarity's GitHub releases. Your library, settings and profiles are kept.",
+  dev: "A development build: it updates from Polarity's \u201cDev build\u201d pre-release only, never to or from a release. Your library, settings and profiles are kept.",
+  local: "Built on this computer, so it doesn't look for updates. Install a release or dev build to get them.",
+} as const;
 
 export function AboutPage() {
   const s = useUpdate();
   const expand = useExpanded();
   const { data: version } = useQuery({ queryKey: keys.appVersion, queryFn: appVersion, staleTime: Infinity });
+  const paused = useDevUpdatesPaused();
+  const updates = buildChannel !== "local";
+  const dev = buildChannel === "dev" && appUpdates.canUpdate;
 
   const status = (() => {
     switch (s.phase) {
@@ -23,13 +47,13 @@ export function AboutPage() {
       case "current":
         return "You're on the latest version";
       case "available":
-        return `Polarity ${s.version} is available`;
+        return `${s.name} is available`;
       case "downloading":
-        return `Downloading Polarity ${s.version}${s.progress == null ? "…" : ` · ${Math.round(s.progress * 100)}%`}`;
+        return `Downloading ${s.name}${s.progress == null ? "…" : ` · ${Math.round(s.progress * 100)}%`}`;
       case "ready":
-        return `Polarity ${s.version} is downloaded. Restart to finish.`;
+        return `${s.name} is downloaded. Restart to finish.`;
       case "installing":
-        return `Installing Polarity ${s.version}…`;
+        return `Installing ${s.name}…`;
       case "error":
         return s.message;
       default:
@@ -39,40 +63,54 @@ export function AboutPage() {
 
   return (
     <>
-      <Card title="Polarity" footer="Updates are signed and come straight from Polarity's GitHub releases. Your library, settings and profiles are kept.">
-        <PickRow title="Version" caption={status}>
-          <span className="settings-row-value settings-version">{version ?? "…"}</span>
+      <Card title={appName} footer={FOOTER[buildChannel]}>
+        <PickRow title="Version" caption={updates ? status : "Doesn't check for updates"}>
+          <span className="settings-row-value settings-version">{version ? buildLabel(buildChannel, version) : "…"}</span>
         </PickRow>
-        <PickRow title="Commit" caption="The last commit this build is from">
-          <span className="settings-row-value settings-version">{__GIT_COMMIT__}</span>
-        </PickRow>
-        <div className="settings-row">
-          <RowText title="Software update" caption={s.phase === "ready" ? "Takes a few seconds; Polarity reopens by itself" : undefined} />
-          <div className="settings-expand-actions">
-            {s.phase === "available" ? (
-              <Button variant="primary" onClick={() => void downloadUpdate()}>
-                <Download size={15} /> Download {s.version}
-              </Button>
-            ) : s.phase === "ready" ? (
-              <Button variant="primary" onClick={() => void installUpdate()}>
-                <Reset size={15} /> Restart to Update
-              </Button>
-            ) : (
-              <Button
-                disabled={s.phase === "checking" || s.phase === "downloading" || s.phase === "installing"}
-                onClick={() => void checkForUpdates()}
-              >
-                Check for Updates
-              </Button>
-            )}
+        {buildChannel === "release" && (
+          <PickRow title="Commit" caption="The last commit this build is from">
+            <span className="settings-row-value settings-version">{buildCommit}</span>
+          </PickRow>
+        )}
+        {updates && (
+          <div className="settings-row">
+            <RowText title="Software update" caption={s.phase === "ready" ? "Takes a few seconds; Polarity reopens by itself" : undefined} />
+            <div className="settings-expand-actions">
+              {s.phase === "available" ? (
+                <Button variant="primary" onClick={() => void downloadUpdate()}>
+                  <Download size={15} /> Download {s.version}
+                </Button>
+              ) : s.phase === "ready" ? (
+                <Button variant="primary" onClick={() => void installUpdate()}>
+                  <Reset size={15} /> Restart to Update
+                </Button>
+              ) : (
+                <Button
+                  disabled={s.phase === "checking" || s.phase === "downloading" || s.phase === "installing"}
+                  onClick={() => void checkForUpdates()}
+                >
+                  Check for Updates
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-        <SettingRow
-          id="autoDownloadUpdates"
-          onChanged={(v) => {
-            if (v && s.phase === "available") void downloadUpdate();
-          }}
-        />
+        )}
+        {updates && (
+          <SettingRow
+            id="autoDownloadUpdates"
+            onChanged={(v) => {
+              if (v && s.phase === "available") void downloadUpdate();
+            }}
+          />
+        )}
+        {dev && (
+          <ToggleRow
+            title="Pause updates"
+            caption="No newer dev build is offered on its own while this is on; Check for Updates still looks"
+            checked={paused}
+            onChange={setDevUpdatesPaused}
+          />
+        )}
         {"notes" in s && s.notes && (
           <ExpandRow icon={Info} title={`What's new in ${s.version}`} {...expand("notes")}>
             <div className="whats-new">
@@ -80,11 +118,55 @@ export function AboutPage() {
             </div>
           </ExpandRow>
         )}
-        <LinkRow icon={Info} title="Release notes" caption="Every version and what changed" onClick={() => void api.openExternal(releaseUrl())} />
+        {dev && <DevBuildsRow current={version} {...expand("builds")} />}
+        <LinkRow
+          icon={Info}
+          title={dev ? "Dev build notes" : "Release notes"}
+          caption={dev ? "The kept builds and the pull requests they came from" : "Every version and what changed"}
+          onClick={() => void api.openExternal(releaseUrl())}
+        />
       </Card>
       <CacheCard />
       <CreditsCard />
     </>
+  );
+}
+
+/**
+ * Going back (dev builds only): the builds the "Dev build" entry keeps, newest first, each with
+ * "Install this build". An older one downloads like an update and waits for Restart to Update;
+ * after that the newest is offered again unless updates are paused.
+ */
+function DevBuildsRow({ current, ...props }: Expandable & { current?: string }) {
+  const s = useUpdate();
+  const { data, error, isPending } = useQuery({ queryKey: keys.devBuilds, queryFn: devBuilds, enabled: props.open, staleTime: 60_000 });
+  const busy = s.phase === "downloading" || s.phase === "installing";
+  return (
+    <ExpandRow icon={Reset} title="Earlier builds" caption="This dev build and the previous ones kept, to go back to" {...props}>
+      {isPending ? (
+        <p className="settings-expand-text">Loading the kept builds…</p>
+      ) : error ? (
+        <p className="settings-error">{errorMessage(error)}</p>
+      ) : (
+        <ul className="settings-credits">
+          {data.map((b) => (
+            <li key={b.build}>
+              <span className="settings-credit-name">{buildLabel("dev", b.version, b.commit)}</span>
+              <span className="settings-expand-text">{[b.date.slice(0, 10), b.title].filter(Boolean).join(" · ")}</span>
+              {b.version === current ? (
+                <span className="settings-expand-text">This build</span>
+              ) : (
+                <span className="settings-expand-actions">
+                  <Button disabled={busy} onClick={() => void installDevBuild(b.build)}>
+                    <Download size={15} /> Install this build
+                  </Button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </ExpandRow>
   );
 }
 
@@ -148,7 +230,7 @@ function CacheCard() {
   const bytes = data && data.bytes + kept;
   const size = bytes === undefined ? "…" : !bytes ? "empty" : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`;
   return (
-    <Card title="Cache" footer={data ? <>Kept in {data.path}</> : undefined}>
+    <Card title="Cache" footer={data ? <>Anime data is kept in {data.path}</> : undefined}>
       <ActionRow
         title="Anime data"
         caption={`AniList's shelves and pages, kept up to a day; filler and recap episodes, kept a day; the anime id list used when ani.zip is down, kept a week · ${size}`}
@@ -158,6 +240,27 @@ function CacheCard() {
         pending={clear.isPending}
         onClick={() => clear.mutate()}
       />
+      <TracksRow />
     </Card>
+  );
+}
+
+/** The audio, subtitles and subtitle delay picked for each source (#418), kept on this device. */
+function TracksRow() {
+  const [sources, setSources] = useState(rememberedSources);
+  return (
+    <ActionRow
+      title="Picked tracks"
+      caption={`The audio, subtitles and subtitle delay you picked for each source, chosen again when it plays again; the 500 most recent · ${
+        sources === 1 ? "1 source" : sources ? `${sources} sources` : "empty"
+      }`}
+      label="Clear"
+      glyph={<Trash size={15} />}
+      disabled={!sources}
+      onClick={() => {
+        forgetTracks();
+        setSources(0);
+      }}
+    />
   );
 }

@@ -17,9 +17,10 @@
 // without it, installed copies can't verify — and so won't take — new builds.
 import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { requireAccountEnv } from "./accountEnv";
+import { feedPlatforms, releaseFile, releaseNotes } from "./releaseAssets";
 import { mpvVersion, vendoredMpvVersion } from "./windowsMpv";
 
 const REPO = "unzoid/polarity";
@@ -57,7 +58,7 @@ bump("src-tauri/tauri.conf.json", /("version": )"[^"]+"/, `$1"${version}"`);
 
 // 2. Build and sign.
 if (!flags.has("--no-build")) {
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = { VITE_POLAR_CHANNEL: "release" }; // updates from the releases (src/lib/platform/build.ts)
   if (!process.env.TAURI_SIGNING_PRIVATE_KEY) {
     const keyPath = join(homedir(), ".tauri", "polar.key");
     if (!existsSync(keyPath)) {
@@ -92,39 +93,32 @@ if (mpv !== mpvVersion(root)) {
   process.exit(1);
 }
 const sourcesFrom = join(root, "src-tauri", "vendor", "mpv-sources", "polarity-windows-mpv-sources.tar");
-const sources = join(bundle, `Polarity_${version}_x64_mpv-sources.tar`);
+// Every file under its release name (scripts/releaseAssets.ts).
+const named = (from: string, built = basename(from)) => join(bundle, releaseFile(built, version)!.name);
+const setupOut = named(setup);
+const msiOut = named(msi);
+copyFileSync(setup, setupOut);
+copyFileSync(msi, msiOut);
+const sources = named(sourcesFrom, `Polarity_${version}_x64_mpv-sources.tar`);
 copyFileSync(sourcesFrom, sources);
 // The player with its licence texts, for development builds without a signed-in gh (scripts/fetch-mpv.ts, #186).
-const playerZip = join(bundle, `Polarity_${version}_x64_mpv.zip`);
+const playerZip = named(join(bundle, `Polarity_${version}_x64_mpv.zip`));
 rmSync(playerZip, { force: true });
 const zipped = spawnSync(join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"), ["-a", "-cf", playerZip, "-C", join(root, "src-tauri", "vendor", "mpv"), "."], { stdio: "inherit" });
 if (zipped.status !== 0) throw new Error("couldn't pack the player's zip");
-const download = (file: string) => `https://github.com/${REPO}/releases/download/v${version}/${file.split(/[\\/]/).pop()}`;
-const sig = (file: string) => readFileSync(`${file}.sig`, "utf8").trim();
-const nsis = { signature: sig(setup), url: download(setup) };
+const sig = (file: string) => readFileSync(`${file}.sig`, "utf8");
+const signatures: Record<string, string> = { [basename(setupOut)]: sig(setup), [basename(msiOut)]: sig(msi) };
 const feed = {
   version,
   notes,
   pub_date: new Date().toISOString(),
-  platforms: {
-    "windows-x86_64": nsis,
-    "windows-x86_64-nsis": nsis,
-    "windows-x86_64-msi": { signature: sig(msi), url: download(msi) },
-  },
+  platforms: feedPlatforms(Object.keys(signatures), version, (name) => signatures[name]),
 };
 const feedPath = join(bundle, "latest.json");
 writeFileSync(feedPath, JSON.stringify(feed, null, 2));
 
 // 4. Publish.
-const body = `Polarity for Windows (x64).
-
-**Install:** download \`Polarity_${version}_x64-setup.exe\` (recommended) or the \`.msi\`. Already have Polarity 0.1.3 or later? It updates itself: you'll be asked to restart when it's ready.
-
-### What's new
-${notes}
-
-mpv is bundled (GPLv2+, with FFmpeg and the libraries listed in \`licenses/mpv/BUNDLED.txt\`); its licences are installed under \`licenses/mpv\`, and the exact source code it was built from, with the build scripts, is \`Polarity_${version}_x64_mpv-sources.tar\` below.
-`;
+const body = releaseNotes(version, [setupOut, msiOut, sources, playerZip].map((f) => basename(f)), notes);
 const bodyPath = join(bundle, "release-body.md");
 writeFileSync(bodyPath, body);
 run("gh", [
@@ -133,6 +127,6 @@ run("gh", [
   "--title", `"Polarity ${version}"`,
   "--notes-file", `"${bodyPath}"`,
   ...(flags.has("--draft") ? ["--draft"] : []),
-  `"${setup}"`, `"${msi}"`, `"${feedPath}"`, `"${sources}"`, `"${playerZip}"`,
+  `"${setupOut}"`, `"${msiOut}"`, `"${feedPath}"`, `"${sources}"`, `"${playerZip}"`,
 ]);
 console.log(`\nReleased Polarity ${version}. Commit the version bump: git commit -am "Release ${version}"`);

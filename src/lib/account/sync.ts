@@ -202,6 +202,8 @@ export const sync = {
     window.clearTimeout(pending);
     pending = undefined;
     await run();
+    // A round was already in flight: the one queued behind it carries the newest changes.
+    while (running) await running;
   },
   /** The account's profiles (all of them; the active one is skipped), for background pushes. */
   setProfiles(ids: string[]) {

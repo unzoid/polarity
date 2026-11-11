@@ -46,7 +46,7 @@
   width: 4px;
   height: 36px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.18);
+  background: rgb(var(--ink) / 0.18);
   flex: none;
 }
 .sheet-body {
@@ -151,7 +151,7 @@
     background-color var(--dur-fast) var(--ease-std);
 }
 .stream-row[data-featured="true"] {
-  background: rgb(255 255 255 / 0.07);
+  background: rgb(var(--ink) / 0.07);
 }
 @media (hover: hover) and (pointer: fine) {
   .stream-row:hover {
@@ -208,7 +208,7 @@
   padding: 0 0.375rem;
   border-radius: 5px;
   background: none;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.2);
   color: var(--text-2);
   font-size: 0.625rem;
 }
@@ -289,7 +289,7 @@
   flex-direction: column;
   gap: 0.875rem;
   width: min(40rem, 100%);
-  /* The grid's row grows with its content: the card is held to the window itself, Done always in reach. */
+  /* The grid's row grows with its content: the card is held to the window itself, Close always in reach. */
   max-height: min(44rem, calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
   padding: 1.5rem;
   border-radius: var(--r-panel);
@@ -300,6 +300,18 @@
 .source-info-card h2,
 .source-info-card p {
   margin: 0;
+}
+/* Copy and Close as icons in the top right corner, level with the title. */
+.source-info-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.source-info-tools {
+  display: flex;
+  gap: 0.25rem;
+  margin: -0.375rem -0.5rem 0 0;
 }
 .source-info-card .source-info-body {
   flex: 1;
@@ -412,7 +424,7 @@
   font-size: var(--fs-micro);
   font-weight: 650;
   letter-spacing: 0.02em;
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--ink) / 0.12);
   white-space: nowrap;
 }
 .badge-bad {
@@ -451,29 +463,34 @@
 /* A phone: the quality switch has the first row; the add-on dropdown and Filters share the
    second, the dropdown taking what Filters leaves, rather than drifting to the right on their own. */
 :root[data-form="phone"] .srcf-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 0.625rem;
 }
 :root[data-form="phone"] .srcf-bar > :first-child {
-  grid-column: 1 / -1;
-  justify-self: start;
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 36px - 0.625rem);
 }
 :root[data-form="phone"] .srcf-bar > :first-child:empty {
   display: none;
 }
+:root[data-form="phone"] .srcf-bar > .srcf-filters {
+  order: 1;
+}
+/* The add-on picker follows them where there's room (the player, held sideways), else takes the next row. */
 :root[data-form="phone"] .srcf-addon {
-  min-width: 0;
-  max-width: none;
+  order: 2;
   margin-left: 0;
 }
-/* Without an add-on choice, Filters starts the row. */
-:root[data-form="phone"] .srcf-bar > .srcf-filters:nth-child(2) {
-  justify-self: start;
+/* Filters is its glyph alone on a phone, right after the quality switch on its row. */
+:root[data-form="phone"] .srcf-filters {
+  justify-content: center;
+  width: 36px;
+  padding: 0;
 }
-:root[data-form="phone"] .srcf-bar > .srcf-active {
-  grid-column: 1 / -1;
+:root[data-form="phone"] .srcf-filters-label {
+  display: none;
 }
 /* As wide as its label (up to a point), never so narrow "All add-ons" is cut. */
 .srcf-addon {
@@ -516,7 +533,7 @@
   height: 36px;
   padding: 0 0.875rem 0 0.75rem;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
   color: var(--text);
   font-size: var(--fs-md);
@@ -526,7 +543,7 @@
     transform var(--dur-press) var(--ease-out);
 }
 .srcf-filters[data-popup-open] {
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(var(--ink) / 0.16);
 }
 @media (hover: hover) and (pointer: fine) {
   .srcf-filters:hover {
@@ -563,7 +580,7 @@
   gap: 0.375rem;
 }
 .srcf-active .srcf-tag[aria-pressed="true"] {
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--ink) / 0.12);
   color: var(--text);
   box-shadow: none;
 }
@@ -572,7 +589,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .srcf-active .srcf-tag[aria-pressed="true"]:hover {
-    background: rgb(255 255 255 / 0.2);
+    background: rgb(var(--ink) / 0.2);
   }
 }
 .srcf-active .srcf-clear {
@@ -591,11 +608,11 @@
   gap: 1rem;
   padding: 1rem 1.125rem 1.125rem;
   border-radius: 1.25rem;
-  background: rgb(38 38 38 / 0.86);
+  background: color-mix(in srgb, var(--tone-5) 86%, transparent);
   -webkit-backdrop-filter: var(--blur-popover);
   backdrop-filter: var(--blur-popover);
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 0 0 1px rgb(var(--ink) / 0.08),
     0 1.5rem 3.5rem -1rem var(--scrim-3);
   font-family: var(--font);
   color: var(--text);
@@ -637,6 +654,21 @@
 }
 .srcf-chiprow-search {
   width: 9.5rem;
+  animation: srcf-search-open var(--dur-base) var(--ease-out);
+}
+@keyframes srcf-search-open {
+  from {
+    opacity: 0;
+    transform: scaleX(0.6);
+    transform-origin: right center;
+  }
+}
+/* Folded into its glyph, the row's head keeps the field's height, so opening it moves nothing under it. */
+.srcf-chiprow-search-open {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: -0.25rem -0.25rem -0.25rem 0;
+  color: var(--text-2);
 }
 /* Past three rows: the rest folds away, fading out at the cut. */
 .srcf-chips[data-folded] {
@@ -743,18 +775,26 @@
   gap: 0.5rem;
   min-width: 0;
 }
+/* TV folds each row to one line (TvChipRow): the chips get the row's whole width, which is what it measures. */
+.srcf-tv .srcf-chips {
+  flex: 1;
+}
 .srcf-chips .source-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
 }
 
+/* Nothing to list: the message and what to do about it in the middle of the sheet, not tucked in its corner. */
 .stream-empty {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: min(22rem, 45dvh);
   padding: 1rem 0.625rem;
+  text-align: center;
 }
 .stream-empty p {
   margin: 0;
