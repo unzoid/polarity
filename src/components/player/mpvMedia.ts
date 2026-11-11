@@ -250,6 +250,8 @@ export class MpvMedia extends EventTarget implements MediaLike {
     return Number.isFinite(this.dur) ? Math.min(t, this.dur) : t;
   }
   set currentTime(t: number) {
+    // Moved back from the end: no longer ended, as a <video>'s `ended` turns false on a seek.
+    if (this.isEnded && Number.isFinite(this.dur) && t < this.dur) this.isEnded = false;
     this.time = t;
     this.stamp = performance.now();
     this.seekTarget = t;
@@ -394,7 +396,7 @@ export class MpvMedia extends EventTarget implements MediaLike {
         if (data === true && this.loaded) {
           this.isEnded = true;
           this.emit("ended");
-        }
+        } else if (data === false) this.isEnded = false;
         break;
       case "demuxer-cache-time":
         if (typeof data === "number") this.cacheEnd = data;
