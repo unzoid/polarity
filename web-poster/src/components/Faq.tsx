@@ -38,7 +38,7 @@ export function Faq() {
         <div ref={reveal} class="reveal rule-t">
           <For each={questions}>
             {(item) => (
-              <details class="group rule-b">
+              <details class="faq-item group rule-b">
                 <summary class="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-[21px] leading-tight font-extrabold tracking-[-0.02em] [&::-webkit-details-marker]:hidden">
                   {item.q}
                   <svg

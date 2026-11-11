@@ -48,6 +48,7 @@
   --color-icon: var(--icon);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-ink: cubic-bezier(0.45, 0, 0.2, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 @layer base {
@@ -171,27 +172,73 @@
   }
 }
 
-/* Segmented pill toggle, as in the hero and the showcase band. */
-@utility seg {
-  display: inline-flex;
+/* Segmented pill toggle. The selected pill slides: `.seg-active` is a copy
+   of the row drawn as the selected state (ink fill, inverted text), clipped
+   to the selected item. Moving the clip moves fill and text together. */
+.seg,
+.seg-active {
+  display: flex;
   flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
+}
+.seg {
+  position: relative;
+  display: inline-flex;
   border-radius: 28px;
   box-shadow: inset 0 0 0 2.5px var(--ink);
-  & button {
-    padding: 9px 16px;
-    font-size: 16px;
-    font-weight: 700;
-    line-height: 1.2;
-    border-radius: 999px;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: background-color 160ms ease, color 160ms ease;
+}
+.seg-item {
+  padding: 9px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg-active {
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  color: var(--on-ink);
+  pointer-events: none;
+  clip-path: var(--clip, inset(50%));
+}
+.seg-active[data-ready] {
+  transition: clip-path 250ms var(--ease-in-out-strong);
+}
+@media (prefers-reduced-motion: reduce) {
+  .seg-active[data-ready] {
+    transition: none;
   }
-  & button[aria-pressed="true"] {
-    background: var(--ink);
-    color: var(--on-ink);
+}
+
+/* FAQ answers open and close by height (no transform equivalent for an
+   accordion), kept short. Browsers without ::details-content just snap. */
+@supports selector(::details-content) {
+  .faq-item {
+    interpolate-size: allow-keywords;
+  }
+  .faq-item::details-content {
+    height: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      height 200ms var(--ease-out-strong),
+      opacity 200ms var(--ease-out-strong),
+      content-visibility 200ms allow-discrete;
+  }
+  .faq-item[open]::details-content {
+    height: auto;
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .faq-item::details-content {
+      transition:
+        opacity 200ms ease,
+        content-visibility 200ms allow-discrete;
+    }
   }
 }
 
