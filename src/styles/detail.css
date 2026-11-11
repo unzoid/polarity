@@ -174,10 +174,10 @@
     background-color var(--dur-fast) var(--ease-std);
 }
 .btn.detail-trailer-btn svg {
-  filter: drop-shadow(0 1px 5px rgb(0 0 0 / 0.45));
+  filter: drop-shadow(0 1px 1.5px var(--text-halo));
 }
 .btn.detail-trailer-btn:active {
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(var(--ink) / 0.16);
 }
 @media (hover: hover) and (pointer: fine) {
   .btn.detail-trailer-btn:hover {
@@ -1205,6 +1205,29 @@
     linear-gradient(to bottom, rgb(0 0 0 / 0.45), transparent 22%),
     linear-gradient(to top, var(--bg) 0%, rgb(0 0 0 / 0.72) 22%, transparent 52%);
 }
+/* Light: the art fades into the near-white page through the page's own colour, on an eased curve (a straight
+   ramp shows its ends as edges), not through black: that drew a grey band between the art and the page. The top
+   is lifted the same way, as the navbar's own scrim is, so the bar's dark wordmark and icons read over the art. */
+:root[data-form="phone"][data-scheme="light"] .detail-bg-scrim {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--bg) 55%, transparent),
+      color-mix(in srgb, var(--bg) 22%, transparent) 10%,
+      transparent 22%
+    ),
+    linear-gradient(
+      to top,
+      var(--bg) 0%,
+      color-mix(in srgb, var(--bg) 94%, transparent) 9%,
+      color-mix(in srgb, var(--bg) 80%, transparent) 17%,
+      color-mix(in srgb, var(--bg) 60%, transparent) 26%,
+      color-mix(in srgb, var(--bg) 38%, transparent) 35%,
+      color-mix(in srgb, var(--bg) 18%, transparent) 44%,
+      color-mix(in srgb, var(--bg) 5%, transparent) 53%,
+      transparent 60%
+    );
+}
 :root[data-form="phone"] .detail .detail-hero {
   min-height: 0;
   flex-direction: column;
@@ -1274,12 +1297,31 @@
     flex-wrap: wrap;
     row-gap: 0.75rem;
   }
-  .seasons-picker,
-  .seasons-bar > .seasons-tabs {
+  .seasons-bar > .seasons-tabs,
+  .anime-seasons-bar > .seasons-picker {
     flex: 1 0 100%;
+  }
+  /* A show's season dropdown keeps its own width, so Download Season sits right beside it (the season it
+     downloads) and the layout switch at the row's end; a long name ellipsizes, or the rest wraps under it. */
+  .seasons-bar:not(.anime-seasons-bar) > .seasons-picker {
+    flex: 0 1 auto;
   }
   .seasons-bar > .segmented {
     margin-left: auto;
+  }
+  /* An anime's tools under its episode ranges: packed to the right edge, the layout switch last. */
+  .anime-seasons-bar > .anime-episodes-tools {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+  /* A franchise's season dropdown with Download Season beside it. */
+  .seasons-tabs:has(> :is(.batch-download, .batch-download-start)) {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .seasons-tabs > :is(.batch-download, .batch-download-start) {
+    flex: none;
   }
   /* The season dropdown (always one on a phone: SeasonPicker.tsx) a size down, a long name ellipsized. */
   :is(.seasons-picker, .seasons-tabs) .select-trigger[data-size="large"] {

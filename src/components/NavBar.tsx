@@ -112,7 +112,7 @@ export function NavBar() {
         <h1 className="navbar-title">Search</h1>
       ) : (
         <button className="navbar-brand" onClick={() => tab({ name: "home" })} aria-label="Polarity home">
-          <img className="brand-logo" src={logo} alt="Polarity" draggable={false} />
+          <img className="brand-logo wordmark" src={logo} alt="Polarity" draggable={false} />
         </button>
       )}
       <NavLinks links={links} isActive={isActive} open={tab} />

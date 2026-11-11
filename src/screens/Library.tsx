@@ -214,7 +214,7 @@ function NewPlaylistTile({ onCreate }: { onCreate: (id: string) => void }) {
         if (p) onCreate(p.id);
       }}
     >
-      <div className="card-frame playlist-new">
+      <div className="card-frame frame-page playlist-new">
         <Plus size={28} />
         <span className="t-callout">New Playlist</span>
       </div>

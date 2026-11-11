@@ -10,7 +10,7 @@ export function AccountShell({ children, header, plain = false }: { children: Re
       <header className="account-bar" data-tauri-drag-region>
         {/* Plain (sign-in): the mark sits over the form instead. */}
         <span className="account-brand" data-tauri-drag-region>
-          {!plain && <img className="brand-logo" src={logo} alt="Polarity" draggable={false} />}
+          {!plain && <img className="brand-logo wordmark" src={logo} alt="Polarity" draggable={false} />}
         </span>
         {header}
         <WindowControls />

@@ -112,3 +112,37 @@ test("stops listening when asked", () => {
   p.touch("touchend");
   expect(p.click()).toBe(true);
 });
+
+test("a tap outside the gliding list (the navbar over it) opens, as the list glides on", () => {
+  const page = new EventTarget();
+  let now = 1000;
+  guardTaps(page as unknown as Window, () => now);
+  const list = { contains: (n: unknown) => n === row };
+  const row = {};
+  const navbar = {};
+  const send = (type: string, target: unknown, extra: object = {}) => {
+    const e = Object.assign(new Event(type, { cancelable: true }), extra);
+    Object.defineProperty(e, "target", { value: target });
+    page.dispatchEvent(e);
+    return !e.defaultPrevented;
+  };
+  const at = (x: number, y: number) => ({ touches: [{ clientX: x, clientY: y }] });
+  // A fling: the list glides on with no finger on it.
+  send("touchstart", row, at(40, 400));
+  send("touchmove", row, at(40, 100));
+  send("scroll", list);
+  send("touchend", row, { touches: [] });
+  now += 50;
+  send("scroll", list);
+  // The navbar's button, tapped mid-glide: its click goes through.
+  send("touchstart", navbar, at(300, 20));
+  now += 80;
+  send("touchend", navbar, { touches: [] });
+  expect(send("click", navbar, { detail: 1 })).toBe(true);
+  // A tap on the list itself only stops it.
+  send("scroll", list);
+  send("touchstart", row, at(40, 400));
+  now += 80;
+  send("touchend", row, { touches: [] });
+  expect(send("click", row, { detail: 1 })).toBe(false);
+});

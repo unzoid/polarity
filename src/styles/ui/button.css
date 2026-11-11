@@ -40,8 +40,9 @@
   box-shadow: var(--glass-highlight);
 }
 /* Icon-only buttons: just the glyph at rest — no fill, no blur, no edge. A faint
-   circle appears on hover/press. The glyph gets a soft shadow so it stays
-   legible over artwork. (Doubled selector beats .btn-glass regardless of order.) */
+   circle appears on hover/press. The glyph gets a tight halo in the scheme's own (dark under white glyphs,
+   light under dark ones) so it stays legible over artwork; on the plain page it doesn't show, where the wide
+   black shadow it had read as a smudge. (Doubled selector beats .btn-glass regardless of order.) */
 .btn.btn-icon {
   width: 46px;
   padding: 0;
@@ -53,7 +54,7 @@
     background-color var(--dur-fast) var(--ease-std);
 }
 .btn.btn-icon svg {
-  filter: drop-shadow(0 1px 5px rgb(0 0 0 / 0.45));
+  filter: drop-shadow(0 1px 1.5px var(--text-halo));
 }
 .btn.btn-icon:active {
   background: rgb(var(--ink) / 0.16);

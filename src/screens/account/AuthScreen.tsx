@@ -100,7 +100,7 @@ export function AuthScreen() {
   return (
     <AccountShell plain>
       <div className="auth">
-        <img className="auth-mark" src={logo} alt="Polarity" draggable={false} />
+        <img className="auth-mark wordmark" src={logo} alt="Polarity" draggable={false} />
         <AnimatePresence mode="wait" initial={false}>
         <motion.div
           className="auth-body"

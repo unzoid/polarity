@@ -189,6 +189,9 @@ static PolarTabs *controller;
     NSArray *items = [state[@"tabs"] isKindOfClass:NSArray.class] ? state[@"tabs"] : @[];
     NSString *selected = [state[@"selected"] isKindOfClass:NSString.class] ? state[@"selected"] : nil;
     BOOL hidden = [state[@"hidden"] isKindOfClass:NSNumber.class] && [state[@"hidden"] boolValue];
+    // The bar in the app's colour scheme (Settings → Appearance), which can differ from the system's.
+    NSString *scheme = [state[@"scheme"] isKindOfClass:NSString.class] ? state[@"scheme"] : nil;
+    if (scheme) self.overrideUserInterfaceStyle = [scheme isEqualToString:@"light"] ? UIUserInterfaceStyleLight : UIUserInterfaceStyleDark;
     if (items.count) [self setItems:items];
     self.current = selected;
     if (selected) [self select:selected];
