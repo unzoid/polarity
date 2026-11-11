@@ -11,7 +11,7 @@ import { AnimeListPanels } from "../components/anime/AnimeListPanel";
 import { AnimeRelated } from "../components/anime/AnimeRelated";
 import { Img } from "../components/Img";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Skeleton } from "../components/ui/Skeleton";
+import { DetailPending } from "../components/title/HeroSkeleton";
 import {
   type Anime,
   animeArt,
@@ -146,7 +146,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   );
 
   if (isError && !shown) return <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>;
-  if (!shown) return <Skeleton className="detail-loading" />;
+  if (!shown) return <DetailPending />;
 
   const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };

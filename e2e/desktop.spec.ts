@@ -55,8 +55,8 @@ test("the Calendar is in the profile menu only while it isn't a navbar tab (#92)
   const profile = app.getByRole("button", { name: /^Profile/ });
   await expect(nav.getByRole("button", { name: "Calendar", exact: true })).toHaveCount(0);
   await profile.click();
-  await expect(app.getByRole("menuitem", { name: "Calendar" })).toBeVisible();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(app.locator(".profile-pop").getByRole("button", { name: "Calendar", exact: true })).toBeVisible();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Browsing", exact: true }).click();
   await settings.getByRole("switch", { name: /^Show the Calendar/ }).click();
@@ -64,8 +64,8 @@ test("the Calendar is in the profile menu only while it isn't a navbar tab (#92)
   await expect(settings).toHaveCount(0);
   await expect(nav.getByRole("button", { name: "Calendar", exact: true })).toBeVisible();
   await profile.click();
-  await expect(app.getByRole("menuitem", { name: "Settings" })).toBeVisible();
-  await expect(app.getByRole("menuitem", { name: "Calendar" })).toHaveCount(0);
+  await expect(app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(app.locator(".profile-pop").getByRole("button", { name: "Calendar", exact: true })).toHaveCount(0);
 });
 
 test("search finds movies and series", async ({ app }) => {
@@ -534,7 +534,7 @@ test("with an AirPlay receiver around, the player sends the video to it and back
 test("settings change and stay changed", async ({ app }) => {
   const open = async () => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     return app.getByRole("dialog", { name: /^Settings/ });
   };
   let settings = await open();
@@ -556,7 +556,7 @@ test("settings change and stay changed", async ({ app }) => {
 test("a settings search result is highlighted once, not again when its page or Settings comes back (#341)", async ({ app }) => {
   const open = async () => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     return app.getByRole("dialog", { name: /^Settings/ });
   };
   // Counts every time a row is marked, so a highlight played again can't hide by ending before a check.
@@ -603,7 +603,7 @@ test("a settings search result is highlighted once, not again when its page or S
 test("Settings → Sources has the torrent limits, kept on this device (#47)", async ({ app }) => {
   const open = async () => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("button", { name: "Sources", exact: true }).click();
     return settings;
@@ -842,7 +842,7 @@ test("a Stremio export is read, previewed and imported; its add-ons are only lis
     ],
   };
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   // Signed out (as here), it's under Advanced; signed in, under Account.
   await settings.getByRole("button", { name: "Advanced", exact: true }).click();
@@ -900,7 +900,7 @@ test("a Letterboxd export ZIP is read on the device, its films found by title an
     "letterboxd-someone/ratings.csv": "Date,Name,Year,Letterboxd URI,Rating\n2026-01-02,The Glass Orchard,2024,https://boxd.example.com/a,4\n",
   });
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Advanced", exact: true }).click();
   await settings.locator('input[type="file"][accept*="zip"]').setInputFiles({ name: "letterboxd-someone.zip", mimeType: "application/zip", buffer: zip });
@@ -1103,7 +1103,7 @@ test("on a new install Discord shows only that something plays, never the title 
 test("with Show on Discord set to the title, the player sends what plays, its pause, and clears it on close (#31)", async ({ app }) => {
   const sent = () => app.evaluate(() => ((window as { __discord?: unknown[] }).__discord ?? []) as ({ details: string; state?: string; end?: number } | null)[]);
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("combobox", { name: "Show on Discord" }).click();
   await app.getByRole("option", { name: "What you're watching" }).click();
@@ -1162,7 +1162,7 @@ test("an add-on's catalogs: off at first, switched on and ordered in Settings, r
   expect((await rowTitles()).filter((t) => t.includes("Example Lists"))).toEqual([]);
 
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Add-ons", exact: true }).click();
   // An add-on without lists has no switch.
@@ -1499,7 +1499,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   async function showOnDiscord(page: Page, mode: string) {
     await page.getByRole("button", { name: /^Profile/ }).click();
-    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await page.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = page.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("combobox", { name: "Show on Discord" }).click();
     await page.getByRole("option", { name: mode }).click();
@@ -1626,7 +1626,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   test("Friends: off until turned on; then a code, requests, friends with what they're doing, and joining a friend's party (#135)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Friends" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: /^Friends/ }).click();
     const panel = app.getByRole("dialog", { name: "Friends" });
     await expect(panel.getByRole("button", { name: "Turn On Friends" })).toBeVisible();
     await panel.getByRole("button", { name: "Turn On Friends" }).click();
@@ -1654,7 +1654,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   test("a friend's invite shows as a toast; Join opens the Friends panel while joining (#135)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Friends" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: /^Friends/ }).click();
     await app.getByRole("button", { name: "Turn On Friends" }).click();
     await expect(app.getByLabel(/^Friend code \w /)).toBeVisible();
     await app.keyboard.press("Escape");
@@ -1669,7 +1669,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   test("Settings → Account → Share add-ons and keys: three choices, between this account's profiles by default (#429)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Account" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Account", exact: true }).click();
     const row = app.locator('[data-setting="shareSetup"]');
     await expect(row).toContainText("Share add-ons and keys");
     await expect(row).toContainText("sync to their accounts");
@@ -1684,7 +1684,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   test("Settings → Account → Friends: on and off for this profile, and what friends see (#135)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Account" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Account", exact: true }).click();
     const row = app.locator('[data-setting="friendsEnabled"]');
     await expect(row).toBeVisible();
     await expect(app.locator('[data-setting="friendsOnline"]')).toHaveCount(0);
@@ -1700,7 +1700,7 @@ test.describe("signed in, on a fresh profile", () => {
   test("a profile that never chose has Friends on: seen online, joinable, what's on hidden (#428)", async ({ app }) => {
     await app.goto("/fake.html?account=1&friends=new");
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Account" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Account", exact: true }).click();
     await expect(app.locator('[data-setting="friendsEnabled"]').getByRole("switch")).toBeChecked();
     await expect(app.locator('[data-setting="friendsOnline"]').getByRole("combobox")).toContainText("Friends");
     await expect(app.locator('[data-setting="friendsWatching"]').getByRole("combobox")).toContainText("Nobody");
@@ -1709,7 +1709,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   test("a link watched from the Join a Watch Party dialog closes the dialog before the player's panel opens (#247)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Join Watch Party", exact: true }).click();
     await expect(partySurfaces(app)).toHaveCount(1);
     await app.getByRole("textbox", { name: "Video link" }).fill("https://media.example/film.mp4");
     await app.getByRole("button", { name: "Watch", exact: true }).click();
@@ -1763,7 +1763,7 @@ test.describe("signed in, on a fresh profile", () => {
 
   test("out of the player in a party on a link, Go to the Current Stream plays the link again (#387)", async ({ app }) => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Join Watch Party", exact: true }).click();
     await app.getByRole("textbox", { name: "Video link" }).fill("https://media.example/film.mp4");
     await app.getByRole("button", { name: "Watch", exact: true }).click();
     const player = app.locator(".player");
@@ -1798,7 +1798,7 @@ test.describe("signed in, on a fresh profile", () => {
       }),
     );
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Join Watch Party", exact: true }).click();
     await app.getByRole("textbox", { name: "Video link" }).fill("https://youtu.be/abc-DEF_123?si=xxx");
     await app.getByRole("button", { name: "Watch", exact: true }).click();
     const player = app.locator(".player");
@@ -1885,7 +1885,7 @@ test.describe("signed in, on a fresh profile", () => {
       }),
     );
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Join Watch Party" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Join Watch Party", exact: true }).click();
     await app.getByRole("textbox", { name: "Video link" }).fill("https://youtu.be/abc-DEF_123");
     await app.getByRole("button", { name: "Watch", exact: true }).click();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
@@ -1998,7 +1998,7 @@ test.describe("stremio:// links (#163)", () => {
     // The app's start registers the handler.
     await expect.poll(() => app.evaluate(() => (window as { __stremioLinks?: boolean[] }).__stremioLinks)).toEqual([true]);
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("button", { name: "Add-ons", exact: true }).click();
     const toggle = settings.getByRole("switch", { name: /^Open Stremio links in Polarity/ });
@@ -2011,7 +2011,7 @@ test.describe("stremio:// links (#163)", () => {
     await expect(app.getByTestId("addon-offer")).toHaveCount(0);
 
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     await settings.getByRole("button", { name: "Add-ons", exact: true }).click();
     await toggle.click();
     await expect(toggle).toBeChecked();
@@ -2059,7 +2059,7 @@ test.describe("stremio:// links (#163)", () => {
 
 test("notifications: New episodes switched on, a new episode is one note, and its click opens the show (#209)", async ({ app }) => {
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Notifications", exact: true }).click();
   const episodes = settings.getByRole("switch", { name: /^New episodes/ });
@@ -2130,7 +2130,7 @@ test.describe("signing in with another device (#133)", () => {
     type Fake = { __polarFakeTv: { waiting(d: string): string; state(c: string): string } };
     const code = await app.evaluate(() => (globalThis as unknown as Fake).__polarFakeTv.waiting("Living room TV"));
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
     // Account isn't a sidebar section: the profile button at the foot of the sidebar opens it (#340).
     await expect(settings.getByRole("button", { name: "Account", exact: true })).toHaveCount(0);
@@ -2187,7 +2187,7 @@ test("Settings → Services: a linked AniList profile reads its list for the imp
   });
   await app.reload();
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Services", exact: true }).click();
   const row = settings.getByRole("button", { name: /^AniList/ });
@@ -2223,7 +2223,7 @@ test("Settings → Services: a linked MyAnimeList profile reads its list for the
   await app.evaluate((v) => localStorage.setItem("polar.link.mal.local", v), JSON.stringify(link));
   await app.reload();
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Services", exact: true }).click();
   const row = settings.getByRole("button", { name: /^MyAnimeList/ });
@@ -2275,7 +2275,7 @@ test("Settings → Services: a linked Trakt profile imports its watchlist and wh
   });
   await app.reload();
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Services", exact: true }).click();
   const row = settings.getByRole("button", { name: /^Trakt/ });
@@ -2331,7 +2331,7 @@ test("Settings → Services: a linked Simkl profile imports its Plan to Watch an
   });
   await app.reload();
   await app.getByRole("button", { name: /^Profile/ }).click();
-  await app.getByRole("menuitem", { name: "Settings" }).click();
+  await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Services", exact: true }).click();
   const row = settings.getByRole("button", { name: /^Simkl/ });
@@ -2435,7 +2435,7 @@ test("in a narrow window nothing in the player's bars overlaps, the title is cut
 test("subtitle Font starts at From the subtitles; a picked font is kept (#347)", async ({ app }) => {
   const open = async () => {
     await app.getByRole("button", { name: /^Profile/ }).click();
-    await app.getByRole("menuitem", { name: "Settings" }).click();
+    await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("button", { name: "Subtitles & Audio", exact: true }).click();
     return settings;

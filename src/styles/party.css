@@ -39,7 +39,7 @@
   width: 2.75rem;
   height: 3.25rem;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   box-shadow: inset 0 0 0 1px var(--hairline);
   font-size: 1.625rem;
   font-weight: 650;
@@ -115,14 +115,15 @@
   gap: 0.625rem;
   width: 100%;
 }
+/* The settings fields' look (ui/text-field.css): squared, a quiet border, blue only while focused. Its
+   button beside it squared to match, at the same height. */
 .party-join-input {
   min-width: 0;
-  height: 46px;
-  padding: 0 1rem;
-  border-radius: var(--r-pill);
-  border: 0;
-  background: rgb(255 255 255 / 0.08);
-  box-shadow: inset 0 0 0 1px var(--hairline);
+  height: 2.75rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--fill-1);
   color: var(--text);
   font: inherit;
   font-size: var(--fs-lg);
@@ -130,7 +131,7 @@
   letter-spacing: 0.24em;
   text-transform: uppercase;
   outline: none;
-  transition: box-shadow var(--dur-fast) var(--ease-std);
+  transition: border-color var(--dur-fast) var(--ease-std);
 }
 .party-join-input::placeholder {
   font-weight: 400;
@@ -138,16 +139,20 @@
   text-transform: none;
   color: var(--text-3);
 }
-.party-join-input:focus-visible {
-  box-shadow: inset 0 0 0 1.5px var(--focus);
+.party-join-input:focus {
+  border-color: var(--accent);
 }
 .party-join-input[data-invalid="true"] {
-  box-shadow: inset 0 0 0 1.5px var(--danger);
+  border-color: var(--danger);
+}
+.party-join .party-join-btn {
+  height: 2.75rem;
+  border-radius: var(--r-sm);
 }
 .party-join-error {
   grid-column: 1 / -1;
   min-height: 1.25em;
-  margin: -0.125rem 0 0 1rem;
+  margin: -0.125rem 0 0;
   font-size: var(--fs-sm);
   color: var(--danger);
   transition:
@@ -222,7 +227,7 @@
   /* A ring in the bar's dark, so overlapping faces read as separate. */
   box-shadow:
     0 0 0 2px rgb(0 0 0 / 0.55),
-    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+    inset 0 0 0 1px rgb(var(--ink) / 0.12);
 }
 .party-extra {
   margin-left: 0.375rem;
@@ -468,7 +473,7 @@
 .party-link-card .party-link-url {
   padding: 0.625rem 0.875rem;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.06);
+  background: rgb(var(--ink) / 0.06);
   box-shadow: inset 0 0 0 1px var(--hairline);
   color: var(--text);
   font-size: var(--fs-sm);
@@ -488,18 +493,21 @@
   text-transform: none;
 }
 
-/* --- Party menu (#156): the top bar's popover, TV mode's panel, and parts of
-   the player's Watch Party panel. Sections stacked, a hairline between. */
+/* --- Party menu (#156): the top bar's popover, two pages (PartyMenu.tsx). Sections stacked, a hairline
+   between. The page has the padding, not the popover, so the header's backdrop reaches the edges. */
 .party-popover {
-  width: min(24rem, calc(100vw - 1.5rem));
+  --fit-dur: var(--dur-base);
+  width: min(22rem, calc(100vw - 1.5rem));
   max-height: min(42rem, calc(100vh - 5rem));
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 1rem 1rem 1.125rem;
+  /* The menus' surface (tokens.css --surface-menu). */
+  border: var(--edge-menu);
   border-radius: var(--r-lg);
-  background: var(--glass-heavy);
-  backdrop-filter: var(--blur-glass);
-  box-shadow: 0 0 0 1px var(--glass-edge), var(--glass-highlight), 0 18px 48px var(--scrim-2);
+  background: var(--surface-menu);
+  -webkit-backdrop-filter: var(--blur-menu);
+  backdrop-filter: var(--blur-menu);
+  box-shadow: var(--shadow-menu);
   outline: none;
   transform-origin: var(--transform-origin);
   transition:
@@ -514,22 +522,207 @@
 .party-menu {
   display: flex;
   flex-direction: column;
+  padding: 1rem;
+}
+/* The room page ends on its rows: their highlight sits as far from the bottom edge as from the sides. */
+.party-menu[data-page="room"] {
+  padding-bottom: 0.375rem;
+}
+.party-menu .party-kicker {
+  margin: 0;
 }
 .party-menu-section {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  padding: 0.875rem 0 0;
-  margin-top: 0.875rem;
+  gap: 0.5rem;
+  padding: 0.75rem 0 0;
+  margin-top: 0.75rem;
   border-top: 1px solid var(--hairline);
 }
+.party-menu .party-member {
+  padding-block: 0.25rem;
+}
+/* What's on, over its own poster blurred, edge to edge; the first section's hairline is the header's edge. */
+.party-menu-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: -1rem -1rem 0;
+  padding: 1rem 1rem 0.875rem;
+}
+.party-menu-hero + .party-menu-section {
+  margin-top: 0;
+}
+.party-now-backdrop {
+  position: absolute;
+  inset: -40px;
+  z-index: -2;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: cover;
+  filter: blur(40px) saturate(1.4);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.party-menu-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, transparent 25%, color-mix(in srgb, var(--tone-3) 60%, transparent));
+}
+.party-menu .party-buttons {
+  margin-top: 0;
+}
+/* Copy Party Log | End Party: one row, equal halves (or the whole row for one). */
+.party-menu[data-page="settings"] .party-buttons {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.5rem;
+}
+.party-menu[data-page="settings"] .party-buttons .btn {
+  min-width: 0;
+  height: 2.75rem;
+  padding: 0 0.75rem;
+  font-size: var(--fs-md);
+}
+.party-menu-hero .party-buttons.party-stream {
+  margin-top: 1rem;
+}
+.party-menu-hero .party-stream .btn {
+  flex: 1;
+}
+/* The code: one wide chip, copying it an icon inside at the end. */
 .party-menu .party-pane {
+  gap: 0.5rem;
   padding: 0;
 }
-.party-menu .party-code > span {
-  width: 2.25rem;
-  height: 2.75rem;
-  font-size: 1.375rem;
+.party-menu .party-pane > .party-lede {
+  max-width: none;
+  font-size: var(--fs-sm);
+}
+.party-code-chip {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 0.5rem;
+  height: 3rem;
+  padding: 0 0.5rem 0 1rem;
+  border-radius: var(--r-md);
+  background: var(--fill-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.party-code-chip .party-code {
+  flex: 1;
+  gap: 0;
+  margin-top: 0;
+}
+.party-code-chip .party-code > span {
+  display: inline;
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+.party-code-chip .party-code > span:nth-child(3) {
+  margin-right: 0.4em;
+}
+.party-code-copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.party-code-copy:is(:hover, :focus-visible) {
+  background: var(--fill-3);
+  color: var(--text);
+}
+.party-code-copy:active {
+  transform: scale(0.94);
+}
+:root[data-touch="true"] .party-code-copy {
+  width: var(--hit);
+  height: var(--hit);
+}
+/* Party Settings ›, Leave Party: rows, edge to edge of the page's padding. */
+.party-menu-rows {
+  gap: 0;
+  padding-top: 0.375rem;
+  margin-top: 0.75rem;
+}
+.party-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: calc(100% + 1.25rem);
+  margin: 0 -0.625rem;
+  padding: 0.625rem;
+  border-radius: var(--r-md);
+  font-weight: 500;
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.party-menu-row:is(:hover, :focus-visible) {
+  background: var(--fill-2);
+}
+.party-menu-row > svg:first-child {
+  flex: none;
+  color: var(--text-2);
+}
+.party-menu-row > span:first-of-type {
+  flex: 1;
+}
+.party-menu-row-detail {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+.party-menu-row > svg:last-child:not(:first-child) {
+  flex: none;
+  color: var(--text-3);
+}
+.party-menu-leave,
+.party-menu-leave > svg:first-child {
+  color: var(--danger);
+}
+.party-menu-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: -0.375rem 0 0.25rem -0.5rem;
+  padding: 0.375rem 0.75rem 0.375rem 0.5rem;
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  color: var(--text-2);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.party-menu-back:is(:hover, :focus-visible) {
+  background: var(--fill-2);
+  color: var(--text);
+}
+.party-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+}
+/* A group's label sits close over its first switch. */
+.party-menu-group > .party-kicker {
+  margin-bottom: -0.25rem;
+}
+:root[data-touch="true"] :is(.party-menu-row, .party-menu-back) {
+  min-height: var(--hit);
 }
 .party-stream {
   margin-top: 0.875rem;
@@ -564,10 +757,6 @@
 }
 .party-column .party-members {
   margin: -0.5rem -0.25rem;
-}
-.party-column .btn.party-end {
-  align-self: auto;
-  margin-top: 0;
 }
 
 /* What's on */
@@ -648,10 +837,15 @@
   font-size: var(--fs-sm);
   color: var(--text-2);
 }
-.btn.party-end {
-  align-self: flex-start;
-  margin-top: 0.25rem;
+/* Ending it for everyone: red, on a red tint (doubled class beats .btn-glass). */
+.btn.btn.party-end {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn.btn.party-end:hover {
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
+  }
 }
 
 /* The faces' dot: someone is waiting for the host to let them in. */

@@ -1,6 +1,7 @@
 import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
 import { NameList } from "../components/title/NameList";
-import { useArtGate, useFoldSnap, useFormFactor } from "../lib/ui";
+import { useArtGate, useFoldSnap, useFormFactor, useReadyTogether } from "../lib/ui";
+import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { useEpisodeLayout } from "../lib/settings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
@@ -12,7 +13,7 @@ import { EpisodeShelf } from "../components/title/EpisodeShelf";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 import { Img } from "../components/Img";
-import { TitleHeading } from "../components/title/TitleHeading";
+import { TitleHeading, useHeadingReady } from "../components/title/TitleHeading";
 import { RatingRing } from "../components/RatingRing";
 import { Segmented } from "../components/Segmented";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
@@ -25,7 +26,6 @@ import { SimklPanel } from "../components/title/SimklPanel";
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
 import { BatchDownload } from "../components/BatchDownload";
-import { Skeleton } from "../components/ui/Skeleton";
 import { errorMessage } from "../lib/errors";
 
 /**
@@ -59,7 +59,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   const phone = useFormFactor().form === "phone";
 
   if (isError && !shown) return <EmptyState>Couldn't load this title: {errorMessage(error)}</EmptyState>;
-  if (!shown) return <Skeleton className="detail-loading" />;
+  if (!shown) return <DetailPending />;
 
   const art = (
     <div className="detail-bg" aria-hidden>
@@ -114,7 +114,9 @@ function DetailHero({
   const isSeries = item.type === "series";
   const { next, videoId, resumeAt, label: primaryLabel } = usePlayTarget(item, meta);
   const { data: fileTrailer } = useFileTrailer(item.id);
-  const { data: ratings } = useRatings(item.type, item.id);
+  const { data: ratings, isLoading: ratingsLoading } = useRatings(item.type, item.id);
+  // Which season a show opens on waits for this too (Seasons): the page below the fold comes in with the rest.
+  const { data: progress } = useProgress(item.id);
 
   // Sources for the primary action load as soon as the page opens, so Play
   // (or the source list) is ready by the time the user reaches for it.
@@ -130,11 +132,27 @@ function DetailHero({
   const facts = joinFacts([item.releaseInfo, formatRuntime(meta?.runtime)]);
   // The logo or name waits for the backdrop (or the poster blurred in its place, as the page draws it; #173).
   const gate = useArtGate(item.background, [item.poster]);
+  // The page loads together: the art, the heading, the details, the scores and the episodes come in as one,
+  // over a skeleton until then (detail.css, `[data-ready]`). Sources aren't waited for: they take seconds.
+  const heading = useHeadingReady({ logo: item.logo, logos: item.logos, backdrop: item.background, look: "detail", pending: metaPending });
+  const ready = useReadyTogether(
+    !metaPending && !ratingsLoading && gate["data-art"] === "ready" && heading.ready && (!isSeries || progress !== undefined),
+    item.id,
+  );
 
   return (
-    <section className="detail-hero" {...gate}>
+    <section className="detail-hero" {...gate} data-ready={ready}>
       <div className="detail-hero-main">
-        <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="detail" pending={metaPending} />
+        {!ready && <HeroSkeleton />}
+        <TitleHeading
+          name={item.name}
+          logo={item.logo}
+          logos={item.logos}
+          backdrop={item.background}
+          look="detail"
+          pending={metaPending}
+          onSettled={heading.onSettled}
+        />
         {item.description && <p className="detail-description t-callout">{item.description}</p>}
         <p className="detail-facts t-callout tabular">
           {/* The score row carries IMDb's when a ratings key found it. */}

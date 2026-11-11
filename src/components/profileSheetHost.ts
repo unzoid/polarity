@@ -1,10 +1,10 @@
 import { nativeDialogsAvailable } from "../lib/platform";
-import { useFormFactor } from "../lib/ui";
 
 /**
- * Whether the profile sheet (ProfileMenu.tsx, a phone's) shows Friends and "Join a Watch Party" itself, as views
- * inside it, rather than their own dialogs: on a phone, except on iOS, where the profile menu is the system's.
+ * Whether the profile menu (ProfileMenu.tsx: a popover, or a phone's sheet) shows Friends and "Join a Watch Party"
+ * itself, as views inside it, rather than their own dialogs: everywhere but iOS, where the profile menu is the
+ * system's. TV mode has its own (no profile menu, nor these dialogs).
  */
-export function useProfileSheetHosts() {
-  return useFormFactor().form === "phone" && !nativeDialogsAvailable;
+export function useProfileMenuHosts() {
+  return !nativeDialogsAvailable;
 }

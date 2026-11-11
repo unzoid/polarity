@@ -1,71 +1,59 @@
-/* --- Menu (components/ui/Menu.tsx): one surface, the native macOS 26 menu measured pixel by pixel
-   from the system's own (dark appearance). A 1px near-black ring outside a 1px light rim, 13px corners,
-   a light tint over a moderate blur so the colours behind show through, 5px inset. Compact rows are the
-   native ones: 24px, 11px separators inset 16px, SF/system 13 regular. Roomy rows are taller, with room
-   for an avatar (profile menu, the navbar's "More"). */
+/* --- Menu (components/ui/Menu.tsx): the navbar dropdowns' surface (tokens.css --surface-menu: near-black,
+   a subtle blur, the settings window's border), so a right-click menu and the party and profile menus are
+   one family. Compact rows are 32px at 14px type, room enough to read and hit; roomy rows are taller, with
+   room for an avatar (the navbar's "More"). */
 .menu {
-  padding: 5px;
-  border-radius: 13px;
-  background: rgb(20 20 22 / 0.6);
-  backdrop-filter: blur(12px) saturate(1.6);
-  -webkit-backdrop-filter: blur(12px) saturate(1.6);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.32),
-    0 0 0 1px rgb(0 0 0 / 0.85),
-    0 6px 20px rgb(0 0 0 / 0.3);
+  padding: 6px;
+  border: var(--edge-menu);
+  border-radius: 14px;
+  background: var(--surface-menu);
+  -webkit-backdrop-filter: var(--blur-menu);
+  backdrop-filter: var(--blur-menu);
+  box-shadow: var(--shadow-menu);
   -webkit-font-smoothing: antialiased;
-  color: rgb(255 255 255 / 0.85);
+  color: rgb(var(--ink-text) / 0.85);
   outline: none;
 }
 .menu-compact {
-  min-width: 200px;
-  max-width: 340px;
+  min-width: 220px;
+  max-width: 360px;
   font-family: var(--font);
   letter-spacing: 0;
 }
 .menu-roomy {
   min-width: 240px;
-  /* More solid than the native compact menus. */
-  background: rgb(10 10 11 / 0.9);
-  -webkit-backdrop-filter: blur(8px) saturate(1.2);
-  backdrop-filter: blur(8px) saturate(1.2);
-  /* The settings panel's border. */
-  border: 1px solid var(--fill-3);
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.6),
-    0 12px 32px rgb(0 0 0 / 0.5);
 }
-/* The title as a native section header: small, bold, secondary. */
+/* The title as a section header: small, bold, secondary. */
 .menu-head {
   display: grid;
-  padding: 3px 13px 4px;
+  padding: 6px 12px 6px;
 }
 .menu-head :is(strong, span) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
 }
 .menu-head strong {
   font-weight: 700;
-  color: rgb(255 255 255 / 0.5);
+  color: rgb(var(--ink-text) / 0.5);
 }
 .menu-head span {
-  color: rgb(255 255 255 / 0.35);
+  color: rgb(var(--ink-text) / 0.35);
 }
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  height: 24px;
-  padding: 0 10px 0 13px;
+  height: 32px;
+  padding: 0 10px 0 12px;
   border-radius: var(--r-sm);
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 400;
-  line-height: 16px;
-  color: rgb(255 255 255 / 0.85);
+  line-height: 18px;
+  color: rgb(var(--ink-text) / 0.85);
   text-align: left;
   cursor: default;
   outline: none;
@@ -80,8 +68,12 @@
 }
 .menu-item > svg {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+  color: rgb(var(--ink-text) / 0.7);
+}
+.menu-item[data-highlighted] > svg {
+  color: inherit;
 }
 /* Under the mouse a soft fill: the pointer already says where you are, a solid colour row following it
    is loud. From the keyboard (data-input, lib/ui/inputModality.ts) the accent, so the row you'd pick with
@@ -96,7 +88,7 @@
   color: var(--accent-fg);
 }
 .menu-item[data-disabled] {
-  color: rgb(255 255 255 / 0.25);
+  color: rgb(var(--ink-text) / 0.25);
 }
 .menu-item > .menu-chevron {
   width: 12px;
@@ -108,20 +100,50 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+}
+/* A check row (MenuCheckItem): unchecked, the label sits where the check would be, so it lines up with
+   the rows around it; checking slides it over to make room while the check fades in (and back). Only
+   transform and opacity move, so the row's layout never changes. The slide is the check's width plus
+   the row's gap. */
+.menu-check-item {
+  --check-room: 26px;
+}
+.menu-check-item .menu-check {
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.menu-check-item .menu-check-label {
+  transform: translateX(calc(-1 * var(--check-room)));
+  transition: transform var(--dur-base) var(--ease-in-out);
+}
+.menu-check-item[aria-checked="true"] .menu-check {
+  opacity: 1;
+  transform: none;
+}
+.menu-check-item[aria-checked="true"] .menu-check-label {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-check-item :is(.menu-check, .menu-check-label) {
+    transition-property: opacity;
+  }
 }
 .menu-meta {
   margin-left: auto;
-  color: rgb(255 255 255 / 0.5);
+  color: rgb(var(--ink-text) / 0.5);
 }
 :root[data-input="keyboard"] .menu-item[data-highlighted] .menu-meta {
-  color: rgb(255 255 255 / 0.75);
+  color: rgb(var(--ink-text) / 0.75);
 }
 .menu-sep {
   height: 1px;
-  margin: 5px 11px;
-  background: var(--fill-4);
+  margin: 6px 10px;
+  background: var(--hairline);
 }
 .menu-sep:first-child,
 .menu-sep + .menu-sep {
@@ -136,8 +158,8 @@
   width: 100%;
   padding: 0.5rem 0.625rem;
   border-radius: var(--r-sm);
-  font-size: 13px;
-  color: rgb(255 255 255 / 0.85);
+  font-size: var(--fs-md);
+  color: rgb(var(--ink-text) / 0.85);
   cursor: default;
   outline: none;
   user-select: none;

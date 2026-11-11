@@ -47,10 +47,11 @@ import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
-import { Skeleton } from "./components/ui/Skeleton";
+import { DetailPending } from "./components/title/HeroSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
+import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "./lib/theme";
 
 // Chunks of their own, loaded the first time they're drawn: most sessions never
 // see the sign-in screens, TV mode, Settings or an anime page (the player is in
@@ -106,7 +107,7 @@ function Screen({ route }: { route: Route }) {
  */
 function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: page } = useQuery(titlePageQuery(type, id, preview));
-  const loading = <Skeleton className="detail-loading" />;
+  const loading = <DetailPending />;
   if (!page) return loading;
   if (page.kind === "anime")
     return (
@@ -197,27 +198,18 @@ function MainApp() {
   }, [settings?.uiFont]);
 
   // Settings → Appearance and → Browsing, as attributes and variables on <html>
-  // (TV mode and portalled menus included).
+  // (TV mode and portalled menus included). TV mode is always dark: it's made for a dim room.
+  const prefersLight = useSystemPrefersLight();
+  const scheme = tv ? "dark" : resolveScheme(settings?.colorScheme, prefersLight);
   useEffect(() => {
     if (!settings) return;
     const root = document.documentElement;
-    const accent = /^#[0-9a-f]{6}$/i.test(settings.accentColor ?? "") ? settings.accentColor : null;
-    if (accent) {
-      root.style.setProperty("--accent", accent);
-      // Light accents (yellow, teal) need dark text on top to stay readable.
-      const n = parseInt(accent.slice(1), 16);
-      const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-      root.style.setProperty("--accent-fg", lum > 0.62 ? "#0b0b0b" : "#fff");
-    } else {
-      root.style.removeProperty("--accent");
-      root.style.removeProperty("--accent-fg");
-    }
-    root.dataset.theme = settings.theme === "black" ? "black" : "dark";
+    applyTheme(resolveTheme(settings), scheme, root);
     root.dataset.cardSize = settings.cardSize ?? "medium";
     root.dataset.reduceMotion = settings.reduceMotion ?? "system";
     root.dataset.hideThumbs = String(!!settings.hideEpisodeThumbs);
     root.dataset.hideOverviews = String(!!settings.hideEpisodeDescriptions);
-  }, [settings]);
+  }, [settings, scheme]);
 
   // Interface size is this screen's, so it's a device pref.
   const { uiScale, animeEnabled } = usePrefs();

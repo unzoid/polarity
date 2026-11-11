@@ -9,6 +9,7 @@ import type { AnimeLink } from "./library/identity";
 import type {
   CacheInfo,
   CatalogExtra,
+  CustomTheme,
   Imported,
   ExternalRatings,
   InstalledAddon,
@@ -230,7 +231,9 @@ export const contract = {
     cardRatingPosition: true,
     cardSize: true,
     clickAction: true,
+    colorScheme: true,
     controlsHideSecs: true,
+    customThemes: true,
     episodeLayout: true,
     excludeKeywords: true,
     heroAutoplay: true,
@@ -280,6 +283,7 @@ export const contract = {
   } satisfies Keys<Settings>,
   Span: { end: true, start: true } satisfies Keys<Span>,
   StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true } satisfies Keys<StreamsResult>,
+  CustomTheme: { accent: true, base: true, id: true, name: true, tint: true } satisfies Keys<CustomTheme>,
   SubtitleOption: { addon: true, id: true, lang: true, url: true } satisfies Keys<SubtitleOption>,
   SubtitleStyle: {
     background: true,

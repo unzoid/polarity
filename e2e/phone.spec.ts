@@ -685,7 +685,7 @@ test("each page starts right under the top bar, which sits right under the statu
     await insets(app, { top, right: 0, bottom: top ? 34 : 0, left: 0 });
     for (const [tab, first] of [
       ["Home", ".hero-card"],
-      ["Series", ".screen-header h1"],
+      ["Series", ".discover-controls"],
       ["Library", ".screen-header h1"],
     ] as const) {
       await tabs.getByRole("button", { name: tab, exact: true }).tap();

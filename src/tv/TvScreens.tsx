@@ -32,7 +32,6 @@ import { useRouter } from "../lib/router";
 import { TvBrowse, TvCard, TvContinueRail, TvItemsRail, TvRail, TvShelfRail, type RailRow } from "./TvRails";
 import { TvKeyboard } from "./TvKeyboard";
 import { TvAnimeRail } from "./TvAnime";
-import { TvFriendsRail } from "./TvFriends";
 import { useAnimeAliases, useAnimeResults, withoutAnime } from "../lib/anime";
 import { usePrefs } from "../lib/settings";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -55,8 +54,6 @@ export function TvHome() {
 
   const rows: RailRow[] = [
     { key: "continue", render: () => <TvContinueRail /> },
-    // Only while the profile has Friends on and someone to show (#135).
-    { key: "friends", render: () => <TvFriendsRail /> },
     { key: "trending", render: () => <TvItemsRail title="Trending Now" items={picks} shape="poster" /> },
     ...addonRows.map((c) => ({ key: `addon:${catalogKey(c)}`, render: (near: boolean) => <TvAddonRail catalog={c} enabled={near} /> })),
     ...shelves.map((shelf, i) => ({

@@ -532,8 +532,8 @@
      the shade — a solid fill here dips the screen to black on open. */
   cursor: default;
 }
-/* Layer 1: the frosted video (see VideoBackdrop.tsx). Scaled past the edges
-   so the softened border never shows; a light CSS blur smooths the upscale. */
+/* Layer 1: the frosted video (see VideoBackdrop.tsx, which does the blurring). Scaled past the edges
+   so the softened border never shows; a light CSS blur only smooths the upscale's blocks. */
 .video-backdrop {
   position: absolute;
   inset: 0;
@@ -541,7 +541,7 @@
   height: 100%;
   object-fit: cover;
   transform: scale(1.08);
-  filter: blur(14px);
+  filter: blur(6px);
 }
 /* Layer 2: darken — neutral black, so the picture's own colour comes through
    instead of a tint — then a fine static grain, which also hides banding in
@@ -910,7 +910,7 @@ html[data-os="android"] .options-columns {
 .scrubber-time {
   padding: 0.25rem 0.5rem;
   border-radius: var(--r-xs);
-  background: rgb(22 22 22 / 0.9);
+  background: color-mix(in srgb, var(--tone-3) 90%, transparent);
   font-weight: 600;
 }
 /* Hover thumbnail: a tile cut from a Seekr sprite sheet (background-position),
@@ -919,7 +919,7 @@ html[data-os="android"] .options-columns {
   aspect-ratio: 16 / 9;
   border-radius: var(--r-md);
   overflow: hidden;
-  background: rgb(22 22 22 / 0.9);
+  background: color-mix(in srgb, var(--tone-3) 90%, transparent);
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 0.18),
     0 12px 32px rgb(0 0 0 / 0.55);
@@ -1788,7 +1788,7 @@ img.load-mark-base[data-logo-look^="halo"] {
 .sub-swatch[aria-checked="true"] {
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.25),
-    0 0 0 2px rgb(20 20 20),
+    0 0 0 2px var(--tone-2),
     0 0 0 4px var(--text);
 }
 .sub-settings .source-chip {

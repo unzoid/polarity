@@ -590,18 +590,9 @@ export const SETTINGS: SettingDef[] = [
   { id: "subtitleBackground", page: "subtitles", title: "Background", keywords: "subtitle box" },
 
   // Appearance
-  { id: "accentColor", page: "appearance", title: "Accent colour", keywords: "color theme highlight" },
-  {
-    id: "theme",
-    page: "appearance",
-    title: "Background",
-    keywords: "theme black oled dark",
-    bind: s("theme", "dark"),
-    control: choice([
-      { value: "dark", label: "Dark" },
-      { value: "black", label: "Black (OLED)" },
-    ]),
-  },
+  // Drawn by components/settings/ThemePicker (grids of pictures, not schema controls).
+  { id: "colorScheme", page: "appearance", title: "Colour scheme", keywords: "color light dark mode system appearance white" },
+  { id: "theme", page: "appearance", title: "Theme", keywords: "colour color accent highlight background black oled dark create custom" },
   { id: "uiScale", page: "appearance", title: "Interface size", keywords: "zoom scale bigger smaller text" },
   {
     id: "cardSize",
@@ -620,10 +611,14 @@ export const SETTINGS: SettingDef[] = [
     id: "uiFont",
     page: "appearance",
     title: "Font",
-    keywords: "text typeface inter system opendyslexic dyslexia dyslexic accessibility readability",
+    keywords: "text typeface inter instrument hanken grotesk onest mona system opendyslexic dyslexia dyslexic accessibility readability",
     bind: s("uiFont", "inter"),
     control: choice([
       { value: "inter", label: "Inter" },
+      { value: "instrument", label: "Instrument Sans" },
+      { value: "hanken", label: "Hanken Grotesk" },
+      { value: "onest", label: "Onest" },
+      { value: "mona", label: "Mona Sans" },
       { value: "system", label: "System" },
       { value: "opendyslexic", label: "OpenDyslexic" },
     ]),

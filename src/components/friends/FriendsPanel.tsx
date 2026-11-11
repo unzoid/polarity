@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ElementType } from "react";
-import { useProfileSheetHosts } from "../profileSheetHost";
+import { useProfileMenuHosts } from "../profileSheetHost";
 import { Dialog } from "@base-ui/react/dialog";
 import { useAccount, type FriendEntry, type FriendPresence } from "../../lib/account";
 import {
@@ -15,7 +15,6 @@ import {
   useFriendsOpen,
 } from "../../lib/friends";
 import { getParty, joinParty, leaveParty, useParty } from "../../lib/party";
-import { openSettings } from "../../lib/settings";
 import { errorMessage } from "../../lib/errors";
 import { Avatar } from "../Avatar";
 import { Spinner } from "../Spinner";
@@ -32,8 +31,8 @@ import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../ui/Menu";
  */
 export function FriendsPanel() {
   const open = useFriendsOpen();
-  // A phone's profile sheet shows it as one of its views instead (ProfileMenu.tsx).
-  const inSheet = useProfileSheetHosts();
+  // The profile menu shows it as one of its views instead (ProfileMenu.tsx), but on iOS.
+  const inSheet = useProfileMenuHosts();
   return (
     <Dialog.Root
       open={open && !inSheet}
@@ -150,16 +149,6 @@ export function FriendsBody({ inDialog = true }: { inDialog?: boolean }) {
         </Section>
       )}
       <JoiningNote />
-      <button
-        type="button"
-        className="friends-settings-link"
-        onClick={() => {
-          setFriendsOpen(false);
-          openSettings("account");
-        }}
-      >
-        What friends see: Settings → Account
-      </button>
     </div>
   );
 }

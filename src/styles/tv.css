@@ -980,7 +980,7 @@
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: rgb(8 8 8 / 0.86);
+  background: color-mix(in srgb, var(--tone-sunk) 86%, transparent);
   backdrop-filter: blur(32px) saturate(140%);
   animation: tv-panel-in 280ms var(--ease-out);
 }
@@ -1695,7 +1695,7 @@
 .tv .sub-swatch[aria-checked="true"] {
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.25),
-    0 0 0 0.14rem rgb(20 20 20),
+    0 0 0 0.14rem var(--tone-2),
     0 0 0 0.3rem var(--text);
 }
 .tv .sub-swatch:focus,
@@ -1759,7 +1759,7 @@
   flex-direction: column;
   gap: 2rem;
   padding: 4rem 2rem;
-  background: rgb(18 18 18 / 0.94);
+  background: color-mix(in srgb, var(--tone-2) 94%, transparent);
   backdrop-filter: blur(32px) saturate(140%);
   box-shadow: 1px 0 0 var(--hairline);
   animation: tv-menu-in 240ms var(--ease-drawer);
@@ -1822,6 +1822,20 @@
   outline: none;
   background: var(--pill-light);
   color: var(--text-on-light);
+}
+/* Invites and friend requests waiting, on the Friends item. */
+.tv-menu-count {
+  margin-left: auto;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
 }
 .tv-menu-kbd {
   margin-left: auto;

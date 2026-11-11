@@ -33,6 +33,8 @@ import { TvSettings } from "./TvSettings";
 import { TvJoinParty } from "./TvJoinParty";
 import { useJoinPartyOpen, usePartyMenuOpen } from "../lib/party";
 import { TvPartyMenu } from "./TvPartyMenu";
+import { TvFriendsPanel } from "./TvFriends";
+import { useFriendsOpen } from "../lib/friends";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
@@ -94,6 +96,7 @@ export function TvApp() {
   const tabs = useTvTabs();
   const joinPartyOpen = useJoinPartyOpen();
   const partyMenuOpen = usePartyMenuOpen();
+  const friendsOpen = useFriendsOpen();
 
   useEffect(installFocusMemory, []);
   useEffect(installPointerFocus, []);
@@ -258,6 +261,7 @@ export function TvApp() {
         {menuOpen && <TvMenu onClose={() => setMenuOpen(false)} />}
         {joinPartyOpen && !playing && <TvJoinParty />}
         {partyMenuOpen && !playing && <TvPartyMenu />}
+        {friendsOpen && !playing && <TvFriendsPanel />}
         <TvHints />
         {!playing && (
           <button className="tv-exit" tabIndex={-1} onClick={() => setTvMode(false)}>

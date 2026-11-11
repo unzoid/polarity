@@ -74,7 +74,11 @@
     "resources": {
       "fonts/OpenDyslexic-Regular.otf": "fonts/OpenDyslexic-Regular.otf",
       "fonts/OpenDyslexic-Bold.otf": "fonts/OpenDyslexic-Bold.otf",
-      "fonts/OFL.txt": "licenses/OpenDyslexic/OFL.txt"
+      "fonts/OFL.txt": "licenses/OpenDyslexic/OFL.txt",
+      "../node_modules/@fontsource-variable/instrument-sans/LICENSE": "licenses/Instrument Sans/OFL.txt",
+      "../node_modules/@fontsource-variable/hanken-grotesk/LICENSE": "licenses/Hanken Grotesk/OFL.txt",
+      "../node_modules/@fontsource-variable/onest/LICENSE": "licenses/Onest/OFL.txt",
+      "../node_modules/@fontsource-variable/mona-sans/LICENSE": "licenses/Mona Sans/OFL.txt"
     }
   }
 }
