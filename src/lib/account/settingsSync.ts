@@ -419,9 +419,13 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
     setProblem({ notSetUp: false });
     if (!isActive()) return;
     const saved = load(space);
+    // The store below is the active profile's. After each wait, a profile that was left or signed
+    // out meanwhile must not be read from it, written to it, uploaded or saved (plan 002).
     const local = await current(saved);
+    if (!isActive()) return;
     let lock = readLock(space);
     const theirs = remote && (await fromWire(remote.data, [lock.passphrase, lock.previous].filter((p) => !!p) as string[], readDoc));
+    if (!isActive()) return;
     const { seal, forget } = sealing(lock, remote?.data ?? null);
     if (forget) writeLock(space, (lock = {}));
 
@@ -437,6 +441,7 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
     if (!saved && !seal && !next.unopened && secretsExposed(local.secrets)) noteFirstPlainSync(space);
     let missing = saved?.missing ?? [];
     if (theirs && !sameDoc(next, local)) missing = await apply(next);
+    if (!isActive()) return;
     setLocked(space, !!next.unopened);
     // Written: a passphrase set here is in force, one removed here is gone.
     const settled = () => lock.pending && writeLock(space, lock.pending === "set" ? { passphrase: lock.passphrase } : {});
@@ -449,6 +454,7 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
     }
 
     const data = await toWire(next, seal);
+    if (!isActive()) return;
     const sent = stable(data);
     if (sent === refused) return;
     // Later than anything stored, even a time another device's clock put ahead.
@@ -461,6 +467,7 @@ export async function syncSettings(space: string, backend: AccountBackend, isAct
       setProblem({ refused: sent });
       return;
     }
+    if (!isActive()) return;
     setProblem({ refused: null });
     if (stored !== null) {
       save(space, { doc: next, at: stored, missing });
