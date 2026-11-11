@@ -34,7 +34,7 @@
 .scheme-dark,
 .player,
 .hero-card,
-.card-frame {
+.card-frame:not(.frame-page) {
   color-scheme: dark;
   /* Text, fills and hairlines: white ink. */
   --ink: 255 255 255;
@@ -77,8 +77,9 @@
   --surface-float-glass: color-mix(in srgb, var(--tone-1) 78%, transparent);
 }
 /* A part that stays dark is built on the theme's own near-black, whatever the scheme: the player (on
-   video), Home's featured card and every poster or still's frame (what's drawn on artwork). */
-:root[data-scheme="light"] :is(.scheme-dark, .player, .hero-card, .card-frame) {
+   video), Home's featured card and every poster or still's frame (what's drawn on artwork). A frame with no
+   artwork in it (.frame-page: Library's New Playlist) follows the page instead. */
+:root[data-scheme="light"] :is(.scheme-dark, .player, .hero-card, .card-frame:not(.frame-page)) {
   --theme-base: var(--theme-base-dark, #0a0a0a);
   color: var(--text);
 }
@@ -135,7 +136,7 @@
 .scheme-dark,
 .player,
 .hero-card,
-.card-frame {
+.card-frame:not(.frame-page) {
   --tint-lo: var(--theme-tint);
   --tint-hi: calc(var(--theme-tint) * 1.4);
   /* Below the page: the settings window's page, menus (whiter than the page in light mode). */

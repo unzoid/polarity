@@ -99,10 +99,12 @@
   -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.4) 35%, transparent 80%);
   mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.4) 35%, transparent 80%);
 }
-/* Light: the tone is deepened for a dark page; lifted and thinned it's a pale tint of the art instead. */
+/* Light: the tone is deepened for a dark page; made vivid and thinned right down it's a pale pastel of the
+   art's colour instead. At 45% the deepened tone, only lifted, laid muddy brown and grey patches over the
+   status bar and the page's top corners. */
 :root[data-scheme="light"] .hero-ambient {
-  filter: brightness(2.2) saturate(1.1);
-  opacity: 0.45;
+  filter: saturate(1.7) brightness(2.4);
+  opacity: 0.2;
 }
 /* A one-pixel copy of the art, stretched: an even tint of its main colour,
    deepened and dimmed so bright art doesn't flood the page. The tone is drawn

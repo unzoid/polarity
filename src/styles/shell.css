@@ -1036,8 +1036,8 @@ html[data-os="mac"] {
   pointer-events: none;
 }
 /* The wordmark is a white picture (navbar, sign-in, profiles): in light mode it's drawn in the text's
-   near-black. By its file, so every place that shows it follows. */
-:root[data-scheme="light"] img[src*="polarity-white"] {
+   near-black. By its class, not its file name: a build inlines the small picture as a data: URL. */
+:root[data-scheme="light"] .wordmark {
   filter: brightness(0) opacity(0.88);
 }
 

@@ -18,6 +18,12 @@ export const CLICK_MS = 600;
  * Guard `target`'s clicks until the returned function is called. `now` is the clock (tests pass their own).
  * Only scrolling the user started counts as a moving list, so a carousel turning by itself never eats a tap.
  */
+/** Whether `node` is in the list `list` (the document's own scrolling holds everything); yes when either is unknown. */
+function inside(list: EventTarget | null, node: EventTarget | null): boolean {
+  if (!list || !node || typeof (list as Node).contains !== "function") return true;
+  return (list as Node).contains(node as Node);
+}
+
 export function guardTaps(
   target: Pick<Window, "addEventListener" | "removeEventListener"> = window,
   now: () => number = () => performance.now(),
@@ -29,6 +35,8 @@ export function guardTaps(
   let touching = false;
   let flungAt = -Infinity;
   let scrolledAt = -Infinity;
+  /** The list that scrolled last: a touch outside it (the navbar over it) is a tap, however fast the list moves. */
+  let scroller: EventTarget | null = null;
   let swallowUntil = -Infinity;
 
   const start = (e: TouchEvent) => {
@@ -42,7 +50,7 @@ export function guardTaps(
       return;
     }
     from = { x: t.clientX, y: t.clientY };
-    deliberate = now() - scrolledAt > MOVING_MS;
+    deliberate = now() - scrolledAt > MOVING_MS || !inside(scroller, e.target);
   };
   const move = (e: TouchEvent) => {
     const t = e.touches[0];
@@ -58,8 +66,11 @@ export function guardTaps(
     if (moved) flungAt = now();
     if (!deliberate) swallowUntil = now() + CLICK_MS;
   };
-  const scroll = () => {
-    if (touching || now() - flungAt < GLIDE_MS) scrolledAt = now();
+  const scroll = (e: Event) => {
+    if (touching || now() - flungAt < GLIDE_MS) {
+      scrolledAt = now();
+      scroller = e.target;
+    }
   };
   const click = (e: Event) => {
     // A click from the keyboard or the remote has no pointer behind it (detail 0).

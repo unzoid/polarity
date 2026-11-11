@@ -5,6 +5,8 @@ import { nativeTabsState, tabRoute, type NavLink } from "../lib/navTabs";
 import { useSettingsOverlay } from "../lib/settings";
 import { dismissDepth, onDismissDepth } from "../lib/ui";
 import { warnFailed } from "../lib/errors";
+import { useSettings } from "../lib/net";
+import { resolveScheme, useSystemPrefersLight } from "../lib/theme";
 
 /**
  * On iOS the sections are iOS's own tab bar (lib/platform/nativeTabs.ts), kept in step with the router both ways:
@@ -17,7 +19,10 @@ export function useNativeTabs(links: NavLink[]) {
   const { stack, tab } = useRouter();
   const settingsOpen = useSettingsOverlay().open;
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  const state = nativeTabsState(links, stack, settingsOpen || layers > 0);
+  // Drawn in the app's scheme: on a light page iOS's dark bar stood out (it would follow the system's otherwise).
+  const { data: settings } = useSettings();
+  const scheme = resolveScheme(settings?.colorScheme, useSystemPrefersLight());
+  const state = { ...nativeTabsState(links, stack, settingsOpen || layers > 0), scheme };
   const key = JSON.stringify(state);
 
   const latest = useRef({ links, tab });

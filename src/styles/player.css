@@ -1771,6 +1771,8 @@ img.load-mark-base[data-logo-look^="halo"] {
   inset: 0;
   display: grid;
   place-items: center;
+  /* The frame's corners: its fill and hairline drew a square box in a rounded card. */
+  border-radius: inherit;
   background: rgb(0 0 0 / 0.28);
   box-shadow: inset 0 0 0 1px var(--fill-2);
   color: rgb(255 255 255 / 0.4);

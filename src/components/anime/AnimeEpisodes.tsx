@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   type Anime,
   aniZipQuery,
@@ -17,6 +17,7 @@ import {
   useEpisodeFlags,
 } from "../../lib/anime";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../../lib/settings";
+import { useFormFactor } from "../../lib/ui";
 import type { PlayRequest } from "../../lib/playback";
 import type { Video } from "../../lib/types";
 import { BatchDownload } from "../BatchDownload";
@@ -59,6 +60,7 @@ export function AnimeEpisodes({
 }) {
   const pb = useAnimePlayback(anime);
   const prefs = usePrefs();
+  const phone = useFormFactor().form === "phone";
   // A grouped page's series pick is the selected part's, under its tabs (#327).
   const pick = franchise && <PartPick anime={anime} pb={pb} />;
   const { data: flags } = useEpisodeFlags(pb.malId, [anime.title.english, anime.title.romaji]);
@@ -158,11 +160,12 @@ export function AnimeEpisodes({
   ) : franchise ? null : (
     <h2 className="t-title2 anime-episode-count">Episodes</h2>
   );
+  // Downloads keyed like progress: under the id the anime plays from, as each episode's own.
+  const download = pb.meta && <BatchDownload item={pb.meta} videos={downloads} part={anime.id} />;
+  // A phone's season dropdown has room beside it: Download Season goes there, by the season it downloads.
+  const downloadBySeason = phone && !!franchise;
   const tools = (
     <div className="anime-episodes-tools">
-      {searchable && (
-        <ExpandingSearch value={query} onChange={setQuery} label="Find an episode by number or title" placeholder="Episode number or title" />
-      )}
       {hasFiller && (
         <Chip
           className="anime-filler-chip toggle-chip"
@@ -179,8 +182,11 @@ export function AnimeEpisodes({
           Skip Filler
         </Chip>
       )}
-      {/* Downloads keyed like progress: under the id the anime plays from, as each episode's own. */}
-      {pb.meta && <BatchDownload item={pb.meta} videos={downloads} part={anime.id} />}
+      {!downloadBySeason && download}
+      {/* Beside the layout switch: it opens leftwards over the pills before it, never off the page's edge. */}
+      {searchable && (
+        <ExpandingSearch value={query} onChange={setQuery} label="Find an episode by number or title" placeholder="Episode number or title" />
+      )}
       <Segmented
         label="Episode layout"
         value={layout}
@@ -197,7 +203,7 @@ export function AnimeEpisodes({
     <section className="seasons">
       {/* The tabs on a row of their own and the toolbar under them, whatever the season holds, so switching
           tabs leaves the toolbar where it is (#426); the series pick under the toolbar, for the same reason. */}
-      {franchise && <SeasonTabs franchise={franchise} />}
+      {franchise && <SeasonTabs franchise={franchise}>{downloadBySeason && download}</SeasonTabs>}
       <div className="seasons-bar anime-seasons-bar">
         <div className="seasons-picker">{picker}</div>
         {tools}
@@ -252,7 +258,7 @@ export function PartPick({ anime, pb }: { anime: Anime; pb: Pick<ReturnType<type
  * their own so long names (Paleblade's arcs) all show. Switching swaps the
  * page's season in place.
  */
-export function SeasonTabs({ franchise: { seasons, active, select, loading } }: { franchise: Franchise }) {
+export function SeasonTabs({ franchise: { seasons, active, select, loading }, children }: { franchise: Franchise; children?: ReactNode }) {
   const title = useAnimeTitle();
   const labels = distinctLabels(
     seasons.map((s) => [title(s.card.title), s.card.title.romaji, s.card.title.english]),
@@ -261,6 +267,7 @@ export function SeasonTabs({ franchise: { seasons, active, select, loading } }: 
   return (
     <div className="seasons-tabs">
       <SeasonPicker value={active} onChange={select} options={seasons.map((s, i) => ({ id: s.card.id, label: labels[i] }))} />
+      {children}
       {loading && (
         <span className="seasons-loading t-callout" role="status">
           Loading seasons…

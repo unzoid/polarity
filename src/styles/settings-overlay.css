@@ -451,6 +451,15 @@
   border-radius: var(--r-card);
   background: color-mix(in srgb, var(--tone-1) 40%, transparent);
 }
+/* Light: grouped, as iOS's and macOS's own Settings: white cards on a pale grey. The dark scheme's
+   cards-a-step-off-the-page left them the page's own colour on a near-white page. */
+:root[data-scheme="light"] .t3s {
+  --t3-bg: var(--tone-1);
+  --t3-card: var(--tone-sunk);
+}
+:root[data-scheme="light"] .t3s .settings-card {
+  background: var(--t3-card);
+}
 .t3s .settings-card > * + * {
   box-shadow: none;
   border-top: 1px solid rgb(var(--ink) / 0.05);
