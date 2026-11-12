@@ -723,7 +723,8 @@ test("each page starts right under the top bar, which sits right under the statu
 
 test("the error screen on a phone keeps clear of the controls, and a panel opened over it covers it (#467)", async ({ app }) => {
   await app.goto("/fake.html?sources=filtered");
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  // Series and Movies are the top bar's buttons on a phone (#477), not tabs.
+  await app.locator(".navbar").getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Play", exact: true }).tap();
   const player = app.locator(".player");
