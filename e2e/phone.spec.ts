@@ -723,16 +723,16 @@ test("each page starts right under the top bar, which sits right under the statu
 
 test("the error screen on a phone keeps clear of the controls, and a panel opened over it covers it (#467)", async ({ app }) => {
   await app.goto("/fake.html?sources=filtered");
-  await app.setViewportSize({ width: 915, height: 412 });
-  await insets(app, { top: 0, right: 59, bottom: 21, left: 59 });
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
   await card(app, "The Glass Orchard").tap();
   await app.getByRole("button", { name: "Play", exact: true }).tap();
   const player = app.locator(".player");
   const status = player.locator('.player-status[data-failed="true"]');
   await expect(status).toBeVisible();
-  // With the controls up, none of the error's buttons sits under one of them.
-  await player.tap({ position: { x: 120, y: 200 } });
+  // Held sideways, the shortest screen there is for it.
+  await app.setViewportSize({ width: 915, height: 412 });
+  await insets(app, { top: 0, right: 59, bottom: 21, left: 59 });
+  // Nothing playing, the controls stay up: none of the error's buttons may sit under one of them.
   await expect(player).toHaveAttribute("data-chrome", "true");
   const overlaps = await app.evaluate(() => {
     const boxes = (sel: string) =>

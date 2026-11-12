@@ -2462,8 +2462,10 @@ test("the sleep timer counts down by the clock, offers +15 min in its last minut
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
 
+  // The clock stands still from here, so each reading of the time left is exact; runFor moves it on.
+  await app.clock.pauseAt((await app.evaluate(() => Date.now())) + 1000);
   await player.getByRole("button", { name: "Sleep Timer" }).click();
-  await app.locator(".options-overlay[data-open=true]").getByRole("button", { name: "15 minutes" }).click();
+  await app.locator(".options-overlay[data-open=true]").getByRole("radio", { name: "15 minutes" }).click();
   await expect(player.getByRole("timer")).toHaveText("15:00");
 
   // A minute to go: the prompt; +15 min puts it back to sixteen.
