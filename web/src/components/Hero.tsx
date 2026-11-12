@@ -1,53 +1,60 @@
-import { For, onMount } from "solid-js";
+import type { JSX } from "solid-js";
 import { DownloadButton, ReleaseNote } from "./Download";
+import { GitHubButton } from "./GitHub";
+import { Flutes } from "./Flutes";
+import { Smooth } from "./Smooth";
 
-/** Each word's resting weight and opacity: the sentence thins out as it goes. */
-const words: { t: string; w: number; a: number }[] = [
-  { t: "Your", w: 900, a: 1 },
-  { t: "shows,", w: 900, a: 1 },
-  { t: "movies", w: 820, a: 0.95 },
-  { t: "and", w: 700, a: 0.88 },
-  { t: "anime,", w: 560, a: 0.8 },
-  { t: "all", w: 420, a: 0.72 },
-  { t: "in", w: 330, a: 0.64 },
-  { t: "one", w: 260, a: 0.58 },
-  { t: "place.", w: 220, a: 0.52 },
-];
+/** Inline vars for the `.enter` keyframe: delay, duration, rise distance, blur, start scale. */
+const beat = (delay: number, dur: number, rise: number, extra: JSX.CSSProperties = {}): JSX.CSSProperties => ({
+  "--delay": `${delay}ms`,
+  "--dur": `${dur}ms`,
+  "--rise": `${rise}px`,
+  ...extra,
+});
 
+/**
+ * One large glass card under the (transparent) navbar: star-shaped flutes radiate from the top right,
+ * the copy sits left, and the app rises out of the card's bottom edge.
+ */
 export function Hero() {
-  let h1!: HTMLHeadingElement;
-
-  // Start thin and faint, then let the words settle one after another.
-  onMount(() => {
-    h1.setAttribute("data-inking", "");
-    requestAnimationFrame(() => requestAnimationFrame(() => h1.removeAttribute("data-inking")));
-  });
-
   return (
-    <section class="px-gutter pt-[4vh] pb-16">
-      <h1 ref={h1} class="text-display">
-        <For each={words}>
-          {(word, i) => (
-            <>
-              <span class="ink-word" data-word={word.t}>
-                <span class="ink" style={{ "--i": i(), "--w": word.w, "--a": word.a }}>
-                  {word.t}
-                </span>
-              </span>{" "}
-            </>
-          )}
-        </For>
-      </h1>
+    <section class="px-2 pt-2 sm:px-3 sm:pt-3">
+      <Smooth radius={28} class="mx-auto max-w-[1600px]">
+        <Flutes shape="star" count={6} origin={[0.86, 0.14]} drift={0.05} class="absolute inset-0" />
+        <div class="relative mx-auto max-w-[1200px] px-6 pt-32 sm:px-8 sm:pt-40">
+          <h1 class="enter text-display" style={beat(0, 900, 18, { "--blur": "6px" })}>
+            Polarity
+          </h1>
+          <p class="enter text-lede mt-5 max-w-[30rem] text-balance text-mute" style={beat(120, 800, 12)}>
+            A desktop player and library for your shows, movies and anime.
+          </p>
+          <div class="enter mt-9 flex flex-col items-start gap-4" style={beat(240, 800, 8)}>
+            <div class="flex flex-wrap gap-3">
+              <DownloadButton />
+              <GitHubButton />
+            </div>
+            <ReleaseNote />
+          </div>
 
-      <div class="enter mt-10 grid gap-7 md:mt-12 md:grid-cols-2 md:items-end md:gap-14" style={{ "--delay": "600ms" }}>
-        <p class="text-lede max-w-[30em]">
-          A free, open-source desktop player and library, with a TV mode.
-        </p>
-        <div class="flex flex-wrap items-center gap-x-[18px] gap-y-3">
-          <DownloadButton />
-          <ReleaseNote />
+          <div
+            class="enter relative mt-16 -mb-[14%] sm:mt-20"
+            style={beat(360, 1100, 40, { "--from-scale": "0.98" })}
+          >
+            <div class="drop-shadow-[0_30px_60px_var(--shadow)]">
+              <Smooth radius={18} edge="var(--edge)">
+                <img
+                  src="/profiles.webp"
+                  alt="Polarity's profile picker: who's watching?"
+                  width="1426"
+                  height="886"
+                  class="block w-full"
+                  fetchpriority="high"
+                />
+              </Smooth>
+            </div>
+          </div>
         </div>
-      </div>
+      </Smooth>
     </section>
   );
 }

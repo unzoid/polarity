@@ -30,9 +30,10 @@ type GitHubRelease = {
 const KINDS: { platform: Platform; test: RegExp; label: string }[] = [
   { platform: "windows", test: /-setup\.exe$/i, label: "Installer (.exe)" },
   { platform: "windows", test: /\.msi$/i, label: "Windows Installer (.msi)" },
-  { platform: "macos", test: /_(aarch64|arm64)\.dmg$/i, label: "Apple silicon (.dmg)" },
-  { platform: "macos", test: /_(x64|x86_64)\.dmg$/i, label: "Intel (.dmg)" },
-  { platform: "macos", test: /_universal\.dmg$/i, label: "Universal (.dmg)" },
+  // Tauri names them "_aarch64.dmg"; CI's release names them "-macOS-arm64.dmg".
+  { platform: "macos", test: /[-_](aarch64|arm64)\.dmg$/i, label: "Apple silicon (.dmg)" },
+  { platform: "macos", test: /[-_](x64|x86_64)\.dmg$/i, label: "Intel (.dmg)" },
+  { platform: "macos", test: /[-_]universal\.dmg$/i, label: "Universal (.dmg)" },
   { platform: "linux", test: /\.AppImage$/i, label: "AppImage" },
   { platform: "linux", test: /\.deb$/i, label: "Debian / Ubuntu (.deb)" },
   { platform: "linux", test: /\.rpm$/i, label: "Fedora / openSUSE (.rpm)" },
@@ -72,12 +73,67 @@ async function latestRelease(): Promise<Release | null> {
   }
 }
 
-export const app = new Elysia({ prefix: "/api" }).get("/release", async ({ set }) => {
-  const release = await latestRelease();
-  if (!release) {
-    set.status = 503;
-    return { error: "Release info is unavailable right now.", fallback: RELEASES_PAGE };
+/** A recently closed issue, for the Open source card. Only what the card shows: no author, avatar or body. */
+export type ClosedIssue = { number: number; title: string; url: string; closedAt: string; labels: string[] };
+
+type GitHubIssue = {
+  number: number;
+  title: string;
+  html_url: string;
+  closed_at: string | null;
+  state_reason?: string | null;
+  pull_request?: unknown;
+  labels: { name: string }[];
+};
+
+const ISSUE_COUNT = 6;
+let issuesCache: { at: number; issues: ClosedIssue[] } | null = null;
+
+async function closedIssues(): Promise<ClosedIssue[] | null> {
+  if (issuesCache && Date.now() - issuesCache.at < TTL_MS) return issuesCache.issues;
+  try {
+    // The issues endpoint also returns pull requests, and can't sort by close time: over-fetch, then filter and sort.
+    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=closed&sort=updated&per_page=40`, {
+      headers: { accept: "application/vnd.github+json", "user-agent": "polarity-web" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
+    const issues = ((await res.json()) as GitHubIssue[])
+      // Fixed or done only: not pull requests, and not issues closed as duplicates or won't-fix.
+      .filter((i) => !i.pull_request && i.closed_at && (i.state_reason ?? "completed") === "completed")
+      .sort((a, b) => Date.parse(b.closed_at!) - Date.parse(a.closed_at!))
+      .slice(0, ISSUE_COUNT)
+      .map((i) => ({
+        number: i.number,
+        title: i.title,
+        url: i.html_url,
+        closedAt: i.closed_at!,
+        labels: i.labels.map((l) => l.name),
+      }));
+    issuesCache = { at: Date.now(), issues };
+    return issues;
+  } catch (error) {
+    console.warn("[issues] lookup failed:", error);
+    return issuesCache?.issues ?? null;
   }
-  set.headers["cache-control"] = "public, max-age=300";
-  return release;
-});
+}
+
+export const app = new Elysia({ prefix: "/api" })
+  .get("/release", async ({ set }) => {
+    const release = await latestRelease();
+    if (!release) {
+      set.status = 503;
+      return { error: "Release info is unavailable right now.", fallback: RELEASES_PAGE };
+    }
+    set.headers["cache-control"] = "public, max-age=300";
+    return release;
+  })
+  .get("/issues", async ({ set }) => {
+    const issues = await closedIssues();
+    if (!issues) {
+      set.status = 503;
+      return { error: "Issue info is unavailable right now." };
+    }
+    set.headers["cache-control"] = "public, max-age=300";
+    return issues;
+  });

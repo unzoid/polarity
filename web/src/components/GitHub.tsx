@@ -12,7 +12,10 @@ export function GitHubMark(props: { class?: string }) {
 /** Secondary pill button linking to the repository. */
 export function GitHubButton(props: { label?: string }) {
   return (
-    <a href={REPO_URL} class="btn btn-lg btn-line">
+    <a
+      href={REPO_URL}
+      class="press inline-flex h-12 items-center justify-center gap-2 rounded-full border border-hair bg-[var(--glass-btn)] px-6 text-[1.0625rem] font-medium whitespace-nowrap backdrop-blur-xl backdrop-saturate-150 select-none hover:border-faint/40"
+    >
       <GitHubMark class="size-[18px]" />
       {props.label ?? "View on GitHub"}
     </a>
