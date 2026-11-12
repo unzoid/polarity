@@ -4,6 +4,48 @@ const REPO = "unzoid/polarity";
 export const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 const TTL_MS = 10 * 60 * 1000;
 
+let githubToken: string | undefined;
+
+/** The Worker hands in its GITHUB_TOKEN secret (worker.ts); the dev server runs without one. */
+export function setGitHubToken(token: string | undefined) {
+  githubToken = token || undefined;
+}
+
+/**
+ * GET a path of this repository's GitHub API. Without a token GitHub allows 60 calls an hour per IP, and a Worker's
+ * outbound IPs are shared with other Cloudflare customers, so in production that budget is usually gone: set the
+ * GITHUB_TOKEN secret (5,000 an hour). Answers are kept for TTL_MS in the data center's cache (Workers only), so every
+ * isolate there shares one call.
+ */
+async function github<T>(path: string): Promise<T> {
+  const url = `https://api.github.com/repos/${REPO}${path}`;
+  const edge = typeof caches === "undefined" ? undefined : (caches as unknown as { default?: Cache }).default;
+  const hit = await edge?.match(url);
+  if (hit) return (await hit.json()) as T;
+
+  const res = await fetch(url, {
+    headers: {
+      accept: "application/vnd.github+json",
+      "user-agent": "polarity-web",
+      ...(githubToken ? { authorization: `Bearer ${githubToken}` } : {}),
+    },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    // GitHub's message says whether it was the rate limit; it never echoes the token.
+    const detail = (await res.text().catch(() => "")).slice(0, 200);
+    throw new Error(`GitHub responded ${res.status}: ${detail}`);
+  }
+  const body = await res.text();
+  await edge?.put(
+    url,
+    new Response(body, {
+      headers: { "content-type": "application/json", "cache-control": `max-age=${TTL_MS / 1000}` },
+    }),
+  );
+  return JSON.parse(body) as T;
+}
+
 export type Platform = "windows" | "macos" | "linux" | "android" | "ios";
 
 export type Installer = { label: string; url: string; size: number };
@@ -58,12 +100,7 @@ let cache: { at: number; release: Release } | null = null;
 async function latestRelease(): Promise<Release | null> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.release;
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "polarity-web" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
-    const release = toRelease((await res.json()) as GitHubRelease);
+    const release = toRelease(await github<GitHubRelease>("/releases/latest"));
     cache = { at: Date.now(), release };
     return release;
   } catch (error) {
@@ -93,12 +130,7 @@ async function closedIssues(): Promise<ClosedIssue[] | null> {
   if (issuesCache && Date.now() - issuesCache.at < TTL_MS) return issuesCache.issues;
   try {
     // The issues endpoint also returns pull requests, and can't sort by close time: over-fetch, then filter and sort.
-    const res = await fetch(`https://api.github.com/repos/${REPO}/issues?state=closed&sort=updated&per_page=40`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "polarity-web" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
-    const issues = ((await res.json()) as GitHubIssue[])
+    const issues = (await github<GitHubIssue[]>("/issues?state=closed&sort=updated&per_page=40"))
       // Fixed or done only: not pull requests, and not issues closed as duplicates or won't-fix.
       .filter((i) => !i.pull_request && i.closed_at && (i.state_reason ?? "completed") === "completed")
       .sort((a, b) => Date.parse(b.closed_at!) - Date.parse(a.closed_at!))

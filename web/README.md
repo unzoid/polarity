@@ -8,6 +8,14 @@ SolidJS + Tailwind pages, with two Elysia routes that read GitHub: `/api/release
 `/api/issues` (recently fixed issues, shown in the Open source section).
 Hosted on Cloudflare Workers: Cloudflare serves the built pages in `dist/`, the Worker answers `/api/*`.
 
+The Worker needs a GitHub token as the `GITHUB_TOKEN` secret: without one, GitHub's per-IP limit is shared with
+other Cloudflare customers and the routes fail, so the download page shows only links to the releases page. A
+fine-grained token with read-only access to public repositories is enough:
+
+```sh
+bunx wrangler secret put GITHUB_TOKEN
+```
+
 ```sh
 bun install
 bun run dev       # Vite dev server, /api mounted in it
