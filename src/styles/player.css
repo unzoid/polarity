@@ -446,7 +446,7 @@
 
 /* Phone, and a tablet's compact window (data-compact: an iPad's Slide Over or narrow Split View):
    the title sits beside Back instead of over the middle; on a phone the volume is the phone's own
-   buttons (mute stays), and each action puts its label under its icon. */
+   buttons (#460), and each action puts its label under its icon. */
 :root:is([data-form="phone"], [data-compact="true"]) .player-top {
   grid-template-columns: max-content minmax(0, 1fr) max-content;
   column-gap: 0.5rem;
@@ -1427,6 +1427,34 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .main {
 }
 .player-status {
   z-index: 2; /* above the surface so its buttons work; chrome still on top */
+}
+/* A phone, or a compact window (#467): the screen is too short for the error to sit in the middle under the
+   bars, where its buttons met the controls and a tap could land on either. It keeps to the space between
+   Back's row and the timeline, its mark a size down, and scrolls there if it still doesn't fit. */
+:root:is([data-form="phone"], [data-compact="true"]) .player-status[data-failed="true"] {
+  padding: calc(var(--safe-top) + 4rem) max(1rem, var(--safe-right)) calc(var(--safe-bottom) + 6.75rem) max(1rem, var(--safe-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: safe center;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .player-status[data-failed="true"] .player-status-content {
+  gap: 0.625rem;
+  padding: 0;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .player-status[data-failed="true"] .load-mark > * {
+  max-height: 64px;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .player-status[data-failed="true"] .load-mark-text {
+  font-size: 1.75rem;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .player-status[data-failed="true"] .player-steps[data-all="true"] {
+  max-height: 6.5rem;
+}
+/* With nothing playing there's no frosted copy of the video to blur: a panel opened over the loading or error
+   screen (Watch Party, Sources) frosts the screen itself, so its text doesn't read through the panel (#467). */
+.player:has(.player-status) .options-overlay[data-open="true"]:not([data-place="beside"]) .options-shade {
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
 }
 
 /* --- Buffering takes the play/pause spot instead of sitting behind it. */
@@ -2526,4 +2554,61 @@ img.load-mark-base[data-logo-look^="halo"] {
     height: 55%;
     padding-top: 4rem;
   }
+}
+
+/* --- Sleep timer (#270) ---------------------------------------------------------
+   The time left sits by the clock while one runs; its last minute asks top left, clear of Skip Intro on the
+   right; run out, a quiet screen over the paused picture offers Resume. */
+.player-sleep {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.sleep-prompt {
+  position: absolute;
+  left: max(2.5rem, var(--safe-left));
+  bottom: calc(10.5rem + var(--safe-bottom));
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border-radius: var(--r-pill);
+  background: var(--surface-float);
+  box-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
+  color: var(--text);
+  animation: fade-in var(--dur-base) var(--ease-out);
+}
+.sleep-prompt-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+:root[data-form="phone"] .sleep-prompt {
+  left: max(1.25rem, var(--safe-left));
+  bottom: calc(6.25rem + max(0.25rem, calc(var(--safe-bottom) - 0.75rem)));
+}
+.sleep-ended {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.875rem;
+  background: rgb(0 0 0 / 0.72);
+  color: var(--text-2);
+  animation: fade-in var(--dur-slow) var(--ease-out);
+}
+.sleep-ended-title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  color: var(--text);
 }

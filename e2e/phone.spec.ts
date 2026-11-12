@@ -53,9 +53,11 @@ test("tabs, a title page and the player by touch", async ({ app }) => {
   await player.tap({ position: { x: 200, y: 300 } });
   await expect(player).toHaveAttribute("data-chrome", "false");
   await player.tap({ position: { x: 200, y: 300 } });
-  // An Android phone's volume buttons set the volume: no slider, Mute still there (#179).
+  // A phone's volume buttons set the volume: no slider and no volume button (#179, #460), and the player plays at full volume.
+  await expect(player.getByRole("button", { name: "Back", exact: true })).toBeVisible();
   await expect(player.getByRole("slider", { name: "Volume" })).toHaveCount(0);
-  await expect(player.getByRole("button", { name: "Mute" })).toBeVisible();
+  await expect(player.getByRole("button", { name: /^(Mute|Unmute|Volume)$/ })).toHaveCount(0);
+  expect(await player.locator("video").evaluate((v: HTMLVideoElement) => [v.volume, v.muted])).toEqual([1, false]);
   // Back is the title page's, in the same spot (#348).
   expect(await backPlace(app, "player")).toBe(backOnPage);
   await player.getByRole("button", { name: "Back", exact: true }).tap();
@@ -717,4 +719,33 @@ test("each page starts right under the top bar, which sits right under the statu
   const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
   // The text's own top, once the page has slid in.
   await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
+});
+
+test("the error screen on a phone keeps clear of the controls, and a panel opened over it covers it (#467)", async ({ app }) => {
+  await app.goto("/fake.html?sources=filtered");
+  await app.setViewportSize({ width: 915, height: 412 });
+  await insets(app, { top: 0, right: 59, bottom: 21, left: 59 });
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).tap();
+  await card(app, "The Glass Orchard").tap();
+  await app.getByRole("button", { name: "Play", exact: true }).tap();
+  const player = app.locator(".player");
+  const status = player.locator('.player-status[data-failed="true"]');
+  await expect(status).toBeVisible();
+  // With the controls up, none of the error's buttons sits under one of them.
+  await player.tap({ position: { x: 120, y: 200 } });
+  await expect(player).toHaveAttribute("data-chrome", "true");
+  const overlaps = await app.evaluate(() => {
+    const boxes = (sel: string) =>
+      [...document.querySelectorAll<HTMLElement>(sel)].filter((e) => e.offsetParent).map((e) => ({ name: e.getAttribute("aria-label") ?? e.textContent?.trim(), r: e.getBoundingClientRect() }));
+    const controls = boxes(".player :is(.player-top, .player-bottom) :is(button, input)");
+    const mine = boxes(".player-status button");
+    const meet = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    return mine.flatMap((m) => controls.filter((c) => meet(m.r, c.r)).map((c) => `${m.name} under ${c.name}`));
+  });
+  expect(overlaps).toEqual([]);
+  // A panel over the error frosts it: the error's text doesn't read through.
+  await status.getByRole("button", { name: "Choose Another Source" }).tap();
+  const shade = player.locator('.options-overlay[data-open="true"] .options-shade');
+  await expect(shade).toBeVisible();
+  expect(await shade.evaluate((e) => getComputedStyle(e).backdropFilter || getComputedStyle(e).getPropertyValue("-webkit-backdrop-filter"))).toContain("blur");
 });

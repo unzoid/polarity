@@ -1,5 +1,16 @@
 import { Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Calendar, Check, ChevronLeft, ChevronRight, Edit, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
+import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
+import { api } from "../lib/api";
+import { appVersion } from "../lib/updater";
+import { feedbackContext, feedbackUrl } from "../lib/feedback";
+
+/** Report a Problem: the bug form, with the version once it's known (never held up by it). */
+function reportProblem() {
+  void appVersion()
+    .catch(() => undefined)
+    .then((v) => api.openExternal(feedbackUrl("bug", feedbackContext(v))))
+    .catch(warnFailed("Opening the bug report form"));
+}
 import { canOpenFiles, setOpenFilesOpen } from "../lib/localFiles";
 import { closePartySurface, getParty, leaveParty, partyAvailable, setJoinPartyOpen, usePartySurface } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
@@ -74,6 +85,8 @@ export function ProfileMenu() {
     ...(!settings?.showCalendar ? [{ id: "calendar", label: "Calendar", icon: <Calendar />, run: () => tab({ name: "calendar" }) }] : []),
     { id: "settings", label: "Settings", icon: <Settings />, run: () => openSettings(), stay: true },
     ...(me ? [{ id: "account", label: "Account", icon: <Profile />, run: () => openSettings("account"), stay: true }] : []),
+    // The bug form in the browser, filled in with this device (#205); Settings → About has the other kinds.
+    { id: "report", label: "Report a Problem", icon: <Feedback />, run: reportProblem },
   ];
   const session: Choice[] = me
     ? [{ id: "sign-out", label: "Sign Out", icon: <SignOut />, run: () => void account.signOut() }]

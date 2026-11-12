@@ -2452,3 +2452,34 @@ test("subtitle Font starts at From the subtitles; a picked font is kept (#347)",
   settings = await open();
   await expect(font()).toHaveText(/^Segoe UI/);
 });
+
+test("the sleep timer counts down by the clock, offers +15 min in its last minute, then pauses and offers Resume (#270)", async ({ app }) => {
+  await app.clock.install();
+  await app.reload();
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+
+  await player.getByRole("button", { name: "Sleep Timer" }).click();
+  await app.locator(".options-overlay[data-open=true]").getByRole("button", { name: "15 minutes" }).click();
+  await expect(player.getByRole("timer")).toHaveText("15:00");
+
+  // A minute to go: the prompt; +15 min puts it back to sixteen.
+  await app.clock.runFor(14 * 60_000);
+  const prompt = player.getByRole("alertdialog", { name: "Sleep timer" });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "+15 min" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(player.getByRole("timer")).toHaveText("16:00");
+
+  // Run out: paused, the screen says so, Resume plays again with no timer.
+  await app.clock.runFor(16 * 60_000 + 1000);
+  const ended = player.getByRole("dialog", { name: "Sleep timer ended" });
+  await expect(ended).toBeVisible();
+  expect(await player.locator("video").evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await ended.getByRole("button", { name: "Resume" }).click();
+  await expect(ended).toHaveCount(0);
+  await expect(player.getByRole("timer")).toHaveCount(0);
+});

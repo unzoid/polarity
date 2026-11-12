@@ -39,6 +39,8 @@ export interface Prefs {
   preferFileChapters: boolean;
   /** Seconds the Skip button counts down before an automatic intro or recap skip; 0 = skip at once. */
   autoSkipDelay: number;
+  /** While a video loads, the list of loading steps with their times under the one line that says how far it got (#469). */
+  loadingDetails: boolean;
 
   // This machine's screen, speakers and GPU:
   /** Interface zoom, 1 = 100%. */
@@ -169,6 +171,7 @@ const DEFAULTS: Prefs = {
   padPlayerVolume: true,
   preferFileChapters: true,
   autoSkipDelay: 5,
+  loadingDetails: false,
   uiScale: 1,
   pauseOnMinimize: false,
   discordPresence: "app",

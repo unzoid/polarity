@@ -136,7 +136,7 @@ import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
 import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
-import { More, Pin, Pinned, WatchParty } from "../components/icons";
+import { Moon, More, Pin, Pinned, WatchParty } from "../components/icons";
 import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
 import { MenuCheckItem, MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
 import { watch, watchLog } from "../lib/playback/watchLog";
@@ -152,6 +152,8 @@ import { useMediaTime } from "../components/player/useMediaTime";
 import { usePlayerChrome } from "../components/player/usePlayerChrome";
 import { usePlayerKeyboard } from "../components/player/usePlayerKeyboard";
 import { useProgressSaver } from "../components/player/useProgressSaver";
+import { useSleepTimer } from "../components/player/useSleepTimer";
+import { SLEEP_CHOICES, sleepLabel, type SleepChoice } from "../lib/playback/sleepTimer";
 import { useSimklScrobble } from "../components/player/useSimklScrobble";
 import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
@@ -286,6 +288,14 @@ export function Player({
   // What the player did while it played, for "Copy Watch Log" (dev builds only, #424).
   useWatchLog(media, videoId);
   videoRef.current = media;
+  // Sleep timer (#270): off at every start; run out, this player alone pauses, progress saved where it stopped.
+  const sleep = useSleepTimer(media);
+  useEffect(() => {
+    if (!sleep.asleep) return;
+    videoRef.current?.pause();
+    save();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sleep.asleep]);
   /** Why the link check turned the built-in player's source down (mpv reports its own). */
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
@@ -298,7 +308,7 @@ export function Player({
   const [notice, flashNotice] = useNotice();
   const [ended, setEnded] = useState(false);
   const [nextDismissed, setNextDismissed] = useState(false);
-  const [options, setOptions] = useState<"speed" | "tracks" | "episodes" | "sources" | "party" | null>(null);
+  const [options, setOptions] = useState<"speed" | "sleep" | "tracks" | "episodes" | "sources" | "party" | null>(null);
   // The Watch Party panel is a party surface (lib/party/surface.ts, #247): another one coming up closes it.
   const partySurface = usePartySurface();
   useEffect(() => {
@@ -443,7 +453,7 @@ export function Player({
   // A link is its own file: no release name for others to look for.
   const hint = useMemo(() => (link ? undefined : streamHint(playingStream)), [link, playingStream]);
   const partyMedia = link ? linkMedia(link) : { type, metaId, videoId, label: heading || undefined };
-  usePartySync({ media, current: partyMedia, started, buffering, hint, leaving });
+  usePartySync({ media, current: partyMedia, started, buffering, hint, leaving, asleep: sleep.asleep });
   const startHere = () => {
     const v = videoRef.current;
     if (!party && profile && v) startParty({ ...partyMedia, hint }, v.currentTime, v.paused, profile);
@@ -554,10 +564,11 @@ export function Player({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.volume = sliderAmplitude(volume);
+    // The sleep timer fades the sound out over its last 30 s; the stored level stays the viewer's.
+    v.volume = sliderAmplitude(volume) * sleep.gain;
     v.muted = muted;
     if (!systemVolume) storeLocal("polar.volume", String(volume));
-  }, [volume, muted, media]);
+  }, [volume, muted, media, sleep.gain]);
 
   // A watch party plays at 1x for everyone (its sync nudges the rate itself).
   const inParty = !!party;
@@ -1070,6 +1081,7 @@ export function Player({
           pingVolume("down");
           return true;
         case "mute":
+          if (systemVolume) return false;
           setMuted((m) => !m);
           pingVolume("mute");
           return true;
@@ -1152,7 +1164,8 @@ export function Player({
   // whether anyone's still watching (Settings → Playback).
   const askAfter = settings?.stillWatchingAfter ?? 0;
   const stillWatching = askAfter > 0 && autoplayStreak() >= askAfter;
-  const willAutoplay = !!settings?.autoplayNext && !stillWatching;
+  // A sleep timer set to the end of this episode (or run out) stops here: no next one (#270).
+  const willAutoplay = !!settings?.autoplayNext && !stillWatching && sleep.choice !== "episode" && !sleep.asleep;
   useEffect(() => {
     if (!ended || !next || nextDismissed || !willAutoplay) return;
     const t = window.setTimeout(() => {
@@ -1502,17 +1515,17 @@ export function Player({
         <div className="player-top-end">
           <div className="player-top-actions">
             {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
-            <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
-              <IconButton
-                variant="player"
-                onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
-                label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
-                aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
-                title={withShortcut("Mute", "mute")}
-              >
-                <VolumeIcon size={22} />
-              </IconButton>
-              {!systemVolume && (
+            {!systemVolume && (
+              <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
+                <IconButton
+                  variant="player"
+                  onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
+                  label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
+                  aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
+                  title={withShortcut("Mute", "mute")}
+                >
+                  <VolumeIcon size={22} />
+                </IconButton>
                 <span className="player-volume-slider">
                   <input
                     type="range"
@@ -1528,8 +1541,8 @@ export function Player({
                     style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
                   />
                 </span>
-              )}
-            </div>
+              </div>
+            )}
             {airplay.available && (
               <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
                 <Cast size={22} />
@@ -1653,12 +1666,19 @@ export function Player({
       >
         <div className="player-timeline">
           <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} onSeek={seekTo} />
+          {sleep.left != null && (
+            <span className="player-sleep tabular" role="timer" aria-label={`Sleep timer: ${sleepLabel(sleep.left)} left`}>
+              <Moon size={16} />
+              {sleepLabel(sleep.left)}
+            </span>
+          )}
           <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
         <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (
             <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
           )}
+          <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
           {type === "series" && (
             <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
           )}
@@ -1683,6 +1703,36 @@ export function Player({
         </div>
       </div>
 
+      {/* The sleep timer's last minute: more time, or no timer (#270). */}
+      {sleep.warning && !sleep.asleep && (
+        <div className="sleep-prompt" role="alertdialog" aria-label="Sleep timer">
+          <span className="sleep-prompt-text">
+            <Moon size={18} /> Stopping in {sleepLabel(sleep.left ?? 0)}
+          </span>
+          <Button size="sm" variant="primary" onClick={sleep.extend}>
+            +15 min
+          </Button>
+          <Button size="sm" variant="glass" onClick={sleep.cancel}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {sleep.asleep && (
+        <div className="sleep-ended" role="dialog" aria-label="Sleep timer ended">
+          <Moon size={32} />
+          <p className="sleep-ended-title">Sleep timer ended</p>
+          <Button
+            variant="primary"
+            autoFocus
+            onClick={() => {
+              sleep.wake();
+              void videoRef.current?.play();
+            }}
+          >
+            <Play size={17} fill="currentColor" /> Resume
+          </Button>
+        </div>
+      )}
       <OptionsOverlay
         open={options === "speed"}
         onClose={() => setOptions(null)}
@@ -1710,6 +1760,23 @@ export function Player({
                 },
               ]
             : []),
+        ]}
+      />
+      <OptionsOverlay
+        open={options === "sleep"}
+        onClose={() => setOptions(null)}
+        media={media}
+        columns={[
+          {
+            title: "Sleep Timer",
+            value: sleep.choice,
+            // A film or a single video stops at its own end.
+            options: SLEEP_CHOICES.map((c) => (c.id === "episode" && type !== "series" ? { ...c, label: "When this video ends" } : c)),
+            onSelect: (id: string) => {
+              sleep.set(id as SleepChoice);
+              setOptions(null);
+            },
+          },
         ]}
       />
       <OptionsOverlay
@@ -1994,11 +2061,12 @@ function pinHintSeen() {
 }
 
 /**
- * Android phones and tablets (#179): their volume buttons and the system's volume panel set the
- * volume, so the player has no slider and plays at full volume itself (a level set before can't
- * be left stuck low with nothing to raise it). Android TV keeps the remote's volume HUD.
+ * Android and iOS phones and tablets (#179, #460): their volume buttons and the system's volume
+ * panel or Control Centre set the volume, so the player has no volume button or slider and plays
+ * at full volume itself (a level or mute set before can't be left stuck with nothing to undo it).
+ * Android TV keeps the remote's volume HUD.
  */
-const systemVolume = os === "android" && !isTvDevice;
+const systemVolume = (os === "android" || os === "ios") && !isTvDevice;
 
 /** The volume last set, 0–1 (1 when none was, or it isn't a number; always 1 where the system sets it). */
 function savedVolume() {

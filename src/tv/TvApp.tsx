@@ -39,6 +39,7 @@ import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { SecretsSyncToast } from "../components/SecretsSyncToast";
+import { LockedKeysToast } from "../components/LockedKeysToast";
 
 function TvScreen({ route }: { route: Route }) {
   switch (route.name) {
@@ -274,6 +275,7 @@ export function TvApp() {
         <StoreProblemToast tv />
         <AccountFullToast tv />
         <SecretsSyncToast tv />
+        <LockedKeysToast tv />
       </main>
       <PlayerLayer player={player} leaving={leaving} />
     </div>
