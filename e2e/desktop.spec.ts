@@ -2462,22 +2462,29 @@ test("the sleep timer counts down by the clock, offers +15 min in its last minut
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
 
-  // The clock stands still from here, so each reading of the time left is exact; runFor moves it on.
-  await app.clock.pauseAt((await app.evaluate(() => Date.now())) + 1000);
+  // The clock stands still from here, so the time left reads exactly. Minutes later is a jump of the time of day
+  // (which fires nothing) and then a moment run, for the timer's next tick: running every frame of a quarter of an
+  // hour would take longer than the test may.
+  const set = (await app.evaluate(() => Date.now())) + 1000;
+  await app.clock.pauseAt(set);
+  const at = async (ms: number) => {
+    await app.clock.setSystemTime(set + ms);
+    await app.clock.runFor(1500);
+  };
   await player.getByRole("button", { name: "Sleep Timer" }).click();
   await app.locator(".options-overlay[data-open=true]").getByRole("radio", { name: "15 minutes" }).click();
   await expect(player.getByRole("timer")).toHaveText("15:00");
 
-  // A minute to go: the prompt; +15 min puts it back to sixteen.
-  await app.clock.runFor(14 * 60_000);
+  // A minute to go: the prompt; +15 min adds a quarter of an hour, to about sixteen.
+  await at(14 * 60_000);
   const prompt = player.getByRole("alertdialog", { name: "Sleep timer" });
   await expect(prompt).toBeVisible();
   await prompt.getByRole("button", { name: "+15 min" }).click();
   await expect(prompt).toHaveCount(0);
-  await expect(player.getByRole("timer")).toHaveText("16:00");
+  await expect(player.getByRole("timer")).toHaveText(/^1[56]:\d\d$/);
 
   // Run out: paused, the screen says so, Resume plays again with no timer.
-  await app.clock.runFor(16 * 60_000 + 1000);
+  await at(31 * 60_000);
   const ended = player.getByRole("dialog", { name: "Sleep timer ended" });
   await expect(ended).toBeVisible();
   expect(await player.locator("video").evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
