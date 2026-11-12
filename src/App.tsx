@@ -49,6 +49,7 @@ import { SignOutDialog } from "./components/SignOutDialog";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
+import { LockedKeysToast } from "./components/LockedKeysToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
 import { useQuery } from "@tanstack/react-query";
@@ -436,6 +437,7 @@ function DesktopApp() {
         <StoreProblemToast tv={false} />
         <AccountFullToast tv={false} />
         <SecretsSyncToast tv={false} />
+        <LockedKeysToast tv={false} />
       </ErrorBoundary>
       <ErrorBoundary where="card menu" quiet>
         {!playing && <CardMenuHost />}

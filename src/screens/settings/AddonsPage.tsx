@@ -10,7 +10,7 @@ import { Switch } from "../../components/ui/Switch";
 import { Card, ExpandRow, FormRow, useExpanded } from "../../components/settings/rows";
 import { showWhereStored, useSecretsNote } from "../../components/settings/secretsNote";
 import { useKeyGate, useSecretsPlain } from "../../components/settings/KeyWarning";
-import { linkHasKey } from "../../lib/account";
+import { linkHasKey, useAccount, useSecretsLocked } from "../../lib/account";
 import { addonHomeCatalogs, catalogKey, useAddonCatalogs, useHomeCatalogSetting, withAddonOnHome, withCatalogMoved } from "../../lib/catalog";
 import { setStremioLinks, stremioLinksOs, type Os } from "../../lib/platform";
 import { setPrefs } from "../../lib/settings";
@@ -26,6 +26,9 @@ export function AddonsPage() {
   const note = useSecretsNote();
   const gate = useKeyGate();
   const plain = useSecretsPlain();
+  // Signed in on a new device with the keys sealed (#470): said first, with the way to unlock them.
+  const account = useAccount();
+  const locked = useSecretsLocked(account.status === "ready" ? account.profile?.id : null);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.addons });
@@ -52,6 +55,18 @@ export function AddonsPage() {
 
   return (
     <>
+      {locked && (
+        <div className="settings-key-warning" role="status" data-kind="locked">
+          <p className="settings-expand-text">
+            <strong>Your account's add-ons are locked on this device.</strong> They're encrypted with your passphrase, and can't be installed or used here until you type it.
+          </p>
+          <div className="settings-expand-form">
+            <Button variant="primary" onClick={showWhereStored}>
+              Unlock
+            </Button>
+          </div>
+        </div>
+      )}
       {!!addons?.length && (
         <Card title="Installed" footer={note}>
           {addons.map((a) => (

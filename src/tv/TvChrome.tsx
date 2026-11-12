@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import logo from "../assets/polarity-white.png";
 import { Avatar } from "../components/Avatar";
 import { Calendar, Close, Desktop, Power, Profile, Search, Settings, Tv, Users, WatchParty } from "../components/icons";
 import { partyAvailable, setJoinPartyOpen, setPartyMenuOpen, useParty } from "../lib/party";
@@ -58,6 +59,8 @@ export function TvNav({ onMenu }: { onMenu: () => void }) {
       <button className="tv-nav-me" onClick={onMenu} aria-label="Menu">
         {profile ? <Avatar id={profile.avatar} /> : <Tv size={28} />}
       </button>
+      {/* The app's name beside the profile, as the desktop navbar has it (#476); not a stop for the remote. */}
+      <img className="tv-nav-brand wordmark" src={logo} alt="Polarity" draggable={false} />
       {/* Switching sections keeps focus on the tabs; the menu's choices (Settings) land in the page. */}
       <nav className="tv-nav-tabs" aria-label="Sections" data-nav-keep>
         {tabs.map((t) => {

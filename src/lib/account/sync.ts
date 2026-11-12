@@ -45,6 +45,10 @@ let failures = 0;
 let others: string[] = [];
 
 const onWake = () => void run();
+/** Going to the background with changes waiting: send them now, as a phone may end the app before the timer fires. */
+const onHide = () => {
+  if (document.visibilityState === "hidden" && pending !== undefined) void sync.flush().catch(() => {});
+};
 
 async function run(): Promise<void> {
   if (!active || !backend) return;
@@ -181,6 +185,7 @@ export const sync = {
     interval = window.setInterval(run, PERIOD_MS);
     window.addEventListener("focus", onWake);
     window.addEventListener("online", onWake);
+    document.addEventListener("visibilitychange", onHide);
     return run();
   },
   stop() {
@@ -194,6 +199,7 @@ export const sync = {
     pending = undefined;
     window.removeEventListener("focus", onWake);
     window.removeEventListener("online", onWake);
+    document.removeEventListener("visibilitychange", onHide);
   },
   /** Push soon after a local change. */
   schedule: () => later(AFTER_CHANGE_MS),

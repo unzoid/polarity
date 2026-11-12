@@ -41,15 +41,27 @@ export function cardOrigin(key: number): CardRect | undefined {
   return prefersReducedMotion() ? undefined : origins.get(key);
 }
 
-/** Notes the card a click lands on (its art, not the caption under it), for the page it opens to grow out of. */
+/**
+ * The card a click on `target` lands in: its art's place (not the caption under it) and the picture on it, once
+ * loaded. The featured banner (Home's and the Anime tab's) counts as one (#214): its page grows out of the banner,
+ * the picture showing on it riding along.
+ */
+export function cardAt(target: Element | null): CardRect | undefined {
+  const banner = target?.closest(".hero-card");
+  const card = banner ?? target?.closest(".card");
+  const frame = banner ?? card?.querySelector(".card-frame") ?? card;
+  const r = frame?.getBoundingClientRect();
+  if (!r || r.width <= 0) return undefined;
+  const img = banner ? banner.querySelector<HTMLImageElement>('.hero-backdrop[data-current="true"]') : frame?.querySelector("img");
+  const src = img?.complete && img.naturalWidth > 0 ? img.currentSrc || img.src : undefined;
+  return { x: r.left, y: r.top, w: r.width, h: r.height, src };
+}
+
+/** Notes the card a click lands on (`cardAt`), for the page it opens to grow out of. */
 export function watchCardTaps() {
   const onClick = (e: MouseEvent) => {
-    const card = e.target instanceof Element ? e.target.closest(".card") : null;
-    const frame = card?.querySelector(".card-frame") ?? card;
-    const r = frame?.getBoundingClientRect();
-    const img = frame?.querySelector("img");
-    const src = img?.complete && img.naturalWidth > 0 ? img.currentSrc || img.src : undefined;
-    tapped = r && r.width > 0 ? { rect: { x: r.left, y: r.top, w: r.width, h: r.height, src }, at: performance.now() } : undefined;
+    const rect = cardAt(e.target instanceof Element ? e.target : null);
+    tapped = rect ? { rect, at: performance.now() } : undefined;
   };
   document.addEventListener("click", onClick, true);
   return () => document.removeEventListener("click", onClick, true);

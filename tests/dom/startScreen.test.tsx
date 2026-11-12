@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { PlayerStatus } from "../../src/components/player/PlayerStatus";
 import type { StartStep } from "../../src/lib/playback";
+import { setPrefs } from "../../src/lib/settings/prefs";
 import { byText, click, render } from "./render";
 
 const steps: StartStep[] = [
@@ -15,15 +16,32 @@ const steps: StartStep[] = [
 
 const noop = () => {};
 
-test("while loading: the stage message and the last five steps, nothing to press", async () => {
-  const { container } = await render(<PlayerStatus state={{ status: "searching" }} error={null} name="Sintel" steps={steps} backend="mpv" onSources={noop} />);
+test("while loading: one line that changes in place, no times, nothing to press (#469)", async () => {
+  const { container, rerender } = await render(<PlayerStatus state={{ status: "searching" }} error={null} name="Sintel" steps={steps} backend="mpv" onSources={noop} />);
   expect(container.querySelector("[role=status]")!.textContent).toBe("Finding the best source");
-  const lines = container.querySelectorAll(".player-steps li");
-  expect(lines.length).toBe(5);
-  expect(lines[0].textContent).toContain("Open Films: 3 sources");
-  expect(lines[4].getAttribute("data-current")).toBe("true");
+  expect(container.querySelector(".player-steps")).toBeNull();
+  expect(container.textContent).not.toMatch(/\d\.\ds/);
   expect(container.querySelector(".player-status-where")).toBeNull();
   expect(container.querySelectorAll("button").length).toBe(0);
+  await rerender(<PlayerStatus state={{ status: "resolving" }} error={null} name="Sintel" steps={steps} backend="mpv" onSources={noop} />);
+  expect(container.querySelectorAll("[role=status]").length).toBe(1);
+  expect(container.querySelector("[role=status]")!.textContent).toBe("Connecting");
+});
+
+test("while loading with Detailed loading information on: the last five steps with their times (#469)", async () => {
+  setPrefs({ loadingDetails: true });
+  try {
+    const { container } = await render(<PlayerStatus state={{ status: "searching" }} error={null} name="Sintel" steps={steps} backend="mpv" onSources={noop} />);
+    expect(container.querySelector("[role=status]")!.textContent).toBe("Finding the best source");
+    const lines = container.querySelectorAll(".player-steps li");
+    expect(lines.length).toBe(5);
+    expect(lines[0].textContent).toContain("Open Films: 3 sources");
+    expect(lines[0].textContent).toContain("0.4s");
+    expect(lines[4].getAttribute("data-current")).toBe("true");
+    expect(container.querySelectorAll("button").length).toBe(0);
+  } finally {
+    setPrefs({ loadingDetails: false });
+  }
 });
 
 test("failed: says where it failed, keeps the whole log behind Show Steps, focuses Choose Another Source", async () => {

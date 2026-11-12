@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Reset, Download, Info, Lock, Trash } from "../../components/icons";
+import { Reset, Download, Feedback, Info, Lock, Trash } from "../../components/icons";
+import { FEEDBACK_EMAIL, FEEDBACK_KINDS, feedbackContext, feedbackUrl } from "../../lib/feedback";
 import { api } from "../../lib/api";
 import tmdbLogo from "../../assets/tmdb-short.svg";
 import { CREDITS, PRIVACY_URL, TERMS_URL, TMDB_NOTICE } from "../../lib/settings";
@@ -126,6 +127,7 @@ export function AboutPage() {
           onClick={() => void api.openExternal(releaseUrl())}
         />
       </Card>
+      <FeedbackCard version={version} />
       <CacheCard />
       <CreditsCard />
     </>
@@ -167,6 +169,20 @@ function DevBuildsRow({ current, ...props }: Expandable & { current?: string }) 
         </ul>
       )}
     </ExpandRow>
+  );
+}
+
+/**
+ * Send Feedback (#205): each kind opens its issue form in the browser, filled in with this device's system,
+ * interface and version. Nothing is sent from here; people without a GitHub account are given the email address.
+ */
+function FeedbackCard({ version }: { version?: string }) {
+  return (
+    <Card title="Send Feedback" footer={`No GitHub account? Write to ${FEEDBACK_EMAIL}. Nothing is sent from Polarity by itself.`}>
+      {FEEDBACK_KINDS.map((k) => (
+        <LinkRow key={k.id} icon={Feedback} title={k.label} caption={k.caption} onClick={() => void api.openExternal(feedbackUrl(k.id, feedbackContext(version)))} />
+      ))}
+    </Card>
   );
 }
 

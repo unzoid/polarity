@@ -103,17 +103,24 @@ describe("keys and add-on links on every device (#89)", () => {
     on(b);
     b.settings.omdbKey = "key-b2"; // a change here doesn't reach the sealed copy
     const seal = stored!.data.sealed;
+    // The notice and Settings follow the locked state as rounds find it (#470).
+    let told = 0;
+    const stop = s.onSecretsLockedChange(() => told++);
     await round();
     expect(s.secretsState(P)).toBe("locked");
+    expect(told).toBe(1);
     expect(stored!.data.sealed).toBe(seal);
     expect(b.settings.omdbKey).toBe("key-b2");
 
     s.unlockSecrets(P, "wrong");
     await round();
     expect(s.secretsState(P)).toBe("locked");
+    expect(told).toBe(1);
     s.unlockSecrets(P, "correct horse");
     await round();
     expect(s.secretsState(P)).toBe("sealed");
+    expect(told).toBe(2);
+    stop();
     expect(b.settings.omdbKey).toBe("key-b");
   });
 
@@ -403,5 +410,36 @@ describe("a round whose profile was left stops (plan 002)", () => {
     const { calls, wrapper } = counting();
     await s.syncSettings("left4", wrapper, () => true);
     expect(calls.put).toBe(1);
+  });
+});
+
+describe("a change not yet synced when the app ends (phones)", () => {
+  test("starting again keeps it, and the next round sends it", async () => {
+    const d = device();
+    on(d);
+    stored = null;
+    await s.keepDeviceSettings("T");
+    await s.restoreSettings("T");
+    await s.syncSettings("T", server, () => true);
+    // Changed, then the app ended before a round ran.
+    d.settings.seekStep = 30;
+    // Started again: the store is still this profile's.
+    await s.restoreSettings("T", await s.keepDeviceSettings("T"));
+    expect(d.settings.seekStep).toBe(30);
+    await s.syncSettings("T", server, () => true);
+    expect((stored!.data.settings as Record<string, unknown>).seekStep).toBe(30);
+  });
+
+  test("switching from another profile still puts this one's back", async () => {
+    const d = device();
+    on(d);
+    stored = null;
+    await s.keepDeviceSettings("U");
+    await s.syncSettings("U", server, () => true);
+    // Another profile's settings in the store.
+    await s.keepDeviceSettings("V");
+    d.settings.seekStep = 45;
+    await s.restoreSettings("U", await s.keepDeviceSettings("U"));
+    expect(d.settings.seekStep).toBe(10);
   });
 });

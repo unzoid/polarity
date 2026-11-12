@@ -512,3 +512,16 @@ test.describe("signed in (a YouTube video comes to TV mode in a watch party)", (
     await expect(player).toHaveCount(0);
   });
 });
+
+test("the Polarity wordmark sits beside the profile and the remote passes it by (#476)", async ({ app }) => {
+  await expect(focused(app)).toHaveAccessibleName("The Understudies");
+  const nav = app.locator(".tv-nav");
+  const [me, brand, tabs] = await Promise.all([
+    nav.getByRole("button", { name: "Menu" }).boundingBox(),
+    nav.getByRole("img", { name: "Polarity" }).boundingBox(),
+    nav.getByRole("navigation", { name: "Sections" }).boundingBox(),
+  ]);
+  expect(brand!.x).toBeGreaterThan(me!.x + me!.width);
+  expect(brand!.x + brand!.width).toBeLessThan(tabs!.x);
+  expect(Math.abs(brand!.y + brand!.height / 2 - (me!.y + me!.height / 2))).toBeLessThan(3);
+});

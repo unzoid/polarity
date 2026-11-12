@@ -332,6 +332,15 @@ export const SETTINGS: SettingDef[] = [
   },
   { id: "rememberSpeed", page: "playback", title: "Remember playback speed", keywords: "rate faster slower" },
   {
+    id: "loadingDetails",
+    page: "playback",
+    title: "Detailed loading information",
+    caption: "While a video loads, list each step with its time instead of one line",
+    keywords: "loading steps log debug details",
+    bind: p("loadingDetails"),
+    control: toggle,
+  },
+  {
     id: "timeDisplay",
     page: "playback",
     title: "Clock",

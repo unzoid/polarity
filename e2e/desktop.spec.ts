@@ -2452,3 +2452,43 @@ test("subtitle Font starts at From the subtitles; a picked font is kept (#347)",
   settings = await open();
   await expect(font()).toHaveText(/^Segoe UI/);
 });
+
+test("the sleep timer counts down by the clock, offers +15 min in its last minute, then pauses and offers Resume (#270)", async ({ app }) => {
+  await app.clock.install();
+  await app.reload();
+  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
+  await card(app, "The Glass Orchard").click();
+  await app.getByRole("button", { name: "Play", exact: true }).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+
+  // The clock stands still from here, so the time left reads exactly. Minutes later is a jump of the time of day
+  // (which fires nothing) and then a moment run, for the timer's next tick: running every frame of a quarter of an
+  // hour would take longer than the test may.
+  const set = (await app.evaluate(() => Date.now())) + 1000;
+  await app.clock.pauseAt(set);
+  const at = async (ms: number) => {
+    await app.clock.setSystemTime(set + ms);
+    await app.clock.runFor(1500);
+  };
+  await player.getByRole("button", { name: "Sleep Timer" }).click();
+  await app.locator(".options-overlay[data-open=true]").getByRole("radio", { name: "15 minutes" }).click();
+  await expect(player.getByRole("timer")).toHaveText("15:00");
+
+  // A minute to go: the prompt; +15 min adds a quarter of an hour, to about sixteen.
+  await at(14 * 60_000);
+  const prompt = player.getByRole("alertdialog", { name: "Sleep timer" });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "+15 min" }).click();
+  await expect(prompt).toHaveCount(0);
+  await expect(player.getByRole("timer")).toHaveText(/^1[56]:\d\d$/);
+
+  // Run out: paused, the screen says so, Resume plays again with no timer.
+  await at(31 * 60_000);
+  const ended = player.getByRole("dialog", { name: "Sleep timer ended" });
+  await expect(ended).toBeVisible();
+  expect(await player.locator("video").evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await ended.getByRole("button", { name: "Resume" }).click();
+  await expect(ended).toHaveCount(0);
+  await expect(player.getByRole("timer")).toHaveCount(0);
+});
