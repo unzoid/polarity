@@ -40,3 +40,11 @@
     public static *** set(android.content.Context, java.lang.String, byte[]);
     public static *** delete(android.content.Context, java.lang.String);
 }
+# The system's Now Playing controls (#461), looked up and called by name from src-tauri/src/player/background.rs,
+# and their native method there.
+-keep class app.getpolar.desktop.NowPlaying {
+    public static void show(android.content.Context, java.lang.String, java.lang.String, java.lang.String, boolean, long, long, float);
+    public static void update(boolean, long, long, float);
+    public static void hide(android.content.Context);
+    native <methods>;
+}
