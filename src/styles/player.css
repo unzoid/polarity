@@ -260,11 +260,11 @@
 }
 .skip-transport[data-dir="forward"] .skip-total {
   left: 100%;
-  transform: translateX(-42px);
+  transform: translateX(calc(-1 * var(--skip-half, 42px)));
 }
 .skip-transport[data-dir="back"] .skip-total {
   right: 100%;
-  transform: translateX(42px);
+  transform: translateX(var(--skip-half, 42px));
 }
 .skip-transport[data-out="true"] .skip-total {
   opacity: 1;
@@ -622,6 +622,62 @@
   height: 12px;
   border-radius: var(--r-round);
   background: var(--text);
+}
+
+/* --- Picture in Picture (data-mini, miniWindow.ts): a window as small as 320 × 180. The centre glyphs
+   size with the window, and the bars lose the tall padding their gradients reach into the middle with:
+   it lay over the glyphs and took their clicks. The glyphs sit above the bars, so where the two still
+   meet in the smallest window, the glyphs get the click. */
+.player[data-mini] .player-top {
+  padding-bottom: 1.5rem;
+  --bar-top: 0.5rem;
+}
+.player[data-mini] .player-bottom {
+  padding: 1.5rem 1rem 0.5rem;
+}
+.player[data-mini] .player-actions {
+  margin-top: 0.25rem;
+}
+.player[data-mini] {
+  /* The skip buttons' size; play's is 1.24 times it. */
+  --t: clamp(36px, 16vmin, 84px);
+}
+.player[data-mini] .player-center {
+  z-index: 3;
+  gap: calc(var(--t) * 0.5);
+}
+.player[data-mini] .player-casting-gap {
+  height: calc(var(--t) * 1.24 + 1rem);
+}
+.player[data-mini] .player-casting-head :is(svg, .player-casting-hint) {
+  display: none;
+}
+.player[data-mini] .player-transport {
+  width: var(--t);
+  height: var(--t);
+}
+.player[data-mini] .player-transport-main {
+  width: calc(var(--t) * 1.24);
+  height: calc(var(--t) * 1.24);
+}
+.player[data-mini] .player-transport-main > svg {
+  width: calc(var(--t) * 0.76);
+  height: calc(var(--t) * 0.76);
+}
+.player[data-mini] .skip-transport {
+  --skip-half: calc(var(--t) / 2);
+  --skip-out: 6px;
+}
+.player[data-mini] .skip-arrow {
+  width: calc(var(--t) * 0.67);
+  height: calc(var(--t) * 0.67);
+}
+.player[data-mini] .skip-num {
+  font-size: calc(var(--t) * 0.226);
+  padding-top: 0;
+}
+.player[data-mini] .skip-total {
+  font-size: calc(var(--t) * 0.3);
 }
 
 /* --- Subtitles: clean white type with a soft shadow, no box. */
@@ -1102,15 +1158,45 @@ html[data-os="android"] .options-columns {
   justify-content: center;
   gap: 0.625rem;
 }
-/* Playing on an AirPlay receiver: the show's art over mpv's paused picture; the controls stay above. */
+/* Playing on a TV (CastingPanel): the show's art over the paused picture; the controls stay above. What plays
+   where sits above the centre controls and the way back below them: the middle row is the gap they fill, in the
+   middle of the screen as they are, whatever the text above and the button below take. */
 .player-casting {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
   z-index: 1;
   overflow: hidden;
   background: #000;
+}
+.player-casting-content {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+  height: 100%;
+  padding: 0 2rem;
+  text-align: center;
+}
+.player-casting-head {
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 520px;
+}
+.player-casting-head p {
+  margin: 0;
+}
+/* The play button (104px) and room on each side of it. */
+.player-casting-gap {
+  height: calc(104px + 4rem);
+}
+:root[data-form="phone"] .player-casting-gap {
+  height: calc(72px + 3rem);
+}
+.player-casting-action {
+  align-self: start;
 }
 .player-casting-hint {
   color: var(--text-2);

@@ -47,8 +47,6 @@ export const Edit = icon(S24.PencilIcon, S20.PencilIcon, S16.PencilIcon);
 export const Episodes = icon(S24.RectangleStackIcon, S20.RectangleStackIcon, S16.RectangleStackIcon);
 export const ExitFullscreen = icon(S24.ArrowsPointingInIcon, S20.ArrowsPointingInIcon, S16.ArrowsPointingInIcon);
 export const Fullscreen = icon(S24.ArrowsPointingOutIcon, S20.ArrowsPointingOutIcon, S16.ArrowsPointingOutIcon);
-/** The player's Fit / Fill on desktop (#183), where the arrows are fullscreen's. */
-export const FillWindow = icon(S24.ViewfinderCircleIcon, S20.ViewfinderCircleIcon, S16.ViewfinderCircleIcon);
 export const Grid = icon(S24.Squares2X2Icon, S20.Squares2X2Icon, S16.Squares2X2Icon);
 export const Hidden = icon(S24.EyeSlashIcon, S20.EyeSlashIcon, S16.EyeSlashIcon);
 export const Info = icon(S24.InformationCircleIcon, S20.InformationCircleIcon, S16.InformationCircleIcon);
@@ -90,9 +88,8 @@ export const Sources = icon(S24.QueueListIcon, S20.QueueListIcon, S16.QueueListI
 export const Speed = icon(S24.ClockIcon, S20.ClockIcon, S16.ClockIcon);
 export const Trash = icon(S24.TrashIcon, S20.TrashIcon, S16.TrashIcon);
 export const Trailer = icon(S24.FilmIcon, S20.FilmIcon, S16.FilmIcon);
+// Also AirPlay's: sending what plays to a TV (not Apple's own glyph).
 export const Tv = icon(S24.TvIcon, S20.TvIcon, S16.TvIcon);
-// AirPlay: sending what plays to a TV (not Apple's own glyph).
-export const Cast = icon(S24.TvIcon, S20.TvIcon, S16.TvIcon);
 export const Filters = icon(S24.AdjustmentsHorizontalIcon, S20.AdjustmentsHorizontalIcon, S16.AdjustmentsHorizontalIcon);
 export const Fire =icon(S24.FireIcon, S20.FireIcon, S16.FireIcon);
 export const Watched = icon(S24.CheckCircleIcon, S20.CheckCircleIcon, S16.CheckCircleIcon);
@@ -162,3 +159,45 @@ const tilted = (grid: number, shape: ReactNode, shift: number): Cut => ({
 export const Pin = drawn(tilted(24, PIN_24, 1.5), tilted(20, PIN_20, 1.25), tilted(16, PIN_16, 1));
 /** The player's Pin window once the window is pinned: the pushpin upright, pushed in. */
 export const Pinned = drawn({ grid: 24, shape: PIN_24 }, { grid: 20, shape: PIN_20 }, { grid: 16, shape: PIN_16 });
+
+/** One shape on the 24 grid for every size: line-drawn, at a weight that sits with the solid icons. */
+const lined = (shape: ReactNode): Icon => {
+  const cut = {
+    grid: 24,
+    shape: (
+      <g fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        {shape}
+      </g>
+    ),
+  };
+  return drawn(cut, cut, cut);
+};
+
+/** Cast to a TV on the network (#443): a screen whose bottom-left corner gives way to the signal. */
+export const Cast = lined(
+  <>
+    <path d="M3 8.5V6.75A2.25 2.25 0 0 1 5.25 4.5h13.5A2.25 2.25 0 0 1 21 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25H13" />
+    <path d="M3 11.5a8 8 0 0 1 8 8" />
+    <path d="M3 15a4.5 4.5 0 0 1 4.5 4.5" />
+    <circle cx={3.5} cy={19} r={0.75} fill="currentColor" />
+  </>,
+);
+
+// The player's crop modes on desktop (#183), each showing itself: the screen, and the picture in it.
+const SCREEN = <rect x={2} y={4.5} width={20} height={15} rx={2.25} />;
+/** Fit: the whole picture, with room above and below it. */
+export const CropFit = lined(
+  <>
+    {SCREEN}
+    <rect x={5} y={9.5} width={14} height={5} rx={0.5} fill="currentColor" strokeWidth={0} />
+  </>,
+);
+/** Crop black bars: the picture's own bars cut away, so it fills the screen. */
+export const CropBars = lined(
+  <>
+    {SCREEN}
+    <rect x={5} y={7.5} width={14} height={9} rx={0.75} fill="currentColor" strokeWidth={0} />
+  </>,
+);
+/** Fill window: the picture covers the screen, edge to edge. */
+export const CropFill = lined(<rect x={2} y={4.5} width={20} height={15} rx={2.25} fill="currentColor" />);

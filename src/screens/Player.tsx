@@ -5,7 +5,9 @@ import {
   Close,
   Episodes,
   ExitFullscreen,
-  FillWindow,
+  CropBars,
+  CropFill,
+  CropFit,
   LayoutList,
   LayoutRow,
   Fullscreen,
@@ -466,7 +468,8 @@ export function Player({
   const ready = source.state.status === "ready" && !error;
   // The top bar's "More" menu (#396) keeps the controls up while it's open.
   const [moreOpen, setMoreOpen] = useState(false);
-  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready;
+  // Playing on a TV, nobody watches this screen: the controls that drive the TV stay up.
+  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting;
   // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
   const [ytPlayed, setYtPlayed] = useState(false);
   useEffect(() => {
@@ -1584,6 +1587,7 @@ export function Player({
       className="player"
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
+      data-mini={mini || undefined}
       data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
       data-instant={chrome.instant}
@@ -1702,30 +1706,30 @@ export function Player({
       )}
 
       {airplay.casting && (
-        <div className="player-casting">
-          {meta?.background && <Img className="player-status-bg" src={meta.background} alt="" />}
-          <div className="player-status-content">
-            <Cast size={40} />
-            <p className="t-title2">Playing on AirPlay</p>
-            <p className="t-callout player-casting-hint">To watch here again, choose this computer in the AirPlay list.</p>
+        <CastingPanel
+          art={meta?.background}
+          icon={<Tv size={40} />}
+          title="Playing on AirPlay"
+          hint="To watch here again, choose this computer in the AirPlay list."
+          action={
             <Button variant="glass" onClick={airplay.pick}>
               AirPlay
             </Button>
-          </div>
-        </div>
+          }
+        />
       )}
       {chromecast.casting && (
-        <div className="player-casting">
-          {meta?.background && <Img className="player-status-bg" src={meta.background} alt="" />}
-          <div className="player-status-content">
-            <Tv size={40} />
-            <p className="t-title2">{`Playing on ${chromecast.casting.name}`}</p>
-            <p className="t-callout player-casting-hint">The controls here play, pause and skip on the TV.</p>
+        <CastingPanel
+          art={meta?.background}
+          icon={<Cast size={40} />}
+          title={`Playing on ${chromecast.casting.name}`}
+          hint="The controls here play, pause and skip on the TV."
+          action={
             <Button variant="glass" onClick={chromecast.stop}>
               Stop Casting
             </Button>
-          </div>
-        </div>
+          }
+        />
       )}
       {notice && <div className="player-notice t-callout">{notice}</div>}
       {hold.held && (
@@ -1780,7 +1784,7 @@ export function Player({
             )}
             {airplay.available && (
               <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
-                <Cast size={22} />
+                <Tv size={22} />
               </IconButton>
             )}
             {/* Chromecast (#443): the TVs on the network, and back to this computer. */}
@@ -1792,7 +1796,7 @@ export function Player({
                   title="Cast to a TV"
                   aria-pressed={!!chromecast.casting}
                 >
-                  <Tv size={22} />
+                  <Cast size={22} />
                 </MenuTrigger>
                 <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="Cast to a TV">
                   {chromecast.devices.map((d) => (
@@ -1827,7 +1831,7 @@ export function Player({
                 data-crop={crop}
                 title={withShortcut(`${cropModeLabel(crop)} (next: ${cropModeLabel(nextCrop)})`, "fill")}
               >
-                <FillWindow size={22} />
+                {crop === "fit" ? <CropFit size={22} /> : crop === "bars" ? <CropBars size={22} /> : <CropFill size={22} />}
               </IconButton>
             )}
             {(more || watchLog || moreItems) && (
@@ -2329,6 +2333,27 @@ export function Player({
 
 /** The Sources row of this video's finished download (#23); the others are indexes into the ranked list. */
 const DOWNLOADED = "downloaded";
+
+/**
+ * Playing on a TV (AirPlay, Chromecast): the show's art, what plays where above the centre controls, which drive
+ * the TV, and the way back below them, so the two never overlap (player.css).
+ */
+function CastingPanel({ art, icon, title, hint, action }: { art?: string; icon: React.ReactNode; title: string; hint: string; action: React.ReactNode }) {
+  return (
+    <div className="player-casting">
+      {art && <Img className="player-status-bg" src={art} alt="" />}
+      <div className="player-casting-content">
+        <div className="player-casting-head">
+          {icon}
+          <p className="t-title2">{title}</p>
+          <p className="t-callout player-casting-hint">{hint}</p>
+        </div>
+        <div className="player-casting-gap" aria-hidden />
+        <div className="player-casting-action">{action}</div>
+      </div>
+    </div>
+  );
+}
 
 function ActionButton({
   icon,
