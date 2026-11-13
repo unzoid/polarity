@@ -1,6 +1,7 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
 import { isMac } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
+import { MAX_VOLUMES } from "../playback/volume";
 import type { Prefs } from "./prefs";
 import type { Settings } from "../types";
 import type { PageId } from "./pages";
@@ -588,6 +589,27 @@ export const SETTINGS: SettingDef[] = [
     bind: p("volumeLeveling"),
     control: toggle,
   },
+  {
+    id: "maxVolume",
+    page: "subtitles",
+    title: "Volume goes up to",
+    caption: "Past 100% makes quiet films louder than the file itself. Loud scenes can distort.",
+    keywords: "volume boost louder amplify 150 200 percent quiet max maximum",
+    bind: p("maxVolume"),
+    control: choice(MAX_VOLUMES.map((v) => ({ value: v, label: `${v * 100}%` }))),
+    tv: "Volume Goes Up To",
+  },
+  {
+    id: "passthrough",
+    page: "subtitles",
+    title: "Send surround sound to my receiver",
+    caption:
+      "For an AV receiver or soundbar on HDMI or optical: Dolby and DTS go to it as they are, for it to decode. The volume and the sound options above don't apply to them then.",
+    keywords: "passthrough bitstream spdif hdmi optical receiver soundbar dolby dts truehd atmos",
+    bind: p("passthrough"),
+    control: toggle,
+    tv: "Surround to Receiver (Passthrough)",
+  },
   { id: "subtitleStyle", page: "subtitles", title: "Subtitle Style", keywords: "captions appearance" },
   { id: "subtitleDelay", page: "subtitles", title: "Delay", keywords: "subtitle sync offset timing" },
   { id: "subtitleFont", page: "subtitles", title: "Font", keywords: "subtitle typeface family opendyslexic dyslexia dyslexic accessibility" },
@@ -1162,6 +1184,20 @@ export const SETTINGS: SettingDef[] = [
     keywords: "gpu hwdec green glitches black",
     bind: p("hwdec"),
     control: toggle,
+  },
+  {
+    id: "hdrOutput",
+    page: "advanced",
+    title: "HDR video",
+    caption:
+      "HDR on this screen sends the picture in HDR when Windows or macOS has HDR on. Convert to SDR helps when HDR looks washed out or too dark.",
+    keywords: "hdr dolby vision tone mapping washed out grey dark colours colors sdr display screen",
+    bind: p("hdrOutput"),
+    control: choice([
+      { value: "auto", label: "Automatic" },
+      { value: "screen", label: "HDR on this screen" },
+      { value: "sdr", label: "Convert to SDR" },
+    ]),
   },
   {
     id: "deband",

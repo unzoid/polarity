@@ -310,7 +310,8 @@ export function SubtitleSettings({
   );
 }
 
-function Setting({ label, caption, children }: { label: string; caption?: string; children: ReactNode }) {
+/** A labelled row of the player's settings panels (subtitles, audio). */
+export function Setting({ label, caption, children }: { label: string; caption?: string; children: ReactNode }) {
   return (
     <div className="sub-setting">
       <span className="sub-setting-text">
@@ -322,7 +323,8 @@ function Setting({ label, caption, children }: { label: string; caption?: string
   );
 }
 
-function Stepper({
+/** − value + for a number, rounded so repeated steps don't drift. */
+export function Stepper({
   value,
   step,
   min,
@@ -398,7 +400,7 @@ function Swatches({ value, options, onChange }: { value: string; options: { valu
   );
 }
 
-function Chips<T extends string | number>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+export function Chips<T extends string | number>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
     <div className="source-chips" role="radiogroup">
       {options.map((o) => (

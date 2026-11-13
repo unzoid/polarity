@@ -378,6 +378,9 @@ impl Mpv {
             "--hwdec=auto-safe".into(), // d3d11va / videotoolbox: decoded frames stay on the GPU
             format!("--gpu-shader-cache-dir={}", shader_cache.display()),
             "--background-color=#000000".into(),
+            // Room for Settings → Subtitles & Audio's "Volume goes up to" 200% (lib/playback/volume.ts):
+            // the page never sends more than its own limit.
+            "--volume-max=200".into(),
             // Cache: with --cache=yes mpv ignores --demuxer-readahead-secs and
             // uses --cache-secs (default: 1000 hours), so it always filled the
             // whole byte limit. Now: up to 90 s ahead, capped at 192 MiB

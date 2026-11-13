@@ -91,6 +91,9 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     "seekStep",
     "audioLanguage",
     "subtitleLanguage",
+    // A TV is where a receiver or soundbar sits.
+    "maxVolume",
+    ...(os === "ios" ? [] : ["passthrough"]),
   ],
   sources: [
     "autoPickSource",

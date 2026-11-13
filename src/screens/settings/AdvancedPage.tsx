@@ -26,6 +26,8 @@ export function AdvancedPage() {
         footer={hasMpv === false ? "Most of these need mpv." : "Saved on this device. Changes apply straight away, even mid-video."}
       >
         <SettingRow id="hwdec" disabled={hasMpv === false} />
+        {/* Windows and macOS hand mpv's HDR picture to the screen; elsewhere the system decides. */}
+        {(os === "windows" || os === "macos") && <SettingRow id="hdrOutput" disabled={hasMpv === false} />}
         <SettingRow id="deband" disabled={hasMpv === false} />
         {/* Without mpv there's no autocrop: Fit or Fill window. */}
         <SettingRow id="cropMode" omit={hasMpv === false ? ["bars"] : undefined} />

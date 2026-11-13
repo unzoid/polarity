@@ -43,6 +43,7 @@ import {
   rememberLanguage,
   rememberTracks,
   resetAutoplay,
+  MAX_VOLUMES,
   sliderAmplitude,
   sourceRow,
   trackMemoryKey,
@@ -82,6 +83,7 @@ import {
   forgetAssOverride,
   subtitleCueVars,
 } from "../components/player/SubtitleSettings";
+import { AudioSettings } from "../components/player/AudioSettings";
 import { isMpv, MpvMedia, type MediaLike, type StepDetail } from "../components/player/mpvMedia";
 import { createFrameStepper, DEFAULT_FPS, measureFps, stepFrame } from "../components/player/frameStep";
 import { useStepping } from "../components/player/useStepping";
@@ -299,6 +301,11 @@ export function Player({
   /** Why the link check turned the built-in player's source down (mpv reports its own). */
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
+  // Past 100% only mpv can play (Settings → Subtitles & Audio): a <video>, AirPlay's included, stops at 100%.
+  const { maxVolume } = usePrefs();
+  const volumeTop = engine === "mpv" && !airplay.casting ? maxVolume : 1;
+  /** The volume up or down a step, kept within what this player can play. */
+  const stepVolume = (by: number) => setVolume((v) => Math.min(volumeTop, Math.max(0, +(Math.min(v, volumeTop) + by).toFixed(2))));
   // TV mode: each volume press from the controller or remote shows the volume HUD.
   const [volumePing, setVolumePing] = useState<VolumePing>({ n: 0, dir: "up" });
   const pingVolume = (dir: VolumePing["dir"]) => tv && setVolumePing((p) => ({ n: p.n + 1, dir }));
@@ -350,6 +357,22 @@ export function Player({
     rememberTracks(memoryKey, videoId, { delay });
   };
   const [subSettingsOpen, setSubSettingsOpen] = useState(false);
+  // Sound ahead of or behind the picture, remembered for this source like the subtitle delay (mpv only).
+  const [audioDelay, setAudioDelay] = useState(0);
+  useEffect(() => setAudioDelay(recallTracks(memoryKey)?.audioDelay ?? 0), [memoryKey]);
+  const changeAudioDelay = (seconds: number) => {
+    setAudioDelay(seconds);
+    rememberTracks(memoryKey, videoId, { audioDelay: seconds });
+  };
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
+  useEffect(() => {
+    if (engine !== "mpv") return;
+    // An mpv option: it outlives the file, so each load gets this source's own (0 for most).
+    const apply = () => void mpv.set("audio-delay", audioDelay);
+    apply();
+    mpv.addEventListener("loadedmetadata", apply);
+    return () => mpv.removeEventListener("loadedmetadata", apply);
+  }, [engine, mpv, audioDelay]);
 
   // Subtitle add-ons match on the file's size and name (React Query compares keys by value).
   const playingFile = videoFile(playingStream);
@@ -504,7 +527,7 @@ export function Player({
     setError(null);
     setBuffering(true);
     watch(`source: ${describeStream(source.state.stream, source.state.url)}, ${engine}`);
-    v.volume = sliderAmplitude(volume);
+    v.volume = sliderAmplitude(volume, volumeTop);
     if (v instanceof MpvMedia) {
       // Start at the resume point (or where the watch party is) directly: no
       // fetching the opening of a network stream only to seek away from it.
@@ -565,10 +588,10 @@ export function Player({
     const v = videoRef.current;
     if (!v) return;
     // The sleep timer fades the sound out over its last 30 s; the stored level stays the viewer's.
-    v.volume = sliderAmplitude(volume) * sleep.gain;
+    v.volume = sliderAmplitude(volume, volumeTop) * sleep.gain;
     v.muted = muted;
     if (!systemVolume) storeLocal("polar.volume", String(volume));
-  }, [volume, muted, media, sleep.gain]);
+  }, [volume, muted, media, sleep.gain, volumeTop]);
 
   // A watch party plays at 1x for everyone (its sync nudges the rate itself).
   const inParty = !!party;
@@ -1071,13 +1094,13 @@ export function Player({
         case "volumeUp":
           // Where the system sets the volume, its keys are the system's.
           if (systemVolume) return false;
-          setVolume((v) => Math.min(1, +(v + 0.1).toFixed(2)));
+          stepVolume(0.1);
           pingVolume("up");
           setMuted(false);
           return true;
         case "volumeDown":
           if (systemVolume) return false;
-          setVolume((v) => Math.max(0, +(v - 0.1).toFixed(2)));
+          stepVolume(-0.1);
           pingVolume("down");
           return true;
         case "mute":
@@ -1438,7 +1461,7 @@ export function Player({
           if (wheel === "none" || (wheel === "volume" && systemVolume)) return;
           if (wheel === "seek") seekBy(-Math.sign(e.deltaY) * seekStep);
           else {
-            setVolume((v) => Math.min(1, Math.max(0, +(v - Math.sign(e.deltaY) * 0.05).toFixed(2))));
+            stepVolume(-Math.sign(e.deltaY) * 0.05);
             setMuted(false);
           }
           poke(true, "wheel");
@@ -1530,15 +1553,16 @@ export function Player({
                   <input
                     type="range"
                     min={0}
-                    max={1}
+                    max={volumeTop}
                     step={0.01}
-                    value={muted ? 0 : volume}
+                    value={muted ? 0 : Math.min(volume, volumeTop)}
                     onChange={(e) => {
                       setVolume(Number(e.target.value));
                       setMuted(false);
                     }}
                     aria-label="Volume"
-                    style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
+                    aria-valuetext={`${Math.round((muted ? 0 : Math.min(volume, volumeTop)) * 100)}%`}
+                    style={{ "--value": `${((muted ? 0 : Math.min(volume, volumeTop)) / volumeTop) * 100}%` } as React.CSSProperties}
                   />
                 </span>
               </div>
@@ -1784,12 +1808,28 @@ export function Player({
         onClose={() => {
           setOptions(null);
           setSubSettingsOpen(false);
+          setAudioSettingsOpen(false);
         }}
         foreground={subSettingsOpen ? <SubtitlePreview style={subStyle} media={media} /> : undefined}
         media={media}
         columns={[
           {
             title: "Audio",
+            size: audioSettingsOpen ? "medium" : "narrow",
+            // Delay and the sound options are mpv's.
+            header:
+              engine === "mpv" && !airplay.casting ? (
+                <IconButton
+                  variant="panel"
+                  aria-pressed={audioSettingsOpen}
+                  label="Audio settings"
+                  title="Audio settings"
+                  onClick={() => setAudioSettingsOpen((v) => !v)}
+                >
+                  <Cog size={19} strokeWidth={2.1} />
+                </IconButton>
+              ) : undefined,
+            content: audioSettingsOpen ? <AudioSettings delay={audioDelay} onDelay={changeAudioDelay} /> : undefined,
             value: tracks.audio.length ? tracks.audioId : "default",
             options: tracks.audio.length ? tracks.audio : [{ id: "default", label: "Default" }],
             onSelect: tracks.selectAudio,
@@ -1825,7 +1865,7 @@ export function Player({
         ]}
       />
 
-      {tv && <VolumeHud volume={volume} muted={muted} ping={volumePing} media={media} />}
+      {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
 
       <SkipButton
         active={started ? skip.active : null}
@@ -2072,7 +2112,7 @@ const systemVolume = (os === "android" || os === "ios") && !isTvDevice;
 function savedVolume() {
   if (systemVolume) return 1;
   const v = Number(localStorage.getItem("polar.volume") ?? 1);
-  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  return Number.isFinite(v) ? Math.min(Math.max(...MAX_VOLUMES), Math.max(0, v)) : 1;
 }
 
 /** `value` once it has stayed the same for `ms`, else null: a blip never shows. */

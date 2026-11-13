@@ -64,6 +64,12 @@ export interface Prefs {
   dialogueBoost: boolean;
   /** mpv: even out loud and quiet scenes. */
   volumeLeveling: boolean;
+  /** The loudest the volume goes, as a slider position: 1 (100%), 1.5 or 2 (lib/playback/volume.ts). Past 100% with mpv only. */
+  maxVolume: number;
+  /** mpv: Dolby and DTS go to an AV receiver undecoded (`audio-spdif`). */
+  passthrough: boolean;
+  /** mpv: HDR video as mpv picks, in HDR on a screen that takes it, or always converted to SDR. */
+  hdrOutput: "auto" | "screen" | "sdr";
   /** mpv: hardware decoding. */
   hwdec: boolean;
   /** mpv: smooth colour banding. */
@@ -180,6 +186,9 @@ const DEFAULTS: Prefs = {
   shareSetup: "account",
   dialogueBoost: false,
   volumeLeveling: false,
+  maxVolume: 1,
+  passthrough: false,
+  hdrOutput: "auto",
   hwdec: true,
   deband: false,
   cropMode: "fit",

@@ -254,6 +254,16 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
     if was.deband != tune.deband {
         mpv.request(json!(["set_property", "deband", tune.deband])).await?;
     }
+    if was.spdif() != tune.spdif() {
+        mpv.request(json!(["set_property", "audio-spdif", tune.spdif()])).await?;
+    }
+    if was.hdr != tune.hdr {
+        let hint = tune.hdr.colorspace_hint();
+        // "auto" is new in mpv 0.40: an older mpv (one found on PATH) is told "no", its own default.
+        if mpv.request(json!(["set_property", "target-colorspace-hint", hint])).await.is_err() && hint == "auto" {
+            mpv.request(json!(["set_property", "target-colorspace-hint", "no"])).await?;
+        }
+    }
     if was.buffer != tune.buffer {
         let (secs, bytes) = tune.cache();
         mpv.request(json!(["set_property", "cache-secs", secs])).await?;

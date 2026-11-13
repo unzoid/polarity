@@ -33,6 +33,8 @@ pub const ALLOWED_PROPERTIES: &[&str] = &[
     "sub-shadow-offset",
     "sub-back-color",
     "sub-delay",
+    // Sound that's ahead of or behind the picture, in seconds.
+    "audio-delay",
     // Fill window (#183, #330): the picture covers the window; the autocrop loop reads it too.
     "panscan",
 ];

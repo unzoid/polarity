@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { keys, useSettings, useUpdateSettings } from "../../lib/net";
 import { Card } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { isDesktop, isTvDevice, os } from "../../lib/platform";
 
 export function SubtitlesPage() {
   const { data } = useSettings();
@@ -51,6 +52,10 @@ function SoundCard() {
     >
       <SettingRow id="dialogueBoost" disabled={hasMpv === false} />
       <SettingRow id="volumeLeveling" disabled={hasMpv === false} />
+      {/* Phones leave the volume to their own buttons (Player.tsx's systemVolume). */}
+      {(isDesktop || isTvDevice) && <SettingRow id="maxVolume" disabled={hasMpv === false} />}
+      {/* iPhones and iPads have no receiver output mpv can pass sound through to. */}
+      {os !== "ios" && <SettingRow id="passthrough" disabled={hasMpv === false} />}
     </Card>
   );
 }
