@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 /// What the app shows and keeps: one `Core` for the whole app, Home's rows and Continue Watching.
+/// The add-ons and keys come from the signed-in profile (`Account`).
 @MainActor
 final class Library: ObservableObject {
     /// `nil` only when the core couldn't open its folder (`startProblem` says why).
@@ -11,6 +12,8 @@ final class Library: ObservableObject {
     @Published private(set) var rows: [Row] = []
     @Published private(set) var continueWatching: [Resume] = []
     @Published private(set) var loading = false
+    /// Counts Home's loads, so only the latest one's rows are kept.
+    private var homeLoads = 0
 
     init() {
         do {
@@ -29,13 +32,32 @@ final class Library: ObservableObject {
         return base.appendingPathComponent("Polarity", isDirectory: true)
     }
 
-    /// Loads Home's rows; Continue Watching comes from the TV's own progress, at once.
+    /// Loads Home's rows once; Continue Watching comes from the TV's own progress, at once.
     func loadHome() async {
-        guard let core, !loading else { return }
+        guard rows.isEmpty, !loading else { return }
+        await reloadHome()
+    }
+
+    /// Loads Home's rows again, dropping an earlier load still under way (its rows came from the
+    /// add-ons and keys before).
+    func reloadHome() async {
+        guard let core else { return }
+        homeLoads += 1
+        let load = homeLoads
         loading = true
         continueWatching = core.continueWatching()
-        rows = await core.home()
+        let fresh = await core.home()
+        guard load == homeLoads else { return }
+        rows = fresh
         loading = false
+    }
+
+    /// A profile's add-ons, TMDB key and language (`Account`), or none after signing out; then Home again.
+    func useSettings(_ settings: AccountSettings) async {
+        guard let core else { return }
+        core.setTmdb(key: settings.tmdbKey, language: settings.language)
+        _ = await core.setAddons(urls: settings.addons)
+        await reloadHome()
     }
 
     /// Continue Watching again, after something played.

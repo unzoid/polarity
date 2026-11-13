@@ -20,6 +20,7 @@ installed by the user.
 | Notifications on Android: AndroidX WorkManager (`androidx.work:work-runtime-ktx`) | Apache-2.0 | `src-tauri/gen/android/app/build.gradle.kts`; in the APK with the other AndroidX libraries |
 | libc (all but Windows) and windows-sys (Windows): free disk space on the Downloads page (`src-tauri/src/disk.rs`) | MIT OR Apache-2.0 | Direct dependencies of `src-tauri`, already built in through other crates; `Cargo.lock`, each crate's licence in its package |
 | UniFFI (`uniffi`, Apple TV app): the core's Swift binding (`crates/ffi`) and the Swift code it generates (`PolarCore.swift`, from UniFFI's templates) | MPL-2.0 | `crates/ffi/Cargo.toml`, `Cargo.lock`; used unchanged, its source at the version `Cargo.lock` names is mozilla/uniffi-rs on GitHub and crates.io |
+| supabase-swift (`Supabase`, Apple TV app): signing in and reading the account's settings document; with the packages it builds in: swift-crypto and swift-http-types (Apache-2.0, Apple), swift-concurrency-extras, swift-clocks and xctest-dynamic-overlay (MIT, Point-Free) | MIT (supabase-swift); as named for the others | `apple-tv/project.yml` (exact version); Swift Package Manager fetches each with its `LICENSE`. Their notices go into the app's licences with libmpv's (#504, part 4) |
 | npm and Rust dependencies | Each package's own | `bun.lock`, `Cargo.lock` |
 
 Third-party logos (TMDB's in Settings → About → Credits) are shown only as credits and links to
