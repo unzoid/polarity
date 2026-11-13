@@ -16,6 +16,7 @@ import {
   SkipForward,
   Sources,
   Speed,
+  Tv,
   Volume,
   VolumeMuted,
 } from "../components/icons";
@@ -97,6 +98,7 @@ import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
 import { usePlayingFormat } from "../components/player/usePlayingFormat";
 import { useMediaSession } from "../components/player/useMediaSession";
+import { useChromecast } from "../components/player/useChromecast";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
 import {
@@ -304,7 +306,21 @@ export function Player({
     // YouTube's player has no file to hand over.
     enabled: !party && engine !== "youtube",
   });
-  const media: MediaLike | null = airplay.media ?? baseMedia;
+  // --- Chromecast (#443): the same link on a TV, this player its remote -------------------------
+  const chromecast = useChromecast({
+    media: baseMedia,
+    url: playingUrl?.url,
+    headers: playingUrl ? requestHeaders(playingUrl.stream) : null,
+    title: current ? `${episodeCode(current.season, current.episode)} · ${current.title}` : (meta?.name ?? stream?.name ?? ""),
+    subtitle: current ? meta?.name : undefined,
+    artwork: meta?.background ?? meta?.poster,
+    // Never with a watch party or AirPlay; YouTube's player has its own.
+    enabled: !party && engine !== "youtube" && !airplay.casting,
+    onProblem: (text) => flashNotice(text, 5000),
+  });
+  /** The video plays on a TV (AirPlay or Chromecast): this player is its remote. */
+  const castingAway = airplay.casting || !!chromecast.casting;
+  const media: MediaLike | null = airplay.media ?? chromecast.media ?? baseMedia;
   // What the player did while it played, for "Copy Watch Log" (dev builds only, #424).
   useWatchLog(media, videoId);
   videoRef.current = media;
@@ -321,7 +337,7 @@ export function Player({
   const [volume, setVolume] = useState(savedVolume);
   // Past 100% only mpv can play (Settings → Subtitles & Audio): a <video>, AirPlay's included, stops at 100%.
   const { maxVolume, holdSpeed, pauseShowsControls, showPlayingFormat } = usePrefs();
-  const volumeTop = engine === "mpv" && !airplay.casting ? maxVolume : 1;
+  const volumeTop = engine === "mpv" && !castingAway ? maxVolume : 1;
   /** The volume up or down a step, kept within what this player can play. */
   const stepVolume = (by: number) => setVolume((v) => Math.min(volumeTop, Math.max(0, +(Math.min(v, volumeTop) + by).toFixed(2))));
   // TV mode: each volume press from the controller or remote shows the volume HUD.
@@ -1255,7 +1271,7 @@ export function Player({
   // to the episode before, as music players do. Not for YouTube's player, which has its own.
   const previous = meta && type === "series" && !local ? previousVideo(meta, videoId) : undefined;
   useMediaSession(
-    started && !ytId && !airplay.casting ? media : null,
+    started && !ytId && !castingAway ? media : null,
     meta || title
       ? {
           title: heading || title,
@@ -1341,7 +1357,7 @@ export function Player({
   const VolumeIcon = muted || volume === 0 ? VolumeMuted : Volume;
 
   // Screenshots (desktop, mpv): the picture as it is, subtitles included, to Pictures/Polarity.
-  const canShoot = isDesktop && engine === "mpv" && started && !airplay.casting;
+  const canShoot = isDesktop && engine === "mpv" && started && !castingAway;
   const [shotSaved, setShotSaved] = useState(false);
   const takeScreenshot = () =>
     void api.screenshot(heading || title, videoRef.current?.currentTime ?? 0).then(
@@ -1353,7 +1369,7 @@ export function Player({
     );
 
   // "4K · Dolby Vision · Dolby Atmos · English 5.1" under the title, once it plays (Settings → Playback).
-  const playingFormat = usePlayingFormat(started && !airplay.casting ? media : null, showPlayingFormat && !ytFramed);
+  const playingFormat = usePlayingFormat(started && !castingAway ? media : null, showPlayingFormat && !ytFramed);
 
   // Play in another player installed here (desktop): this one pauses and keeps the place.
   const { data: otherPlayers = [] } = useQuery({
@@ -1388,7 +1404,9 @@ export function Player({
     actionRow,
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact,
-    [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join("|"),
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join(
+      "|",
+    ),
     !!watchLog || moreItems,
   );
   const more = barFit.more;
@@ -1696,6 +1714,19 @@ export function Player({
           </div>
         </div>
       )}
+      {chromecast.casting && (
+        <div className="player-casting">
+          {meta?.background && <Img className="player-status-bg" src={meta.background} alt="" />}
+          <div className="player-status-content">
+            <Tv size={40} />
+            <p className="t-title2">{`Playing on ${chromecast.casting.name}`}</p>
+            <p className="t-callout player-casting-hint">The controls here play, pause and skip on the TV.</p>
+            <Button variant="glass" onClick={chromecast.stop}>
+              Stop Casting
+            </Button>
+          </div>
+        </div>
+      )}
       {notice && <div className="player-notice t-callout">{notice}</div>}
       {hold.held && (
         <div className="player-hold-speed t-callout tabular" role="status">
@@ -1751,6 +1782,31 @@ export function Player({
               <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
                 <Cast size={22} />
               </IconButton>
+            )}
+            {/* Chromecast (#443): the TVs on the network, and back to this computer. */}
+            {chromecast.available && (
+              <MenuRoot modal={false} onOpenChange={setMoreOpen}>
+                <MenuTrigger
+                  className={iconButtonClass("player")}
+                  aria-label="Cast to a TV"
+                  title="Cast to a TV"
+                  aria-pressed={!!chromecast.casting}
+                >
+                  <Tv size={22} />
+                </MenuTrigger>
+                <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="Cast to a TV">
+                  {chromecast.devices.map((d) => (
+                    <MenuCheckItem
+                      key={d.id}
+                      checked={chromecast.casting?.id === d.id}
+                      onCheckedChange={() => (chromecast.casting?.id === d.id ? chromecast.stop() : chromecast.start(d))}
+                    >
+                      {d.name}
+                    </MenuCheckItem>
+                  ))}
+                  {chromecast.casting && <MenuItem onClick={chromecast.stop}>Stop Casting</MenuItem>}
+                </MenuPopup>
+              </MenuRoot>
             )}
             {showPin && !more && (
               <IconButton
@@ -1910,7 +1966,7 @@ export function Player({
           {/* YouTube's player keeps its own captions and audio. */}
           {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
           {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
-          {canParty && !airplay.casting && (
+          {canParty && !castingAway && (
             <ActionButton
               icon={<WatchParty size={22} />}
               label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
@@ -2019,7 +2075,7 @@ export function Player({
             size: audioSettingsOpen ? "medium" : "narrow",
             // Delay and the sound options are mpv's.
             header:
-              engine === "mpv" && !airplay.casting ? (
+              engine === "mpv" && !castingAway ? (
                 <IconButton
                   variant="panel"
                   aria-pressed={audioSettingsOpen}

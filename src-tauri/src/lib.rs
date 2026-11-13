@@ -1,4 +1,5 @@
 mod art_focus;
+mod cast;
 #[cfg(any(windows, test))]
 mod automation;
 mod commands;
@@ -266,6 +267,7 @@ pub fn run() {
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
             app.manage(controllers::Controllers::default());
+            app.manage(cast::Cast::default());
             controllers::watch(app.handle().clone());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move { install_bundled_addons(handle).await });
@@ -375,6 +377,10 @@ pub fn run() {
             media_session::media_session,
             external_player::external_players,
             external_player::external_play,
+            cast::cast_devices,
+            cast::cast_play,
+            cast::cast_control,
+            cast::cast_stop,
             player::player_system_bars,
             player::player_keep_awake,
             native_tabs::native_tabs,

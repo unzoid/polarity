@@ -22,6 +22,8 @@ polar-anime.workspace = true
 polar-index.workspace = true
 polar-library.workspace = true
 polar-player.workspace = true
+# Chromecast (#443): finding receivers and playing a link on one. Desktop only at runtime (cast.rs).
+polar-cast.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
