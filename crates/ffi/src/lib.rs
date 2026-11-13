@@ -256,11 +256,13 @@ pub fn player_options() -> Vec<PlayerOption> {
         .collect()
 }
 
-/// mpv's `http-header-fields` for a source's headers.
+/// mpv's `http-header-fields` for a source's headers, one `Name: value` each. Set as a list
+/// (`MPV_FORMAT_NODE_ARRAY`), as the desktop app does: a value may hold a comma, which mpv's
+/// string form would split on.
 #[uniffi::export]
-pub fn header_fields(headers: Vec<Header>) -> String {
+pub fn header_fields(headers: Vec<Header>) -> Vec<String> {
     let pairs: Vec<(String, String)> = headers.into_iter().map(|h| (h.name, h.value)).collect();
-    polar_player::headers::mpv_fields(&pairs).join(",")
+    polar_player::headers::mpv_fields(&pairs)
 }
 
 impl Core {

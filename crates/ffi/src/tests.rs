@@ -158,7 +158,7 @@ fn sources_keep_playable_links_best_first_with_safe_headers() {
         assert_eq!(best.text, "Example\n1080p\nFilm 1080p");
         assert_eq!(best.headers, [Header { name: "Referer".into(), value: "https://media.example.com/".into() }]);
         assert!(!best.stream_json.contains("ytId"));
-        assert_eq!(header_fields(best.headers.clone()), "Referer: https://media.example.com/");
+        assert_eq!(header_fields(best.headers.clone()), ["Referer: https://media.example.com/"]);
     });
 }
 
