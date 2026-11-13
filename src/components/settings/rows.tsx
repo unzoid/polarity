@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight, type Icon as IconT } from "../icons";
+import { PAGE_SECTIONS, type PageId } from "../../lib/settings/pages";
 import { SliderField } from "../SliderField";
 import { Button, type ButtonVariant } from "../ui/Button";
 import { Switch } from "../ui/Switch";
@@ -257,13 +258,27 @@ export function ExpandRow({
 }
 
 /** A row that leads somewhere else. */
-export function LinkRow({ icon: Icon, title, caption, onClick }: { icon: IconT; title: string; caption?: string; onClick: () => void }) {
+export function LinkRow({ icon: Icon, title, caption, onClick }: { icon?: IconT; title: string; caption?: string; onClick: () => void }) {
   return (
     <button className="settings-row settings-row-button" onClick={onClick}>
-      <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />
+      {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
       <RowText title={title} caption={caption} />
       <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
     </button>
+  );
+}
+
+/** What a page split into sections (PAGE_SECTIONS) is given: the section open (null: its list), and how to open one. */
+export type SectionProps = { section: string | null; openSection: (id: string) => void };
+
+/** A long page's list of sections, each opening a view of its own. */
+export function SectionList({ page, openSection }: { page: PageId; openSection: (id: string) => void }) {
+  return (
+    <Card>
+      {(PAGE_SECTIONS[page] ?? []).map((s) => (
+        <LinkRow key={s.id} title={s.label} caption={s.caption} onClick={() => openSection(s.id)} />
+      ))}
+    </Card>
   );
 }
 
