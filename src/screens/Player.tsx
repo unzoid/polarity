@@ -2255,8 +2255,8 @@ export function Player({
                   size: "wide",
                   header: meta && (
                     <>
-                      {shuffleButton}
                       {layoutSwitch}
+                      {shuffleButton}
                     </>
                   ),
                   value: videoId,
@@ -2279,8 +2279,8 @@ export function Player({
                         onChange={(id) => setPickSeason(Number(id))} // browse; playback continues
                         options={seasons.map((n) => ({ value: String(n), label: seasonLabel(n) }))}
                       />
-                      {shuffleButton}
                       {layoutSwitch}
+                      {shuffleButton}
                     </div>
                   ),
                   options: [],
