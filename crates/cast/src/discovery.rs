@@ -36,6 +36,7 @@ pub fn device(s: &ResolvedService) -> Option<Device> {
     let ip = *addrs.first()?;
     let txt = |k: &str| s.get_property_val_str(k).map(str::to_owned);
     let id = txt("id").unwrap_or_else(|| s.fullname.clone());
-    let name = txt("fn").filter(|n| !n.is_empty()).unwrap_or_else(|| s.fullname.split('.').next().unwrap_or("TV").to_owned());
+    let name =
+        txt("fn").filter(|n| !n.is_empty()).unwrap_or_else(|| s.fullname.split('.').next().unwrap_or("TV").to_owned());
     Some(Device { id, name, model: txt("md").unwrap_or_default(), addr: SocketAddr::new(ip, s.port) })
 }

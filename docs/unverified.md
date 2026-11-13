@@ -1225,6 +1225,51 @@ same network:
 - Subtitles: add-on subtitles go to the element as WebVTT tracks; whether the receiver shows them is
   untested. Subtitles inside the file aren't sent.
 
+## The player's wishlist batch (volume to 200%, passthrough, HDR output, audio delay, hold to speed up, screenshots, Picture in Picture, media keys, other players, your own mpv settings, shuffle, Chromecast)
+
+Checked here (Windows): `cargo check`, `clippy -D warnings` and the tests of `polar-player` (screenshot names,
+other players' command lines, Tune presets), `polar-cast` (the CastMessage format, the JSON, and a whole cast
+against a fake TV over an in-memory pipe) and `src-tauri`; `tsc`, `vite build` and the unit and DOM tests
+(volume curve, track memory with the audio delay, the format line, the mini window with fake window calls, hold to
+speed up, shuffle, the next episode's warm-up, `CastMedia`). Nothing was run in the app's window. Needs the app:
+
+- **Volume past 100%** (Settings → Subtitles & Audio → Volume goes up to 200%), with mpv: the slider goes to 200%,
+  louder than 100% and about twice as loud at the top; the built-in player stops at 100%; the TV HUD's pill fills at
+  the limit.
+- **Passthrough**, with an AV receiver on HDMI or optical: Dolby and DTS tracks show as Dolby/DTS on the receiver;
+  AAC still plays; dialogue boost and volume don't apply to passed-through tracks.
+- **HDR video** (Settings → Advanced), on Windows with HDR on: "HDR on this screen" plays HDR10 in HDR; "Convert to
+  SDR" looks right with Windows' HDR off. mpv older than 0.40 refuses "auto": it's sent "no" then.
+- **Audio delay**: Subtitles & Audio → the Audio column's cog; ±0.05 s steps move the sound against the picture and
+  come back for the same source next time.
+- **Hold to speed up**: a mouse held on the picture and a finger on a touch screen play at 2x until let go; letting
+  go doesn't pause; a drag or a pinch never speeds up; nothing in a watch party.
+- **Show the controls when paused** off: pausing leaves the picture clear; the mouse or a key brings the controls.
+- **Screenshots** (Ctrl+S / ⌘S, More → Save Screenshot): a JPEG with the subtitles in Pictures/Polarity; Show Last
+  Screenshot opens Explorer or Finder on it.
+- **Picture in Picture** (More, or I): the window goes to the bottom-right corner of its screen at about a quarter of
+  its width, on top; it can be moved and resized; I, Esc, a double click, fullscreen or Back put it back as it was,
+  maximised or fullscreen included. Check two screens with different scaling, and macOS's own fullscreen.
+- **Media keys and now playing**: Windows: the keyboard's play/pause and next keys while another app is in front; the
+  volume flyout's media panel shows the title, show, poster and a timeline that seeks. macOS (now_playing.m was never
+  compiled here): Control Center's Now Playing and the keyboard's media keys. iOS: the Lock Screen and Control Center.
+  Closing the player clears it.
+- **Play in another player** (More → Play in VLC/mpv/MPC-HC/MPC-BE/PotPlayer/IINA): only installed ones are listed;
+  each starts at the same time with the title; a source needing request headers gets all of them in mpv and IINA,
+  only User-Agent and Referer in VLC, none in MPC and PotPlayer.
+- **Your own mpv settings** (Settings → Advanced, desktop): Open Folder makes the folder with a starter mpv.conf; a
+  shader named there applies from the next video; turning it off goes back to Polarity's own settings.
+- **Shuffle**: on a show's page and in the Episodes panel; each released episode once before any again; Continue
+  Watching, watched ticks and Trakt/Simkl don't change for shuffled episodes.
+- **Next episode warm-up**: as Up Next shows, the next episode's first two sources are asked once (the serving
+  host's log shows the request); with a source that's slow to open the first time, the next episode starts sooner.
+- **Chromecast**, with a Chromecast or a Google TV on the same network (no device was available here): the TV button
+  appears with the device's name; an MP4 or HLS link from the web plays there from the same moment, with the title
+  and backdrop; play/pause, seeking, the skips and volume act on the TV and the time follows it; Stop Casting comes
+  back at the TV's position; an MKV the TV can't play says so and plays here again. Finding receivers listens on
+  mDNS (UDP 5353): Windows may ask once to allow Polarity on private networks. No button for torrents, downloads, files
+  or sources that need request headers (phase 2 of #443), in a watch party, or while AirPlay casts.
+
 ## Downloads page (#15)
 
 Checked here: grouping, seasons, sorting, filters, search, totals and the saved view (`tests/downloadsView.test.ts`);

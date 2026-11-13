@@ -135,7 +135,11 @@ pub struct MediaState {
 pub enum Incoming {
     Ping,
     /// The device's status: our app if it runs, and its volume.
-    Receiver { app: Option<App>, volume: Option<f64>, muted: Option<bool> },
+    Receiver {
+        app: Option<App>,
+        volume: Option<f64>,
+        muted: Option<bool>,
+    },
     /// The media's status; None when nothing is loaded.
     Media(Option<MediaState>),
     /// The file wouldn't play.
@@ -157,10 +161,17 @@ pub fn parse(namespace: &str, payload: &str) -> Incoming {
             let status = &v["status"];
             let app = status["applications"].as_array().and_then(|apps| {
                 apps.iter().find(|a| a["appId"] == DEFAULT_RECEIVER).and_then(|a| {
-                    Some(App { session: a["sessionId"].as_str()?.to_owned(), transport: a["transportId"].as_str()?.to_owned() })
+                    Some(App {
+                        session: a["sessionId"].as_str()?.to_owned(),
+                        transport: a["transportId"].as_str()?.to_owned(),
+                    })
                 })
             });
-            Incoming::Receiver { app, volume: status["volume"]["level"].as_f64(), muted: status["volume"]["muted"].as_bool() }
+            Incoming::Receiver {
+                app,
+                volume: status["volume"]["level"].as_f64(),
+                muted: status["volume"]["muted"].as_bool(),
+            }
         }
         (NS_RECEIVER, "LAUNCH_ERROR" | "INVALID_REQUEST") | (NS_MEDIA, "INVALID_REQUEST" | "INVALID_PLAYER_STATE") => {
             Incoming::Refused(v["reason"].as_str().unwrap_or(kind).to_owned())
@@ -208,14 +219,24 @@ mod tests {
         let status = r#"{"type":"RECEIVER_STATUS","status":{"applications":[{"appId":"CC1AD845","sessionId":"S","transportId":"T"}],"volume":{"level":0.4,"muted":false}}}"#;
         assert_eq!(
             parse(NS_RECEIVER, status),
-            Incoming::Receiver { app: Some(App { session: "S".into(), transport: "T".into() }), volume: Some(0.4), muted: Some(false) }
+            Incoming::Receiver {
+                app: Some(App { session: "S".into(), transport: "T".into() }),
+                volume: Some(0.4),
+                muted: Some(false)
+            }
         );
         let backdrop = r#"{"type":"RECEIVER_STATUS","status":{"applications":[{"appId":"E8C28D3C"}]}}"#;
         assert!(matches!(parse(NS_RECEIVER, backdrop), Incoming::Receiver { app: None, .. }));
         let media = r#"{"type":"MEDIA_STATUS","status":[{"mediaSessionId":1,"playerState":"PLAYING","currentTime":12.5,"media":{"duration":3600}}]}"#;
         assert_eq!(
             parse(NS_MEDIA, media),
-            Incoming::Media(Some(MediaState { session: 1, player: "PLAYING".into(), position: 12.5, duration: Some(3600.0), idle_reason: None }))
+            Incoming::Media(Some(MediaState {
+                session: 1,
+                player: "PLAYING".into(),
+                position: 12.5,
+                duration: Some(3600.0),
+                idle_reason: None
+            }))
         );
         assert_eq!(parse(NS_MEDIA, r#"{"type":"MEDIA_STATUS","status":[]}"#), Incoming::Media(None));
         assert_eq!(parse(NS_MEDIA, r#"{"type":"LOAD_FAILED"}"#), Incoming::LoadFailed);

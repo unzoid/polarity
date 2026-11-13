@@ -127,9 +127,13 @@ mod tests {
     #[test]
     fn known_bytes_from_a_receiver() {
         // protocol 0, source "a", destination "b", namespace "n", payload_type 0, payload "{}", and a binary 7 read past.
-        let bytes = [0x08, 0x00, 0x12, 1, b'a', 0x1a, 1, b'b', 0x22, 1, b'n', 0x28, 0x00, 0x32, 2, b'{', b'}', 0x3a, 1, 0xff];
+        let bytes =
+            [0x08, 0x00, 0x12, 1, b'a', 0x1a, 1, b'b', 0x22, 1, b'n', 0x28, 0x00, 0x32, 2, b'{', b'}', 0x3a, 1, 0xff];
         let m = CastMessage::decode(&bytes).unwrap();
-        assert_eq!((m.source.as_str(), m.destination.as_str(), m.namespace.as_str(), m.payload.as_str()), ("a", "b", "n", "{}"));
+        assert_eq!(
+            (m.source.as_str(), m.destination.as_str(), m.namespace.as_str(), m.payload.as_str()),
+            ("a", "b", "n", "{}")
+        );
     }
 
     #[test]

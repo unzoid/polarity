@@ -300,7 +300,12 @@ pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>, owner: Option<
 /// the time `at` (seconds): the viewer's own screenshot. Returns the file's name; [`mpv_screenshot_reveal`]
 /// shows it. The page names nothing on disk: the folder is fixed and the title becomes a plain file name.
 #[tauri::command]
-pub async fn mpv_screenshot(app: AppHandle, state: State<'_, AppState>, title: String, at: f64) -> Result<String, CmdError> {
+pub async fn mpv_screenshot(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    title: String,
+    at: f64,
+) -> Result<String, CmdError> {
     use polar_player::shots::{shot_name, unused_path};
     let dir = app.path().picture_dir().map_err(|e| CmdError::Save(e.to_string()))?.join("Polarity");
     tokio::fs::create_dir_all(&dir).await.map_err(|e| CmdError::Save(e.to_string()))?;
@@ -319,7 +324,8 @@ pub async fn mpv_screenshot(app: AppHandle, state: State<'_, AppState>, title: S
 /// Open the user's own mpv folder (made, with a starter mpv.conf, if it isn't there yet).
 #[tauri::command]
 pub fn mpv_config_folder(app: AppHandle) -> Result<(), CmdError> {
-    let dir = super::ensure_user_config_dir(&app).ok_or_else(|| CmdError::Save("couldn't make the mpv folder".into()))?;
+    let dir =
+        super::ensure_user_config_dir(&app).ok_or_else(|| CmdError::Save("couldn't make the mpv folder".into()))?;
     tauri_plugin_opener::open_path(dir, None::<&str>).map_err(|e| CmdError::Other(e.to_string()))
 }
 

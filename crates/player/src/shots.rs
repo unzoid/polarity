@@ -9,10 +9,8 @@ const TITLE_MAX: usize = 80;
 /// the page (an add-on's metadata), so it's cut down to plain characters: no folder separators, no
 /// characters Windows refuses, no `..`, no control characters, no name Windows reserves.
 pub fn shot_name(title: &str, at: f64) -> String {
-    let clean: String = title
-        .chars()
-        .map(|c| if c.is_control() || r#"<>:"/\|?*"#.contains(c) { ' ' } else { c })
-        .collect();
+    let clean: String =
+        title.chars().map(|c| if c.is_control() || r#"<>:"/\|?*"#.contains(c) { ' ' } else { c }).collect();
     let mut words = clean.split_whitespace().collect::<Vec<_>>().join(" ");
     if words.chars().count() > TITLE_MAX {
         words = words.chars().take(TITLE_MAX).collect::<String>().trim_end().to_string();
@@ -22,7 +20,9 @@ pub fn shot_name(title: &str, at: f64) -> String {
     let reserved = {
         let stem = words.split('.').next().unwrap_or("").to_ascii_uppercase();
         matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-            || (stem.len() == 4 && (stem.starts_with("COM") || stem.starts_with("LPT")) && stem.as_bytes()[3].is_ascii_digit())
+            || (stem.len() == 4
+                && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && stem.as_bytes()[3].is_ascii_digit())
     };
     let title = if words.is_empty() || reserved { "Screenshot".to_string() } else { words };
     let secs = if at.is_finite() && at > 0.0 { at as u64 } else { 0 };
@@ -36,10 +36,7 @@ pub fn unused_path(dir: &Path, name: &str) -> PathBuf {
         return first;
     }
     let (stem, ext) = name.rsplit_once('.').unwrap_or((name, "jpg"));
-    (2..)
-        .map(|n| dir.join(format!("{stem} ({n}).{ext}")))
-        .find(|p| !p.exists())
-        .expect("some number is free")
+    (2..).map(|n| dir.join(format!("{stem} ({n}).{ext}"))).find(|p| !p.exists()).expect("some number is free")
 }
 
 #[cfg(test)]

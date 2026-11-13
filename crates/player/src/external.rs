@@ -133,9 +133,13 @@ mod tests {
 
     #[test]
     fn headers_go_where_a_player_takes_them() {
-        let headers = ["User-Agent: Agent/1".to_string(), "Referer: https://example.com/".into(), "Cookie: a=b, c=d".into()];
+        let headers =
+            ["User-Agent: Agent/1".to_string(), "Referer: https://example.com/".into(), "Cookie: a=b, c=d".into()];
         let h = Handoff { url: URL, title: "", start: 0.0, headers: &headers };
-        assert_eq!(args(Kind::Vlc, &h), ["--http-user-agent=Agent/1", "--http-referrer=https://example.com/", "--", URL]);
+        assert_eq!(
+            args(Kind::Vlc, &h),
+            ["--http-user-agent=Agent/1", "--http-referrer=https://example.com/", "--", URL]
+        );
         assert_eq!(
             args(Kind::Mpv, &h),
             ["--http-header-fields=User-Agent: Agent/1,Referer: https://example.com/,Cookie: a=b\\, c=d", "--", URL]

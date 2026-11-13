@@ -99,7 +99,9 @@ fn show(s: &mut Session, now: Option<NowPlaying>) -> windows::core::Result<()> {
         v.SetSubtitle(&HSTRING::from(&now.subtitle))?;
         // Windows fetches the picture itself. A link it can't read just leaves the overlay without one.
         if let Some(art) = &now.artwork {
-            if let Ok(stream) = Uri::CreateUri(&HSTRING::from(art)).and_then(|u| RandomAccessStreamReference::CreateFromUri(&u)) {
+            if let Ok(stream) =
+                Uri::CreateUri(&HSTRING::from(art)).and_then(|u| RandomAccessStreamReference::CreateFromUri(&u))
+            {
                 d.SetThumbnail(&stream)?;
             }
         }

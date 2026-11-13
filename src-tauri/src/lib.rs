@@ -1,7 +1,7 @@
 mod art_focus;
-mod cast;
 #[cfg(any(windows, test))]
 mod automation;
+mod cast;
 mod commands;
 mod controllers;
 mod deep_link;

@@ -88,7 +88,11 @@ impl Session {
     }
 
     /// The same over any connection (a test's in-memory pipe).
-    fn over<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, load: Load, events: mpsc::UnboundedSender<Event>) -> Session {
+    fn over<S: AsyncRead + AsyncWrite + Send + 'static>(
+        stream: S,
+        load: Load,
+        events: mpsc::UnboundedSender<Event>,
+    ) -> Session {
         let (commands, rx) = mpsc::unbounded_channel();
         tokio::spawn(run(stream, load, rx, events));
         Session { commands }
@@ -197,7 +201,12 @@ impl<S: AsyncWrite> Writer<S> {
         self.request
     }
     async fn send(&mut self, to: &str, namespace: &str, payload: Value) -> Result<(), String> {
-        let msg = CastMessage { source: m::SENDER_ID.into(), destination: to.into(), namespace: namespace.into(), payload: payload.to_string() };
+        let msg = CastMessage {
+            source: m::SENDER_ID.into(),
+            destination: to.into(),
+            namespace: namespace.into(),
+            payload: payload.to_string(),
+        };
         self.w.write_all(&msg.encode()).await.map_err(|e| e.to_string())
     }
 }
@@ -245,7 +254,8 @@ async fn drive<S: AsyncWrite>(
     if let Err(e) = setup.await {
         return failed(format!("lost the TV: {e}"));
     }
-    let mut status = Status { state: PlayState::Loading, position: load.start, duration: None, volume: None, muted: None };
+    let mut status =
+        Status { state: PlayState::Loading, position: load.start, duration: None, volume: None, muted: None };
     let _ = events.send(Event::Status(status.clone()));
     let mut app: Option<App> = None;
     let mut media: Option<i64> = None;
@@ -389,11 +399,17 @@ mod tests {
             }
         }
         async fn say(&mut self, from: &str, namespace: &str, payload: Value) {
-            let msg = CastMessage { source: from.into(), destination: m::SENDER_ID.into(), namespace: namespace.into(), payload: payload.to_string() };
+            let msg = CastMessage {
+                source: from.into(),
+                destination: m::SENDER_ID.into(),
+                namespace: namespace.into(),
+                payload: payload.to_string(),
+            };
             self.w.write_all(&msg.encode()).await.unwrap();
         }
         async fn media(&mut self, state: &str, at: f64, idle: Option<&str>) {
-            let mut s = json!({ "mediaSessionId": 7, "playerState": state, "currentTime": at, "media": { "duration": 600.0 } });
+            let mut s =
+                json!({ "mediaSessionId": 7, "playerState": state, "currentTime": at, "media": { "duration": 600.0 } });
             if let Some(reason) = idle {
                 s["idleReason"] = json!(reason);
             }
@@ -404,18 +420,23 @@ mod tests {
     fn cast() -> (Session, FakeTv, mpsc::UnboundedReceiver<Event>) {
         let (ours, theirs) = tokio::io::duplex(1 << 16);
         let (tx, rx) = mpsc::unbounded_channel();
-        let load = Load { url: "https://media.example.com/film.mp4".into(), title: "A Film".into(), subtitle: String::new(), image: None, start: 30.0 };
+        let load = Load {
+            url: "https://media.example.com/film.mp4".into(),
+            title: "A Film".into(),
+            subtitle: String::new(),
+            image: None,
+            start: 30.0,
+        };
         let session = Session::over(ours, load, tx);
         let (r, w) = tokio::io::split(theirs);
         (session, FakeTv { r, w }, rx)
     }
 
+    /// The next event, which must be a status.
     async fn status(events: &mut mpsc::UnboundedReceiver<Event>) -> Status {
-        loop {
-            match events.recv().await.unwrap() {
-                Event::Status(s) => return s,
-                other => panic!("{other:?}"),
-            }
+        match events.recv().await.unwrap() {
+            Event::Status(s) => s,
+            other => panic!("{other:?}"),
         }
     }
 
@@ -433,7 +454,10 @@ mod tests {
         let (to, _) = tv.expect("CONNECT").await;
         assert_eq!(to.destination, "T");
         let (_, load) = tv.expect("LOAD").await;
-        assert_eq!((load["media"]["contentId"].as_str(), load["currentTime"].as_f64()), (Some("https://media.example.com/film.mp4"), Some(30.0)));
+        assert_eq!(
+            (load["media"]["contentId"].as_str(), load["currentTime"].as_f64()),
+            (Some("https://media.example.com/film.mp4"), Some(30.0))
+        );
         assert_eq!(status(&mut events).await.volume, Some(0.5));
         tv.media("PLAYING", 30.5, None).await;
         let playing = status(&mut events).await;

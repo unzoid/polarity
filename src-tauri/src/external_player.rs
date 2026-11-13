@@ -24,12 +24,17 @@ fn candidates(kind: Kind) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     #[cfg(windows)]
     {
-        let bases: Vec<PathBuf> =
-            ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"].iter().filter_map(|v| std::env::var_os(v)).map(PathBuf::from).collect();
+        let bases: Vec<PathBuf> = ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]
+            .iter()
+            .filter_map(std::env::var_os)
+            .map(PathBuf::from)
+            .collect();
         let under = |rel: &[&str]| bases.iter().flat_map(|b| rel.iter().map(move |r| b.join(r))).collect::<Vec<_>>();
         out.extend(match kind {
             Kind::Vlc => under(&["VideoLAN\\VLC\\vlc.exe"]),
-            Kind::MpcHc => under(&["MPC-HC\\mpc-hc64.exe", "MPC-HC\\mpc-hc.exe", "K-Lite Codec Pack\\MPC-HC64\\mpc-hc64.exe"]),
+            Kind::MpcHc => {
+                under(&["MPC-HC\\mpc-hc64.exe", "MPC-HC\\mpc-hc.exe", "K-Lite Codec Pack\\MPC-HC64\\mpc-hc64.exe"])
+            }
             Kind::MpcBe => under(&["MPC-BE x64\\mpc-be64.exe", "MPC-BE\\mpc-be.exe"]),
             Kind::PotPlayer => under(&["DAUM\\PotPlayer\\PotPlayerMini64.exe", "DAUM\\PotPlayer\\PotPlayerMini.exe"]),
             Kind::Mpv => under(&["mpv\\mpv.exe", "MPV Player\\mpv.exe", "Programs\\mpv\\mpv.exe"]),
@@ -106,8 +111,11 @@ pub fn external_play(
     }
     let program = find(player).ok_or_else(|| CmdError::NotFound(format!("{} isn't installed", player.name())))?;
     let local = downloaded || opened || crate::torrent::owns(&app, &url);
-    let fields =
-        if local { Vec::new() } else { polar_player::headers::mpv_fields(&polar_player::headers::playback_headers(&headers.unwrap_or_default())) };
+    let fields = if local {
+        Vec::new()
+    } else {
+        polar_player::headers::mpv_fields(&polar_player::headers::playback_headers(&headers.unwrap_or_default()))
+    };
     let line = args(player, &Handoff { url: &url, title: &title, start, headers: &fields });
     std::process::Command::new(program)
         .args(line)

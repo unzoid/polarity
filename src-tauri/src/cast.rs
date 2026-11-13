@@ -49,10 +49,11 @@ enum Update {
     },
 }
 
+/// The receivers by name, each once (a TV can answer under more than one service name).
 fn list(cast: &Cast) -> Vec<Device> {
-    let mut v: Vec<Device> = cast.devices.locked().values().cloned().collect();
-    v.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    v.dedup_by(|a, b| a.id == b.id);
+    let mut seen = std::collections::HashSet::new();
+    let mut v: Vec<Device> = cast.devices.locked().values().filter(|d| seen.insert(d.id.clone())).cloned().collect();
+    v.sort_by_key(|d| d.name.to_lowercase());
     v
 }
 
@@ -101,7 +102,11 @@ fn reachable(url: &str) -> bool {
     let rest = url.split_once("://").map(|(_, r)| r).unwrap_or("");
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     let host = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
-    let host = if let Some(v6) = host.strip_prefix('[') { v6.split(']').next().unwrap_or("") } else { host.split(':').next().unwrap_or("") };
+    let host = if let Some(v6) = host.strip_prefix('[') {
+        v6.split(']').next().unwrap_or("")
+    } else {
+        host.split(':').next().unwrap_or("")
+    };
     let host = host.to_ascii_lowercase();
     if host.is_empty() || host == "localhost" || host.ends_with(".localhost") {
         return false;
@@ -125,7 +130,10 @@ pub async fn cast_play(
     if !reachable(&url) {
         return Err(CmdError::Unsupported("the TV can only play links from the web".into()));
     }
-    let to = list(&cast).into_iter().find(|d| d.id == device).ok_or_else(|| CmdError::NotFound("that TV isn't on the network any more".into()))?;
+    let to = list(&cast)
+        .into_iter()
+        .find(|d| d.id == device)
+        .ok_or_else(|| CmdError::NotFound("that TV isn't on the network any more".into()))?;
     let cut = |s: &str| s.chars().filter(|c| !c.is_control()).take(200).collect::<String>();
     let load = Load {
         url,
