@@ -221,7 +221,7 @@ impl Tmdb {
             .await?;
         let found = Lookup {
             imdb_id: str_of(&d["external_ids"]["imdb_id"]).filter(|i| i.starts_with("tt")),
-            logos: pick_logos(&d["images"]["logos"]),
+            logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
         };
         self.lookups.insert(key, found.clone());
         Ok(found)
@@ -245,7 +245,23 @@ impl Tmdb {
             .await?;
 
         let videos = if ty == "series" { self.episodes(tmdb_id, imdb_id, &d).await? } else { Vec::new() };
-        Ok(detail_to_meta(ty, imdb_id, &d, videos))
+        let logos = self.logos(kind, tmdb_id, &d).await;
+        Ok(detail_to_meta(ty, imdb_id, &d, videos, logos))
+    }
+
+    /// The logos of a details answer (`pick_logos`). A title with no English or
+    /// language-free logo gets those in its original language, by one more
+    /// request (#454: a show made in another language may have only those);
+    /// when that fails the title has none, as the name shows just as well.
+    async fn logos(&self, kind: &str, tmdb_id: u64, d: &Value) -> Vec<String> {
+        let found = pick_logos(&d["images"]["logos"]);
+        if !found.is_empty() {
+            return found;
+        }
+        let Some(original) = str_of(&d["original_language"]).filter(|l| l != "en") else { return found };
+        let images: Result<Value> =
+            self.get(&format!("/{kind}/{tmdb_id}/images"), &[("include_image_language", original.as_str())]).await;
+        images.map(|i| pick_logos(&i["logos"])).unwrap_or_default()
     }
 
     /// All seasons, 20 per request via `append_to_response=season/N,...`.
@@ -440,15 +456,18 @@ fn pick_trailer(videos: &[Value]) -> Option<String> {
 }
 
 /// The logos from a details answer's `images.logos` (asked for as English or
-/// language-free only), English first, each group in TMDB's order. The first
-/// is the title's logo; the app may choose another that reads better on the
-/// backdrop (#215).
+/// language-free only), English first, and in each group the wide ones before
+/// the rest, otherwise in TMDB's order. The first is the title's logo; the app
+/// may choose another that reads better on the backdrop (#215), but never one
+/// that isn't wide (`logoShaped`), so square ones listed first mustn't crowd
+/// the wide ones out of the few kept (#454).
 fn pick_logos(logos: &Value) -> Vec<String> {
     let Some(logos) = logos.as_array() else { return Vec::new() };
-    let english = logos.iter().filter(|l| l["iso_639_1"] == "en");
-    let others = logos.iter().filter(|l| l["iso_639_1"] != "en");
-    english
-        .chain(others)
+    let mut ordered: Vec<&Value> = logos.iter().collect();
+    // Stable: TMDB's order stays within each kind. No aspect ratio given counts as wide.
+    ordered.sort_by_key(|l| (l["iso_639_1"] != "en", l["aspect_ratio"].as_f64().is_some_and(|r| r < LOGO_ASPECT)));
+    ordered
+        .into_iter()
         .filter_map(|l| str_of(&l["file_path"]))
         .map(|p| format!("{IMG}/w500{p}"))
         .take(MAX_LOGOS)
@@ -458,7 +477,10 @@ fn pick_logos(logos: &Value) -> Vec<String> {
 /// More logos than this aren't kept: the app measures at most a few.
 const MAX_LOGOS: usize = 6;
 
-fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>) -> Meta {
+/// How many times wider than tall a logo must be for the app to show it (`LOGO_ASPECT` in lib/ui/logoContrast.ts).
+const LOGO_ASPECT: f64 = 1.2;
+
+fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos: Vec<String>) -> Meta {
     let is_series = ty == "series";
     let release_info = if is_series {
         let start = year(&d["first_air_date"]);
@@ -472,8 +494,6 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>) -> Met
     } else {
         year(&d["release_date"])
     };
-
-    let logos = pick_logos(&d["images"]["logos"]);
 
     let runtime = d["runtime"]
         .as_u64()
@@ -638,7 +658,8 @@ mod tests {
     /// page 2 repeating two titles of page 1 (lists drift as popularity
     /// moves), page 1 refused once with 429. Details: no IMDb id for multiples
     /// of 5, a 500 every time for 305; even ids have logos (a Spanish one
-    /// listed before the English one), odd ids none.
+    /// listed before the English one), odd ids none; 601 has logos only in
+    /// its own language, 602 seven square ones before a wide one (#454).
     async fn fake_tmdb() -> (String, Arc<AtomicUsize>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
@@ -680,24 +701,46 @@ mod tests {
                                 ids.iter().map(|id| json!({ "id": id, "title": format!("T{id}") })).collect();
                             ("200 OK", json!({ "results": results, "total_pages": 3 }).to_string())
                         }
+                    } else if path == "/movie/601/images" {
+                        // Asked for in the original language only.
+                        assert!(query.contains("include_image_language=zh"), "{query}");
+                        let logos = json!([{ "iso_639_1": "zh", "file_path": "/zh601.png", "aspect_ratio": 3.0 }]);
+                        ("200 OK", json!({ "logos": logos }).to_string())
                     } else if let Some(id) = path.strip_prefix("/movie/").and_then(|id| id.parse::<u64>().ok()) {
                         assert!(query.contains("append_to_response=external_ids%2Cimages"), "{query}");
                         assert!(query.contains("include_image_language=en%2Cnull"), "{query}");
                         let imdb = if id % 5 == 0 { Value::Null } else { json!(format!("tt{id}")) };
-                        let logos = if id % 2 == 0 {
-                            json!([
-                                { "iso_639_1": "es", "file_path": format!("/es{id}.png") },
-                                { "iso_639_1": "en", "file_path": format!("/en{id}.png") },
-                            ])
-                        } else {
-                            json!([])
+                        let square = |n: u64| json!({ "iso_639_1": "en", "file_path": format!("/sq{n}.png"), "aspect_ratio": 1.06 });
+                        let (logos, original) = match id {
+                            // Logos only in the title's own language, which "en,null" doesn't bring (#454).
+                            601 => (json!([]), "zh"),
+                            // Seven square English logos listed before the one wide one (#454).
+                            602 => {
+                                let mut l: Vec<Value> = (0..7).map(square).collect();
+                                l.push(json!({ "iso_639_1": "en", "file_path": "/wide.png", "aspect_ratio": 2.19 }));
+                                l.push(json!({ "iso_639_1": null, "file_path": "/plain.png", "aspect_ratio": 2.0 }));
+                                (json!(l), "ja")
+                            }
+                            id if id % 2 == 0 => (
+                                json!([
+                                    { "iso_639_1": "es", "file_path": format!("/es{id}.png") },
+                                    { "iso_639_1": "en", "file_path": format!("/en{id}.png") },
+                                ]),
+                                "en",
+                            ),
+                            _ => (json!([]), "en"),
                         };
                         match id {
                             305 => ("500 Internal Server Error", String::new()),
                             id => (
                                 "200 OK",
-                                json!({ "id": id, "external_ids": { "imdb_id": imdb }, "images": { "logos": logos } })
-                                    .to_string(),
+                                json!({
+                                    "id": id,
+                                    "original_language": original,
+                                    "external_ids": { "imdb_id": imdb },
+                                    "images": { "logos": logos },
+                                })
+                                .to_string(),
                             ),
                         }
                     } else {
@@ -745,6 +788,25 @@ mod tests {
         assert!(second.iter().all(|id| !first.contains(id)), "skip=20 repeats a title");
         // Asking again gives the same slice, from the run already read.
         assert_eq!(ids(tmdb.catalog("movie", "popular", 0, None).await.unwrap()), first);
+    }
+
+    #[tokio::test]
+    async fn wide_logos_first_and_the_original_language_when_none_else() {
+        let (api, hits) = fake_tmdb().await;
+        let tmdb = local(api);
+        let img = |p: &str| format!("https://image.tmdb.org/t/p/w500{p}");
+        // The wide English logo leads, then the square ones, then the language-free one; six kept (#454).
+        let found = tmdb.lookup("movie", 602).await.unwrap();
+        assert_eq!(found.logos[0], img("/wide.png"));
+        assert_eq!(found.logos[1..], (0..5).map(|n| img(&format!("/sq{n}.png"))).collect::<Vec<_>>()[..]);
+        // A title with logos only in its own language gets those, by a second request.
+        let before = hits.load(Ordering::SeqCst);
+        assert_eq!(tmdb.lookup("movie", 601).await.unwrap().logos, [img("/zh601.png")]);
+        assert_eq!(hits.load(Ordering::SeqCst) - before, 2);
+        // An English title with none asks nothing more.
+        let before = hits.load(Ordering::SeqCst);
+        assert!(tmdb.lookup("movie", 101).await.unwrap().logos.is_empty());
+        assert_eq!(hits.load(Ordering::SeqCst) - before, 1);
     }
 
     #[tokio::test]
@@ -840,10 +902,10 @@ mod tests {
     fn details_say_the_language_it_was_made_in() {
         let d = json!({"id": 1, "name": "Made Up Toon", "original_language": "ja"});
         assert_eq!(
-            detail_to_meta("series", "tt0000001", &d, Vec::new()).details.original_language.as_deref(),
+            detail_to_meta("series", "tt0000001", &d, Vec::new(), Vec::new()).details.original_language.as_deref(),
             Some("ja")
         );
         let d = json!({"id": 1, "name": "Made Up Toon", "original_language": ""});
-        assert_eq!(detail_to_meta("series", "tt0000001", &d, Vec::new()).details.original_language, None);
+        assert_eq!(detail_to_meta("series", "tt0000001", &d, Vec::new(), Vec::new()).details.original_language, None);
     }
 }
