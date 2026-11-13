@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { PLAYER_ZIP, feedPlatforms, releaseFile, releaseNotes } from "../scripts/releaseAssets";
 
+// These tests put a shell script on PATH in place of a real tool, which Windows can't run; the
+// scripts they check run on the macOS and Linux runners only.
+const unixOnly = test.skipIf(process.platform === "win32");
+
 const V = "1.2.3";
 const root = join(import.meta.dir, "..");
 
@@ -119,7 +123,7 @@ test("fetch-mpv finds the player in a release under the old name and the new one
   expect(PLAYER_ZIP.test(`Sources-Polarity-${V}-Windows-x64-mpv.tar`)).toBe(false);
 });
 
-test("release-publish drafts the release with the new names, no signatures, the feed and the notes", () => {
+unixOnly("release-publish drafts the release with the new names, no signatures, the feed and the notes", () => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "release-publish-"));
   try {
     const built = join(dir, "release");
@@ -134,7 +138,8 @@ test("release-publish drafts the release with the new names, no signatures, the 
     writeFileSync(join(bin, "gh"), `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a"; done > "${join(dir, "gh-args")}"\n`);
     chmodSync(join(bin, "gh"), 0o755);
 
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_REPOSITORY: "" };
+    // Should the stand-in ever not be the gh that runs, the real one is pointed at a host that doesn't exist.
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_REPOSITORY: "", GH_HOST: "github.invalid" };
     const r = spawnSync("bun", [join(root, "scripts", "release-publish.ts"), V, built, join(dir, "notes.md")], { encoding: "utf8", env });
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);

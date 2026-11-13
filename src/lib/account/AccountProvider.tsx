@@ -110,13 +110,15 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     // Best effort: get the previous profile's last changes up first. Whatever doesn't make it
     // goes up in the background with the next profile's sync rounds.
     await Promise.race([sync.flush(), new Promise((r) => setTimeout(r, 3000))]);
+    // From here the store becomes the new profile's: a round still running for the old one must see that (plan 002).
+    sync.stop();
     await api.activateSpace(p.id);
     const before = await keepDeviceSettings(p.id).catch(warnFailed("Keeping this device's settings"));
     // New to this device: the add-ons and keys Settings → Account → Share add-ons and keys allows it (#80, #429).
     await startProfile(p.id, before ?? null, siblings.current).catch(warnFailed("Starting the profile with this device's add-ons and keys"));
     // This profile's settings as this device last synced them; reinstalling
     // addons can take a moment, so don't hold the app for it.
-    await Promise.race([restoreSettings(p.id).catch(warnFailed("Restoring the profile's settings")), new Promise((r) => setTimeout(r, 1500))]);
+    await Promise.race([restoreSettings(p.id, before ?? null).catch(warnFailed("Restoring the profile's settings")), new Promise((r) => setTimeout(r, 1500))]);
     localStorage.setItem(LAST_PROFILE_KEY, p.id);
     setProfile(p);
     refreshLocalViews();

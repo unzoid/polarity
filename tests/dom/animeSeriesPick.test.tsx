@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AnimeSeriesPick } from "../../src/components/anime/AnimeSeriesPick";
+import { SeriesPickToast } from "../../src/components/anime/SeriesPickToast";
 import type { AnimeCard } from "../../src/lib/anime";
 import { keys } from "../../src/lib/net";
 import { click, render } from "./render";
@@ -24,13 +25,15 @@ const found = {
   movies: [{ id: "tt0000902", type: "movie", name: "Stardust Wanderers: The Film", releaseInfo: "2027" }],
 };
 
-async function open(current?: string) {
+async function open(current?: string, stored = false) {
   const qc = new QueryClient();
   qc.setQueryData(keys.search("Hoshikuzu Ryokou-dan"), found);
   qc.setQueryData(keys.anime.imdb(show.id), null);
+  qc.setQueryData(keys.animeLinks, stored ? [{ canonical: current, anilist: show.id, kitsu: 5, updatedAt: 1 }] : []);
   const view = await render(
     <QueryClientProvider client={qc}>
       <AnimeSeriesPick anime={show} isMovie={false} current={current} />
+      <SeriesPickToast />
     </QueryClientProvider>,
   );
   const trigger = view.container.querySelector("button")!;
@@ -58,5 +61,36 @@ test("AnimeSeriesPick: a show linked by title can be changed, the current one ma
   const { view, trigger } = await open("tt0000901");
   expect(trigger.textContent).toBe("Wrong series?");
   expect(document.querySelector(".anime-pick-item")!.getAttribute("aria-current")).toBe("true");
+  await view.unmount();
+});
+
+test("AnimeSeriesPick: a pick says which series the anime plays from now, and Undo asks the page again (#335)", async () => {
+  const { qc, view } = await open();
+  expect(document.querySelector(".anime-pick-automatic")).toBeNull();
+  await click(document.querySelector(".anime-pick-item")!);
+  await settle();
+  const notice = document.querySelector('[data-kind="series-pick"]')!;
+  expect(notice.textContent).toContain("Plays from Stardust Wanderers now");
+  await act(async () => qc.setQueryData(keys.anime.imdb(show.id), { id: "tt0000901", by: "stored" }));
+  await click([...notice.querySelectorAll("button")].find((b) => b.textContent === "Undo")!);
+  await settle();
+  // The link from before is put back (none here: the stored one is taken back), and the page asks again.
+  expect(qc.getQueryState(keys.anime.imdb(show.id))?.isInvalidated).toBe(true);
+  await act(async () => new Promise((r) => setTimeout(r, 300)));
+  expect(document.querySelector('[data-kind="series-pick"]')).toBeNull();
+  await view.unmount();
+});
+
+test("AnimeSeriesPick: with a stored link, \"Use Polarity's match\" comes first and takes it back (#335)", async () => {
+  const { qc, view } = await open("tt0000901", true);
+  const list = document.querySelector(".anime-pick")!;
+  const automatic = list.querySelector(".anime-pick-automatic")!;
+  expect(automatic.textContent).toBe("Use Polarity's match");
+  expect(automatic.compareDocumentPosition(list.querySelector("input")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await click(automatic);
+  await settle();
+  expect(document.querySelector(".anime-pick")).toBeNull();
+  expect(qc.getQueryState(keys.anime.imdb(show.id))?.isInvalidated).toBe(true);
+  expect(document.querySelector('[data-kind="series-pick"]')!.textContent).toContain("Back to Polarity's match");
   await view.unmount();
 });

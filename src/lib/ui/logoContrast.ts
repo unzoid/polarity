@@ -78,31 +78,40 @@ function weightedMedian(values: number[], weight: number[], total: number) {
  * Where a heading's logo sits over its backdrop (fractions of the picture, as `object-fit: cover` shows it on a wide
  * window) and how much of the page's gradient covers it there (`rgb(10 10 10 / scrim)`). They follow the scrims in
  * cards.css (.hero-scrim), detail.css (.detail-bg-scrim) and tv.css (the TV art fades out towards the logo).
+ * `onPage`: the gradient is the page's colour, near-white in light mode (the detail page); the others stay dark.
  */
 export const LOGO_SPOTS = {
   hero: { x0: 0.03, y0: 0.45, x1: 0.4, y1: 0.8, scrim: 0.5 },
-  detail: { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7 },
+  detail: { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7, onPage: true },
   "tv-stage": { x0: 0.03, y0: 0.5, x1: 0.35, y1: 0.85, scrim: 0.8 },
   "tv-detail": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
   "tv-panel": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
 } as const;
 
-export type LogoSpot = { x0: number; y0: number; x1: number; y1: number; scrim: number };
+export type LogoSpot = { x0: number; y0: number; x1: number; y1: number; scrim: number; onPage?: boolean };
 
-/** The scrim's colour (the page background, #0a0a0a). */
+/** The scrim's colour (the dark page background, #0a0a0a). */
 const SCRIM = 10;
+/** The light page's grey (lib/theme LIGHT_BASE, #f4f4f6). */
+const LIGHT_SCRIM = 244;
+
+/** The grey a spot's gradient is made of right now: the light page's for an `onPage` spot in light mode. */
+export function scrimLevel(spot: Pick<LogoSpot, "onPage">): number {
+  const light = typeof document !== "undefined" && document.documentElement.dataset.scheme === "light";
+  return spot.onPage && light ? LIGHT_SCRIM : SCRIM;
+}
 
 /** The luminance behind a logo when the backdrop can't be measured, or there's none: the app's dark page. */
 export const DARK_PAGE = luminance(SCRIM, SCRIM, SCRIM);
 
 /**
  * The mean luminance of a backdrop's pixels (already cut to the logo's spot) under the page's gradient of
- * `scrim` (0-1), blended in sRGB as CSS does.
+ * `scrim` (0-1) in the grey `level`, blended in sRGB as CSS does.
  */
-export function backdropLuminance(px: ArrayLike<number>, scrim: number) {
+export function backdropLuminance(px: ArrayLike<number>, scrim: number, level = SCRIM) {
   let sum = 0;
   let n = 0;
-  const over = (c: number) => c * (1 - scrim) + SCRIM * scrim;
+  const over = (c: number) => c * (1 - scrim) + level * scrim;
   for (let i = 0; i < px.length; i += 4) {
     sum += luminance(over(px[i]), over(px[i + 1]), over(px[i + 2]));
     n++;

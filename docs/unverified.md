@@ -161,6 +161,21 @@ it); the IPA (a zip) holds `licenses/mpv/` with each library's licence and `BUND
 Not built: Picture in picture, background audio, lock screen controls, AirPlay on iOS (#19 is macOS), signing
 and TestFlight (the owner's Apple developer account).
 
+## iOS: five tabs, no More (#449)
+
+With Library a fifth section and Search a sixth tab (#174), an iPhone's tab bar put iOS's own More tab in
+their place: a list with an Edit button, and pages under it inside a navigation controller of its own, which
+drew a "Library" bar with a round Back above the app's header (also over the player) and took the back swipe
+out to the list. Now `native_tabs` carries the sections alone, five at most (`MAX_NATIVE_TABS` in
+`lib/navTabs.ts`), and `ios/tabs.m` has no search tab. Checked here: unit tests and the phone e2e with an
+iPhone's user agent (the tabs sent, the top bar's buttons, the edge swipe back to the Library). On an iPhone:
+1. Five tabs (four with Anime off), no More, with and without Settings → Browsing → Show the Calendar.
+2. Search and, when it's on, the Calendar are buttons in the top bar next to the profile; each opens its page.
+3. Library → a title → the swipe in from the left edge: back on the Library, never a list of tabs.
+4. No iOS navigation bar (a title and a round Back) above the app's header on any page, nor over the player
+   started from the Library.
+5. A title opened from the Library fills the whole screen (#466 may share this cause).
+
 ## iOS player and layouts (#172)
 
 The first runs (simulator and an iPhone) showed a solid blue picture with sound, the status bar over the
@@ -178,8 +193,9 @@ run on iOS here:
   Tauri's root view controller), back when it closes.
 - Safe areas: the player's bars, title, notices, Up Next, Skip and the options' close button keep clear of
   the insets on phones and tablets (e2e with an iPhone's insets, upright and sideways, and a tablet's).
-- iOS Back: a swipe in from the left edge (within 24 px) closes what's open, then leaves a pushed page or the
-  player; at a tab's own page it does nothing (Android's Back goes Home, then leaves the app).
+- iOS Back: a swipe in from the left edge (iOS's own edge recognizer, `ios/back.m`) closes what's open, then
+  leaves the player; on a pushed page with nothing over it the page follows the finger (#451, below); at a
+  tab's own page the edge is the page's (Android's Back goes Home, then leaves the app).
 - iPad: the tablet layout in every window, Slide Over and narrow Split View included; there (under 600 px
   wide) the player takes the phone's compact controls. Seen as screenshots at iPad sizes in a desktop
   browser with an iPad user agent, not on an iPad.
@@ -192,11 +208,23 @@ To check on an iPhone (notched, iOS 17 or later) and an iPad:
    Sources, Skip, Up Next) visible and tappable clear of the Dynamic Island and the home indicator. Closing
    the player brings the status bar back.
 3. The player's Back button leaves the player; a swipe in from the left edge does too, closes an open sheet
-   or menu first, leaves a title page, and does nothing on a tab's own page; a vertical scroll that starts
-   at the edge still scrolls.
+   or menu first, leaves a title page (steps 24 to 26), and does nothing on a tab's own page; a vertical
+   scroll that starts at the edge still scrolls.
 4. iPad, portrait and landscape, full screen, Split View (half, a third) and Slide Over, Stage Manager
    windows resized: the tablet layout; under 600 px wide the player shows glyph-only actions and the title
    beside Back. With a keyboard and a trackpad: Escape is Back, the shortcuts work, hover shows on cards.
+
+## The space under the top bar on phones (#450)
+
+On a phone a page's title (Series, Movies, Library, Calendar, Anime without its carousel, a playlist) now
+starts 0.5rem under the top bar; before, the desktop's 1.75rem plus the heading's default margin left about
+48 px of nothing there. Home's featured card already sat right under it. The phone e2e measures the gap on
+Home, Series and Library, with and without a notch's inset, and that the bar's row starts where the
+status bar ends. Only the web layout runs here. On an iPhone (with #449's change, so no More tab):
+- Home, Series, Library: the logo sits just under the status bar, and the page's title or card just under
+  the logo's row, with no band of empty space above or below the bar.
+- If the bar itself sits lower than the status bar's height, that space comes from the safe area iOS
+  reports to the web view (the native side), not from the page: note how much and on which pages.
 
 ## iOS green tint (#416)
 
@@ -224,11 +252,12 @@ Nothing here runs iOS. `scripts/colour-bars.sh <dir>` makes SMPTE colour-bar cli
 
 ## iOS tab bar (#174)
 
-The sections (Home, Series, Movies, Anime, Library, and Calendar when it's on) are iOS's own tab bar: a
+The sections (Home, Series, Movies, Anime, Library: five at most) are iOS's own tab bar: a
 `UITabBarController` becomes the window's root and Tauri's view controller, the web view with the video
 behind it, moves into the current tab (`ios/tabs.m`). The web app sends the tabs, the current one and
 whether the bar shows (`native_tabs`); a tab the user picks comes back as `native://tab` and opens that
-section, the current one picked again goes back to its top. The web-drawn tabs hide. CI builds with Xcode
+section, the current one picked again goes back to its top. The web-drawn tabs hide. Search and the Calendar
+(when it's on) are buttons in the top bar next to the profile, so iOS never adds its own More tab (#449). CI builds with Xcode
 26 or later, so iOS 26 draws the bar in Liquid Glass; iOS 17 to 25 get the classic bar; an iPad on iOS 18
 or later gets the tab bar that opens into a sidebar. Only the web side ran here (unit tests, the Rust for
 iOS type-checked); the Objective-C was written from Apple's documentation and is compiled only by CI.
@@ -244,7 +273,8 @@ To check on an iPhone and an iPad on iOS 26, and an iPhone on iOS 17 or 18:
 4. The bar hides while the player, Settings or a sheet is open and comes back when they close; the player's
    bottom controls sit by the home indicator, not above an empty space where the bar was (iOS 17 most of
    all).
-5. Settings → Browsing → Show the Calendar: a sixth tab; on an iPhone the bar shows More with the rest.
+5. Settings → Browsing → Show the Calendar: no sixth tab; a Calendar button appears in the top bar next to
+   Search and opens the Calendar. No More tab on any iPhone, upright or sideways (#449).
 6. iPad: the bar at the top, its sidebar button opens the sidebar with the same tabs; Split View, Slide Over
    and Stage Manager sizes; the web top bar (logo, search, profile) doesn't sit under the tab bar.
 7. VoiceOver reads the tabs and the current one; Larger Text grows the labels; Reduce Transparency turns the
@@ -287,14 +317,13 @@ doesn't show within 0.6 s, or before iOS 17.4, an action sheet comes instead. On
     the subtitle settings and the preview. Picking a track switches to it. Sources and Episodes keep the
     full-screen picker.
 
-The search tab, the back button and the sheets' detents (`ios/tabs.m`, `ios/back.m`, `native_back`,
+The back button and the sheets' detents (`ios/tabs.m`, `ios/back.m`, `native_back`,
 `components/NativeBack.tsx`, `components/Sheet.tsx`). The detents ran in the phone e2e with an iPhone's user
-agent (Chromium); the button and the search tab only as unit tests, their Objective-C compiled only by CI:
-19. The search tab: last in the bar; on iOS 26 apart from the sections, on its right; on iOS 18 to 25 the
-    system's search tab, on iOS 17 a tab like the others. Tapping it opens the search page with the field
-    in the top bar focused and the keyboard up; with nothing typed the page says what it searches. Typing
-    shows results; another tab leaves it and empties the field; tapping the search tab again focuses the
-    field again.
+agent (Chromium); the button only as unit tests, its Objective-C compiled only by CI:
+19. Search (#449): the magnifier in the top bar, left of the profile, on every page with the top bar. On an
+    iPhone it opens the search page (the field focused, the keyboard up); typing shows results; Back (the
+    edge swipe) leaves it; tapping the magnifier on the page focuses the field again. On an iPad the field
+    opens in the top bar. No search tab in the bar.
 20. On a title page (and any page opened from another): Back at the top left is the system's button, glass
     on iOS 26, a chevron before, standing exactly where the web Back was (no second chevron under it, the
     logo beside it not covered). A tap goes back one page. A long press lists the pages behind, nearest
@@ -308,6 +337,22 @@ agent (Chromium); the button and the search tab only as unit tests, their Object
     when let go past it; a flick goes as far as it was thrown; pushing the list up at half height brings
     the sheet up first; tapping the grabber toggles the two heights; VoiceOver reads the grabber as Expand
     or Collapse. Turning the phone keeps the sheet at its height. An iPad keeps the side sheet.
+
+Back on every page and the swipe that follows the finger (#451: `ios/back.m`, `native_back.rs`,
+`lib/platform/backSwipe.ts`, `lib/ui/pageDrag.ts`). The page's move ran in the phone e2e with an iPhone's user
+agent and the swipe's steps sent as the shell sends them; iOS's recognizer and the button's new place only
+compiled by CI:
+24. Every page that can go back (a title page from any section, a Library collection, a playlist, Search's
+    results, an anime's page, Settings' sections) shows the system's Back top left, with the logo beside it;
+    before, the logo moved right and no button showed (the tab bar's view covered it).
+25. On a title page, put a finger on the left edge and move it slowly right: the title page moves with it,
+    with a shadow on its left edge, and the page it came from shows under it, coming in from a little to the
+    left and brightening. Move back left: it follows. Let go before half the width: the title page slides
+    back and stays. Let go past half, or flick right from anywhere: it slides out and the page under it is
+    the page, where it was scrolled, with no second animation. Flicking back left before letting go cancels.
+26. A row that starts at the left edge (Home's shelves) scrolls sideways from the edge on a section's top
+    page; on a title page the same touch is Back. With a sheet or menu open, the swipe closes it and the page
+    doesn't move; in the player it leaves the player as before. A vertical scroll near the edge still scrolls.
 
 ## macOS release: sources of the bundled libraries
 
@@ -854,16 +899,19 @@ on two devices, check:
 - TV mode: the question shows and works with a remote (Play focused, Back is Not Now). There's no
   link field in TV mode.
 
-## Discord buttons and joining from Discord (#153, #154)
+## Discord buttons and joining from Discord (#153, #154, #357, #376)
 
-Checked here: the activity's buttons and their limits (`src-tauri/src/discord.rs` tests, type-checked
-only: src-tauri doesn't link here), polarity:// link parsing (`tests/deepLink.test.ts`), the join desk
+Checked here: the activity's button and its limits, the join secret and party that replace it in a
+joinable party, the join events over a stand-in for Discord's socket (a join passed on, a request to
+join accepted only while the activity offers one, PING answered) and the launch registration's desktop
+entry and macOS command file (`src-tauri/src/discord.rs` tests: type-checked in src-tauri, which
+doesn't link here, and run in a copy of the module without Tauri), polarity:// link parsing (`tests/deepLink.test.ts`), the join desk
 and the sealed code on a simulated channel (`tests/discordJoin.test.ts`: Anyone, Ask me, decline,
 timeout, lock, busy, token rotation, a forged answer, refusal or "seen"), the website's /watch and /party pages at a
 desktop and a phone width, and end to end in the browser shell with two pages as two members (e2e:
 the host allows a request from a party link and the joiner lands in the party; a polarity://title
 link opens the title). Not run: a real Discord client, a real Realtime project, an installed build's
-link registration. Discord shows buttons only to others, never on your own profile, so this needs two
+link registration, Discord starting Polarity for a join. Discord shows buttons only to others, never on your own profile, so this needs two
 Discord accounts (A with Polarity, B to look at A's profile), and for joining a second computer with
 Polarity signed in. Check:
 1. A: Settings → Playback → Show on Discord → That you're watching. Play something: B sees "Watching
@@ -871,16 +919,31 @@ Polarity signed in. Check:
 2. A: What you're watching: B sees "Watch in Polarity". B clicks it: the browser opens
    getpolar.app/watch/…; with Polarity installed it opens on that title's page (a running Polarity comes
    to the front instead of starting again); without it, after a moment the page offers the download.
-3. A starts a watch party: B sees "Join watch party" next to it (also in "That you're watching"). A
-   locks the party: the button goes within a few seconds; unlocking brings it back.
-4. "Who can join from Discord" = Ask me: B (signed in to Polarity on the second computer) clicks Join:
-   Polarity asks "Join a watch party?" with B's profile name; Ask to Join: "Waiting for the host to let
-   you in…", A sees "<B's profile name> wants to join". Allow:
-   B's Polarity joins and plays in step. Again with Decline: B is told the host declined. No answer
-   for two minutes: declined by itself.
-5. Anyone who sees it: B is let in without A being asked. Nobody: no button.
-6. Linux: the .deb/.rpm register polarity:// on install; an AppImage registers it when it first runs.
+3. A starts a watch party: B sees Discord's own Ask to Join on A's activity (also in "That you're
+   watching"), and no Watch in Polarity. A locks the party: Ask to Join goes within a few seconds;
+   unlocking brings it back.
+4. "Who can join from Discord" = Ask me, Polarity running on B's computer: B presses Ask to Join. No
+   browser opens: B's Polarity comes to the front and asks "Join a watch party?" with B's profile
+   name (A's Discord may show Discord's own request briefly; A's Polarity accepts it there by itself).
+   Ask to Join: "Waiting for the host to let you in…", A sees "<B's profile name> wants to join".
+   Allow: B's Polarity joins and plays in step. Again with Decline: B is told the host declined. No
+   answer for two minutes: declined by itself.
+5. Again with Polarity closed on B's computer (run once before, so it registered itself with
+   Discord): pressing Ask to Join starts Polarity, and the question still comes (Discord holds the join
+   for three minutes). Where to look if not: Windows `HKEY_CURRENT_USER\Software\Classes\discord-<id>`,
+   Linux `~/.local/share/applications/discord-<id>.desktop` (`xdg-mime query default
+   x-scheme-handler/discord-<id>`), macOS `~/Library/Application Support/discord/games/<id>.json`; the
+   log says "discord: join arrived".
+6. Anyone who sees it: B sees Join instead of Ask to Join, and is let in without A being asked.
+   Nobody: neither, and Watch in Polarity is back with "What you're watching".
+7. Linux: the .deb/.rpm register polarity:// on install; an AppImage registers it when it first runs.
    Windows: the installer registers it. macOS: the app bundle does.
+8. Dev builds (#376), with `DEV_DISCORD_CLIENT_ID` set and the released app installed on both
+   computers: A plays in a dev build, B sees "Watching Polarity Dev". A starts a party in the dev
+   build: B's Join opens B's dev build (`discord-<dev id>`, `polarity-dev://discord-join`), never
+   the released app, also with B's dev build closed. Both apps running on A: B sees two separate
+   activities. A dev build made without the variable: no activity on Discord, and Settings →
+   Playback reads "Not set up for dev builds" under Show on Discord.
 
 ## Browser extension: Open in Polarity, Watch together (#208)
 
@@ -914,18 +977,19 @@ with `cd extension && bun run build`, Polarity installed and signed in, and the 
 
 ## Opening Stremio links in Polarity (#163)
 
-Checked here: link parsing and where each kind goes, the setting's off state, and that an install link
+Checked here: link parsing and where each kind goes, the setting's default and off state, and that an install link
 never installs without Install (`tests/stremioLinks.test.ts`); the shell keeping stremio:// links
-(`deep_link.rs` test); end to end in the browser shell (e2e: off by default, turning it on, Cancel and
+(`deep_link.rs` test); end to end in the browser shell (e2e: on by default, a stored off kept, turning it off and on, Cancel and
 Install, an add-on that can't be read, an episode link, an unknown link). src-tauri is type-checked for
 Windows, macOS, Linux, Android and iOS but doesn't link here; the Android Kotlin compiles in CI only.
 Not run: a real handler registration on any system. With an add-on configuration page that has an
 "Install" button for Stremio (or a test page with a `stremio://addon.example.com/manifest.json` link
 pointing at a real add-on you trust), check on each system, with and without Stremio installed:
-1. Settings → Add-ons → Open Stremio links in Polarity is off on a fresh install. With Stremio installed,
-   its links still open Stremio; without it, Windows and Linux say no app opens them; macOS may open
+1. Settings → Add-ons → Open Stremio links in Polarity is on on a fresh install (#428), and links open
+   Polarity from the first start. An install that had it off keeps it off: with Stremio installed, its
+   links still open Stremio; without it, Windows and Linux say no app opens them; macOS may open
    Polarity, which only says the setting is off.
-2. Turn it on. Windows: the link opens Polarity (a running Polarity comes to the front). Turn it off:
+2. With it off, turn it on. Windows: the link opens Polarity (a running Polarity comes to the front). Turn it off:
    with a per-user Stremio, its links open Stremio again; with no Stremio, nothing opens them.
    Linux: `xdg-mime query default x-scheme-handler/stremio` names Polarity's handler while on, and no
    longer once off. macOS: on, links open Polarity; off, they go back to Stremio when it's installed.

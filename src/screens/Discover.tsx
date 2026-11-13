@@ -68,8 +68,9 @@ export function Discover({
 
   return (
     <div className="scroll">
-      <header className="screen-header">
-        <h1 className="t-title1">{type === "movie" ? "Movies" : "Series"}</h1>
+      <header className="screen-header discover-header">
+        {/* The selected tab already says which this is; the heading stays for screen readers. */}
+        <h1 className="discover-title">{type === "movie" ? "Movies" : "Series"}</h1>
         <div className="discover-controls">
           {!!lists.length && (
             <Dropdown
@@ -87,7 +88,12 @@ export function Discover({
               options={[...(own?.genreRequired ? [] : [{ value: "", label: "All Genres" }]), ...genres.map((g) => ({ value: g, label: g }))]}
             />
           )}
-          {!own && <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />}
+          {!own && (
+            // Its own row on a phone, scrolling from one screen edge to the other (shell.css).
+            <div className="discover-catalogs">
+              <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />
+            </div>
+          )}
         </div>
       </header>
       <PosterGrid pager={query} stale={query.isPlaceholderData}>

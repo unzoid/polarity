@@ -1,4 +1,4 @@
-import { secretsState, useAccount } from "../../lib/account";
+import { secretsState, useAccount, useSecretsLocked } from "../../lib/account";
 import { openSettings } from "../../lib/settings";
 import type { Os } from "../../lib/platform";
 import type { SecretsPlace } from "../../lib/types";
@@ -32,6 +32,8 @@ export function deviceStoreText(place: SecretsPlace, os: Os): string {
  */
 export function useSecretsNote(): string | undefined {
   const account = useAccount();
+  // Re-drawn when a round opens the keys (or finds them sealed), so the note changes with them (#470).
+  useSecretsLocked(account.profile?.id);
   if (account.status !== "ready" || !account.profile) return;
   switch (secretsState(account.profile.id)) {
     case "plain":

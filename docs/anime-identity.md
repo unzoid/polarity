@@ -81,6 +81,19 @@ When nothing matches, the anime page says it isn't linked and offers "Choose the
 user's pick is stored as the entry's link. A link found by title or stored is offered for
 change ("Wrong series?"); one a mapping gives is not.
 
+**Taking a pick back** (#335). Right after a pick a notice says which series the anime plays from
+now, with Undo: the link from before the pick is made again (none before: the stored link is
+taken back). With a link stored, "Wrong series?" offers "Use Polarity's match" first, which takes
+it back (`unlink_anime`, `Space::unlink_anime`): the entry plays from what the id lists or the
+title search find again. A removal stays in `Space.links` as the link marked `removed` (the
+`deleted` column of `anime_links`), so it syncs like a link; it says nothing about aliases, and
+`anime_links()` leaves it out. Whenever an entry's IMDb title changes (another pick, Undo, or the
+removal), `Space::unkey` moves back what the old link moved onto it: progress whose video id was
+played under one of the link's other ids (`kitsu:5:3`), and the library item it moved there,
+known by its stamp (`rekey` stamps a moved item and its old id's removal alike; a merge with the
+series' own item one ms later, so that item stays and the show's comes back beside it). The IMDb
+title's own rows never move. Pulled links go through the same step, so every device ends the same.
+
 **Anime links.** For each canonical anime title Polarity stores one small record, the *link*:
 `{ anilist, mal?, kitsu? }`, plus `imdb` when canonical is a `tt`. It is the persisted form of
 what the in-memory maps hold today, and the alias set is derived from it (`anilist:N`, `mal:N`,

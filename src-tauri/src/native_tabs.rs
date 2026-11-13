@@ -20,6 +20,9 @@ pub struct Tabs {
     pub tabs: Vec<Tab>,
     pub selected: Option<String>,
     pub hidden: bool,
+    /// "light" or "dark": the bar follows the app's colour scheme, not the system's.
+    #[serde(default)]
+    pub scheme: Option<String>,
 }
 
 #[cfg(target_os = "ios")]

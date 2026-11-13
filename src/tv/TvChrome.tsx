@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import logo from "../assets/polarity-white.png";
 import { Avatar } from "../components/Avatar";
 import { Calendar, Close, Desktop, Power, Profile, Search, Settings, Tv, Users, WatchParty } from "../components/icons";
 import { partyAvailable, setJoinPartyOpen, setPartyMenuOpen, useParty } from "../lib/party";
+import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
 import { useAccount } from "../lib/account";
 import { rootTab, useRouter, type TabRoute } from "../lib/router";
 import { shortcutText, usePrefs } from "../lib/settings";
@@ -57,6 +59,8 @@ export function TvNav({ onMenu }: { onMenu: () => void }) {
       <button className="tv-nav-me" onClick={onMenu} aria-label="Menu">
         {profile ? <Avatar id={profile.avatar} /> : <Tv size={28} />}
       </button>
+      {/* The app's name beside the profile, as the desktop navbar has it (#476); not a stop for the remote. */}
+      <img className="tv-nav-brand wordmark" src={logo} alt="Polarity" draggable={false} />
       {/* Switching sections keeps focus on the tabs; the menu's choices (Settings) land in the page. */}
       <nav className="tv-nav-tabs" aria-label="Sections" data-nav-keep>
         {tabs.map((t) => {
@@ -105,6 +109,9 @@ export function TvMenu({ onClose }: { onClose: () => void }) {
   useBack(true, onClose);
   const party = useParty();
   const { data: settings } = useSettings();
+  // Invites and requests waiting: counted on the Friends item.
+  const friendsState = useFriends();
+  const waiting = friendsState.invites.length + friendsState.entries.filter((e) => e.state === "pending" && e.incoming).length;
   const me = account.profile;
   const others = me ? account.profiles.filter((p) => p.id !== me.id) : [];
   const hasAccountItems = account.enabled && (others.length > 0 || account.status === "ready" || account.status === "guest");
@@ -130,7 +137,7 @@ export function TvMenu({ onClose }: { onClose: () => void }) {
           ))}
           {account.enabled && account.status === "ready" && (
             <button className="tv-menu-item" onClick={() => account.switchProfile("pick")}>
-              <Users size={28} />
+              <Profile size={28} />
               Switch Profile
             </button>
           )}
@@ -146,6 +153,19 @@ export function TvMenu({ onClose }: { onClose: () => void }) {
             >
               <WatchParty size={28} />
               {party && !party.knocking ? `Watch Party (${party.members.length})` : "Join Watch Party"}
+            </button>
+          )}
+          {account.enabled && account.status === "ready" && friendsAvailable() && (
+            <button
+              className="tv-menu-item"
+              onClick={() => {
+                onClose();
+                setFriendsOpen(true);
+              }}
+            >
+              <Users size={28} />
+              Friends
+              {waiting > 0 && <span className="tv-menu-count">{waiting}</span>}
             </button>
           )}
           {account.enabled && account.status === "guest" && (

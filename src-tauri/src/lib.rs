@@ -1,3 +1,4 @@
+mod art_focus;
 #[cfg(any(windows, test))]
 mod automation;
 mod commands;
@@ -221,6 +222,9 @@ pub fn run() {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
                 app.handle().plugin(tauri_plugin_process::init())?;
                 app.handle().plugin(tauri_plugin_dialog::init())?;
+                // Before the links: one may be Discord starting Polarity for a join.
+                let handle = app.handle().clone();
+                discord::init(move |secret| deep_link::from_discord(&handle, &secret));
                 deep_link::init(app);
             }
             let dir = app.path().app_data_dir()?;
@@ -309,6 +313,7 @@ pub fn run() {
             commands::continue_watching,
             commands::watch_history,
             commands::link_anime,
+            commands::unlink_anime,
             commands::anime_links,
             commands::settings_get,
             commands::settings_set,
@@ -363,8 +368,10 @@ pub fn run() {
             player::mpv_stop,
             player::mpv_snapshot,
             player::player_system_bars,
+            player::player_keep_awake,
             native_tabs::native_tabs,
             native_back::native_back,
+            art_focus::art_focus,
             native_dialogs::native_dialog,
             native_dialogs::native_share,
             notifications::notifications_permission,

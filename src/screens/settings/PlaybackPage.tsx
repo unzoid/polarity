@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { keys, useSettings, useUpdateSettings } from "../../lib/net";
+import { buildChannel, isDesktop } from "../../lib/platform";
 import { usePrefs } from "../../lib/settings";
-import { Card, ToggleRow } from "../../components/settings/rows";
+import { Card, PickRow, ToggleRow } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 
 export function PlaybackPage() {
@@ -52,6 +53,16 @@ export function PlaybackPage() {
         <SettingRow id="startFullscreen" />
         <SettingRow id="pauseOnMinimize" />
         {discord && <SettingRow id="discordPresence" />}
+        {/* A dev build made without its own Discord application stays off Discord (#376). */}
+        {discord === false && buildChannel === "dev" && isDesktop && (
+          <PickRow
+            setting="discordPresence"
+            title="Show on Discord"
+            caption="Not set up for dev builds: this build was made without the Polarity Dev Discord application, so it doesn't show on Discord."
+          >
+            {null}
+          </PickRow>
+        )}
         {/* The button goes with the presence: none while nothing shows. */}
         {discord && discordPresence !== "off" && <SettingRow id="discordJoin" />}
         {/* Turning it on or off starts the next video at normal speed. */}
@@ -63,6 +74,7 @@ export function PlaybackPage() {
           onChange={(v) => update.mutate({ rememberSpeed: v, playbackSpeed: 1 })}
         />
         <SettingRow id="timeDisplay" />
+        <SettingRow id="loadingDetails" />
         <SettingRow id="seekStep" />
         <SettingRow id="controlsHideSecs" />
         <SettingRow id="clickAction" />

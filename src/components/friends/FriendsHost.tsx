@@ -13,7 +13,7 @@ import { FriendsPanel } from "./FriendsPanel";
 /**
  * Friends (#135) for the profile in use: starts the friends store on it (which reads from the
  * server whether the profile has Friends on), keeps what friends may see current (the party it's
- * in, what plays), and shows invites. The Friends panel is desktop's; TV lists friends on Home.
+ * in, what plays), and shows invites. The Friends panel is desktop's; TV has its own, from the side menu (TvFriends.tsx).
  */
 export function FriendsHost() {
   const { status, profile } = useAccount();
@@ -38,8 +38,8 @@ export function FriendsHost() {
 
 /**
  * The newest invite into a friend's party, until joined, dismissed or expired. Waits while a watch
- * party dialog or panel is up (the Friends panel lists invites itself). On TV it points to Home's
- * Friends row, where the invite is joined.
+ * party dialog or panel is up (the Friends panel lists invites itself). On TV it points to the side menu's
+ * Friends, where the invite is joined.
  */
 function InviteToast({ tv }: { tv: boolean }) {
   const { invites } = useFriends();
@@ -79,7 +79,7 @@ function InviteToast({ tv }: { tv: boolean }) {
       data-kind="friend-invite"
     >
       <strong>{shown.name} invited you to a watch party</strong>
-      <span>{error ?? (tv ? "Join from Friends on Home." : "Join to watch together.")}</span>
+      <span>{error ?? (tv ? "Join from Friends in the menu." : "Join to watch together.")}</span>
     </Toast>
   );
 }

@@ -13,7 +13,7 @@ mock.module("../../src/lib/platform", () => ({
   setNativeBack: async (state: NativeBackState) => void sent.push(state),
   onNativeBack: async (handler: (steps: number) => void) => ((press = handler), () => {}),
 }));
-const { useNativeBack } = await import("../../src/components/NativeBack");
+const { useNativeBack, useNativeSwipe } = await import("../../src/components/NativeBack");
 
 function Page({ shown, onBack }: { shown: boolean; onBack: (steps: number) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -30,7 +30,7 @@ test("iOS draws Back where the web app's stands, hides it while covered, and goe
   await view.rerender(<Page shown={false} onBack={(n) => steps.push(n)} />);
   await view.rerender(<Page shown onBack={(n) => steps.push(n)} />);
   expect(button.dataset.nativeBack).toBe("true");
-  expect(sent.at(-1)).toEqual({ shown: true, rect: box, history: ["Movies", "Home"] });
+  expect(sent.at(-1)).toEqual({ shown: true, rect: box, history: ["Movies", "Home"], swipe: false });
 
   await act(async () => press?.(2));
   expect(steps).toEqual([2]);
@@ -63,5 +63,17 @@ test("the last Back to show wins: Settings' over the top bar's, and the top bar'
   expect(sent.at(-1)?.history).toEqual(["Settings"]);
   await act(async () => press?.(1));
   expect(sent.at(-1)?.history).toEqual(["Home"]);
+  await view.unmount();
+});
+
+test("iOS hears whether the edge swipe is Back now, and only when that changes (#451)", async () => {
+  const Swipe = ({ on }: { on: boolean }) => (useNativeSwipe(on), null);
+  const view = await render(<Swipe on />);
+  expect(sent.at(-1)?.swipe).toBe(true);
+  const count = sent.length;
+  await view.rerender(<Swipe on />);
+  expect(sent.length).toBe(count);
+  await view.rerender(<Swipe on={false} />);
+  expect(sent.at(-1)?.swipe).toBe(false);
   await view.unmount();
 });

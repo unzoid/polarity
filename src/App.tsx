@@ -1,11 +1,12 @@
-import { Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { MotionConfig } from "motion/react";
 import { actionFor, getPrefs, isSettingsOpen, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
 import type { Settings as SettingsT } from "./lib/types";
 import { NavBar } from "./components/NavBar";
+import { useNativeSwipe } from "./components/NativeBack";
 import { PlayerLayer, preloadPlayer, usePlayerLayer } from "./components/PlayerLayer";
 import { useSettings } from "./lib/net";
-import { rootTab, RouterProvider, useRouter, type Route } from "./lib/router";
+import { rootTab, RouterProvider, useRouter, type Entry, type Route } from "./lib/router";
 import { focusSearch } from "./lib/catalog";
 import { Home } from "./screens/Home";
 import { Discover } from "./screens/Discover";
@@ -18,13 +19,28 @@ import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
 import { ControllerToast } from "./tv/TvChrome";
 import { isTvMode, setTvMode, useTvMode } from "./tv/tvMode";
-import { dismissDepth, lazyNamed, pressEscape, systemBackAction, useFormFactor, usePageFocus, usePageMotion, useSystemBack } from "./lib/ui";
+import {
+  dismissDepth,
+  lazyNamed,
+  onDismissDepth,
+  pageDrag,
+  pressEscape,
+  systemBackAction,
+  useFormFactor,
+  usePageFocus,
+  usePageMotion,
+  cardMotionVars,
+  cardOrigin,
+  watchCardTaps,
+  useSystemBack,
+  watchInputModality,
+} from "./lib/ui";
 import { CardMenuHost } from "./components/CardMenu";
 import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
 import { UpdateToast, WhatsNewSheet } from "./components/Updates";
 import { startUpdateChecks } from "./lib/updater";
-import { appWindow, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
+import { appWindow, guardTaps, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
 import { PartyHost } from "./components/party/PartyHost";
 import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
@@ -33,10 +49,13 @@ import { SignOutDialog } from "./components/SignOutDialog";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
-import { Skeleton } from "./components/ui/Skeleton";
+import { LockedKeysToast } from "./components/LockedKeysToast";
+import { SeriesPickToast } from "./components/anime/SeriesPickToast";
+import { DetailPending } from "./components/title/HeroSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
+import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "./lib/theme";
 
 // Chunks of their own, loaded the first time they're drawn: most sessions never
 // see the sign-in screens, TV mode, Settings or an anime page (the player is in
@@ -92,7 +111,7 @@ function Screen({ route }: { route: Route }) {
  */
 function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: page } = useQuery(titlePageQuery(type, id, preview));
-  const loading = <Skeleton className="detail-loading" />;
+  const loading = <DetailPending />;
   if (!page) return loading;
   if (page.kind === "anime")
     return (
@@ -183,27 +202,18 @@ function MainApp() {
   }, [settings?.uiFont]);
 
   // Settings → Appearance and → Browsing, as attributes and variables on <html>
-  // (TV mode and portalled menus included).
+  // (TV mode and portalled menus included). TV mode is always dark: it's made for a dim room.
+  const prefersLight = useSystemPrefersLight();
+  const scheme = tv ? "dark" : resolveScheme(settings?.colorScheme, prefersLight);
   useEffect(() => {
     if (!settings) return;
     const root = document.documentElement;
-    const accent = /^#[0-9a-f]{6}$/i.test(settings.accentColor ?? "") ? settings.accentColor : null;
-    if (accent) {
-      root.style.setProperty("--accent", accent);
-      // Light accents (yellow, teal) need dark text on top to stay readable.
-      const n = parseInt(accent.slice(1), 16);
-      const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-      root.style.setProperty("--accent-fg", lum > 0.62 ? "#0b0b0b" : "#fff");
-    } else {
-      root.style.removeProperty("--accent");
-      root.style.removeProperty("--accent-fg");
-    }
-    root.dataset.theme = settings.theme === "black" ? "black" : "dark";
+    applyTheme(resolveTheme(settings), scheme, root);
     root.dataset.cardSize = settings.cardSize ?? "medium";
     root.dataset.reduceMotion = settings.reduceMotion ?? "system";
     root.dataset.hideThumbs = String(!!settings.hideEpisodeThumbs);
     root.dataset.hideOverviews = String(!!settings.hideEpisodeDescriptions);
-  }, [settings]);
+  }, [settings, scheme]);
 
   // Interface size is this screen's, so it's a device pref.
   const { uiScale, animeEnabled } = usePrefs();
@@ -242,6 +252,8 @@ function MainApp() {
 
   // iOS sends no contextmenu for a finger held down: a long press on a title opens its options all the same.
   useEffect(() => (longPressMenus ? onLongPress((held) => openContextMenu(held)) : undefined), []);
+  // A touch that scrolled, or stopped a list gliding after a fling, opens nothing (#459).
+  useEffect(() => guardTaps(), []);
 
   // Switching modes works from anywhere, the player included (Settings → Controls to rebind).
   useEffect(() => {
@@ -264,9 +276,15 @@ function MainApp() {
       ) : (
         <DesktopApp />
       )}
-      <PartyHost />
-      <DeepLinks tv={tv} />
-      <FriendsHost />
+      <ErrorBoundary where="party host" quiet>
+        <PartyHost />
+      </ErrorBoundary>
+      <ErrorBoundary where="deep links" quiet>
+        <DeepLinks tv={tv} />
+      </ErrorBoundary>
+      <ErrorBoundary where="friends host" quiet>
+        <FriendsHost />
+      </ErrorBoundary>
     </>
   );
 }
@@ -298,6 +316,9 @@ function DesktopApp() {
   // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
   const motion = usePageMotion(pages, useFormFactor().form === "phone" && !playing);
   const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
+  // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
+  useEffect(watchInputModality, []);
+  useEffect(watchCardTaps, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -316,13 +337,39 @@ function DesktopApp() {
 
   // Android's back button and gesture: Escape's Back, then Home, then the app goes to the background.
   // iOS's swipe in from the left edge: Escape's Back only.
-  useSystemBack(() => {
-    const open = !!playing || isSettingsOpen() || dismissDepth() > 0;
-    const action = systemBackAction({ open, pushed: stack.length - 1, atHome: rootTab(stack).name === "home", swipe: systemBack === "swipe" });
-    if (action === "escape") pressEscape();
-    else if (action === "home") tab({ name: "home" });
-    else if (action === "leave") void leaveApp();
-  });
+  // iOS's swipe, on a pushed page with nothing over it, moves the page with the finger (#451).
+  const main = useRef<HTMLElement>(null);
+  const now = useRef({ pages, back });
+  now.current = { pages, back };
+  const drag = useMemo(
+    () =>
+      pageDrag(
+        () => {
+          const { pages } = now.current;
+          const at = (e: Entry | undefined) => e && main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${e.key}"]`);
+          const top = at(pages[pages.length - 1]);
+          const under = pages.length > 1 && at(pages[pages.length - 2]);
+          // A title page that grew out of a card goes back into it with the finger (pageDrag.ts).
+          return top && under ? { top, under, card: cardOrigin(pages[pages.length - 1].key) } : null;
+        },
+        () => now.current.back(),
+      ),
+    [],
+  );
+  const open = () => !!playing || isSettingsOpen() || dismissDepth() > 0;
+  useSystemBack(
+    () => {
+      const action = systemBackAction({ open: open(), pushed: stack.length - 1, atHome: rootTab(stack).name === "home", swipe: systemBack === "swipe" });
+      if (action === "escape") pressEscape();
+      else if (action === "home") tab({ name: "home" });
+      else if (action === "leave") void leaveApp();
+    },
+    () => (open() ? undefined : drag),
+  );
+  // The swipe is Back wherever something can be left; at a tab's own page iOS leaves the edge to the page.
+  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
+  const settingsOpen = useSettingsOverlay().open;
+  useNativeSwipe(!!playing || settingsOpen || layers > 0 || stack.length > 1);
 
   return (
     <div
@@ -334,8 +381,10 @@ function DesktopApp() {
       data-rating-colors={settings?.ratingColors ?? false}
       data-player-leaving={leaving}
     >
-      <main className="main">
-        <NavBar />
+      <main className="main" ref={main}>
+        <ErrorBoundary where="top bar">
+          <NavBar />
+        </ErrorBoundary>
         {shown.map((entry) => (
           <section
             key={entry.key}
@@ -344,7 +393,15 @@ function DesktopApp() {
             data-motion={motion?.enter === entry.key ? "enter" : motion?.leave === entry.key ? "leave" : undefined}
             // A page on its way out is still drawn for a moment, but no longer read out.
             aria-hidden={(motion?.leave === entry.key && entry !== topPage) || undefined}
-            style={motion ? ({ "--page-dir": motion.dir } as CSSProperties) : undefined}
+            // A title's page out of its card, and back into it (shell.css).
+            data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
+            // The pair moves once the new page is laid out (pageMotion.ts `go`).
+            data-go={motion?.go || undefined}
+            style={
+              motion
+                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
+                : undefined
+            }
             data-under-player={(entry === topPage && !!player) || undefined}
             data-page-key={entry.key}
             inert={entry !== topPage || !!playing}
@@ -352,21 +409,45 @@ function DesktopApp() {
             <ErrorBoundary where={`page ${entry.route.name}`}>
               <Screen route={entry.route} />
             </ErrorBoundary>
+            {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
+                the same box, so they move as one piece (shell.css). */}
+            {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
+              <div className="card-ghost" aria-hidden>
+                <img className="card-ghost-soft" src={motion.card.src} alt="" draggable={false} />
+                <img className="card-ghost-sharp" src={motion.card.src} alt="" draggable={false} />
+              </div>
+            )}
           </section>
         ))}
-        <ControllerToast tv={false} />
-        <UpdateToast hidden={!!playing} />
+        {/* Between the title's page and the one behind it: dims and softens what's behind as the card opens. */}
+        {motion?.card && <div className="card-scrim" aria-hidden data-card={motion.dir === 1 ? "open" : "close"} data-go={motion.go || undefined} />}
+        <ErrorBoundary where="toasts" quiet>
+          <ControllerToast tv={false} />
+          <SeriesPickToast />
+          <UpdateToast hidden={!!playing} />
+        </ErrorBoundary>
       </main>
-      <WhatsNewSheet />
+      <ErrorBoundary where="what's new" quiet>
+        <WhatsNewSheet />
+      </ErrorBoundary>
       <PlayerLayer player={player} leaving={leaving} />
       <LazySettingsOverlay />
       {/* After Settings: it reports changes made there too, so it must never be under it or inert with the page. */}
-      <StoreProblemToast tv={false} />
-      <AccountFullToast tv={false} />
-      <SecretsSyncToast tv={false} />
-      {!playing && <CardMenuHost />}
-      <TrailerHost />
-      <OpenFilesHost />
+      <ErrorBoundary where="notices" quiet>
+        <StoreProblemToast tv={false} />
+        <AccountFullToast tv={false} />
+        <SecretsSyncToast tv={false} />
+        <LockedKeysToast tv={false} />
+      </ErrorBoundary>
+      <ErrorBoundary where="card menu" quiet>
+        {!playing && <CardMenuHost />}
+      </ErrorBoundary>
+      <ErrorBoundary where="trailer" quiet>
+        <TrailerHost />
+      </ErrorBoundary>
+      <ErrorBoundary where="open files" quiet>
+        <OpenFilesHost />
+      </ErrorBoundary>
     </div>
   );
 }
@@ -376,7 +457,14 @@ function LazySettingsOverlay() {
   const { open } = useSettingsOverlay();
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
-  if (!opened) return null;
+  // Fetched once the app has settled, so the first Settings opens as quickly as the rest.
+  useEffect(() => {
+    const later = window.setTimeout(() => void import("./components/SettingsOverlay").catch(() => {}), 2000);
+    return () => window.clearTimeout(later);
+  }, []);
+  // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
+  const phone = useFormFactor().form === "phone";
+  if (!opened || phone) return null;
   return (
     <Suspense fallback={null}>
       <SettingsOverlay />

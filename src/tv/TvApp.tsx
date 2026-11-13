@@ -33,10 +33,13 @@ import { TvSettings } from "./TvSettings";
 import { TvJoinParty } from "./TvJoinParty";
 import { useJoinPartyOpen, usePartyMenuOpen } from "../lib/party";
 import { TvPartyMenu } from "./TvPartyMenu";
+import { TvFriendsPanel } from "./TvFriends";
+import { useFriendsOpen } from "../lib/friends";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { SecretsSyncToast } from "../components/SecretsSyncToast";
+import { LockedKeysToast } from "../components/LockedKeysToast";
 
 function TvScreen({ route }: { route: Route }) {
   switch (route.name) {
@@ -94,6 +97,7 @@ export function TvApp() {
   const tabs = useTvTabs();
   const joinPartyOpen = useJoinPartyOpen();
   const partyMenuOpen = usePartyMenuOpen();
+  const friendsOpen = useFriendsOpen();
 
   useEffect(installFocusMemory, []);
   useEffect(installPointerFocus, []);
@@ -258,6 +262,7 @@ export function TvApp() {
         {menuOpen && <TvMenu onClose={() => setMenuOpen(false)} />}
         {joinPartyOpen && !playing && <TvJoinParty />}
         {partyMenuOpen && !playing && <TvPartyMenu />}
+        {friendsOpen && !playing && <TvFriendsPanel />}
         <TvHints />
         {!playing && (
           <button className="tv-exit" tabIndex={-1} onClick={() => setTvMode(false)}>
@@ -270,6 +275,7 @@ export function TvApp() {
         <StoreProblemToast tv />
         <AccountFullToast tv />
         <SecretsSyncToast tv />
+        <LockedKeysToast tv />
       </main>
       <PlayerLayer player={player} leaving={leaving} />
     </div>

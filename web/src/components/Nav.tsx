@@ -1,71 +1,40 @@
-import { createSignal, onCleanup, onMount } from "solid-js";
-import { DownloadButton } from "./Download";
+import { DOWNLOAD_PAGE } from "../lib/release";
 import { GitHubMark, REPO_URL } from "./GitHub";
-import { Smooth } from "./Smooth";
 
 const links = [
   { href: "/#features", label: "Features" },
+  { href: "/#open-source", label: "Open source" },
   { href: "/roadmap/", label: "Roadmap" },
   { href: "/#faq", label: "FAQ" },
 ];
 
-export function Logo(props: { class?: string; width?: number }) {
-  const w = props.width ?? 88;
-  return (
-    <picture class={props.class}>
-      <source srcset="/logo-dark.svg" media="(prefers-color-scheme: dark)" />
-      <img src="/logo.svg" alt="Polarity" width={w} height={Math.round((w * 100) / 260)} />
-    </picture>
-  );
+/** The wordmark, drawn in the page's ink (#0D0D24) for the lavender background. */
+export function Logo(props: { class?: string }) {
+  return <img src="/logo-web.svg" alt="Polarity" width={112} height={40} class={`block ${props.class ?? ""}`} />;
 }
 
-/**
- * Transparent over the top of the page; once you scroll it becomes a floating,
- * frosted bar (Screen Studio's pattern). Only colors change, so nothing shifts.
- */
+/** A plain top bar that scrolls away with the page, like the masthead of a poster. */
 export function Nav() {
-  const [scrolled, setScrolled] = createSignal(false);
-  onMount(() => {
-    const onScroll = () => setScrolled(scrollY > 8);
-    onScroll();
-    addEventListener("scroll", onScroll, { passive: true });
-    onCleanup(() => removeEventListener("scroll", onScroll));
-  });
-
   return (
-    <header class="fixed inset-x-0 top-0 z-50 px-3 pt-2.5 sm:px-4">
-      <Smooth
-        radius={16}
-        edge={scrolled() ? "var(--hair)" : "transparent"}
-        class="material mx-auto max-w-[1080px] transition-[background-color,backdrop-filter] duration-300 ease-[var(--ease-out-strong)]"
-        style={{
-          "background-color": scrolled() ? "color-mix(in srgb, var(--tile) 82%, transparent)" : "transparent",
-          "backdrop-filter": scrolled() ? "blur(20px) saturate(180%)" : "none",
-        }}
-      >
-        <div class="flex h-13 items-center pr-2.5 pl-4">
-          <a href="/" aria-label="Polarity home" class="-ml-1.5">
-            <Logo />
+    <header class="px-gutter flex items-center gap-7 py-[18px]">
+      <a href="/" aria-label="Polarity home">
+        <Logo />
+      </a>
+      <nav class="ml-auto hidden items-center gap-7 text-base font-semibold md:flex" aria-label="Main">
+        {links.map((l) => (
+          <a href={l.href} class="link">
+            {l.label}
           </a>
-          <nav class="ml-auto hidden items-center gap-7 text-sm font-medium text-ink/70 sm:flex" aria-label="Main">
-            {links.map((l) => (
-              <a href={l.href} class="transition-colors duration-150 hover:text-ink">
-                {l.label}
-              </a>
-            ))}
-          </nav>
-          <div class="ml-auto flex items-center gap-3 sm:ml-7">
-            <a
-              href={REPO_URL}
-              aria-label="Polarity on GitHub"
-              class="press grid size-8 place-items-center rounded-full text-ink/70 hover:text-ink"
-            >
-              <GitHubMark class="size-[18px]" />
-            </a>
-            <DownloadButton size="sm" />
-          </div>
-        </div>
-      </Smooth>
+        ))}
+      </nav>
+      <div class="ml-auto flex items-center gap-2 md:ml-0">
+        <a href={REPO_URL} aria-label="Polarity on GitHub" class="grid size-10 place-items-center rounded-full hover:bg-night/10">
+          <GitHubMark class="size-5" />
+        </a>
+        <a href={DOWNLOAD_PAGE} class="btn btn-sm btn-line">
+          Download
+        </a>
+      </div>
     </header>
   );
 }

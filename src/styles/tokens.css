@@ -9,41 +9,190 @@
  *  - --ease-drawer:  sheets and panels (iOS drawer curve)
  * UI motion stays under 300ms; springs (src/lib/motion.ts) handle gestures.
  */
+
+/*
+ * Theme (src/lib/theme). The inputs, set on the page by applyTheme; these are Polar's:
+ *  - --accent:      switches, selections, highlights
+ *  - --theme-base:  the near-black (dark) or near-white (light) everything is built on
+ *  - --theme-tint:  how much of the accent shows in the greys
+ *  - data-scheme:   "light" or "dark" (the default), on <html>
+ */
+:root {
+  --accent: #5e5ce6;
+  /* Text on an accent fill; applyTheme flips it to dark for light accents (yellow, teal). */
+  --accent-fg: #fff;
+  --theme-base: #0a0a0a;
+  --theme-tint: 0%;
+}
+
+/*
+ * The scheme: which way surfaces step away from the page, the ink that text, fills and lines are drawn
+ * in, and the floating surfaces. Dark is the default; .scheme-dark keeps a part dark in light mode
+ * (the player sits on video).
+ */
+:root,
+.scheme-dark,
+.player,
+.hero-card,
+.card-frame:not(.frame-page) {
+  color-scheme: dark;
+  /* Text, fills and hairlines: white ink. */
+  --ink: 255 255 255;
+  --ink-text: 245 245 247;
+  /* Surfaces step toward white from the page. */
+  --step: #fff;
+  --step-1: 3%;
+  --step-2: 4%;
+  --step-3: 5%;
+  --step-4: 7.5%;
+  --step-5: 11.5%;
+  /* Below the page: toward black. */
+  --sink: #000;
+  --sink-by: 60%;
+
+  --pill-light: rgb(240 240 242 / 0.94);
+  --pill-light-hover: #fff;
+  --text-on-light: #0b0b0b;
+  /* A soft shadow behind text on artwork, so it reads over bright spots. */
+  --text-halo: var(--scrim-2);
+  /* A text field floating over content (the navbar's search). */
+  --field-glass: rgb(0 0 0 / 0.55);
+  --field-edge: rgb(255 255 255 / 0.28);
+  /* How strongly the navbar tints what scrolls under it. */
+  --nav-tint: 50%;
+  /* A floating surface's outer line and its drop shadow (menus, the settings window). */
+  --ring-outer: rgb(0 0 0 / 0.6);
+  --shadow-deep: rgb(0 0 0 / 0.85);
+  --focus: color-mix(in srgb, var(--accent) 65%, white);
+
+  /* Glass: one recipe, two weights. Heavy for structure, light for controls (the ink fills, below). */
+  --glass: color-mix(in srgb, var(--tone-5) 46%, transparent);
+  --glass-heavy: color-mix(in srgb, var(--tone-3) 70%, transparent);
+  /* Menus and the navbar's dropdowns (party, profile, right-click): near-black with a subtle blur, the
+     settings window's border and shadow. One surface for all of them. */
+  --surface-menu: color-mix(in srgb, var(--tone-sunk) 80%, transparent);
+  /* Menus and popovers; toasts and floating player buttons. */
+  --surface-popover: color-mix(in srgb, var(--tone-5) 82%, transparent);
+  --surface-float: color-mix(in srgb, var(--tone-3) 88%, transparent);
+  --surface-float-glass: color-mix(in srgb, var(--tone-1) 78%, transparent);
+}
+/* A part that stays dark is built on the theme's own near-black, whatever the scheme: the player (on
+   video), Home's featured card and every poster or still's frame (what's drawn on artwork). A frame with no
+   artwork in it (.frame-page: Library's New Playlist) follows the page instead. */
+:root[data-scheme="light"] :is(.scheme-dark, .player, .hero-card, .card-frame:not(.frame-page)) {
+  --theme-base: var(--theme-base-dark, #0a0a0a);
+  color: var(--text);
+}
+/* Light: dark ink; surfaces step toward black from a near-white page, and float in white. .scheme-light
+   shows a part in light mode on a dark page (the colour scheme's previews). */
+:root[data-scheme="light"],
+.scheme-light {
+  color-scheme: light;
+  --ink: 0 0 0;
+  --ink-text: 29 29 31;
+  --step: #000;
+  --step-1: 3%;
+  --step-2: 4.5%;
+  --step-3: 6%;
+  --step-4: 8%;
+  --step-5: 12%;
+  --sink: #fff;
+  --sink-by: 75%;
+
+  /* The "light pill" (the primary action, TV focus) inverts: dark, with light text. */
+  --pill-light: rgb(29 29 31 / 0.92);
+  --pill-light-hover: rgb(52 52 56);
+  --text-on-light: #fff;
+  --text-halo: rgb(255 255 255 / 0.6);
+  --field-glass: rgb(255 255 255 / 0.82);
+  --field-edge: rgb(0 0 0 / 0.12);
+  --nav-tint: 78%;
+  /* Glass controls frost white, with a hairline to hold their edge on a pale page. */
+  --glass-control: rgb(255 255 255 / 0.6);
+  --glass-control-hover: rgb(255 255 255 / 0.85);
+  --glass-edge: rgb(0 0 0 / 0.08);
+  --glass-highlight: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  /* On a light page a black ring reads as a drawn border: a hairline and a soft shadow instead. */
+  --ring-outer: rgb(0 0 0 / 0.08);
+  --shadow-deep: rgb(0 0 0 / 0.22);
+  --focus: var(--accent);
+
+  --glass: color-mix(in srgb, var(--tone-sunk) 62%, transparent);
+  --glass-heavy: color-mix(in srgb, var(--tone-sunk) 82%, transparent);
+  --surface-menu: color-mix(in srgb, var(--tone-sunk) 88%, transparent);
+  --surface-popover: color-mix(in srgb, var(--tone-sunk) 88%, transparent);
+  --surface-float: color-mix(in srgb, var(--tone-sunk) 92%, transparent);
+  --surface-float-glass: color-mix(in srgb, var(--tone-sunk) 80%, transparent);
+}
+
+/*
+ * Every surface colour, derived from the inputs and the scheme: the base stepped away from the page,
+ * then tinted. Surfaces use these (or the named tokens around them), never a grey of their own, so
+ * they follow the theme and the scheme. Declared on .themed too: an element that sets the inputs
+ * inline (a theme's tile, the Create theme preview) gets the whole ramp in its colours.
+ */
+:root,
+.themed,
+.scheme-dark,
+.player,
+.hero-card,
+.card-frame:not(.frame-page) {
+  --tint-lo: var(--theme-tint);
+  --tint-hi: calc(var(--theme-tint) * 1.4);
+  /* Below the page: the settings window's page, menus (whiter than the page in light mode). */
+  --tone-sunk: color-mix(in oklab, var(--accent) var(--tint-lo), color-mix(in srgb, var(--sink) var(--sink-by), var(--theme-base)));
+  /* The page (#0a0a0a on Polar). */
+  --tone-0: color-mix(in oklab, var(--accent) var(--tint-lo), var(--theme-base));
+  /* Cards on the page (#111). */
+  --tone-1: color-mix(in oklab, var(--accent) var(--tint-lo), color-mix(in srgb, var(--step) var(--step-1), var(--theme-base)));
+  /* Raised surfaces (#141414). */
+  --tone-2: color-mix(in oklab, var(--accent) var(--tint-lo), color-mix(in srgb, var(--step) var(--step-2), var(--theme-base)));
+  /* Floating panels (#161616). */
+  --tone-3: color-mix(in oklab, var(--accent) var(--tint-hi), color-mix(in srgb, var(--step) var(--step-3), var(--theme-base)));
+  /* (#1c1c1c) */
+  --tone-4: color-mix(in oklab, var(--accent) var(--tint-hi), color-mix(in srgb, var(--step) var(--step-4), var(--theme-base)));
+  /* Popovers and glass (#262626). */
+  --tone-5: color-mix(in oklab, var(--accent) var(--tint-hi), color-mix(in srgb, var(--step) var(--step-5), var(--theme-base)));
+
+  --bg: var(--tone-0);
+  --surface-1: var(--tone-2);
+  --surface-2: var(--tone-4);
+  --surface-3: var(--tone-5);
+
+  /* Lighter top stop for accent gradients. */
+  --accent-hi: color-mix(in srgb, var(--accent) 78%, white);
+
+  /* Text and lines in the scheme's ink. */
+  --text: rgb(var(--ink-text));
+  --text-2: rgb(var(--ink-text) / 0.7);
+  --text-3: rgb(var(--ink-text) / 0.5);
+  --hairline: rgb(var(--ink) / 0.08);
+  --hairline-strong: rgb(var(--ink) / 0.16);
+  /* Fills on surfaces (rows, chips, inputs), lightest to strongest. */
+  --fill-1: rgb(var(--ink) / 0.04);
+  --fill-2: rgb(var(--ink) / 0.06);
+  --fill-3: rgb(var(--ink) / 0.1);
+  --fill-4: rgb(var(--ink) / 0.14);
+  --glass-control: rgb(var(--ink) / 0.13);
+  --glass-control-hover: rgb(var(--ink) / 0.2);
+  --glass-edge: rgb(var(--ink) / 0.13);
+  --glass-highlight: inset 0 1px 0 rgb(var(--ink) / 0.1);
+}
+
 :root {
   /* "Twemoji Country Flags" first: it covers only flag emoji, and only exists where the system draws
      none (Windows, main.tsx); every other character skips it. */
   --font: "Twemoji Country Flags", "Inter Variable", "Inter", system-ui, "Segoe UI Variable Text", sans-serif;
-  --bg: #0a0a0a;
-  --surface-1: #141414;
-  --surface-2: #1c1c1c;
-  --surface-3: #262626;
-  --hairline: rgb(255 255 255 / 0.08);
-  --hairline-strong: rgb(255 255 255 / 0.16);
 
-  --text: #f5f5f7;
-  --text-2: rgb(245 245 247 / 0.7);
-  --text-3: rgb(245 245 247 / 0.45);
-  --text-on-light: #0b0b0b;
-
-  --pill-light: rgb(240 240 242 / 0.94);
-  --accent: #0a84ff; /* system blue: switches, primary settings actions */
-  /* Text on an accent fill; App.tsx flips it to dark for light accents (yellow, teal). */
-  --accent-fg: #fff;
-  /* Lighter top stop for accent gradients, and the accent-tinted focus ring. */
-  --accent-hi: color-mix(in srgb, var(--accent) 78%, white);
-  --focus: color-mix(in srgb, var(--accent) 65%, white);
+  /* A poster or still's frame before its picture is in: the page's own surface (the frame itself is
+     dark-styled, for what's drawn on the picture, so it can't use --surface-1). */
+  --frame-bg: var(--surface-1);
+  /* Progress over artwork and video: always white. */
   --progress: #f5f5f7;
   --danger: #ff6b5e;
   --online: #30d158; /* system green: a friend online (#135) */
   --good: #5ed39a;
 
-  /* Glass: one recipe, two weights. Heavy for structure, light for controls. */
-  --glass: rgb(38 38 38 / 0.46);
-  --glass-heavy: rgb(22 22 22 / 0.7);
-  --glass-control: rgb(255 255 255 / 0.13);
-  --glass-control-hover: rgb(255 255 255 / 0.2);
-  --glass-edge: rgb(255 255 255 / 0.13);
-  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.1);
   --blur-glass: blur(32px) saturate(180%);
   --blur-control: blur(16px) saturate(160%);
 
@@ -71,21 +220,17 @@
   --r-pill: 999px;
   --r-round: 50%;
 
-  /* White fills on dark surfaces (rows, chips, inputs), lightest to strongest. */
-  --fill-1: rgb(255 255 255 / 0.04);
-  --fill-2: rgb(255 255 255 / 0.06);
-  --fill-3: rgb(255 255 255 / 0.1);
-  --fill-4: rgb(255 255 255 / 0.14);
   /* Black scrims over artwork and behind overlays. */
   --scrim-1: rgb(0 0 0 / 0.35);
   --scrim-2: rgb(0 0 0 / 0.5);
   --scrim-3: rgb(0 0 0 / 0.7);
 
-  /* Menus and popovers; toasts and floating player buttons. */
-  --surface-popover: rgb(38 38 38 / 0.82);
+  --blur-menu: blur(10px);
+  --edge-menu: 1px solid var(--fill-3);
+  --shadow-menu:
+    0 0 0 1px var(--ring-outer),
+    0 24px 64px -16px var(--shadow-deep);
   --blur-popover: blur(40px) saturate(160%);
-  --surface-float: rgb(22 22 22 / 0.88);
-  --surface-float-glass: rgb(16 16 16 / 0.78);
 
   /* Rating sites, in their own colours. */
   --brand-imdb: #f5c518;
@@ -166,10 +311,11 @@
   --tabbar-h: calc(56px + var(--safe-bottom));
   /* In landscape the content stays clear of the camera cutout, on either side. */
   --gutter: max(1rem, var(--safe-left), var(--safe-right));
-  /* About three posters across a 390px screen, the rest peeking in. */
-  --poster-w: calc(112px * var(--card-scale));
-  --landscape-w: calc(232px * var(--card-scale));
-  --episode-w: calc(260px * var(--card-scale));
+  /* A phone's cards start from the small size (Settings → Appearance → Card size still scales them): three and
+     a half posters across a 390px screen, as phone apps show them. */
+  --poster-w: calc(104px * var(--card-scale));
+  --landscape-w: calc(208px * var(--card-scale));
+  --episode-w: calc(248px * var(--card-scale));
 }
 :root[data-touch="true"] {
   --hit: 44px;
@@ -204,14 +350,6 @@
   transition: transform var(--dur-press) var(--ease-out);
 }
 
-/* Settings → Appearance → Background: pure black, for OLED screens. */
-:root[data-theme="black"] {
-  --bg: #000;
-  --surface-1: #0b0b0b;
-  --surface-2: #141414;
-  --surface-3: #1e1e1e;
-}
-
 /* Settings → Appearance → Reduce motion: "On" regardless of Windows. Motion's
    springs follow via <MotionConfig>; this covers CSS transitions and keyframes. */
 :root[data-reduce-motion="on"] *,
@@ -244,24 +382,36 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  :root {
-    --glass: rgb(30 30 30);
-    --glass-heavy: rgb(22 22 22);
-    --glass-control: rgb(60 60 60);
-    --glass-control-hover: rgb(74 74 74);
+  :root,
+  :root[data-scheme="light"],
+  .themed,
+  .scheme-dark,
+  .player,
+  .hero-card,
+  .card-frame {
+    --glass: var(--tone-4);
+    --glass-heavy: var(--tone-3);
+    --glass-control: color-mix(in srgb, rgb(var(--ink)) 22%, var(--tone-0));
+    --glass-control-hover: color-mix(in srgb, rgb(var(--ink)) 28%, var(--tone-0));
     --blur-glass: none;
     --blur-control: none;
   }
 }
 
 @media (prefers-contrast: more) {
-  :root {
-    --text-2: rgb(245 245 247 / 0.88);
-    --text-3: rgb(245 245 247 / 0.72);
-    --hairline: rgb(255 255 255 / 0.3);
-    --hairline-strong: rgb(255 255 255 / 0.45);
-    --glass: rgb(16 16 16);
-    --glass-heavy: rgb(12 12 12);
-    --glass-edge: rgb(255 255 255 / 0.45);
+  :root,
+  :root[data-scheme="light"],
+  .themed,
+  .scheme-dark,
+  .player,
+  .hero-card,
+  .card-frame {
+    --text-2: rgb(var(--ink-text) / 0.88);
+    --text-3: rgb(var(--ink-text) / 0.72);
+    --hairline: rgb(var(--ink) / 0.3);
+    --hairline-strong: rgb(var(--ink) / 0.45);
+    --glass: var(--tone-1);
+    --glass-heavy: var(--tone-0);
+    --glass-edge: rgb(var(--ink) / 0.45);
   }
 }

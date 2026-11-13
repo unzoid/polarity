@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { AmbientWash } from "../components/AmbientWash";
+import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
@@ -115,6 +116,7 @@ export function HeroCarousel({
   handlers?: (item: MetaPreview) => { onClick: () => void; onContextMenu: (e: React.MouseEvent<HTMLElement>) => void };
 }) {
   const { navigate } = useRouter();
+  const phone = useFormFactor().form === "phone";
   const [paused, setPaused] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const count = items?.length ?? 0;
@@ -168,13 +170,18 @@ export function HeroCarousel({
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colours: a heavily
-          blurred copy of each backdrop, cross-fading with it. */}
-      <div className="hero-ambient" aria-hidden>
-        {items.map((it, i) => (
-          <AmbientWash key={it.id} src={it.background} current={i === index} />
-        ))}
-      </div>
+      {/* The page around the card takes on the art's colour: on a phone its most prominent one glowing in from the
+          top right corner (Netflix's); elsewhere its main colour, one dimmed tint per backdrop, fading down from the
+          top and cross-fading with it. */}
+      {phone ? (
+        <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} />
+      ) : (
+        <div className="hero-ambient" aria-hidden>
+          {items.map((it, i) => (
+            <AmbientWash key={it.id} src={it.background} current={i === index} flat />
+          ))}
+        </div>
+      )}
       <div className="hero-stage">
       {count > 1 && <HeroPeek item={items[(index - 1 + count) % count]} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />}
       <div
@@ -328,7 +335,10 @@ function HeroContent({ item }: { item: MetaPreview }) {
 const MIN_FRESH = 6;
 
 function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
-  const { title, shape } = shelf;
+  const { title } = shelf;
+  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
+  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
+  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);

@@ -11,6 +11,7 @@ import { failedStage, formatReport, STAGE_LABEL, type StartStage, type StartStep
 import type { useSource } from "./useSource";
 import { watchLog } from "../../lib/playback/watchLog";
 import { watchLogText } from "./useWatchLog";
+import { usePrefs } from "../../lib/settings/prefs";
 
 /** How far the logo has filled in for each loading stage (0–100). */
 const FILL = { searching: 34, resolving: 66, starting: 92, done: 100 } as const;
@@ -76,6 +77,10 @@ export function PlayerStatus({
   const hidden = !mark && (waiting || (!!candidate && choice === undefined));
   const failed = state.status === "failed" || !!error;
   const stageAt = failed ? failedStage(steps) : undefined;
+  // Failed, the screen leads with what to do next; the log waits behind Show Steps (Copy Details has it all).
+  const [log, setLog] = useState(false);
+  // Loading, the message line changes in place; the steps with their times are a setting (#469).
+  const { loadingDetails } = usePrefs();
 
   const stage = state.status === "searching" ? "searching" : state.status === "resolving" || state.status === "notice" ? "resolving" : "starting";
   const message = failed
@@ -126,8 +131,17 @@ export function PlayerStatus({
         <p key={message} className="player-status-message t-callout" role="status">
           {message}
         </p>
-        {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
-        <StartSteps steps={steps} all={failed} />
+        {failed && (stageAt || steps.length > 0) && (
+          <div className="player-status-meta">
+            {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
+            {steps.length > 0 && (
+              <button type="button" className="player-status-log t-caption" aria-expanded={log} onClick={() => setLog((v) => !v)}>
+                {log ? "Hide Steps" : "Show Steps"}
+              </button>
+            )}
+          </div>
+        )}
+        {(failed ? log : loadingDetails) && <StartSteps steps={steps} all={failed} />}
         {failed && (
           <div className="player-status-actions">
             {/* Focused, so Enter (or a controller's A) picks it straight away. */}

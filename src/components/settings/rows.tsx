@@ -219,6 +219,7 @@ export function ExpandRow({
   open,
   onToggle,
   setting,
+  accessory,
   children,
 }: Expandable & {
   /** The schema id (lib/settings/schema.ts) or another name the page finds the row by. */
@@ -228,16 +229,28 @@ export function ExpandRow({
   caption?: ReactNode;
   /** Short current state on the right ("On", a server address…). */
   value?: ReactNode;
+  /** A small button of its own beside the chevron (an add-on's Copy Link): over the row, not inside its button. */
+  accessory?: ReactNode;
   children: ReactNode;
 }) {
+  const row = (
+    <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle} data-accessory={accessory ? "" : undefined}>
+      {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
+      <RowText title={title} caption={caption} />
+      {value != null && <span className="settings-row-value">{value}</span>}
+      <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
+    </button>
+  );
   return (
     <div className="settings-expand" data-open={open} data-setting={setting}>
-      <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle}>
-        {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
-        <RowText title={title} caption={caption} />
-        {value != null && <span className="settings-row-value">{value}</span>}
-        <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
-      </button>
+      {accessory ? (
+        <div className="settings-expand-head">
+          {row}
+          <div className="settings-expand-accessory">{accessory}</div>
+        </div>
+      ) : (
+        row
+      )}
       {open && <div className="settings-expand-body">{children}</div>}
     </div>
   );

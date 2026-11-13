@@ -5,6 +5,7 @@ import * as fx from "./fixtures";
 import { SAGA_FILLER } from "./longAnime";
 import { fakeAccount, startSignedOut } from "./account";
 import type { Download } from "../../library/downloads";
+import type { NativeDialog } from "../nativeDialogs";
 import type { AnimeLink } from "../../library/identity";
 import type { LibraryItem, MetaPreview, Progress, Settings } from "../../types";
 
@@ -105,6 +106,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   },
   // Open Stremio links in Polarity (#163): each change is kept for browser tests to read.
   stremio_links_set: (a) => void ((window as { __stremioLinks?: boolean[] }).__stremioLinks ??= []).push(!!a.on),
+  // What iOS's tab bar was last told to show (components/NativeTabs.tsx).
+  native_tabs: (a) => void ((window as { __nativeTabs?: unknown }).__nativeTabs = a.tabs),
   addon_catalog: (a) => fx.addonCatalog(String(a.addon), String(a.ty), String(a.id), a.extra as [string, string][]),
   addons_bundled: () => [],
   library_list: () => library,
@@ -133,11 +136,21 @@ const commands: Record<string, (a: Args) => unknown> = {
     animeLinks.set(link.anilist, { ...link, updatedAt: Date.now() });
     return true;
   },
+  unlink_anime: (a) => animeLinks.delete((a as { anilist: number }).anilist),
   anime_ids: () => null,
   // The invented two-series franchise's long series has filler (its tab's toolbar has Skip filler, #426).
   anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),
   downloads_list: () => downloads,
+  // iOS's own menus and sheets (nativeDialogs.ts): the action a test named in __polarFakeDialogPick is tapped, once;
+  // otherwise the dialog goes away untouched.
+  native_dialog: (a) => {
+    const w = window as { __polarFakeDialogPick?: string };
+    const pick = w.__polarFakeDialogPick;
+    w.__polarFakeDialogPick = undefined;
+    const all = (a.dialog as NativeDialog).actions.flatMap((x) => [x, ...(x.children ?? [])]);
+    return all.find((x) => x.label === pick)?.id ?? null;
+  },
   // Files on this device (#204): none opened, and the file dialog is cancelled.
   local_recent: () => [],
   local_pick: () => [],
@@ -237,6 +250,10 @@ mockIPC(
 
 // A tab picked in iOS's tab bar, as the native shell reports it (components/NativeTabs.tsx).
 (window as { __polarFakeNativeTab?: (id: string) => void }).__polarFakeNativeTab = (id) => void emit("native://tab", id);
+
+
+// A step of the swipe in from the left edge, as iOS's shell reports it (lib/platform/backSwipe.ts, #451).
+(window as { __polarFakeBackSwipe?: (swipe: object) => void }).__polarFakeBackSwipe = (swipe) => void emit("native://back-swipe", swipe);
 
 // A click on a note, as the native shell reports it (#209).
 (window as { __polarFakeNoteClick?: (payload: string) => void }).__polarFakeNoteClick = (payload) => void emit("notification://click", payload);

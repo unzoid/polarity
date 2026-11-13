@@ -1,22 +1,48 @@
 import { exit, onBackButtonPress } from "@tauri-apps/api/app";
-import { inShell, type Unlisten } from "./bridge";
+import { call, inShell, type Unlisten } from "./bridge";
 import { os } from "./device";
-import { onEdgeSwipe } from "./edgeSwipe";
+import { onBackSwipe, swipeGoesBack, type BackSwipe } from "./backSwipe";
 
 /**
  * The system's Back: Android's back button and back gesture (a TV remote's Back too), and on iOS, which
- * has neither, a swipe in from the left edge (edgeSwipe.ts). Elsewhere the keyboard's Escape is Back and
+ * has neither, a swipe in from the left edge (backSwipe.ts). Elsewhere the keyboard's Escape is Back and
  * nothing here runs. While an Android handler is registered the system no longer goes back or closes the
  * app by itself: the handler decides, and calls `leaveApp` at the root.
  */
 export const systemBack: "button" | "swipe" | null = !inShell ? null : os === "android" ? "button" : os === "ios" ? "swipe" : null;
 
+/**
+ * A Back that follows the finger (iOS's swipe): `begin` says whether it takes this swipe (the page moves with it),
+ * `move` how far it has come of `width`, `end` whether it goes back. A swipe it doesn't take calls the handler
+ * when it ends far enough in, as a button press would.
+ */
+export type BackDrag = { begin(): boolean; move(x: number, width: number): void; end(back: boolean): void };
+
 /** Hear the system's Back until the returned function is called; a no-op where there is none. */
-export async function onSystemBack(handler: () => void): Promise<Unlisten> {
-  if (systemBack === "swipe") return onEdgeSwipe(handler);
+export async function onSystemBack(handler: () => void, drag?: () => BackDrag | undefined): Promise<Unlisten> {
+  if (systemBack === "swipe") return onBackSwipe(followSwipe(handler, drag));
   if (systemBack !== "button") return () => {};
   const listener = await onBackButtonPress(() => handler());
   return () => void listener.unregister();
+}
+
+/** The swipe's steps, to the drag while it has one, else to the handler once it ends far enough in. */
+export function followSwipe(handler: () => void, drag?: () => BackDrag | undefined): (swipe: BackSwipe) => void {
+  let taken: BackDrag | undefined;
+  return (swipe) => {
+    if (swipe.phase === "begin") {
+      const d = drag?.();
+      taken = d?.begin() ? d : undefined;
+      taken?.move(swipe.x, swipe.width);
+    } else if (swipe.phase === "move") {
+      taken?.move(swipe.x, swipe.width);
+    } else {
+      const back = swipe.phase === "end" && swipeGoesBack(swipe);
+      if (taken) taken.end(back);
+      else if (back) handler();
+      taken = undefined;
+    }
+  };
 }
 
 /**
@@ -47,7 +73,25 @@ export function leaveApp(scope: LeaveBridge = globalThis as LeaveBridge, quit: (
   return quit();
 }
 
-type ImmersiveBridge = { polarActions?: Actions; polarDevice?: { immersive?: (on: boolean) => void } };
+type ImmersiveBridge = { polarActions?: Actions; polarDevice?: { immersive?: (on: boolean) => void; keepAwake?: (on: boolean) => void } };
+
+/**
+ * Keep the screen on while a video plays, and let it dim and lock again when it pauses or the player closes, as
+ * other video apps do: Android through the page's bridge (MainActivity.kt), iOS's idle timer through the shell
+ * (ios/system_bars.m). Elsewhere it does nothing.
+ */
+export function keepScreenOn(on: boolean, scope: ImmersiveBridge = globalThis as ImmersiveBridge): void {
+  if (os === "ios" && inShell) {
+    void call<void>("player_keep_awake", { on }).catch(() => {});
+    return;
+  }
+  try {
+    if (typeof scope.polarActions?.postMessage === "function") scope.polarActions.postMessage(on ? "awake:on" : "awake:off");
+    else scope.polarDevice?.keepAwake?.(on);
+  } catch {
+    // An older shell without the call: the screen locks on its own timer, as before.
+  }
+}
 
 /**
  * Hide Android's status and navigation bars while the player is open, and bring them back after (#178).

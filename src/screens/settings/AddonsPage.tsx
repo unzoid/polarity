@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Settings as Cog, Plus, Puzzle, Trash } from "../../components/icons";
+import { ArrowDown, ArrowUp, Check, LinkIcon, Settings as Cog, Plus, Puzzle, Trash } from "../../components/icons";
+import { SwapIcon } from "../../components/SwapIcon";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { keys, useAddons } from "../../lib/net";
@@ -9,7 +10,7 @@ import { Switch } from "../../components/ui/Switch";
 import { Card, ExpandRow, FormRow, useExpanded } from "../../components/settings/rows";
 import { showWhereStored, useSecretsNote } from "../../components/settings/secretsNote";
 import { useKeyGate, useSecretsPlain } from "../../components/settings/KeyWarning";
-import { linkHasKey } from "../../lib/account";
+import { linkHasKey, useAccount, useSecretsLocked } from "../../lib/account";
 import { addonHomeCatalogs, catalogKey, useAddonCatalogs, useHomeCatalogSetting, withAddonOnHome, withCatalogMoved } from "../../lib/catalog";
 import { setStremioLinks, stremioLinksOs, type Os } from "../../lib/platform";
 import { setPrefs } from "../../lib/settings";
@@ -25,6 +26,9 @@ export function AddonsPage() {
   const note = useSecretsNote();
   const gate = useKeyGate();
   const plain = useSecretsPlain();
+  // Signed in on a new device with the keys sealed (#470): said first, with the way to unlock them.
+  const account = useAccount();
+  const locked = useSecretsLocked(account.status === "ready" ? account.profile?.id : null);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.addons });
@@ -51,6 +55,18 @@ export function AddonsPage() {
 
   return (
     <>
+      {locked && (
+        <div className="settings-key-warning" role="status" data-kind="locked">
+          <p className="settings-expand-text">
+            <strong>Your account's add-ons are locked on this device.</strong> They're encrypted with your passphrase, and can't be installed or used here until you type it.
+          </p>
+          <div className="settings-expand-form">
+            <Button variant="primary" onClick={showWhereStored}>
+              Unlock
+            </Button>
+          </div>
+        </div>
+      )}
       {!!addons?.length && (
         <Card title="Installed" footer={note}>
           {addons.map((a) => (
@@ -59,6 +75,7 @@ export function AddonsPage() {
               icon={Puzzle}
               title={a.manifest.name}
               caption={linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
+              accessory={<CopyLink url={a.manifestUrl} name={a.manifest.name} />}
               {...expand(a.manifest.id)}
             >
               {a.manifest.description && <p className="settings-expand-text">{a.manifest.description}</p>}
@@ -110,6 +127,29 @@ export function AddonsPage() {
 }
 
 /**
+ * Copies an installed add-on's manifest link, to install it elsewhere or share it. The glyph turns into a
+ * check for a moment to say it worked. The link is copied as it is, key included: that's what installs it.
+ */
+function CopyLink({ url, name }: { url: string; name: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+  return (
+    <IconButton
+      variant="settings"
+      label={copied ? `${name} link copied` : `Copy ${name} link`}
+      title={copied ? "Copied" : "Copy Link"}
+      onClick={() => void navigator.clipboard.writeText(url).then(() => setCopied(true), () => {})}
+    >
+      <SwapIcon state={copied ? "copied" : "copy"}>{copied ? <Check size={16} /> : <LinkIcon size={16} />}</SwapIcon>
+    </IconButton>
+  );
+}
+
+/**
  * Under an installed add-on with lists of titles (#206): whether they're rows on Home, and their order there.
  * Off until switched on, so installing an add-on for its sources doesn't change Home.
  */
@@ -155,7 +195,7 @@ const STREMIO_LINKS_ON: Record<Os, string> = {
   ios: "",
 };
 
-/** Settings → Add-ons → Open Stremio links in Polarity (#163): this device's choice, off until the user turns it on. */
+/** Settings → Add-ons → Open Stremio links in Polarity (#163): this device's choice, on until the user turns it off (#428). */
 function StremioLinksCard() {
   const os = stremioLinksOs();
   const [error, setError] = useState<string | null>(null);

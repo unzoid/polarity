@@ -211,8 +211,10 @@ export interface AccountBackend {
   friends: {
     /** The profile's code and what its friends see; `null` while Friends is off (as it starts). */
     settings(profileId: string): Promise<FriendSettings | null>;
-    /** Friends on: a code, made the first time, and everything shown until changed. */
+    /** Friends on: a code, made the first time; online and joinable shown, what is on hidden until changed. */
     on(profileId: string): Promise<FriendSettings>;
+    /** Friends on if the profile never had it turned on or off (#428); `null` when it had, or the server is older. */
+    defaultOn(profileId: string): Promise<FriendSettings | null>;
     /** Friends off: the code stops working and the settings go. Friends stay. */
     off(profileId: string): Promise<void>;
     /** A new code; the old one stops working. */

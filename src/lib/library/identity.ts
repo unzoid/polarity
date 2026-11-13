@@ -81,6 +81,8 @@ export interface AnimeLink {
   kitsu?: number;
   /** ms; the latest decision about an AniList entry wins. */
   updatedAt: number;
+  /** The stored link was taken back (#335): the entry plays from what the id lists or the title search find. Says nothing else. */
+  removed?: boolean;
 }
 
 /** The alias → target pairs a link stands for. Never makes an IMDb id an alias. */
@@ -98,7 +100,7 @@ export function aliasesOf(link: AnimeLink): [string, string][] {
  * old answer).
  */
 export function aliasTable(links: Iterable<AnimeLink>): Map<string, string> {
-  const sorted = [...links].sort((a, b) => a.updatedAt - b.updatedAt);
+  const sorted = [...links].filter((l) => !l.removed).sort((a, b) => a.updatedAt - b.updatedAt);
   const table = new Map<string, string>();
   for (const l of sorted) for (const [from, to] of aliasesOf(l)) if (!IMDB.test(from)) table.set(from, to);
   return table;

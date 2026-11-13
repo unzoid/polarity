@@ -31,7 +31,9 @@ export function VideoBackdrop({ media, className, crop = false }: { media: Media
     const el = canvas.current;
     const ctx = el?.getContext("2d");
     if (!media || !el || !ctx) return;
-    ctx.filter = crop ? "blur(8px) saturate(140%)" : "blur(4px) saturate(115%)";
+    // The overlay's copy is blurred once, here: at 160 px wide, 2px reads as about 18px on a 1440px window. The
+    // CSS adds only a light smoothing of the upscale (player.css), and no saturation: the picture's own colour.
+    ctx.filter = crop ? "blur(8px) saturate(140%)" : "blur(2px)";
     // The first frame marks the canvas ready: the CSS fades it in over the live
     // video only then, so opening never shows an empty (black) backdrop.
     const paint = (src: CanvasImageSource, srcW: number, srcH: number) => {

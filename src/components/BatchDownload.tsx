@@ -9,12 +9,14 @@ import {
   useDownloads,
 } from "../lib/library";
 import type { MetaPreview, Video } from "../lib/types";
-import { Close, Download, Pause, Play } from "./icons";
+import { useFormFactor } from "../lib/ui";
+import { Close, Download, DownloadAll, Pause, Play } from "./icons";
 import { Button, IconButton } from "./ui/Button";
 
 /**
  * Download a whole season (an anime season tab's episodes, #352), or a whole show, as one batch (#24; lib/library/batchDownloads.ts):
- * one button to start, then the batch's progress with Pause / Resume and Cancel.
+ * one button to start, then the batch's progress with Pause / Resume and Cancel. On a phone the start is a glyph beside
+ * the season picker (a stack, set apart from one episode's Download), its words in its label.
  */
 export function BatchDownload({ item, videos, season, part }: { item: MetaPreview; videos: Video[]; season?: number; part?: number }) {
   // An anime season tab (#352) is a season of its own, though its episodes may share a season number with another tab's.
@@ -23,6 +25,7 @@ export function BatchDownload({ item, videos, season, part }: { item: MetaPrevie
   const { data: downloads } = useDownloads();
   const what = season === undefined && part === undefined ? "Show" : "Season";
   const have = videos.filter((v) => downloads?.some((d) => d.id === v.id && d.state === "done")).length;
+  const phone = useFormFactor().form === "phone";
 
   if (batch && (batch.state === "running" || batch.state === "paused")) {
     const percent = Math.round(batchFraction(batch) * 100);
@@ -56,23 +59,30 @@ export function BatchDownload({ item, videos, season, part }: { item: MetaPrevie
 
   const all = videos.length > 0 && have === videos.length;
   const failed = batch?.state === "finished" && batch.failed > 0 ? batch.failed : 0;
+  const label = all ? `${what} Downloaded` : failed ? `Download ${what} (${failed} left)` : `Download ${what}`;
+  const title = failed
+    ? `${failed} ${failed === 1 ? "episode" : "episodes"} had no source that could be downloaded. Click to try again.`
+    : all
+      ? `Every episode of this ${what.toLowerCase()} is downloaded`
+      : `Download every episode of this ${what.toLowerCase()}${have ? ` (${have} already here)` : ""}`;
+  const start = () => void downloadBatch(key, item, videos);
+  if (phone)
+    return (
+      <IconButton variant="glass" className="batch-download-start" disabled={all || !videos.length} onClick={start} label={label} title={title}>
+        <DownloadAll size={20} />
+      </IconButton>
+    );
   return (
     <Button
       variant="glass"
       size={what === "Show" ? undefined : "sm"}
       className="batch-download-start"
       disabled={all || !videos.length}
-      onClick={() => void downloadBatch(key, item, videos)}
-      title={
-        failed
-          ? `${failed} ${failed === 1 ? "episode" : "episodes"} had no source that could be downloaded. Click to try again.`
-          : all
-            ? `Every episode of this ${what.toLowerCase()} is downloaded`
-            : `Download every episode of this ${what.toLowerCase()}${have ? ` (${have} already here)` : ""}`
-      }
+      onClick={start}
+      title={title}
     >
       <Download size={16} />
-      {all ? `${what} Downloaded` : failed ? `Download ${what} (${failed} left)` : `Download ${what}`}
+      {label}
     </Button>
   );
 }

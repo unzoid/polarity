@@ -10,7 +10,7 @@
   aspect-ratio: 1;
   border-radius: 14%;
   background: linear-gradient(160deg, var(--avatar-from), var(--avatar-to));
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.12);
   overflow: hidden;
 }
 .avatar img {
@@ -44,7 +44,10 @@
   align-items: center;
   gap: 1rem;
   height: var(--nav-h);
-  padding-left: var(--gutter);
+  /* The bar's height counts the status bar on a phone (--nav-h): its wordmark and Sign Out sit under it, not
+     centred across it. */
+  box-sizing: border-box;
+  padding: var(--safe-top) max(0.75rem, var(--safe-right)) 0 max(var(--gutter), var(--safe-left));
 }
 .account-brand {
   display: flex;
@@ -66,7 +69,7 @@
 @media (hover: hover) and (pointer: fine) {
   .account-bar-link:hover {
     color: var(--text);
-    background: rgb(255 255 255 / 0.08);
+    background: rgb(var(--ink) / 0.08);
   }
 }
 .account-bar-link + .window-controls {
@@ -94,7 +97,7 @@
        column, generous spacing, pill buttons. Steps change with a sink-out /
        spring-in (see .auth-body below). */
 .account-shell[data-plain] {
-  background: linear-gradient(180deg, #111213 0%, #0c0d0e 50%, #08090a 100%);
+  background: linear-gradient(180deg, var(--tone-1) 0%, var(--tone-0) 50%, var(--tone-sunk) 100%);
 }
 /* Anchored from the top, not centred: each step is a different height, and
    centring would shift the logo and the step's first line every time it
@@ -126,17 +129,17 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.3;
-  color: #f7f8f8;
+  color: var(--text);
 }
 .auth-sub {
   margin: -0.875rem 0 2rem;
   font-size: var(--fs-md);
   line-height: 1.5;
-  color: #8a8f98;
+  color: var(--text-2);
 }
 .auth-sub strong {
   font-weight: 500;
-  color: #f7f8f8;
+  color: var(--text);
 }
 .auth-actions {
   display: flex;
@@ -163,7 +166,7 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.12em;
-  color: #f7f8f8;
+  color: var(--text);
   min-height: 1.3em;
 }
 .auth-device-code[data-state="signing-in"],
@@ -171,7 +174,7 @@
   font-size: var(--fs-lg);
   font-weight: 500;
   letter-spacing: normal;
-  color: #8a8f98;
+  color: var(--text-2);
 }
 .auth-device-code + .auth-fine {
   margin-top: 0;
@@ -180,7 +183,7 @@
   margin-top: 1.25rem;
   font-size: var(--fs-sm);
   font-weight: 500;
-  color: #d0d6e0;
+  color: rgb(var(--ink-text) / 0.85);
   transition: color 150ms var(--ease-std);
 }
 .auth-link + .auth-link {
@@ -195,13 +198,13 @@
   opacity: 0.5;
 }
 .auth-link-quiet {
-  color: #62666d;
+  color: var(--text-3);
 }
 .auth-fine {
   margin: 2.75rem 0 0;
   font-size: var(--fs-md);
   line-height: 1.45;
-  color: #8a8f98;
+  color: var(--text-2);
 }
 /* Privacy Policy · Terms of Use (#157): quiet links under the sign-in steps. */
 .auth-legal {
@@ -210,7 +213,7 @@
   gap: 0.5rem;
   margin: 1.5rem 0 0;
   font-size: var(--fs-sm);
-  color: #62666d;
+  color: var(--text-3);
 }
 .auth-legal button {
   color: inherit;
@@ -218,7 +221,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .auth-legal button:hover {
-    color: #d0d6e0;
+    color: rgb(var(--ink-text) / 0.85);
   }
 }
 .auth-error {
@@ -324,7 +327,7 @@
 @media (hover: hover) and (pointer: fine) {
   .auth-back:hover {
     color: var(--text);
-    background: rgb(255 255 255 / 0.08);
+    background: rgb(var(--ink) / 0.08);
   }
 }
 
@@ -556,7 +559,7 @@
 @media (hover: hover) and (pointer: fine) {
   .profile-tile:hover {
     color: var(--text);
-    background: rgb(255 255 255 / 0.08);
+    background: rgb(var(--ink) / 0.08);
   }
 }
 .profile-tile-art {
@@ -858,6 +861,195 @@
   }
 }
 
+/* --- The profile menu on a desktop or tablet (ProfileMenu.tsx ProfilePopover): the menus' surface, who's
+       watching on top (the profile, the others a click each), then rows; Friends and Join as views inside. */
+.profile-pop {
+  --fit-dur: var(--dur-base);
+  width: min(21rem, calc(100vw - 1.5rem));
+  max-height: min(42rem, calc(100vh - 5rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  /* The menus' surface (tokens.css --surface-menu). */
+  border: var(--edge-menu);
+  border-radius: 14px;
+  background: var(--surface-menu);
+  -webkit-backdrop-filter: var(--blur-menu);
+  backdrop-filter: var(--blur-menu);
+  box-shadow: var(--shadow-menu);
+  outline: none;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.profile-pop[data-starting-style],
+.profile-pop[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+.profile-pop-view:not([data-view="list"]) {
+  padding: 0.25rem 0.625rem 0.75rem;
+}
+.profile-pop-profiles {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 0.375rem 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.profile-pop-profiles::-webkit-scrollbar {
+  display: none;
+}
+.profile-pop-profile {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  width: 3.75rem;
+  padding: 0.375rem 0 0.3125rem;
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-2);
+  outline: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+button.profile-pop-profile:is(:hover, :focus-visible) {
+  background: var(--fill-3);
+  color: var(--text);
+}
+.profile-pop-profile > .avatar,
+.profile-pop-manage {
+  width: 36px;
+  border-radius: var(--r-sm);
+}
+.profile-pop-profile[aria-current] {
+  color: var(--text);
+}
+/* You: ringed, the way the profiles screen marks who's watching. */
+.profile-pop-profile[aria-current] > .avatar {
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 4px var(--text);
+}
+.profile-pop-manage {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  background: var(--fill-3);
+  color: var(--text-2);
+}
+.profile-pop-profile > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-pop-group {
+  display: flex;
+  flex-direction: column;
+  padding-top: 5px;
+  margin-top: 5px;
+  border-top: 1px solid var(--hairline);
+}
+.profile-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 2.375rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+  color: rgb(var(--ink) / 0.85);
+  text-align: left;
+  outline: none;
+}
+.profile-pop-row:is(:hover, :focus-visible) {
+  background: var(--fill-3);
+  color: var(--text);
+}
+:root[data-input="keyboard"] .profile-pop-row:focus-visible {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.profile-pop-row > svg:first-child {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-inline: 4px;
+}
+.profile-pop-row > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.profile-pop-row > svg:last-child:not(:first-child) {
+  flex: none;
+  opacity: 0.5;
+}
+.profile-pop-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+}
+.profile-pop-title {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 0 0.5rem -0.5rem;
+}
+.profile-pop-title strong {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+}
+.profile-pop-back {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-round);
+  color: var(--text-2);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.profile-pop-back:is(:hover, :focus-visible) {
+  background: var(--fill-3);
+  color: var(--text);
+}
+.profile-pop .profile-sheet-join {
+  padding: 0;
+}
+/* Tight: no room kept for a note or error that isn't there (the height follows when one comes). */
+.profile-pop :is(.party-join-error, .party-join-note)[data-shown="false"] {
+  display: none;
+}
+.profile-pop .profile-sheet-join .party-dialog-text {
+  margin: 0 0 0.75rem;
+}
+.profile-pop .profile-sheet-join .party-or {
+  margin: 0.875rem 0 0.75rem;
+}
+.profile-pop .party-join {
+  gap: 0.5rem;
+}
+.profile-pop .friends-body {
+  gap: 1rem;
+  margin-top: 0;
+}
+:root[data-touch="true"] :is(.profile-pop-row, .profile-pop-back) {
+  min-height: var(--hit);
+  min-width: var(--hit);
+}
+
 /* --- The profile menu on a phone (ProfileMenu.tsx ProfileSheet): who's watching, the profiles to switch to,
        then the rest as rows in cards, the settings cards' look. */
 .profile-sheet {
@@ -866,32 +1058,7 @@
   gap: 1.25rem;
   padding: 0.25rem 0.25rem 0.5rem;
 }
-/* Between views the sheet's height follows its content (FitHeight) while the new view comes in from the
-   side it's on: Friends and Join from the right, the list back from the left. One movement, together. */
-.fit-height {
-  overflow: hidden;
-  transition: height 300ms var(--ease-drawer);
-}
-.profile-sheet[data-slide] {
-  animation: profile-view-in 260ms var(--ease-out) both;
-}
-.profile-sheet[data-view="list"] {
-  --view-from: -20px;
-}
-@keyframes profile-view-in {
-  from {
-    opacity: 0;
-    transform: translateX(var(--view-from, 20px));
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .fit-height {
-    transition: none;
-  }
-  .profile-sheet {
-    --view-from: 0px !important;
-  }
-}
+/* Between views: FitHeight and [data-slide] (base.css). */
 /* The view's title with its Back, in the sheet's header. */
 .profile-sheet-title {
   display: inline-flex;
@@ -932,9 +1099,12 @@
   background: var(--fill-2);
   text-align: center;
 }
+.profile-sheet-me .profile-sheet-face {
+  margin-bottom: 0.5rem;
+  border-radius: var(--r-md);
+}
 .profile-sheet-me .avatar {
   width: 76px;
-  margin-bottom: 0.5rem;
   border-radius: var(--r-md);
 }
 .profile-sheet-me strong {
@@ -942,7 +1112,7 @@
   font-weight: 700;
   letter-spacing: -0.014em;
 }
-.profile-sheet-me span {
+.profile-sheet-me > span:last-child {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -974,10 +1144,124 @@
   font-weight: 600;
   color: var(--text);
 }
-.profile-sheet-other > .avatar,
+.profile-sheet-other .avatar,
 .profile-sheet-manage {
   width: 56px;
   border-radius: var(--r-sm);
+}
+.profile-sheet-other .profile-sheet-face {
+  border-radius: var(--r-sm);
+}
+/* The list's profiles, the one in use and the others, as one group (Manage marks them all). */
+.profile-sheet-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+/* Managing (ProfileMenu.tsx): each picture takes a pencil, fading in over it, darkened, with a fine rim, and the
+   one in use is a button to its page too. */
+.profile-sheet-face {
+  position: relative;
+  display: block;
+  line-height: 0;
+}
+.profile-sheet-edit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgb(0 0 0 / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.35);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms var(--ease-out);
+}
+.profile-sheet-edit > svg {
+  transform: scale(0.85);
+  transition: transform 260ms var(--ease-out);
+}
+[data-managing] .profile-sheet-edit {
+  opacity: 1;
+}
+[data-managing] .profile-sheet-edit > svg {
+  transform: none;
+}
+button.profile-sheet-me {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  touch-action: manipulation;
+}
+button.profile-sheet-me:active {
+  background: var(--fill-3);
+}
+
+/* A profile's page in the sheet (ProfileEditSheet.tsx): its picture with a pencil, its name in a labelled field,
+   then the settings that are its own and Delete, in the sheet's cards. */
+.profile-edit {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+.profile-edit-avatar {
+  position: relative;
+  align-self: center;
+  width: 108px;
+  margin: 0.25rem 0 0.25rem;
+}
+.profile-edit-avatar .avatar {
+  width: 108px;
+  border-radius: var(--r-md);
+}
+.profile-edit-avatar-badge {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-round);
+  background: var(--text);
+  color: var(--text-on-light);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+}
+.profile-edit-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.625rem 1rem;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow var(--dur-fast) var(--ease-std);
+}
+.profile-edit-name:focus-within {
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+.profile-edit-name > span {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+.profile-edit-name > input {
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-lg);
+}
+.profile-edit-delete,
+.profile-edit-delete > svg:first-child {
+  color: var(--danger) !important;
+}
+.profile-sheet .icon-picker[data-bare] {
+  width: 100%;
+  animation: none;
 }
 .profile-sheet-manage {
   display: grid;
@@ -992,16 +1276,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The same cards as Settings in this sheet (settings-overlay.css `.t3s[data-embedded]`): filled, no outline. */
 .profile-sheet-card {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--hairline-strong);
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.025);
+  background: rgb(var(--ink) / 0.025);
   overflow: hidden;
 }
 .profile-sheet-card > * + * {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.07);
 }
 .profile-sheet-row {
   display: flex;

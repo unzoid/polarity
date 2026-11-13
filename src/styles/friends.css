@@ -49,7 +49,7 @@
 }
 .friends-add .party-join-note,
 .friends-add .party-join-error {
-  margin: -0.125rem 0 0 1rem;
+  margin: -0.125rem 0 0;
 }
 
 /* Sections of people. */
@@ -133,18 +133,6 @@
 .friends-dialog .party-join-note {
   text-align: center;
 }
-.friends-settings-link {
-  align-self: center;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--r-pill);
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-}
-@media (hover: hover) and (pointer: fine) {
-  .friends-settings-link:hover {
-    color: var(--text);
-  }
-}
 
 /* The invite toast's face, where the toast's icon goes. */
 .friends-toast .friends-toast-face {
@@ -153,8 +141,9 @@
   border-radius: 28%;
 }
 
-/* Phones: the actions go under the name. */
-:root[data-form="phone"] .friends-actions {
+/* Phones: several actions (Accept, Decline…) go under the name; a lone one (a friend's ⋯) stays beside it, in line
+   with the face, rather than on a line of its own under the row. */
+:root[data-form="phone"] .friends-actions:has(> :nth-child(2)) {
   flex-basis: 100%;
   justify-content: flex-end;
 }
@@ -212,4 +201,42 @@
   .tv-friend:focus {
     transform: none;
   }
+}
+
+/* TV mode's Friends panel (TvFriends.tsx), from the side menu: one column of people, read from the sofa. */
+.tv-friends {
+  z-index: var(--z-sheet);
+}
+.tv-friends-code {
+  margin-left: 0.4rem;
+  color: var(--text);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+.tv-friends-status {
+  margin: 0 0 1rem;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.tv-friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(48rem, 100%);
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 0.75rem 3rem;
+  margin-left: -0.75rem;
+}
+.tv-friends-list .tv-friend {
+  width: 100%;
+}
+.tv-friend[aria-disabled] {
+  cursor: default;
+}
+.tv-friends-empty {
+  margin: 1rem 0 0;
+  max-width: 40rem;
+  font-size: var(--fs-xl);
+  color: var(--text-2);
 }

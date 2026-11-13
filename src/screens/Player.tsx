@@ -20,7 +20,7 @@ import {
 } from "../components/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { ease, useFormFactor } from "../lib/ui";
-import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
+import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, keepScreenOn, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
@@ -56,6 +56,8 @@ import {
   SPEED_PARTY_NOTE,
   captionChoices,
   speedChoices,
+  resumeFrom,
+  startPosition,
 } from "../lib/playback";
 import { downloadedStream, episodeState, isLocalFile, nextVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
@@ -71,7 +73,7 @@ import { SkipTransport } from "../components/player/SkipTransport";
 import { useTracks } from "../components/player/useTracks";
 import { useKeyboardFocus } from "../components/player/useKeyboardFocus";
 import { usePinch } from "../components/player/usePinch";
-import { pickedSpeed, pickedTrack, speedLabel, speedMenu, tracksMenu } from "../components/player/nativeMenus";
+import { pickedSpeed, speedLabel, speedMenu } from "../components/player/nativeMenus";
 import {
   DEFAULT_SUBTITLE_STYLE,
   SubtitlePreview,
@@ -128,13 +130,13 @@ import {
   useJoinDesk,
   youtubeId,
 } from "../lib/party";
-import { partyPage, watchPage } from "../lib/deepLink";
+import { watchPage } from "../lib/deepLink";
 import { setWatching } from "../lib/friends";
 import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
 import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
-import { More, Pin, Pinned, WatchParty } from "../components/icons";
+import { Moon, More, Pin, Pinned, WatchParty } from "../components/icons";
 import { Button, IconButton, iconButtonClass } from "../components/ui/Button";
 import { MenuCheckItem, MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "../components/ui/Menu";
 import { watch, watchLog } from "../lib/playback/watchLog";
@@ -150,6 +152,8 @@ import { useMediaTime } from "../components/player/useMediaTime";
 import { usePlayerChrome } from "../components/player/usePlayerChrome";
 import { usePlayerKeyboard } from "../components/player/usePlayerKeyboard";
 import { useProgressSaver } from "../components/player/useProgressSaver";
+import { useSleepTimer } from "../components/player/useSleepTimer";
+import { SLEEP_CHOICES, sleepLabel, type SleepChoice } from "../lib/playback/sleepTimer";
 import { useSimklScrobble } from "../components/player/useSimklScrobble";
 import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
@@ -262,6 +266,13 @@ export function Player({
   const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state });
   useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
   useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
+  // A phone or tablet doesn't dim and lock while the video plays; paused, it does in its own time.
+  const playingNow = started && !paused;
+  useEffect(() => {
+    if (!playingNow) return;
+    keepScreenOn(true);
+    return () => keepScreenOn(false);
+  }, [playingNow]);
 
   // --- AirPlay (#19) ----------------------------------------------------------
   const playingUrl = source.state.status === "ready" && started ? source.state : undefined;
@@ -277,6 +288,14 @@ export function Player({
   // What the player did while it played, for "Copy Watch Log" (dev builds only, #424).
   useWatchLog(media, videoId);
   videoRef.current = media;
+  // Sleep timer (#270): off at every start; run out, this player alone pauses, progress saved where it stopped.
+  const sleep = useSleepTimer(media);
+  useEffect(() => {
+    if (!sleep.asleep) return;
+    videoRef.current?.pause();
+    save();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sleep.asleep]);
   /** Why the link check turned the built-in player's source down (mpv reports its own). */
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
@@ -289,7 +308,7 @@ export function Player({
   const [notice, flashNotice] = useNotice();
   const [ended, setEnded] = useState(false);
   const [nextDismissed, setNextDismissed] = useState(false);
-  const [options, setOptions] = useState<"speed" | "tracks" | "episodes" | "sources" | "party" | null>(null);
+  const [options, setOptions] = useState<"speed" | "sleep" | "tracks" | "episodes" | "sources" | "party" | null>(null);
   // The Watch Party panel is a party surface (lib/party/surface.ts, #247): another one coming up closes it.
   const partySurface = usePartySurface();
   useEffect(() => {
@@ -434,7 +453,7 @@ export function Player({
   // A link is its own file: no release name for others to look for.
   const hint = useMemo(() => (link ? undefined : streamHint(playingStream)), [link, playingStream]);
   const partyMedia = link ? linkMedia(link) : { type, metaId, videoId, label: heading || undefined };
-  usePartySync({ media, current: partyMedia, started, buffering, hint, leaving });
+  usePartySync({ media, current: partyMedia, started, buffering, hint, leaving, asleep: sleep.asleep });
   const startHere = () => {
     const v = videoRef.current;
     if (!party && profile && v) startParty({ ...partyMedia, hint }, v.currentTime, v.paused, profile);
@@ -472,11 +491,11 @@ export function Player({
 
   // --- Load source ----------------------------------------------------------
   /** Where to pick up (Settings → Playback: resume on/off, rewind), or undefined to start over. */
-  const resumePoint = (r?: Pick<Progress, "position" | "duration">) => {
-    if (settings?.resumePlayback === false || !r || r.position <= 30 || r.position / r.duration >= watchedFraction()) return undefined;
-    return Math.max(0, r.position - (settings?.resumeRewind ?? 0));
-  };
+  const resumePoint = (r?: Pick<Progress, "position" | "duration">) =>
+    resumeFrom(r, { resume: settings?.resumePlayback !== false, rewind: settings?.resumeRewind ?? 0, watchedFraction: watchedFraction() });
   const resumed = useRef(false);
+  /** Where a source that failed had got to: the next one carries on from there (not from where the episode was opened). */
+  const reached = useRef<number | undefined>(undefined);
   useEffect(() => {
     // Always the app's own player: handing over to AirPlay and back isn't a new source.
     const v = baseRef.current;
@@ -489,9 +508,9 @@ export function Player({
     if (v instanceof MpvMedia) {
       // Start at the resume point (or where the watch party is) directly: no
       // fetching the opening of a network stream only to seek away from it.
-      const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
+      const start = startPosition(partyPosition(videoId), reached.current, resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined)));
       resumed.current = true;
-      v.load(source.state.url, start, requestHeaders(source.state.stream));
+      v.load(source.state.url, start, requestHeaders(source.state.stream), !!link);
     } else if (v instanceof YouTubeMedia) {
       resumed.current = true;
       v.load(partyPosition(videoId) ?? null);
@@ -508,7 +527,7 @@ export function Player({
       const id = nextProbeId();
       const unlisten = listenProbe(id, (e) => logStep(...probeStep(e)));
       api
-        .streamProbe(url, id, requestHeaders(source.state.stream))
+        .streamProbe(url, id, requestHeaders(source.state.stream), !!link)
         .then(
           (final) => !cancelled && play(final),
           (e) => {
@@ -545,10 +564,11 @@ export function Player({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.volume = sliderAmplitude(volume);
+    // The sleep timer fades the sound out over its last 30 s; the stored level stays the viewer's.
+    v.volume = sliderAmplitude(volume) * sleep.gain;
     v.muted = muted;
     if (!systemVolume) storeLocal("polar.volume", String(volume));
-  }, [volume, muted, media]);
+  }, [volume, muted, media, sleep.gain]);
 
   // A watch party plays at 1x for everyone (its sync nudges the rate itself).
   const inParty = !!party;
@@ -584,13 +604,18 @@ export function Player({
   }, [settings, tv]);
 
   // Settings → Playback → "Pause when minimized".
-  const { pauseOnMinimize, discordPresence } = usePrefs();
+  const { pauseOnMinimize, discordPresence, discordJoin } = usePrefs();
   // A file on this device stays private: its name isn't shown on Discord.
-  // Buttons (#153): this title in the viewer's own Polarity (only where the title is shown), and the party's join link.
-  const joinToken = useJoinDesk().token;
+  // The button (#153): this title in the viewer's own Polarity (only where the title is shown); in a party joinable
+  // from Discord, Discord's own Join instead (#357).
+  const { token: joinToken, party: joinParty } = useJoinDesk();
+  const partyMembers = party?.members.length ?? 0;
   const presenceLinks = useMemo(
-    () => ({ watch: (discordPresence === "title" && watchPage(type, metaId)) || undefined, party: joinToken ? partyPage(joinToken) : undefined }),
-    [discordPresence, type, metaId, joinToken],
+    () => ({
+      watch: (discordPresence === "title" && watchPage(type, metaId)) || undefined,
+      join: joinToken && joinParty ? { party: joinParty, secret: joinToken, members: Math.max(1, partyMembers), ask: discordJoin !== "anyone" } : undefined,
+    }),
+    [discordPresence, type, metaId, joinToken, joinParty, partyMembers, discordJoin],
   );
   useDiscordPresence(media, meta, videoId, local ? "off" : discordPresence, presenceLinks);
   // What friends may see playing (#135); the same rule: never a file on this device.
@@ -646,7 +671,7 @@ export function Player({
     },
     loadedmetadata: () => {
       const v = videoRef.current!;
-      const start = partyPosition(videoId) ?? resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined));
+      const start = startPosition(partyPosition(videoId), reached.current, resumePoint(source.resume ?? (local ? recentPosition(videoId) : undefined)));
       if (!resumed.current && start != null) v.currentTime = start;
       resumed.current = true;
       if (!startedRef.current) {
@@ -663,6 +688,11 @@ export function Player({
       setEnded(true);
       save();
     },
+    seeking: () => {
+      // Gone back from the end to watch again: the "up next" countdown must not go on behind it.
+      const v = videoRef.current;
+      if (v && Number.isFinite(v.duration) && v.currentTime < v.duration - 1) setEnded(false);
+    },
     error: () => {
       // The torrent engine was stopped in the background (#207): its reason stays on screen.
       if (source.halted()) return;
@@ -676,6 +706,9 @@ export function Player({
         const kinds = ["", "loading was stopped", "network error", "couldn't decode it", "format not supported"];
         logStep(`Built-in player: ${kinds[el.error.code] ?? `error ${el.error.code}`}${el.error.message ? ` (${el.error.message})` : ""}`, "fail", "player");
       }
+      // Only once a picture was up, and never 0: a source that fails before it starts leaves the last place alone.
+      const at = videoRef.current?.currentTime;
+      if (startedRef.current && at != null && Number.isFinite(at) && at > 0) reached.current = at;
       if (!exited && source.next()) {
         logStep("Trying the next source", "warn");
         flashNotice("That source didn't load. Trying the next best one.", 3500);
@@ -934,7 +967,7 @@ export function Player({
   // title page. Ids stay the index into the ranked list, so selection works
   // regardless of the view. Kept for this show while the player stays open,
   // through picking a source or moving to another episode (each rebuilds it).
-  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime), airedAt(meta, videoId));
+  const sourceFilters = useSourceFilters(streams.data?.streams, settings, metaId, runtimeSeconds(meta?.runtime), airedAt(meta, videoId), meta?.details?.originalLanguage);
   const hiddenSources = streams.data?.hidden ?? 0;
   // The first few sources get a look ahead of time while the panel is open (#21).
   const readiness = useReadiness(
@@ -1000,25 +1033,15 @@ export function Player({
     setOptionsByKey(true);
     setOptions((open) => (open === o ? null : o));
   };
-  // A tap on Speed or Subtitles & Audio: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker.
+  // A tap on Speed: on iOS the system's menu from the button (nativeMenus.ts), elsewhere the picker. Every other
+  // button, Subtitles & Audio included (#465), opens the app's own panel everywhere.
   const openOptions = (o: NonNullable<typeof options>, from: Element) => {
-    if (!nativeDialogsAvailable || (o !== "speed" && o !== "tracks")) return setOptions(o);
-    const menu = o === "speed" ? speedMenu(SPEEDS, rate) : tracksMenu(tracks);
+    if (!nativeDialogsAvailable || o !== "speed") return setOptions(o);
     setNativeMenu(true);
-    showNativeDialog({ ...menu, anchor: anchorOf(from) })
+    showNativeDialog({ ...speedMenu(SPEEDS, rate), anchor: anchorOf(from) })
       .then((id) => {
-        if (o === "speed") {
-          const r = pickedSpeed(id);
-          if (r != null && r !== rate) setRate(r);
-          return;
-        }
-        const pick = pickedTrack(id);
-        if (pick === "settings") {
-          setSubSettingsOpen(true);
-          setOptions("tracks");
-        } else if (pick && "audio" in pick) {
-          if (pick.audio !== tracks.audioId) tracks.selectAudio(pick.audio);
-        } else if (pick && pick.subtitle !== tracks.subId) void tracks.selectSubtitle(pick.subtitle);
+        const r = pickedSpeed(id);
+        if (r != null && r !== rate) setRate(r);
       })
       .catch(warnFailed("menu"))
       .finally(() => setNativeMenu(false));
@@ -1058,6 +1081,7 @@ export function Player({
           pingVolume("down");
           return true;
         case "mute":
+          if (systemVolume) return false;
           setMuted((m) => !m);
           pingVolume("mute");
           return true;
@@ -1140,7 +1164,8 @@ export function Player({
   // whether anyone's still watching (Settings → Playback).
   const askAfter = settings?.stillWatchingAfter ?? 0;
   const stillWatching = askAfter > 0 && autoplayStreak() >= askAfter;
-  const willAutoplay = !!settings?.autoplayNext && !stillWatching;
+  // A sleep timer set to the end of this episode (or run out) stops here: no next one (#270).
+  const willAutoplay = !!settings?.autoplayNext && !stillWatching && sleep.choice !== "episode" && !sleep.asleep;
   useEffect(() => {
     if (!ended || !next || nextDismissed || !willAutoplay) return;
     const t = window.setTimeout(() => {
@@ -1490,17 +1515,17 @@ export function Player({
         <div className="player-top-end">
           <div className="player-top-actions">
             {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
-            <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
-              <IconButton
-                variant="player"
-                onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
-                label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
-                aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
-                title={withShortcut("Mute", "mute")}
-              >
-                <VolumeIcon size={22} />
-              </IconButton>
-              {!systemVolume && (
+            {!systemVolume && (
+              <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
+                <IconButton
+                  variant="player"
+                  onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
+                  label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
+                  aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
+                  title={withShortcut("Mute", "mute")}
+                >
+                  <VolumeIcon size={22} />
+                </IconButton>
                 <span className="player-volume-slider">
                   <input
                     type="range"
@@ -1516,8 +1541,8 @@ export function Player({
                     style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
                   />
                 </span>
-              )}
-            </div>
+              </div>
+            )}
             {airplay.available && (
               <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
                 <Cast size={22} />
@@ -1641,12 +1666,19 @@ export function Player({
       >
         <div className="player-timeline">
           <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} onSeek={seekTo} />
+          {sleep.left != null && (
+            <span className="player-sleep tabular" role="timer" aria-label={`Sleep timer: ${sleepLabel(sleep.left)} left`}>
+              <Moon size={16} />
+              {sleepLabel(sleep.left)}
+            </span>
+          )}
           <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
         <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (
             <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
           )}
+          <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
           {type === "series" && (
             <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
           )}
@@ -1671,6 +1703,36 @@ export function Player({
         </div>
       </div>
 
+      {/* The sleep timer's last minute: more time, or no timer (#270). */}
+      {sleep.warning && !sleep.asleep && (
+        <div className="sleep-prompt" role="alertdialog" aria-label="Sleep timer">
+          <span className="sleep-prompt-text">
+            <Moon size={18} /> Stopping in {sleepLabel(sleep.left ?? 0)}
+          </span>
+          <Button size="sm" variant="primary" onClick={sleep.extend}>
+            +15 min
+          </Button>
+          <Button size="sm" variant="glass" onClick={sleep.cancel}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {sleep.asleep && (
+        <div className="sleep-ended" role="dialog" aria-label="Sleep timer ended">
+          <Moon size={32} />
+          <p className="sleep-ended-title">Sleep timer ended</p>
+          <Button
+            variant="primary"
+            autoFocus
+            onClick={() => {
+              sleep.wake();
+              void videoRef.current?.play();
+            }}
+          >
+            <Play size={17} fill="currentColor" /> Resume
+          </Button>
+        </div>
+      )}
       <OptionsOverlay
         open={options === "speed"}
         onClose={() => setOptions(null)}
@@ -1698,6 +1760,23 @@ export function Player({
                 },
               ]
             : []),
+        ]}
+      />
+      <OptionsOverlay
+        open={options === "sleep"}
+        onClose={() => setOptions(null)}
+        media={media}
+        columns={[
+          {
+            title: "Sleep Timer",
+            value: sleep.choice,
+            // A film or a single video stops at its own end.
+            options: SLEEP_CHOICES.map((c) => (c.id === "episode" && type !== "series" ? { ...c, label: "When this video ends" } : c)),
+            onSelect: (id: string) => {
+              sleep.set(id as SleepChoice);
+              setOptions(null);
+            },
+          },
         ]}
       />
       <OptionsOverlay
@@ -1982,11 +2061,12 @@ function pinHintSeen() {
 }
 
 /**
- * Android phones and tablets (#179): their volume buttons and the system's volume panel set the
- * volume, so the player has no slider and plays at full volume itself (a level set before can't
- * be left stuck low with nothing to raise it). Android TV keeps the remote's volume HUD.
+ * Android and iOS phones and tablets (#179, #460): their volume buttons and the system's volume
+ * panel or Control Centre set the volume, so the player has no volume button or slider and plays
+ * at full volume itself (a level or mute set before can't be left stuck with nothing to undo it).
+ * Android TV keeps the remote's volume HUD.
  */
-const systemVolume = os === "android" && !isTvDevice;
+const systemVolume = (os === "android" || os === "ios") && !isTvDevice;
 
 /** The volume last set, 0–1 (1 when none was, or it isn't a number; always 1 where the system sets it). */
 function savedVolume() {

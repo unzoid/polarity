@@ -11,7 +11,7 @@
  */
 import type { AccountBackend } from "./backend";
 import { createSupabaseBackend } from "./supabase";
-import { devDatabase, loadDevDatabase } from "./devDatabase";
+import { accountDatabase, devDatabase, loadDevDatabase } from "./devDatabase";
 import { buildChannel } from "../platform/build";
 
 function pick(): AccountBackend | null {
@@ -20,14 +20,10 @@ function pick(): AccountBackend | null {
     const fake = (globalThis as { __polarFakeAccount?: AccountBackend }).__polarFakeAccount;
     if (fake) return fake;
   }
-  if (buildChannel === "dev") {
-    const db = devDatabase();
-    return db ? createSupabaseBackend(db.url, db.key) : null;
-  }
-  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-  if (url && key) return createSupabaseBackend(url, key);
-  return null;
+  const builtIn = { url: import.meta.env.VITE_SUPABASE_URL as string | undefined, key: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined };
+  // The condition stays here so a release bundle leaves out the dev database (scripts/releaseBundle.ts).
+  const db = accountDatabase(buildChannel, builtIn, buildChannel === "dev" ? devDatabase() : null);
+  return db ? createSupabaseBackend(db.url, db.key) : null;
 }
 
 export let backend = pick();

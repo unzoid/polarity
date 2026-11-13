@@ -118,6 +118,13 @@
   outline-offset: 0.25rem;
   transform: scale(1.08);
 }
+.tv-nav-brand {
+  height: 2.1rem;
+  width: auto;
+  margin-left: 1rem;
+  user-select: none;
+  pointer-events: none;
+}
 .tv-nav-tabs {
   position: absolute;
   left: 50%;
@@ -980,7 +987,7 @@
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: rgb(8 8 8 / 0.86);
+  background: color-mix(in srgb, var(--tone-sunk) 86%, transparent);
   backdrop-filter: blur(32px) saturate(140%);
   animation: tv-panel-in 280ms var(--ease-out);
 }
@@ -1695,7 +1702,7 @@
 .tv .sub-swatch[aria-checked="true"] {
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.25),
-    0 0 0 0.14rem rgb(20 20 20),
+    0 0 0 0.14rem var(--tone-2),
     0 0 0 0.3rem var(--text);
 }
 .tv .sub-swatch:focus,
@@ -1759,7 +1766,7 @@
   flex-direction: column;
   gap: 2rem;
   padding: 4rem 2rem;
-  background: rgb(18 18 18 / 0.94);
+  background: color-mix(in srgb, var(--tone-2) 94%, transparent);
   backdrop-filter: blur(32px) saturate(140%);
   box-shadow: 1px 0 0 var(--hairline);
   animation: tv-menu-in 240ms var(--ease-drawer);
@@ -1822,6 +1829,20 @@
   outline: none;
   background: var(--pill-light);
   color: var(--text-on-light);
+}
+/* Invites and friend requests waiting, on the Friends item. */
+.tv-menu-count {
+  margin-left: auto;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
 }
 .tv-menu-kbd {
   margin-left: auto;
@@ -2533,8 +2554,92 @@
 .tv-downloads .downloads {
   padding: 0;
 }
+/* The desktop page sizes its controls in px; TV sizes by its rem (a larger root), so here the boxes grow
+   with the type, the way every other TV screen's do. Otherwise the labels outgrow their pills. */
+.tv-downloads .downloads-toolbar {
+  gap: 0.75rem 1rem;
+  margin-bottom: 2rem;
+}
+/* The filter and the sort at the buttons' height, their labels at the buttons' size. */
+.tv-downloads .downloads-toolbar .segmented {
+  height: 2.6rem;
+  padding: 0.2rem;
+}
+.tv-downloads .downloads-toolbar .segmented-item {
+  height: 100%;
+  padding: 0 1.1rem;
+  font-size: 1rem;
+}
+.tv-downloads .downloads-toolbar .select-trigger {
+  height: 2.6rem;
+  padding: 0 1rem 0 1.3rem;
+  font-size: 1rem;
+}
+.tv-downloads .downloads-toolbar .btn,
+.tv-downloads .downloads-selectbar .btn {
+  height: 2.6rem;
+  padding: 0 1.3rem;
+  gap: 0.5rem;
+  font-size: 1rem;
+}
+.tv-downloads .btn.downloads-bulk-sm {
+  height: 2.25rem;
+  padding: 0 1rem;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+.tv-downloads .btn svg {
+  width: 1em;
+  height: 1em;
+}
+.tv-downloads .downloads-search.search-field-pill {
+  width: 18rem;
+  height: 2.6rem;
+}
+.tv-downloads .downloads-panel {
+  padding: 0.25rem 1.5rem;
+  border-radius: calc(var(--tv-radius) * 1.6);
+}
+.tv-downloads .download-title-head {
+  padding: 0.75rem 0;
+}
+.tv-downloads .download-title-poster {
+  width: 3.5rem;
+}
+.tv-downloads .download-title-actions {
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+}
+.tv-downloads .downloads .download-row-still {
+  width: 9rem;
+}
+.tv-downloads .downloads .download-row-inner {
+  padding: 0.75rem 0;
+}
+.tv-downloads .download-row-action {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.tv-downloads .download-row-action svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.tv-downloads .download-season-toggle {
+  min-height: 2.6rem;
+}
+/* Selecting: the bar floats at the bottom, sized for the couch. (It's fixed to the window: it must not be
+   given a top as well, or it stretches the whole height into a tall oval.) */
+.tv-downloads .downloads[data-selecting] {
+  padding-bottom: 8rem;
+}
 .tv-downloads .downloads-selectbar {
-  top: 0;
+  bottom: 2.5rem;
+  gap: 1rem;
+  width: min(44rem, calc(100vw - 2 * var(--tv-gutter)));
+  padding: 0.5rem;
+}
+.tv-downloads .downloads-selectbar-count {
+  font-size: 1rem;
 }
 .tv-card-more .tv-card-fallback {
   font-weight: 650;

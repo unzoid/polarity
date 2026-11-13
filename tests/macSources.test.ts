@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { downloadName, kegOf, kegsOf, outdated, packMacSources } from "../scripts/macSources";
 
+// These tests put a shell script on PATH in place of a real tool, which Windows can't run; the
+// scripts they check run on the macOS and Linux runners only.
+const unixOnly = test.skipIf(process.platform === "win32");
+
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -76,7 +80,7 @@ const listing = (tar: string) =>
     .filter((f) => f && !f.endsWith("/"))
     .sort();
 
-test("the archive holds every fetched source, patch and recipe, and a list of them", () => {
+unixOnly("the archive holds every fetched source, patch and recipe, and a list of them", () => {
   const dir = fakeHomebrew();
   const bin = join(dir, "bin");
   const path = process.env.PATH;
@@ -97,7 +101,7 @@ test("the archive holds every fetched source, patch and recipe, and a list of th
   expect(list).toContain("  sources/fix.patch\n");
 });
 
-test("the Release workflow's macOS job packs the archive from the command line and attaches it", () => {
+unixOnly("the Release workflow's macOS job packs the archive from the command line and attaches it", () => {
   const dir = fakeHomebrew();
   const tar = join(dir, "bundle", "Polarity_1.2.3_aarch64_mpv-sources.tar");
   const r = spawnSync("bun", [join(import.meta.dir, "..", "scripts", "macSources.ts"), join(dir, "formulae.json"), tar], {

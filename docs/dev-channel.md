@@ -89,6 +89,13 @@ A dev build installs and runs as an app of its own next to the released Polarity
 - **Window title:** "Polarity Dev", and Settings → About is headed "Polarity Dev". The icon is the
   released one.
 - **Updates:** its own line, from the "Dev build" entry only (above).
+- **Discord:** its own Discord application, "Polarity Dev" (#376), so a profile reads "Watching
+  Polarity Dev", Discord starts the dev build for a Join from a dev host (it registers
+  `discord-<dev id>` with `polarity-dev://discord-join`), and its join links open `polarity-dev://`.
+  The released app and a dev build never speak as the same application, so a party hosted on one
+  is never offered to the other (their databases differ). Without the application's id the dev
+  build doesn't connect to Discord at all, and Settings → Playback → Show on Discord says it isn't
+  set up for dev builds (`pick_client_id` in `src-tauri/src/discord.rs`).
 - **Android:** the APK keeps the released app's id for now (its Java classes are named by it), so it
   doesn't install next to a release build there.
 
@@ -123,7 +130,10 @@ databases, neither production nor development.
   bun scripts/devDatabaseCode.ts https://<project>.supabase.co <publishable key>
   ```
 
-- **Release builds** are unchanged and have no such setting.
+- **Release builds** are unchanged and have no such setting. Its code is not in their bundle at all:
+  `buildChannel` is a constant the bundler folds, so `buildChannel === "dev"` branches are dropped.
+  The same goes for the watch log (#424). CI checks it on every push: `bun scripts/releaseBundle.ts`
+  builds a release and a dev build and fails if the release has any of the dev-only parts' texts.
 - **CI's builds:** once `ci.yml` gives the Android and iOS builds the production settings
   (`VITE_SUPABASE_*` secrets), only builds of `master` should get them; builds of other branches,
   `dev` included, get none.
@@ -141,11 +151,52 @@ Run by whoever owns the dev Supabase project, with the Supabase CLI:
 2. **Invite accounts:** Authentication → Users → Add user → Send invitation, one per teammate.
 3. **Sign-in email:** Authentication → Emails → "Magic Link" and "Confirm signup": paste `supabase/email-templates/code.html`
    (the app signs in with the six-digit code, not a link).
-4. **Apply the migrations:** `supabase link --project-ref <project>`, then `supabase db push`
-   (everything in `supabase/migrations`, in order). `supabase/optional/` stays optional, as on production.
-5. **Deploy the Edge Function** for TV sign-in: `supabase functions deploy tv-sign-in --no-verify-jwt`
-   (docs/supabase-storage.md §9).
-6. **Make the connection code** (above) and share it privately.
+4. **Migrations and the Edge Function** are applied by CI once the `supabase-dev` environment is set
+   up (below, "Database changes"). To bring a new project up to date at once, run the workflow by hand
+   (Actions → Database → Run workflow on `dev`): it applies every migration and deploys every function,
+   `tv-sign-in` included. `supabase/optional/` stays optional, as on production.
+5. **Make the connection code** (above) and share it privately.
+
+## Database changes (`.github/workflows/supabase.yml`)
+
+New migrations in `supabase/migrations` and changed Edge Functions in `supabase/functions` reach the
+Supabase projects through CI (`scripts/supabaseDeploy.ts`):
+
+| When | What runs | Where |
+|---|---|---|
+| A pull request into `dev` or `master` that touches them | lists the migrations the merge would apply and checks their versions (unique, later than the base's newest); no secrets, no database | the check "Migrations a merge would apply" |
+| A push to `dev` that touches them | the new migrations (listed with `supabase db push --dry-run`, then applied in order), then the changed functions | the dev project, environment `supabase-dev` |
+| A push to `master` (a release) that touches them | the same, after the owner approves the run | the production project, environment `supabase-production` |
+| Actions → Database → Run workflow, on `dev` or `master` | every migration not yet applied and every function | that branch's project |
+
+- A failed migration stops the run; the log names it and nothing after it runs. Nothing is retried: the
+  fix is a new migration. A migration already applied is never run again (Supabase keeps the history in
+  `supabase_migrations.schema_migrations`).
+- `supabase/optional`, `supabase/admin` and `supabase/checks` are never run by CI: they stay manual,
+  as each file says.
+- A missing setting stops the step that needs it, naming what is missing and the environment.
+- Functions called without a user's session are deployed with `--no-verify-jwt`; today that is
+  `tv-sign-in` (docs/supabase-storage.md §9). A new one of that kind goes in `WITHOUT_JWT` in the script.
+
+### What the owner sets up for it
+
+1. Settings → Environments → New environment **`supabase-dev`**:
+   - Deployment branches and tags: "Selected branches and tags", add `dev`.
+   - Variables: `SUPABASE_PROJECT_REF` (the dev project's reference, from its URL) and `SUPABASE_DB_HOST`
+     (Dashboard → Connect → Session pooler: the host, like `aws-0-<region>.pooler.supabase.com`; the
+     session pooler because GitHub's runners have no IPv6 for the direct address).
+   - Secrets: `SUPABASE_DB_PASSWORD` (the dev database's password) and `SUPABASE_ACCESS_TOKEN` (a personal
+     access token, Account → Access Tokens, for deploying functions).
+2. New environment **`supabase-production`**, the same with the production project's values, and:
+   - Deployment branches and tags: only `master`.
+   - Required reviewers: the owner. "Prevent self-review" can stay off if the owner both merges and approves.
+3. Keep these out of repository-wide secrets: a workflow on any branch could read those. An access token
+   reaches every project of its account, which is why it sits behind each environment's branch rule (and,
+   for production, the reviewer). A token from an account that only has these projects is better.
+4. If a project already has migrations applied by hand, check that its history matches before the first
+   run: `supabase migration list --db-url <session pooler URL>` shows each migration as local and remote;
+   one applied by hand but missing from the history is recorded with `supabase migration repair <version>
+   --status applied --db-url ...`, so CI doesn't apply it twice.
 
 ## What the owner sets up
 
@@ -158,6 +209,13 @@ Run by whoever owns the dev Supabase project, with the Supabase CLI:
    Without them the workflow stops at its first step and says which is missing.
 3. Create the `dev` branch from `master` if it isn't there yet.
 4. Optionally, Settings → General → Pull Requests → "Automatically delete head branches".
+5. Optionally, Discord for dev builds: in the Discord Developer Portal
+   (discord.com/developers/applications), create a second application named "Polarity Dev"
+   (the name is what profiles show), with the released app's icon (`src-tauri/icons/icon.png`). It
+   needs no uploaded art: the activity's picture is the title's poster link, or the application's
+   icon when there is none. Copy its Application ID (General Information) into the repository
+   variable `DEV_DISCORD_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables). The
+   next dev build uses it; until then dev builds stay off Discord.
 
 ## Checks on GitHub
 

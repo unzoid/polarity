@@ -1,50 +1,110 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { endParty, expectedPosition, leaveParty, partyLog, partyRoute, setQuiet, setRules, syncNow, type PartyState } from "../../lib/party";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { endParty, expectedPosition, leaveParty, partyLog, partyRoute, setQuiet, setRules, syncNow, type PartyState, type RoomRules } from "../../lib/party";
 import { formatTime } from "../../lib/format";
 import { useMeta } from "../../lib/net";
 import { osName } from "../../lib/platform";
 import { useRouter } from "../../lib/router";
 import { appVersion } from "../../lib/updater";
-import { Lock, Pause, Play } from "../icons";
+import { ChevronLeft, ChevronRight, Lock, LogIcon, Pause, Play, Power, Settings, SignOut } from "../icons";
 import { Button } from "../ui/Button";
 import { Switch } from "../ui/Switch";
-import { PartyInvite, PartyMembers } from "./PartyUI";
+import { FitHeight, backOnEscape, useViewSlide } from "../ViewStack";
+import { PartyCodeChip, PartyInvite, PartyMembers } from "./PartyUI";
 
 /**
- * The party menu (#156): what's on, who's here, the code, and what you can
- * do from anywhere in the app. The top bar's party faces open it as a
- * popover, TV mode as a panel; the player's Watch Party panel shows the same
- * parts in two columns (PartyRoomPane, PartySettingsPane).
+ * The party menu (#156): the top bar's party faces open it as a popover. Two pages, so the one opened most
+ * stays short: the room (what's on and going there, who's here, the code, leaving), and its settings (sounds,
+ * the host's rules, the log, ending it), a row away, with Back (and Escape) to the room. The player's Watch
+ * Party panel and TV mode show the same parts in two columns (PartyRoomPane, PartySettingsPane).
  */
 export function PartyMenu({ party, onClose }: { party: PartyState; onClose?: () => void }) {
-  const host = party.hostId === party.me;
+  const [page, setPage] = useState<"room" | "settings">("room");
+  const slide = useViewSlide(true, page, "room");
+  // Keyboard focus follows the page: into the settings, back to the row that opened them.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const turned = useRef(false);
+  useEffect(() => {
+    if (!turned.current) return;
+    pageRef.current?.querySelector<HTMLElement>(page === "room" ? ".party-menu-settings" : ".party-menu-back")?.focus({ preventScroll: true });
+  }, [page]);
+  const go = (to: typeof page) => {
+    turned.current = true;
+    setPage(to);
+  };
   return (
-    <div className="party-menu">
-      <PartyNowPlaying party={party} />
-      <PartyStreamButtons party={party} onGo={onClose} />
+    <FitHeight>
+      <div
+        key={page}
+        ref={pageRef}
+        className="party-menu"
+        data-page={page}
+        data-slide={slide}
+        onKeyDown={page === "settings" ? backOnEscape(() => go("room")) : undefined}
+      >
+        {page === "room" ? <PartyMenuRoom party={party} onClose={onClose} settings={() => go("settings")} /> : <PartyMenuSettings party={party} back={() => go("room")} />}
+      </div>
+    </FitHeight>
+  );
+}
+
+function PartyMenuRoom({ party, onClose, settings }: { party: PartyState; onClose?: () => void; settings: () => void }) {
+  const host = party.hostId === party.me;
+  const on = ruleRows(party.rules).filter((r) => r.checked).length;
+  return (
+    <>
+      {party.playback?.media && (
+        <div className="party-menu-hero">
+          <PartyNowPlaying party={party} backdrop />
+          <PartyStreamButtons party={party} onGo={onClose} />
+        </div>
+      )}
       <section className="party-menu-section" aria-label="Members">
+        <h3 className="party-kicker">Watching · {party.members.length}</h3>
         <PartyMembers party={party} />
       </section>
-      <section className="party-menu-section">
-        <PartyInvite party={party} leave={false} />
+      <section className="party-menu-section" aria-label="Invite">
+        <PartyCodeChip party={party} />
       </section>
-      <section className="party-menu-section">
+      <section className="party-menu-section party-menu-rows">
+        <button className="party-menu-row party-menu-settings" onClick={settings}>
+          <Settings size={18} />
+          <span>Party Settings</span>
+          {host && <span className="party-menu-row-detail">{on} on</span>}
+          <ChevronRight size={16} aria-hidden />
+        </button>
+        <button className="party-menu-row party-menu-leave" onClick={leaveParty}>
+          <SignOut size={18} />
+          <span>Leave Party</span>
+        </button>
+      </section>
+    </>
+  );
+}
+
+function PartyMenuSettings({ party, back }: { party: PartyState; back: () => void }) {
+  const host = party.hostId === party.me;
+  return (
+    <>
+      <button className="party-menu-back pressable" onClick={back}>
+        <ChevronLeft size={18} strokeWidth={2.25} /> Watch Party
+      </button>
+      <section className="party-menu-group">
+        <h3 className="party-kicker">Sound</h3>
         <PartyQuiet party={party} />
-        <div className="party-buttons">
-          <Button variant="glass" onClick={leaveParty}>
-            Leave Party
-          </Button>
-          <PartyCopyLog />
-        </div>
       </section>
       {host && (
-        <section className="party-menu-section">
+        <section className="party-menu-group">
           <h3 className="party-kicker">Host controls</h3>
           <PartyRules party={party} />
-          <PartyEnd />
         </section>
       )}
-    </div>
+      <section className="party-menu-section">
+        <div className="party-buttons">
+          <PartyCopyLog />
+          {host && <PartyEnd />}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -126,7 +186,8 @@ function useRoomPosition(party: PartyState) {
 }
 
 /** What the room is on: poster, title, episode, where, and whether it's playing. */
-export function PartyNowPlaying({ party }: { party: PartyState }) {
+/** `backdrop`: the poster again, blurred, behind its box (`.party-menu-hero`, positioned) — the menu's header. */
+export function PartyNowPlaying({ party, backdrop }: { party: PartyState; backdrop?: boolean }) {
   const media = party.playback?.media;
   const { data: meta } = useMeta(media?.type ?? "movie", media?.metaId ?? "", !!media);
   const position = useRoomPosition(party);
@@ -136,6 +197,7 @@ export function PartyNowPlaying({ party }: { party: PartyState }) {
   const title = meta?.name ?? label ?? "Something";
   return (
     <div className="party-now">
+      {backdrop && meta?.poster && <img className="party-now-backdrop" src={meta.poster} alt="" aria-hidden draggable={false} />}
       <div className="party-now-poster" aria-hidden>
         {meta?.poster && <img src={meta.poster} alt="" draggable={false} />}
       </div>
@@ -212,6 +274,7 @@ export function PartyCopyLog() {
   };
   return (
     <Button variant="glass" onClick={() => void copy()}>
+      <LogIcon size={16} />
       {copied === "yes" ? "Copied" : copied === "no" ? "Couldn't copy" : "Copy Party Log"}
     </Button>
   );
@@ -227,6 +290,7 @@ export function PartyEnd() {
   }, [confirm]);
   return (
     <Button variant="glass" className="party-end" onClick={() => (confirm ? endParty() : setConfirm(true))} aria-live="polite">
+      <Power size={16} />
       {confirm ? "End for Everyone?" : "End Party"}
     </Button>
   );
@@ -234,8 +298,26 @@ export function PartyEnd() {
 
 /** The host's switches: who can join and who controls playback. */
 export function PartyRules({ party }: { party: PartyState }) {
-  const { rules } = party;
-  const rows: { label: string; caption: string; checked: boolean; set: (on: boolean) => void }[] = [
+  return (
+    <>
+      {ruleRows(party.rules).map((r) => (
+        <label key={r.label} className="party-switch">
+          <span className="party-switch-text">
+            <span>
+              {r.label === "Lock party" && r.checked && <Lock size={14} />} {r.label}
+            </span>
+            <span className="party-switch-caption">{r.caption}</span>
+          </span>
+          <Switch checked={r.checked} onChange={r.set} />
+        </label>
+      ))}
+    </>
+  );
+}
+
+/** The host's rules as switches, also counted on the menu's Party Settings row. */
+function ruleRows(rules: RoomRules): { label: string; caption: string; checked: boolean; set: (on: boolean) => void }[] {
+  return [
     {
       label: "Lock party",
       caption: "No new joins: the code stops working until you unlock it",
@@ -267,19 +349,4 @@ export function PartyRules({ party }: { party: PartyState }) {
       set: (stall) => setRules({ stall }),
     },
   ];
-  return (
-    <>
-      {rows.map((r) => (
-        <label key={r.label} className="party-switch">
-          <span className="party-switch-text">
-            <span>
-              {r.label === "Lock party" && r.checked && <Lock size={14} />} {r.label}
-            </span>
-            <span className="party-switch-caption">{r.caption}</span>
-          </span>
-          <Switch checked={r.checked} onChange={r.set} />
-        </label>
-      ))}
-    </>
-  );
 }

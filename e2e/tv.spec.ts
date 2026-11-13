@@ -255,16 +255,19 @@ test.describe("signed in, on a fresh profile", () => {
     // The remote carries on from inside the panel, not from nowhere.
     await expect(focused(app)).toHaveAccessibleName("Copy Invite");
   });
-  test("Home's Friends row: friends in a party first; OK joins the party (#135)", async ({ app }) => {
-    // Friends turned on (on another device, as far as TV is concerned): Home lists them.
+  test("Friends from the side menu: friends in a party first; OK joins the party (#135)", async ({ app }) => {
+    // Friends turned on (on another device, as far as TV is concerned): the menu's Friends lists them, not Home.
     await app.goto("/fake.html?account=1&friends=1");
-    const row = app.locator(".tv-rail").filter({ has: app.locator(".tv-rail-title", { hasText: "Friends" }) });
-    await expect(row.locator(".tv-friend").first()).toContainText("Sam");
-    await expect(row.locator(".tv-friend").first()).toContainText("In a watch party · Big Buck Bunny");
-    await expect(row.locator(".tv-rail-title")).toContainText("1 friend request");
-    await row.locator(".tv-friend").first().focus();
+    await expect(app.locator(".tv-rail-title", { hasText: "Friends" })).toHaveCount(0);
+    await app.getByRole("button", { name: "Menu" }).click();
+    await app.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: /^Friends/ }).click();
+    const panel = app.getByRole("dialog", { name: "Friends" });
+    await expect(panel.locator(".tv-friend").first()).toContainText("Sam");
+    await expect(panel.locator(".tv-friend").first()).toContainText("In a watch party · Big Buck Bunny");
+    await expect(panel).toContainText("1 friend request");
+    await panel.locator(".tv-friend").first().focus();
     await press(app, "Enter");
-    await expect(row.locator(".tv-rail-title")).toContainText("Joining the watch party…");
+    await expect(panel).toContainText("Joining the watch party…");
   });
 });
 
@@ -508,4 +511,17 @@ test.describe("signed in (a YouTube video comes to TV mode in a watch party)", (
     await press(app, "Backspace");
     await expect(player).toHaveCount(0);
   });
+});
+
+test("the Polarity wordmark sits beside the profile and the remote passes it by (#476)", async ({ app }) => {
+  await expect(focused(app)).toHaveAccessibleName("The Understudies");
+  const nav = app.locator(".tv-nav");
+  const [me, brand, tabs] = await Promise.all([
+    nav.getByRole("button", { name: "Menu" }).boundingBox(),
+    nav.getByRole("img", { name: "Polarity" }).boundingBox(),
+    nav.getByRole("navigation", { name: "Sections" }).boundingBox(),
+  ]);
+  expect(brand!.x).toBeGreaterThan(me!.x + me!.width);
+  expect(brand!.x + brand!.width).toBeLessThan(tabs!.x);
+  expect(Math.abs(brand!.y + brand!.height / 2 - (me!.y + me!.height / 2))).toBeLessThan(3);
 });

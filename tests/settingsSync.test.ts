@@ -103,17 +103,24 @@ describe("keys and add-on links on every device (#89)", () => {
     on(b);
     b.settings.omdbKey = "key-b2"; // a change here doesn't reach the sealed copy
     const seal = stored!.data.sealed;
+    // The notice and Settings follow the locked state as rounds find it (#470).
+    let told = 0;
+    const stop = s.onSecretsLockedChange(() => told++);
     await round();
     expect(s.secretsState(P)).toBe("locked");
+    expect(told).toBe(1);
     expect(stored!.data.sealed).toBe(seal);
     expect(b.settings.omdbKey).toBe("key-b2");
 
     s.unlockSecrets(P, "wrong");
     await round();
     expect(s.secretsState(P)).toBe("locked");
+    expect(told).toBe(1);
     s.unlockSecrets(P, "correct horse");
     await round();
     expect(s.secretsState(P)).toBe("sealed");
+    expect(told).toBe(2);
+    stop();
     expect(b.settings.omdbKey).toBe("key-b");
   });
 
@@ -322,5 +329,117 @@ describe("add-ons and keys per profile on this device (#80)", () => {
     on(e);
     expect(await s.startProfile("S")).toBe(false);
     expect(e.addons).toEqual([subtitles]);
+  });
+});
+
+describe("a round whose profile was left stops (plan 002)", () => {
+  /** The shared server, counting uploads; `afterGet` runs once the read has been made. */
+  const counting = (afterGet: () => void = () => {}, onPut: () => void = () => {}) => {
+    const calls = { put: 0 };
+    const wrapper = {
+      settings: {
+        get: async (space: string) => {
+          const r = await server.settings.get(space);
+          afterGet();
+          return r;
+        },
+        put: async (space: string, doc: { data: Record<string, unknown>; updatedAt: number }) => {
+          calls.put++;
+          onPut();
+          return server.settings.put(space, doc);
+        },
+      },
+    } as unknown as AccountBackend;
+    return { calls, wrapper };
+  };
+  /** A device that has synced once, then changed a setting, so the next round would upload. */
+  const changed = async (space: string) => {
+    stored = null;
+    const d = device({ tmdbKey: "key-a" });
+    on(d);
+    await s.syncSettings(space, server, () => true);
+    d.settings.seekStep = 20;
+    return d;
+  };
+
+  test("no upload after the profile is left", async () => {
+    await changed("left1");
+    // Active at the existing check after the read, left during the waits after it.
+    let asked = 0;
+    const { calls, wrapper } = counting();
+    await s.syncSettings("left1", wrapper, () => asked++ === 0);
+    expect(calls.put).toBe(0);
+  });
+
+  test("no write to the store after the profile is left mid-round", async () => {
+    // Another device put a different document up; this one has never synced the profile.
+    stored = null;
+    const a = device({ tmdbKey: "key-a" });
+    a.settings.seekStep = 30;
+    on(a);
+    await s.syncSettings("left2", server, () => true);
+    const b = device();
+    on(b);
+    const before = structuredClone(b.settings);
+    let calls = 0;
+    const { calls: counted, wrapper } = counting();
+    await s.syncSettings("left2", wrapper, () => calls++ === 0);
+    expect(b.settings).toEqual(before);
+    expect(counted.put).toBe(0);
+  });
+
+  test("nothing is saved after sign-out", async () => {
+    await changed("left3");
+    const mine = (m: Map<string, string>) => new Set([...m.keys()].filter((k) => k.includes("left3")));
+    const d = dev;
+    let active = true;
+    const { wrapper } = counting(
+      () => {},
+      () => {
+        active = false;
+        s.forgetSettings("left3");
+      },
+    );
+    await s.syncSettings("left3", wrapper, () => active);
+    expect(mine(d.keychain).size).toBe(0);
+    expect(mine(d.storage).size).toBe(0);
+  });
+
+  test("control: a round that stays active uploads once", async () => {
+    await changed("left4");
+    const { calls, wrapper } = counting();
+    await s.syncSettings("left4", wrapper, () => true);
+    expect(calls.put).toBe(1);
+  });
+});
+
+describe("a change not yet synced when the app ends (phones)", () => {
+  test("starting again keeps it, and the next round sends it", async () => {
+    const d = device();
+    on(d);
+    stored = null;
+    await s.keepDeviceSettings("T");
+    await s.restoreSettings("T");
+    await s.syncSettings("T", server, () => true);
+    // Changed, then the app ended before a round ran.
+    d.settings.seekStep = 30;
+    // Started again: the store is still this profile's.
+    await s.restoreSettings("T", await s.keepDeviceSettings("T"));
+    expect(d.settings.seekStep).toBe(30);
+    await s.syncSettings("T", server, () => true);
+    expect((stored!.data.settings as Record<string, unknown>).seekStep).toBe(30);
+  });
+
+  test("switching from another profile still puts this one's back", async () => {
+    const d = device();
+    on(d);
+    stored = null;
+    await s.keepDeviceSettings("U");
+    await s.syncSettings("U", server, () => true);
+    // Another profile's settings in the store.
+    await s.keepDeviceSettings("V");
+    d.settings.seekStep = 45;
+    await s.restoreSettings("U", await s.keepDeviceSettings("U"));
+    expect(d.settings.seekStep).toBe(10);
   });
 });

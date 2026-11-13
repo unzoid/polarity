@@ -120,6 +120,22 @@ test("preferences are weights: audio language, tags, release groups", () => {
   expect(["FIRST-CREW", "Second Crew", "Third", "Fourth", "Fifth", "Nobody"].map(g)).toEqual([12, 9, 6, 3, 3, undefined]);
 });
 
+test("the file's own audio means the title's language: a dub into another one doesn't win on picture alone", () => {
+  const dub = source("Paper.Moon.Road.2031.2160p.WEB-DL.RUS-MADEUP", { languages: ["ru"], resolution: 2160 });
+  const eng = source("Paper.Moon.Road.2031.1080p.WEB-DL-MADEUP", { languages: ["en"] });
+  const plain = source("Paper.Moon.Road.2031.1080p.BluRay-MADEUP");
+  // Setting left on the file's own, the title made in English.
+  const c = ctx({ audioLanguage: "", ownLanguage: { code: "en", from: "title" } });
+  expect(reasons(dub, c)["Audio in Russian, not English"]).toBe(WEIGHTS.audioOtherLanguage);
+  expect(reasons(eng, c)["Audio in English, the title's own"]).toBe(WEIGHTS.audioLanguage);
+  expect(top([dub, eng, plain], c)).toBe(eng.label);
+  // A file that says nothing about its audio isn't taken for a dub.
+  expect(top([dub, plain], c)).toBe(plain.label);
+  // Its language unknown, the device's stands in; an explicit setting is "your language" and outranks both.
+  expect(reasons(eng, ctx({ ownLanguage: { code: "en", from: "device" } }))["Audio in English, this device's language"]).toBe(WEIGHTS.audioLanguage);
+  expect(top([dub, eng], ctx({ audioLanguage: "ru", ownLanguage: { code: "en", from: "title" } }))).toBe(dub.label);
+});
+
 test("the best compromise wins when nothing matches every preference", () => {
   // Italian audio and Remux preferred; no source has both.
   const ita = source("Low.Tide.2031.1080p.WEB-DL.ITA-MADEUP", { languages: ["it"], sizeBytes: 5 * GB });

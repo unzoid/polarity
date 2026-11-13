@@ -13,12 +13,6 @@ export const GROUPS: { status: Status; title: string; body: string; badge: strin
 ];
 
 export const ITEMS: RoadmapItem[] = [
-  { status: "progress", title: "macOS app", body: "Polarity on the Mac, with the same player and TV mode." },
-  { status: "progress", title: "Linux app", body: "AppImage, .deb and .rpm builds for Linux desktops." },
-  { status: "planned", title: "Download a whole season", body: "Save a full season, or a whole show, in one go.", issue: 24 },
-  { status: "planned", title: "Ready-to-play sources", body: "See which sources will actually play before you pick one.", issue: 21 },
-  { status: "planned", title: "Discord Rich Presence", body: "Show friends what you're watching on Discord.", issue: 31 },
-  { status: "planned", title: "AirPlay", body: "Send what's playing to an Apple TV or AirPlay receiver.", issue: 19 },
-  { status: "planned", title: "Android and Android TV", body: "Polarity on phones, tablets and the TV itself.", issue: 28 },
-  { status: "planned", title: "iOS app", body: "Polarity on iPhone and iPad.", issue: 29 },
+  { status: "progress", title: "Android TV", body: "Polarity on the TV itself, in TV mode, with the remote's arrow keys." },
+  { status: "progress", title: "Apple TV", body: "Polarity on Apple TV, in TV mode." },
 ];
