@@ -99,6 +99,21 @@ in an API 35 emulator: start, 30 s alive, Back, no crash; logcat and screenshots
 The Playwright suite isn't pointed at the app (it would need a WebDriver into the
 WebView, chromedriver through adb); the screenshots are the check of what it shows.
 
+Back gesture that follows the finger (#483: `MainActivity.kt` `predictiveBack`, `onPredictiveBack` in
+`lib/platform/back.ts`, `lib/ui/pageDrag.ts`). On Android 14 and later, while the page hears it, the activity sends
+the gesture's steps into the page's main frame as `polar-back` events, and every Back, a press too, goes that way
+instead of Tauri's back button event. Tested here: the steps moving the page and going back
+(`tests/dom/predictiveBack.test.ts`); the Kotlin compiled with Gradle. Not run in an emulator or on a phone yet. To
+check on an Android 14 or later phone with gesture navigation:
+1. On a title page, swipe in slowly from the left edge and hold: the title page moves right with the finger and the
+   page it came from shows under it. Move back: it follows. Let go early (or move back to the edge): it slides back
+   and stays. Swipe further and let go: you're on the page under it, with no second animation. Same from the right
+   edge.
+2. With Sources (or any sheet) open, the gesture closes the sheet and the page doesn't move; in the player it
+   leaves the player as before; on a section's own page Back goes Home, on Home the app goes to the background.
+3. With 3-button navigation, and on Android 13 or older, Back goes back one step at a time as before.
+4. Android TV: the remote's Back goes back as before.
+
 ## Android TV (same APK, T-047)
 
 Written by reading only: the manifest's banner (`res/drawable-xhdpi/banner.png`, 320x180, the icon and
