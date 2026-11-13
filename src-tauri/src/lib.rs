@@ -367,6 +367,8 @@ pub fn run() {
             player::mpv_tune,
             player::mpv_stop,
             player::mpv_snapshot,
+            player::mpv_screenshot,
+            player::mpv_screenshot_reveal,
             player::player_system_bars,
             player::player_keep_awake,
             native_tabs::native_tabs,

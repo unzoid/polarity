@@ -1148,6 +1148,10 @@ export function Player({
           if (type !== "series") return false;
           toggleOptions(action);
           return true;
+        case "screenshot":
+          if (!canShoot) return false;
+          takeScreenshot();
+          return true;
         case "escape":
           if (tv) {
             void exit();
@@ -1227,6 +1231,21 @@ export function Player({
 
   const VolumeIcon = muted || volume === 0 ? VolumeMuted : Volume;
 
+  // Screenshots (desktop, mpv): the picture as it is, subtitles included, to Pictures/Polarity.
+  const canShoot = isDesktop && engine === "mpv" && started && !airplay.casting;
+  const [shotSaved, setShotSaved] = useState(false);
+  const takeScreenshot = () =>
+    void api.screenshot(heading || title, videoRef.current?.currentTime ?? 0).then(
+      (name) => {
+        setShotSaved(true);
+        flashNotice(`Screenshot saved to Pictures › Polarity › ${name}`, 3500);
+      },
+      (e) => flashNotice(`Couldn't save the screenshot: ${errorMessage(e)}`, 4000),
+    );
+
+  /** "More" has items of its own (screenshots), so it shows whatever fits. */
+  const moreItems = canShoot;
+
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
   const actionRow = useRef<HTMLDivElement>(null);
@@ -1237,8 +1256,8 @@ export function Player({
     actionRow,
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact,
-    [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local].join("|"),
-    !!watchLog,
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join("|"),
+    !!watchLog || moreItems,
   );
   const more = barFit.more;
   // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
@@ -1620,7 +1639,7 @@ export function Player({
                 <FillWindow size={22} />
               </IconButton>
             )}
-            {(more || watchLog) && (
+            {(more || watchLog || moreItems) && (
               <MenuRoot modal={false} onOpenChange={setMoreOpen}>
                 <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More">
                   <More size={22} />
@@ -1635,6 +1654,16 @@ export function Player({
                     <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
                       {`Crop: ${cropModeLabel(crop)}`}
                     </MenuCheckItem>
+                  )}
+                  {canShoot && (
+                    <MenuItem onClick={takeScreenshot} meta={shortcutText("screenshot")}>
+                      Save Screenshot
+                    </MenuItem>
+                  )}
+                  {canShoot && shotSaved && (
+                    <MenuItem onClick={() => void api.revealScreenshot().catch(warnFailed("reveal screenshot"))}>
+                      Show Last Screenshot
+                    </MenuItem>
                   )}
                   {watchLog && (
                     <MenuItem

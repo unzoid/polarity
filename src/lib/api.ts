@@ -156,6 +156,10 @@ export const api = {
   resetSettings: () => call<Settings>("settings_reset").then(changed),
 
   mpvAvailable: () => call<boolean>("mpv_available"),
+  /** Save the picture on screen, with subtitles, to Pictures/Polarity; resolves to the file's name. */
+  screenshot: (title: string, at: number) => call<string>("mpv_screenshot", { title, at }),
+  /** Show the last screenshot in the file manager. */
+  revealScreenshot: () => call<void>("mpv_screenshot_reveal"),
   /** Whether autocrop's lookahead reads ahead in the video playing now, or why it can't; null with nothing to say. */
   mpvLookahead: () => call<LookaheadState | null>("mpv_lookahead").catch(() => null),
   /** Whether this build can show what plays on Discord (desktop, built with a Discord application). */

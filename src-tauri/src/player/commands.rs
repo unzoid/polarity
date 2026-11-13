@@ -294,6 +294,33 @@ pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>, owner: Option<
     stopped
 }
 
+/// Save the picture on screen (with its subtitles) as a JPEG in Pictures/Polarity, named after `title` and
+/// the time `at` (seconds): the viewer's own screenshot. Returns the file's name; [`mpv_screenshot_reveal`]
+/// shows it. The page names nothing on disk: the folder is fixed and the title becomes a plain file name.
+#[tauri::command]
+pub async fn mpv_screenshot(app: AppHandle, state: State<'_, AppState>, title: String, at: f64) -> Result<String, CmdError> {
+    use polar_player::shots::{shot_name, unused_path};
+    let dir = app.path().picture_dir().map_err(|e| CmdError::Save(e.to_string()))?.join("Polarity");
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| CmdError::Save(e.to_string()))?;
+    let path = unused_path(&dir, &shot_name(&title, at));
+    let mpv = &state.mpv;
+    // Full quality for this one; the frosted overlays' snapshots go back to their small files.
+    let _ = mpv.request(json!(["set_property", "screenshot-jpeg-quality", 95])).await;
+    let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "subtitles"])).await;
+    let _ = mpv.request(json!(["set_property", "screenshot-jpeg-quality", 70])).await;
+    taken.map_err(CmdError::Player)?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    *mpv.last_shot.locked() = Some(path);
+    Ok(name)
+}
+
+/// Show the last screenshot in the system's file manager.
+#[tauri::command]
+pub fn mpv_screenshot_reveal(state: State<'_, AppState>) -> Result<(), CmdError> {
+    let path = state.mpv.last_shot.locked().clone().ok_or_else(|| CmdError::NotFound("no screenshot yet".into()))?;
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| CmdError::Other(e.to_string()))
+}
+
 /// The current frame as a JPEG data URL — mpv's picture lives in a native
 /// window the page can't sample, so overlays blur this snapshot instead.
 #[tauri::command]

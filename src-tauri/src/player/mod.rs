@@ -220,6 +220,8 @@ pub struct Mpv {
     /// reader marks `pause` changes as held until mpv plays on, so the
     /// player doesn't take them for the viewer's pause.
     held: AtomicBool,
+    /// The viewer's last saved screenshot, for "Show in folder" ([`mpv_screenshot_reveal`]).
+    last_shot: StdMutex<Option<PathBuf>>,
 }
 
 /// Whether this build keeps a watch log (#424): a dev build, or one made with `bun tauri dev`.

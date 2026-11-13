@@ -30,6 +30,7 @@ export type Action =
   | "episodes"
   | "sources"
   | "speed"
+  | "screenshot"
   | "toggleTv"
   | "search"
   | "openFile";
@@ -55,6 +56,7 @@ export const ACTIONS: { id: Action; label: string; group: ActionGroup; when?: st
   { id: "episodes", label: "Episodes", group: "player" },
   { id: "sources", label: "Sources", group: "player" },
   { id: "speed", label: "Playback speed", group: "player" },
+  { id: "screenshot", label: "Save a screenshot", group: "player", when: "While watching, on desktop" },
   { id: "toggleTv", label: "Switch TV / desktop mode", group: "app", when: "Anywhere, even while watching" },
   { id: "search", label: "Search", group: "app", when: "While browsing" },
   { id: "openFile", label: "Open file", group: "app", when: "Anywhere, even while watching" },
@@ -83,6 +85,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   episodes: ["e"],
   sources: ["o"],
   speed: ["r"],
+  screenshot: [`${MOD}+s`],
   toggleTv: ["F10"],
   // Letters are stored lower-case (see comboOf); they're shown upper-case.
   search: ["/", `${MOD}+k`],

@@ -14,6 +14,7 @@
 //!   * [`certs`]: one certificate bundle from a folder of certificates (Android's mpv).
 //!   * [`turns`]: which player's load and stop count at the one mpv.
 //!   * [`video_path`]: one log line on how mpv decodes and draws the video (#416).
+//!   * [`shots`]: the file names of screenshots the viewer saves.
 
 pub mod allow;
 pub mod bars;
@@ -24,6 +25,7 @@ pub mod headers;
 pub mod lookahead;
 pub mod png;
 pub mod sampler;
+pub mod shots;
 pub mod tune;
 pub mod turns;
 pub mod video_path;
