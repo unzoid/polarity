@@ -266,6 +266,10 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
             mpv.request(json!(["set_property", "target-colorspace-hint", "no"])).await?;
         }
     }
+    if was.sub_hdr != tune.sub_hdr {
+        // An older mpv (one found on PATH) may not have it: it keeps its own.
+        let _ = mpv.request(json!(["set_property", "sub-hdr-peak", tune.sub_hdr.peak()])).await;
+    }
     if was.buffer != tune.buffer {
         let (secs, bytes) = tune.cache();
         mpv.request(json!(["set_property", "cache-secs", secs])).await?;
@@ -319,6 +323,33 @@ pub async fn mpv_screenshot(
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     *mpv.last_shot.locked() = Some(path);
     Ok(name)
+}
+
+/// The subtitle files the dialog offers: those mpv reads as text or as pictures.
+const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "ass", "ssa", "vtt", "sub", "idx", "sup", "smi", "txt"];
+
+/// A subtitle file the user picks in the system's dialog, added to what mpv plays and shown (desktop). Only
+/// the dialog's answer reaches mpv: the page can't name a file. False when the dialog is cancelled.
+#[tauri::command]
+pub async fn mpv_subtitle_pick(app: AppHandle, state: State<'_, AppState>) -> Result<bool, CmdError> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog().file().set_title("Add a subtitle file").add_filter("Subtitles", SUBTITLE_EXTENSIONS).pick_file(
+            move |picked| {
+                let _ = tx.send(picked);
+            },
+        );
+        let Some(path) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else { return Ok(false) };
+        state.mpv.request(json!(["sub-add", path.to_string_lossy(), "select"])).await.map_err(CmdError::Player)?;
+        Ok(true)
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, state, SUBTITLE_EXTENSIONS);
+        Err(CmdError::Unsupported("Adding a subtitle file isn't available on this device yet.".into()))
+    }
 }
 
 /// Open the user's own mpv folder (made, with a starter mpv.conf, if it isn't there yet).

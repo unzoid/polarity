@@ -76,6 +76,14 @@ export interface Prefs {
   passthrough: boolean;
   /** mpv: HDR video as mpv picks, in HDR on a screen that takes it, or always converted to SDR. */
   hdrOutput: "auto" | "screen" | "sdr";
+  /** mpv, HDR video shown in HDR: how bright subtitles are. "auto" as bright as the picture allows, "sdr" paper white, "dim" below it. */
+  subtitleHdrPeak: "auto" | "sdr" | "dim";
+  /** Subtitles picked by language: the ones for the deaf and hard of hearing (SDH) when the file has both. */
+  preferSdh: boolean;
+  /** mpv: a second subtitle at the top of the picture, picked in the player's Second Subtitles column. */
+  secondSubtitles: boolean;
+  /** The second subtitle's language, put on by itself like the first ("" = none). */
+  secondSubtitleLanguage: string;
   /** mpv: hardware decoding. */
   hwdec: boolean;
   /** mpv: smooth colour banding. */
@@ -200,6 +208,10 @@ const DEFAULTS: Prefs = {
   maxVolume: 1,
   passthrough: false,
   hdrOutput: "auto",
+  subtitleHdrPeak: "auto",
+  preferSdh: false,
+  secondSubtitles: false,
+  secondSubtitleLanguage: "",
   hwdec: true,
   deband: false,
   cropMode: "fit",
@@ -283,6 +295,9 @@ export const SYNCED_PREFS = [
   "holdSpeed",
   "pauseShowsControls",
   "showPlayingFormat",
+  "preferSdh",
+  "secondSubtitles",
+  "secondSubtitleLanguage",
   "saveRecentSearches",
   "searchSuggestions",
   "matureContent",

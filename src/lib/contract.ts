@@ -196,7 +196,7 @@ export const contract = {
     total: true,
     type: true,
   } satisfies Keys<Download>,
-  InstalledAddon: { manifest: true, manifestUrl: true } satisfies Keys<InstalledAddon>,
+  InstalledAddon: { disabled: true, manifest: true, manifestUrl: true } satisfies Keys<InstalledAddon>,
   LocalChanges: { library: true, links: true, progress: true, pulledAt: true } satisfies Keys<LocalChanges>,
   "Playable.external": { kind: true, url: true } satisfies Keys<Extract<Playable, { kind: "external" }>>,
   "Playable.torrent": { kind: true } satisfies Keys<Extract<Playable, { kind: "torrent" }>>,
@@ -282,7 +282,7 @@ export const contract = {
     wheelAction: true,
   } satisfies Keys<Settings>,
   Span: { end: true, start: true } satisfies Keys<Span>,
-  StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true } satisfies Keys<StreamsResult>,
+  StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true, waiting: true } satisfies Keys<StreamsResult>,
   CustomTheme: { accent: true, base: true, id: true, name: true, tint: true } satisfies Keys<CustomTheme>,
   SubtitleOption: { addon: true, id: true, lang: true, url: true } satisfies Keys<SubtitleOption>,
   SubtitleStyle: {

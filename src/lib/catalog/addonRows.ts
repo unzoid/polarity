@@ -18,7 +18,7 @@ import {
 /** Every installed add-on's catalogs (lib/catalog/addonCatalogs.ts). */
 export function useAddonCatalogs(): AddonCatalog[] {
   const { data: addons } = useAddons();
-  return useMemo(() => addonCatalogs(addons ?? []), [addons]);
+  return useMemo(() => addonCatalogs((addons ?? []).filter((a) => !a.disabled)), [addons]);
 }
 
 /** Which add-ons' catalogs are on Home and in what order, and a way to change it (Settings → Add-ons). */

@@ -16,6 +16,11 @@ const EARLIER_DEFAULT_FONTS = ["Segoe UI Semibold", "Helvetica Neue"];
 /** The Font menu's "From the subtitles": only in the menu, saved as `fontFromSubtitles`. */
 const FROM_SUBTITLES = "from-subtitles";
 
+const ON_OFF = [
+  { value: 0, label: "Off" },
+  { value: 1, label: "On" },
+];
+
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   size: 100,
   raise: 0,
@@ -228,6 +233,8 @@ export function SubtitleSettings({
   onChange,
   delay,
   onDelay,
+  onStepLine,
+  second,
   canPosition,
 }: {
   style: SubtitleStyle;
@@ -235,6 +242,10 @@ export function SubtitleSettings({
   /** This video's timing offset; leave out where there's no video (Settings page). */
   delay?: number;
   onDelay?: (seconds: number) => void;
+  /** mpv: move the timing so the line before (-1) or after (1) shows now. */
+  onStepLine?: (by: 1 | -1) => void;
+  /** mpv: the second subtitle's switch (it's picked in its own column). */
+  second?: { on: boolean; onChange: (on: boolean) => void };
   /** Delay and position need the mpv engine. */
   canPosition: boolean;
 }) {
@@ -261,6 +272,23 @@ export function SubtitleSettings({
             onChange={onDelay}
             label="Delay"
           />
+        </Setting>
+      )}
+      {onStepLine && (
+        <Setting label="Match a line" caption="Just heard a line? Show its subtitle now, whether it's still to come or already gone">
+          <div className="source-chips">
+            <Chip variant="choice" onClick={() => onStepLine(-1)}>
+              Previous Line
+            </Chip>
+            <Chip variant="choice" onClick={() => onStepLine(1)}>
+              Next Line
+            </Chip>
+          </div>
+        </Setting>
+      )}
+      {second && (
+        <Setting label="Second subtitle" caption="Another language at the top of the picture">
+          <Chips value={second.on ? 1 : 0} options={ON_OFF} onChange={(v) => second.onChange(v === 1)} />
         </Setting>
       )}
       <Setting label="Font" caption={keepsReleaseFont(style) ? "Styled subtitles keep their own font" : undefined}>

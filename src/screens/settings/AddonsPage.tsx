@@ -42,6 +42,14 @@ export function AddonsPage() {
     },
   });
   const remove = useMutation({ mutationFn: api.removeAddon, onSuccess: refresh });
+  // Off or moved: what's asked, and in what order, changes for sources, subtitles and lists alike.
+  const changed = () => {
+    refresh();
+    qc.invalidateQueries({ queryKey: ["subtitles"] });
+    qc.invalidateQueries({ queryKey: keys.addonCatalogAll });
+  };
+  const toggle = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => api.setAddonEnabled(id, on), onSuccess: changed });
+  const move = useMutation({ mutationFn: ({ id, by }: { id: string; by: -1 | 1 }) => api.moveAddon(id, by), onSuccess: changed });
 
   // Manifests saved before behaviour hints were kept: refetch them once so
   // the Configure button can show.
@@ -68,20 +76,24 @@ export function AddonsPage() {
         </div>
       )}
       {!!addons?.length && (
-        <Card title="Installed" footer={note}>
-          {addons.map((a) => (
+        <Card title="Installed" footer={addons.length > 1 ? <>Equally good sources, and subtitles in one language, are listed in this order. {note}</> : note}>
+          {addons.map((a, i) => (
             <ExpandRow
               key={a.manifest.id}
               icon={Puzzle}
               title={a.manifest.name}
-              caption={linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
+              caption={a.disabled ? "Off" : linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
               accessory={<CopyLink url={a.manifestUrl} name={a.manifest.name} />}
               {...expand(a.manifest.id)}
             >
               {a.manifest.description && <p className="settings-expand-text">{a.manifest.description}</p>}
               <p className="settings-expand-text settings-url">{a.manifestUrl}</p>
               {linkHasKey(a.manifestUrl) && <KeyedLinkNote plain={plain} />}
-              <HomeLists addon={a.manifest.id} />
+              <label className="settings-expand-toggle">
+                <span>Use this add-on</span>
+                <Switch checked={!a.disabled} disabled={toggle.isPending} onChange={(on) => toggle.mutate({ id: a.manifest.id, on })} />
+              </label>
+              {!a.disabled && <HomeLists addon={a.manifest.id} />}
               <div className="settings-expand-actions">
                 {a.manifest.behaviorHints?.configurable && (
                   <Button
@@ -90,6 +102,28 @@ export function AddonsPage() {
                   >
                     <Cog size={15} /> Configure
                   </Button>
+                )}
+                {addons.length > 1 && (
+                  <>
+                    <IconButton
+                      variant="settings"
+                      label={`Move ${a.manifest.name} up`}
+                      title="Move Up: asked before the ones below it"
+                      disabled={i === 0 || move.isPending}
+                      onClick={() => move.mutate({ id: a.manifest.id, by: -1 })}
+                    >
+                      <ArrowUp size={16} />
+                    </IconButton>
+                    <IconButton
+                      variant="settings"
+                      label={`Move ${a.manifest.name} down`}
+                      title="Move Down"
+                      disabled={i === addons.length - 1 || move.isPending}
+                      onClick={() => move.mutate({ id: a.manifest.id, by: 1 })}
+                    >
+                      <ArrowDown size={16} />
+                    </IconButton>
+                  </>
                 )}
                 <Button variant="danger" onClick={() => remove.mutate(a.manifest.id)} disabled={remove.isPending}>
                   <Trash size={15} /> Remove

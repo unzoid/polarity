@@ -5,11 +5,14 @@ import { keys, useSettings, useUpdateSettings } from "../../lib/net";
 import { Card, SectionList, type SectionProps } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { isDesktop, isTvDevice, os } from "../../lib/platform";
+import { usePrefs } from "../../lib/settings";
 
 /** Its sections (PAGE_SECTIONS.subtitles): Languages, Subtitle Style, Sound. */
 export function SubtitlesPage({ section, openSection }: SectionProps) {
   const { data } = useSettings();
   const update = useUpdateSettings();
+  const { secondSubtitles } = usePrefs();
+  const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   if (!data) return null;
   const style = data.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE;
 
@@ -20,6 +23,10 @@ export function SubtitlesPage({ section, openSection }: SectionProps) {
           <SettingRow id="audioLanguage" />
           <SettingRow id="subtitleLanguage" />
           {!!data.subtitleLanguage && <SettingRow id="subtitleMode" />}
+          <SettingRow id="preferSdh" />
+          {/* mpv shows the second one; the built-in player shows one at a time. */}
+          {hasMpv && <SettingRow id="secondSubtitles" />}
+          {hasMpv && secondSubtitles && <SettingRow id="secondSubtitleLanguage" />}
         </Card>
       );
     case "style":

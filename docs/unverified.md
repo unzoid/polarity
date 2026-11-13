@@ -1270,6 +1270,37 @@ speed up, shuffle, the next episode's warm-up, `CastMedia`). Nothing was run in 
   mDNS (UDP 5353): Windows may ask once to allow Polarity on private networks. No button for torrents, downloads, files
   or sources that need request headers (phase 2 of #443), in a watch party, or while AirPlay casts.
 
+## Subtitles and add-ons batch (every add-on subtitle, track kinds, second subtitle, matching a line, a subtitle file, HDR subtitle brightness, add-ons off and in order, sources as they come)
+
+Checked here (Windows): `clippy -D warnings`, the tests of `polar-player` (the `sub-step` and `secondary-sid`
+allowlist, the HDR subtitle preset) and `src-tauri` (the field names, the partial ranking of sources and who's still
+out); `tsc`, `vite build` and the unit and DOM tests (track kinds, which subtitle mpv shows, every add-on file listed,
+the forced, SDH and audio-description choices, the second subtitle from the file and from an add-on). Nothing was run
+in the app's window. Needs the app, with mpv:
+
+- **Every add-on subtitle**: the Subtitles list has one row per file, its add-on under it, numbered when one add-on
+  offers several in a language. Picking the second English one plays it; playing the source again brings it back.
+- **Kinds of tracks**: a file with a forced (signs) English track and a full one starts with the full one; with
+  Settings → Subtitles & Audio → Prefer subtitles for the deaf and hard of hearing, the SDH one. "Only for foreign
+  audio" with English audio shows the signs track if there is one, else nothing. A file whose first English audio
+  is an audio description starts with the film's own. The labels say SDH, Forced or Audio description when the file
+  flags a track and its title doesn't.
+- **Second subtitle**: turn it on (the subtitle cog, or Settings); a Second Subtitles column appears, its pick shows at
+  the top, the first stays at the bottom; an add-on's file is added without replacing the first. The next episode
+  starts with the same second language. Turning it off removes it. Not offered with the built-in player.
+- **Match a line**: with subtitles late, press Next Line as a line is spoken: it shows now and the Delay above
+  changes to match; Previous Line the other way. The delay is remembered for the source like a typed one.
+- **A subtitle file** (desktop): Subtitles → Add from a File… opens the system's dialog for .srt, .ass, .vtt and the
+  rest; the file plays and is listed as "From a file". A video opened from disk with a .srt beside it now lists that
+  subtitle too (it used to load but not be listed).
+- **HDR subtitles** (Settings → Advanced, Windows and macOS, HDR video shown in HDR): Standard and Dim make white
+  subtitles less glaring than Full. Hidden with Convert to SDR.
+- **Add-ons off and in order** (Settings → Add-ons): an add-on switched off stays installed, says Off, and gives no
+  sources, subtitles, Home rows or search results until it's on again; reconfiguring it (installing its new link) keeps it off. Move Up and Move
+  Down change the order, which stays after a restart and isn't synced (each device has its own).
+- **Sources as they come**: with one slow add-on, the source list shows the fast ones' sources first with "Still
+  asking …", then fills in. Auto-pick and Play still wait for every add-on (or its 8 seconds).
+
 ## Downloads page (#15)
 
 Checked here: grouping, seasons, sorting, filters, search, totals and the saved view (`tests/downloadsView.test.ts`);

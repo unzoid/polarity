@@ -39,6 +39,10 @@ export interface MpvTrack {
   /** For a selected subtitle: 0 = the main one, 1 = the secondary one. */
   "main-selection"?: number;
   "demux-channel-count"?: number;
+  /** The file's flags: only signs and foreign lines, for the deaf and hard of hearing, describing the picture. */
+  forced?: boolean;
+  "hearing-impaired"?: boolean;
+  "visual-impaired"?: boolean;
   /** FFmpeg's profile: "Dolby TrueHD + Dolby Atmos", "DTS-HD MA", "Main 10"… (newer mpv). */
   "codec-profile"?: string;
   /** A video track's Dolby Vision profile (newer mpv). */

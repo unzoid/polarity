@@ -185,6 +185,8 @@ const HOLD_SHOWS_MS = 1200;
 const NEXT_UP_AT_END = 12;
 /** A media key's Previous this early in an episode goes to the one before; later it starts this one again. */
 const PREVIOUS_RESTARTS_S = 5;
+/** The subtitle list's "Add from a File…" entry. */
+const PICK_SUBTITLE = "pick-file";
 
 
 export function Player({
@@ -338,7 +340,7 @@ export function Player({
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
   // Past 100% only mpv can play (Settings → Subtitles & Audio): a <video>, AirPlay's included, stops at 100%.
-  const { maxVolume, holdSpeed, pauseShowsControls, showPlayingFormat } = usePrefs();
+  const { maxVolume, holdSpeed, pauseShowsControls, showPlayingFormat, secondSubtitles } = usePrefs();
   const volumeTop = engine === "mpv" && !castingAway ? maxVolume : 1;
   /** The volume up or down a step, kept within what this player can play. */
   const stepVolume = (by: number) => setVolume((v) => Math.min(volumeTop, Math.max(0, +(Math.min(v, volumeTop) + by).toFixed(2))));
@@ -393,6 +395,15 @@ export function Player({
     rememberTracks(memoryKey, videoId, { delay });
   };
   const [subSettingsOpen, setSubSettingsOpen] = useState(false);
+  // The system's file dialog hands mpv the file: desktop, not while another screen plays.
+  const canPickSubtitle = isDesktop && engine === "mpv" && !castingAway;
+  // mpv: the line heard before (-1) or after (1) shows now; the delay that makes it is this source's, like any other.
+  const stepLine = async (by: 1 | -1) => {
+    if (engine !== "mpv") return;
+    await mpv.command("sub-step", by).catch(warnFailed("sub-step"));
+    const delay = await mpv.command("get_property", "sub-delay").catch(() => null);
+    if (typeof delay === "number") changeSubDelay(Math.round(delay * 100) / 100);
+  };
   // Sound ahead of or behind the picture, remembered for this source like the subtitle delay (mpv only).
   const [audioDelay, setAudioDelay] = useState(0);
   useEffect(() => setAudioDelay(recallTracks(memoryKey)?.audioDelay ?? 0), [memoryKey]);
@@ -2115,14 +2126,33 @@ export function Player({
                 onChange={(patch) => updateSettings.mutate({ subtitleStyle: { ...subStyle, ...patch } })}
                 delay={subDelay}
                 onDelay={changeSubDelay}
+                onStepLine={engine === "mpv" && !castingAway ? (by) => void stepLine(by) : undefined}
+                second={engine === "mpv" && !castingAway ? { on: secondSubtitles, onChange: (on) => setPrefs({ secondSubtitles: on }) } : undefined}
                 canPosition={engine === "mpv"}
               />
             ) : undefined,
             value: tracks.subId,
-            options: tracks.subtitles,
-            onSelect: (id) => void tracks.selectSubtitle(id),
+            // Desktop with mpv: a subtitle file from this computer too.
+            options: canPickSubtitle ? [...tracks.subtitles, { id: PICK_SUBTITLE, label: "Add from a File…", heading: "On This Computer" }] : tracks.subtitles,
+            onSelect: (id) =>
+              id === PICK_SUBTITLE
+                ? void api.pickSubtitleFile().catch((e: unknown) => flashNotice(`Couldn't add the subtitle: ${errorMessage(e)}`, 4000))
+                : void tracks.selectSubtitle(id),
             empty: tracks.subtitlesLoading ? "Loading…" : undefined,
           },
+          // mpv: another language at the top (Settings → Subtitles & Audio, or the cog above).
+          ...(engine === "mpv" && secondSubtitles && !castingAway
+            ? [
+                {
+                  title: "Second Subtitles",
+                  size: "narrow" as const,
+                  value: tracks.secondId,
+                  options: tracks.subtitles,
+                  onSelect: (id: string) => void tracks.selectSecond(id),
+                  empty: tracks.subtitlesLoading ? "Loading…" : undefined,
+                },
+              ]
+            : []),
         ]}
       />
 

@@ -184,7 +184,7 @@ async fn install_bundled_addons(app: tauri::AppHandle) {
         };
         let saved = state.persist(|data| {
             if !data.addons.iter().any(|a| a.manifest.id == manifest.id) {
-                data.addons.push(store::InstalledAddon { manifest_url: url.into(), manifest });
+                data.addons.push(store::InstalledAddon { manifest_url: url.into(), manifest, disabled: false });
             }
             data.bundled_addons.push(url.into());
         });
@@ -308,6 +308,8 @@ pub fn run() {
             commands::addon_preview,
             commands::addon_install,
             commands::addon_remove,
+            commands::addon_set_enabled,
+            commands::addon_move,
             commands::library_list,
             commands::library_toggle,
             commands::progress_for,
@@ -374,6 +376,7 @@ pub fn run() {
             player::mpv_screenshot,
             player::mpv_screenshot_reveal,
             player::mpv_config_folder,
+            player::mpv_subtitle_pick,
             media_session::media_session,
             external_player::external_players,
             external_player::external_play,

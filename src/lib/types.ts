@@ -173,6 +173,8 @@ export interface StreamsResult {
   asked?: string[];
   /** The ids they were asked for: the episode's, then its other ids. */
   ids?: string[];
+  /** In an answer still coming in (`partialStreams`): the add-ons yet to answer. */
+  waiting?: string[];
 }
 
 /** What `search` returns: matches of each kind. */
@@ -304,6 +306,8 @@ export interface CatalogExtra {
 export interface InstalledAddon {
   manifestUrl: string;
   manifest: Manifest;
+  /** Switched off on this device: kept, but asked for nothing. */
+  disabled?: boolean;
 }
 
 export type EpisodeLayout = "row" | "list";

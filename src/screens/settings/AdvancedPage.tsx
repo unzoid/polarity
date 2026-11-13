@@ -16,7 +16,7 @@ import { StremioImport } from "../../components/settings/StremioImport";
 
 export function AdvancedPage() {
   const expand = useExpanded();
-  const { cropMode, mpvUserConfig } = usePrefs();
+  const { cropMode, mpvUserConfig, hdrOutput } = usePrefs();
   const autocrop = cropsBars(cropMode);
   const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   const account = useAccount();
@@ -29,6 +29,8 @@ export function AdvancedPage() {
         <SettingRow id="hwdec" disabled={hasMpv === false} />
         {/* Windows and macOS hand mpv's HDR picture to the screen; elsewhere the system decides. */}
         {(os === "windows" || os === "macos") && <SettingRow id="hdrOutput" disabled={hasMpv === false} />}
+        {/* Converted to SDR, subtitles are as bright as SDR anyway. */}
+        {(os === "windows" || os === "macos") && hdrOutput !== "sdr" && <SettingRow id="subtitleHdrPeak" disabled={hasMpv === false} />}
         <SettingRow id="deband" disabled={hasMpv === false} />
         {/* Without mpv there's no autocrop: Fit or Fill window. */}
         <SettingRow id="cropMode" omit={hasMpv === false ? ["bars"] : undefined} />

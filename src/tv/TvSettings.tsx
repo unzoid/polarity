@@ -93,6 +93,7 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     "showPlayingFormat",
     "audioLanguage",
     "subtitleLanguage",
+    "preferSdh",
     // A TV is where a receiver or soundbar sits.
     "maxVolume",
     ...(os === "ios" ? [] : ["passthrough"]),

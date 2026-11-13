@@ -1,4 +1,4 @@
-import { call as native } from "./platform/bridge";
+import { call as native, channel } from "./platform/bridge";
 import { noteSaveFailure } from "./errors";
 import { playContext } from "./anime/playContext";
 import { isKitsuId, kitsuMeta } from "./anime/kitsu";
@@ -68,8 +68,11 @@ export const api = {
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
-  /** Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime). */
-  streams: (type: ContentType, videoId: string) => {
+  /**
+   * Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime).
+   * `onPartial` gets the ranking so far each time an add-on answers before the last.
+   */
+  streams: (type: ContentType, videoId: string, onPartial: (partial: StreamsResult) => void = () => {}) => {
     const absolute = playContext.absolute(videoId);
     return call<StreamsResult>("streams", {
       ty: type,
@@ -77,6 +80,7 @@ export const api = {
       altIds: playContext.altIds(videoId) ?? null,
       absolute: absolute === undefined ? null : [absolute],
       seasonNames: playContext.seasonNames(videoId) ?? null,
+      partial: channel(onPartial),
     });
   },
   resolveStream: (stream: Stream) => call<Playable>("resolve_stream", { stream }),
@@ -112,6 +116,10 @@ export const api = {
   previewAddon: (url: string) => call<Manifest>("addon_preview", { url }),
   installAddon: (url: string) => call<InstalledAddon>("addon_install", { url }).then(changed),
   removeAddon: (id: string) => call<void>("addon_remove", { id }).then(changed),
+  /** Off: the add-on stays installed but is asked for nothing (this device only). */
+  setAddonEnabled: (id: string, enabled: boolean) => call<void>("addon_set_enabled", { id, enabled }),
+  /** One place up (-1) or down (1) in the order add-ons are asked in. */
+  moveAddon: (id: string, by: -1 | 1) => call<void>("addon_move", { id, by }),
 
   library: () => call<LibraryItem[]>("library_list"),
   toggleLibrary: (item: MetaPreview) => call<boolean>("library_toggle", { item }),
@@ -167,6 +175,8 @@ export const api = {
     call<void>("external_play", { player, url, title, start, headers }),
   /** Open the user's own mpv folder (Settings → Advanced → "Use my own mpv settings"). */
   openMpvFolder: () => call<void>("mpv_config_folder"),
+  /** Desktop, mpv: a subtitle file chosen in the system's dialog, added and shown; false when cancelled. */
+  pickSubtitleFile: () => call<boolean>("mpv_subtitle_pick"),
   /** Whether autocrop's lookahead reads ahead in the video playing now, or why it can't; null with nothing to say. */
   mpvLookahead: () => call<LookaheadState | null>("mpv_lookahead").catch(() => null),
   /** Whether this build can show what plays on Discord (desktop, built with a Discord application). */

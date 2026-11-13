@@ -41,6 +41,31 @@ pub struct Tune {
     /// How HDR video reaches the screen.
     #[serde(default)]
     pub hdr: HdrOutput,
+    /// How bright subtitles are over HDR video shown in HDR.
+    #[serde(default)]
+    pub sub_hdr: SubtitleHdr,
+}
+
+/// Subtitle brightness over HDR video shown in HDR, where white text can be glaring: mpv's own choice, the
+/// white of SDR video, or dimmer still.
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleHdr {
+    #[default]
+    Auto,
+    Sdr,
+    Dim,
+}
+
+impl SubtitleHdr {
+    /// mpv's `sub-hdr-peak` for it: "auto", "sdr" (203 nits), or a peak in nits.
+    pub fn peak(self) -> serde_json::Value {
+        match self {
+            SubtitleHdr::Auto => "auto".into(),
+            SubtitleHdr::Sdr => "sdr".into(),
+            SubtitleHdr::Dim => 100.into(),
+        }
+    }
 }
 
 /// How HDR video is shown: mpv's choice, as HDR on a screen that takes it,
@@ -115,6 +140,7 @@ impl Default for Tune {
             every_frame: false,
             passthrough: false,
             hdr: HdrOutput::Auto,
+            sub_hdr: SubtitleHdr::Auto,
         }
     }
 }
@@ -229,6 +255,7 @@ mod tests {
             every_frame: false,
             passthrough: false,
             hdr: HdrOutput::Auto,
+            sub_hdr: SubtitleHdr::Auto,
         };
         assert!(t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm"));
         let off = Tune { dialogue_boost: false, volume_leveling: false, ..t };
@@ -248,6 +275,16 @@ mod tests {
         assert_eq!(HdrOutput::Screen.colorspace_hint(), "yes");
         // Anything else is refused, never handed to mpv.
         assert!(serde_json::from_str::<Tune>(&page.replace('}', r#","hdr":"--script=x"}"#)).is_err());
+    }
+
+    #[test]
+    fn subtitle_brightness_over_hdr_is_a_preset() {
+        let page = r#"{"dialogueBoost":false,"volumeLeveling":false,"hwdec":true,"deband":false,"buffer":"normal"}"#;
+        assert_eq!(serde_json::from_str::<Tune>(page).unwrap().sub_hdr.peak(), "auto");
+        let dim = serde_json::from_str::<Tune>(&page.replace('}', r#","subHdr":"dim"}"#)).unwrap();
+        assert_eq!(dim.sub_hdr.peak(), 100);
+        assert_eq!(SubtitleHdr::Sdr.peak(), "sdr");
+        assert!(serde_json::from_str::<Tune>(&page.replace('}', r#","subHdr":5000}"#)).is_err());
     }
 
     #[test]

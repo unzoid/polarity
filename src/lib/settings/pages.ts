@@ -99,8 +99,8 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "languages",
       label: "Languages",
-      caption: "Audio and subtitle languages",
-      settings: ["audioLanguage", "subtitleLanguage", "subtitleMode"],
+      caption: "Audio and subtitle languages, SDH and a second subtitle",
+      settings: ["audioLanguage", "subtitleLanguage", "subtitleMode", "preferSdh", "secondSubtitles", "secondSubtitleLanguage"],
     },
     {
       id: "style",

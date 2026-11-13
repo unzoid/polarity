@@ -11,7 +11,7 @@ import type { MpvMedia } from "./mpvMedia";
  * (polar_player `Tune`).
  */
 export function useMpvTune(mpv: MpvMedia | null) {
-  const { dialogueBoost, volumeLeveling, hwdec, deband, cropMode, autocropLookahead, autocropEveryFrame, buffer, passthrough, hdrOutput } = usePrefs();
+  const { dialogueBoost, volumeLeveling, hwdec, deband, cropMode, autocropLookahead, autocropEveryFrame, buffer, passthrough, hdrOutput, subtitleHdrPeak } = usePrefs();
   const autocrop = cropsBars(cropMode);
 
   useEffect(() => {
@@ -32,6 +32,7 @@ export function useMpvTune(mpv: MpvMedia | null) {
           buffer,
           passthrough,
           hdr: hdrOutput,
+          subHdr: subtitleHdrPeak,
         },
       }).catch(warnFailed("mpv_tune"));
     };
@@ -42,5 +43,5 @@ export function useMpvTune(mpv: MpvMedia | null) {
       mpv.removeEventListener("loadedmetadata", apply);
       mpv.removeEventListener("tracks", apply);
     };
-  }, [mpv, dialogueBoost, volumeLeveling, hwdec, deband, autocrop, autocropLookahead, autocropEveryFrame, buffer, passthrough, hdrOutput]);
+  }, [mpv, dialogueBoost, volumeLeveling, hwdec, deband, autocrop, autocropLookahead, autocropEveryFrame, buffer, passthrough, hdrOutput, subtitleHdrPeak]);
 }
