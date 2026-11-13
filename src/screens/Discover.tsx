@@ -9,6 +9,7 @@ import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catal
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { keys } from "../lib/net";
+import { useFormFactor } from "../lib/ui";
 
 const CATALOGS = [
   { id: "trending", label: "Trending" },
@@ -35,6 +36,7 @@ export function Discover({
   genre?: string;
   addon?: string;
 }) {
+  const phone = useFormFactor().form === "phone";
   const [catalog, setCatalog] = useState(() => (CATALOGS.some((c) => c.id === initialCatalog) ? initialCatalog! : "trending"));
   const [picked, setGenre] = useState(initialGenre);
   const lists = useAddonCatalogs().filter((c) => c.type === type && browsable(c));
@@ -88,12 +90,13 @@ export function Discover({
               options={[...(own?.genreRequired ? [] : [{ value: "", label: "All Genres" }]), ...genres.map((g) => ({ value: g, label: g }))]}
             />
           )}
-          {!own && (
-            // Its own row on a phone, scrolling from one screen edge to the other (shell.css).
-            <div className="discover-catalogs">
+          {!own &&
+            // Six of them are wider than a phone: there it's a dropdown sharing the row with Genre's (#457, shell.css).
+            (phone ? (
+              <Dropdown label="Catalog" value={catalog} onChange={setCatalog} options={CATALOGS.map((c) => ({ value: c.id, label: c.label }))} />
+            ) : (
               <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />
-            </div>
-          )}
+            ))}
         </div>
       </header>
       <PosterGrid pager={query} stale={query.isPlaceholderData}>
