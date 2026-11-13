@@ -32,7 +32,9 @@ import { TvSourceMenu, useSourceInfo } from "../components/SourceInfo";
 import { playingReport } from "../components/player/playingReport";
 import {
   airedAt,
+  autoPickOrder,
   autoplayStreak,
+  warmLinks,
   countAutoplay,
   describeStream,
   requestHeaders,
@@ -113,7 +115,7 @@ import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
 import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds, seasonLabel } from "../lib/format";
-import { keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
+import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
 import { useRouter } from "../lib/router";
 import type { ContentType, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
@@ -1316,6 +1318,17 @@ export function Player({
     return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
   });
   const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
+  // As Up Next comes: the next episode's first two picks get the request pressing Play makes, so their
+  // servers have the file open by the time it starts (its sources were fetched at three quarters).
+  const nextId = next?.id;
+  useEffect(() => {
+    if (!nextId || local || link || nearEnd !== "yes") return;
+    const streams = cachedStreams(type, nextId);
+    if (!streams?.length) return;
+    return warmLinks(autoPickOrder(streams, settings, metaId).slice(0, 2));
+    // The settings at that moment: a change later doesn't need another look.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextId, nearEnd, local, link, type, metaId]);
   // What Best Match learns from this try (#230): how long it took to start, whether it played through, and
   // what the connection carried (links only: not a file here or the torrent engine's own link on this machine).
   useSourceRecord(source.kind, source.state.status === "resolving", started, ended || nearEnd === "yes");

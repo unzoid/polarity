@@ -164,6 +164,9 @@ export const prefetchMeta = (type: ContentType, id: string) =>
   });
 
 export const prefetchStreams = (type: ContentType, videoId: string) => queryClient.prefetchQuery(streamsQuery(type, videoId));
+/** A video's sources, if they've been fetched already (prefetchStreams); never asks the add-ons. */
+export const cachedStreams = (type: ContentType, videoId: string) =>
+  queryClient.getQueryData<StreamsResult>(streamsQuery(type, videoId).queryKey)?.streams;
 
 const preloaded = new Set<string>();
 export function preloadImage(src?: string) {
