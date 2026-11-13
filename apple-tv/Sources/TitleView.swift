@@ -58,33 +58,28 @@ struct TitleView: View {
 
     @ViewBuilder
     private func episodes(of title: Title) -> some View {
-        let seasons = Array(Set(title.episodes.map(\.season))).sorted { ($0 == 0 ? UInt32.max : $0) < ($1 == 0 ? UInt32.max : $1) }
-        let shown = season ?? seasons.first ?? 1
+        let seasons: [UInt32] = seasonNumbers(of: title)
+        let shown: UInt32 = season ?? seasons.first ?? 1
         VStack(alignment: .leading, spacing: 24) {
             if seasons.count > 1 {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 20) {
-                        ForEach(seasons, id: \.self) { s in
-                            Button(s == 0 ? "Specials" : "Season \(s)") { season = s }
-                                .buttonStyle(.bordered)
-                                .tint(s == shown ? Color.accentColor : nil)
-                        }
-                    }
-                    .padding(.vertical, 20)
-                }
-                .scrollClipDisabled()
-                .focusSection()
+                SeasonPicker(seasons: seasons, shown: shown) { season = $0 }
             }
             LazyVStack(alignment: .leading, spacing: 16) {
-                ForEach(title.episodes.filter { $0.season == shown }, id: \.id) { episode in
-                    NavigationLink(value: Playing(card: title.card, videoId: episode.id, episode: episode, resumeAt: resumeAt(progress[episode.id]))) {
-                        EpisodeRow(episode: episode, resume: progress[episode.id])
-                    }
-                    .buttonStyle(.card)
+                ForEach(title.episodes.filter { $0.season == shown }, id: \.id) { (episode: Episode) in
+                    episodeLink(episode, of: title)
                 }
             }
             .focusSection()
         }
+    }
+
+    private func episodeLink(_ episode: Episode, of title: Title) -> some View {
+        let resume: Resume? = progress[episode.id]
+        let playing = Playing(card: title.card, videoId: episode.id, episode: episode, resumeAt: resumeAt(resume))
+        return NavigationLink(value: playing) {
+            EpisodeRow(episode: episode, resume: resume)
+        }
+        .buttonStyle(.card)
     }
 
     private func load() async {
@@ -112,6 +107,17 @@ struct TitleView: View {
     }
 }
 
+/// A show's season numbers in order, specials (season 0) last.
+func seasonNumbers(of title: Title) -> [UInt32] {
+    let numbers: Set<UInt32> = Set(title.episodes.map { (episode: Episode) -> UInt32 in episode.season })
+    return numbers.sorted { (a: UInt32, b: UInt32) -> Bool in seasonOrder(a) < seasonOrder(b) }
+}
+
+/// Where a season sorts: its number, specials after every other.
+private func seasonOrder(_ season: UInt32) -> UInt32 {
+    season == 0 ? UInt32.max : season
+}
+
 /// Where to start a video again: from its progress, unless it was watched to the end.
 func resumeAt(_ resume: Resume?) -> Double {
     guard let resume, resume.duration > 0, resume.position / resume.duration < 0.92 else { return 0 }
@@ -120,6 +126,28 @@ func resumeAt(_ resume: Resume?) -> Double {
 
 func resumeLabel(for resume: Resume?) -> String {
     resumeAt(resume) > 0 ? "Resume" : "Play"
+}
+
+/// A show's seasons as a row of buttons, the one shown tinted.
+struct SeasonPicker: View {
+    let seasons: [UInt32]
+    let shown: UInt32
+    let choose: (UInt32) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 20) {
+                ForEach(seasons, id: \.self) { (s: UInt32) in
+                    Button(s == 0 ? "Specials" : "Season \(s)") { choose(s) }
+                        .buttonStyle(.bordered)
+                        .tint(s == shown ? Color.accentColor : nil)
+                }
+            }
+            .padding(.vertical, 20)
+        }
+        .scrollClipDisabled()
+        .focusSection()
+    }
 }
 
 /// One episode in a show's list.
