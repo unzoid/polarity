@@ -45,6 +45,8 @@ export interface Prefs {
   holdSpeed: number;
   /** Pausing brings the controls up. Off: the picture stays clear, the controls come with the mouse or a key. */
   pauseShowsControls: boolean;
+  /** Under the title in the player: what's playing ("4K · Dolby Vision · Dolby Atmos · English 5.1"). */
+  showPlayingFormat: boolean;
 
   // This machine's screen, speakers and GPU:
   /** Interface zoom, 1 = 100%. */
@@ -184,6 +186,7 @@ const DEFAULTS: Prefs = {
   loadingDetails: false,
   holdSpeed: 2,
   pauseShowsControls: true,
+  showPlayingFormat: true,
   uiScale: 1,
   pauseOnMinimize: false,
   discordPresence: "app",
@@ -276,6 +279,7 @@ export const SYNCED_PREFS = [
   "autoSkipDelay",
   "holdSpeed",
   "pauseShowsControls",
+  "showPlayingFormat",
   "saveRecentSearches",
   "searchSuggestions",
   "matureContent",

@@ -91,6 +91,7 @@ import { createWindowPin } from "../components/player/windowPin";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
+import { usePlayingFormat } from "../components/player/usePlayingFormat";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
 import {
@@ -303,7 +304,7 @@ export function Player({
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
   // Past 100% only mpv can play (Settings → Subtitles & Audio): a <video>, AirPlay's included, stops at 100%.
-  const { maxVolume, holdSpeed, pauseShowsControls } = usePrefs();
+  const { maxVolume, holdSpeed, pauseShowsControls, showPlayingFormat } = usePrefs();
   const volumeTop = engine === "mpv" && !airplay.casting ? maxVolume : 1;
   /** The volume up or down a step, kept within what this player can play. */
   const stepVolume = (by: number) => setVolume((v) => Math.min(volumeTop, Math.max(0, +(Math.min(v, volumeTop) + by).toFixed(2))));
@@ -1243,6 +1244,9 @@ export function Player({
       (e) => flashNotice(`Couldn't save the screenshot: ${errorMessage(e)}`, 4000),
     );
 
+  // "4K · Dolby Vision · Dolby Atmos · English 5.1" under the title, once it plays (Settings → Playback).
+  const playingFormat = usePlayingFormat(started && !airplay.casting ? media : null, showPlayingFormat && !ytFramed);
+
   /** "More" has items of its own (screenshots), so it shows whatever fits. */
   const moreItems = canShoot;
 
@@ -1579,6 +1583,7 @@ export function Player({
         <div className="player-heading" data-tauri-drag-region={pinned ? undefined : true}>
           <span className="player-heading-title">{heading}</span>
           {current && <span className="player-heading-show">{title}</span>}
+          {playingFormat && <span className="player-heading-format">{playingFormat}</span>}
         </div>
         <div className="player-top-end">
           <div className="player-top-actions">

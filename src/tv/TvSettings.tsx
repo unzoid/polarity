@@ -90,6 +90,7 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     "resumePlayback",
     "seekStep",
     "pauseShowsControls",
+    "showPlayingFormat",
     "audioLanguage",
     "subtitleLanguage",
     // A TV is where a receiver or soundbar sits.

@@ -38,6 +38,10 @@ export interface MpvTrack {
   /** For a selected subtitle: 0 = the main one, 1 = the secondary one. */
   "main-selection"?: number;
   "demux-channel-count"?: number;
+  /** FFmpeg's profile: "Dolby TrueHD + Dolby Atmos", "DTS-HD MA", "Main 10"… (newer mpv). */
+  "codec-profile"?: string;
+  /** A video track's Dolby Vision profile (newer mpv). */
+  "dolby-vision-profile"?: number;
 }
 
 /** Detail of the `step` events MpvMedia fires for the loading screen's log. */

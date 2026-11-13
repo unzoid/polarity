@@ -170,6 +170,13 @@
   color: var(--text-2);
   font-weight: 500;
 }
+/* What plays now (usePlayingFormat): quieter than the show's name, one line. */
+.player-heading-format {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
 .player-top-end {
   justify-self: end;
   display: flex;

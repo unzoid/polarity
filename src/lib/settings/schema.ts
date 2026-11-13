@@ -347,6 +347,16 @@ export const SETTINGS: SettingDef[] = [
     ]),
   },
   {
+    id: "showPlayingFormat",
+    page: "playback",
+    title: "Show what's playing under the title",
+    caption: "The picture and sound as they play, such as 4K · Dolby Vision · Dolby Atmos · English 5.1",
+    keywords: "quality resolution hdr dolby vision atmos audio format language badge info stats",
+    bind: p("showPlayingFormat"),
+    control: toggle,
+    tv: "Show Picture and Sound Format",
+  },
+  {
     id: "pauseShowsControls",
     page: "playback",
     title: "Show the controls when paused",

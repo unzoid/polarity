@@ -74,6 +74,7 @@ export function PlaybackPage() {
           onChange={(v) => update.mutate({ rememberSpeed: v, playbackSpeed: 1 })}
         />
         <SettingRow id="timeDisplay" />
+        <SettingRow id="showPlayingFormat" />
         <SettingRow id="loadingDetails" />
         <SettingRow id="seekStep" />
         <SettingRow id="controlsHideSecs" />
