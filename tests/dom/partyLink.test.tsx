@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { LinkConfirm } from "../../src/components/party/LinkConfirm";
 import { usePlayerKeyboard } from "../../src/components/player/usePlayerKeyboard";
@@ -21,6 +21,7 @@ const checked: string[] = [];
     return args.url.endsWith(".html") ? { state: "notReady", reason: "Answered with a page, not a video" } : { state: "ready", ms: 40 };
   },
 };
+afterAll(() => void delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 afterEach(() => {
   checked.length = 0;
   leaveParty();

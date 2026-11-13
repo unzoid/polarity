@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { afterAll, expect, mock, test } from "bun:test";
 import { act, useRef, useState } from "react";
 import { render } from "./render";
 import * as platform from "../../src/lib/platform";
@@ -7,8 +7,11 @@ import type { NativeBackState } from "../../src/lib/platform";
 // As in the iOS shell: the system's back button stands in for the web app's (ios/back.m).
 const sent: NativeBackState[] = [];
 let press: ((steps: number) => void) | undefined;
+// bun keeps a module mock for every file after this one in the same run: the real module goes back afterwards (#510).
+const real = { ...platform };
+afterAll(() => void mock.module("../../src/lib/platform", () => real));
 mock.module("../../src/lib/platform", () => ({
-  ...platform,
+  ...real,
   nativeBackAvailable: true,
   setNativeBack: async (state: NativeBackState) => void sent.push(state),
   onNativeBack: async (handler: (steps: number) => void) => ((press = handler), () => {}),

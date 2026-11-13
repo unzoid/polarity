@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { DownloadButton } from "../../src/components/DownloadButton";
@@ -32,6 +32,7 @@ const calls: string[] = [];
     return cmd === "downloads_list" ? [] : null;
   },
 };
+afterAll(() => void delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 afterEach(() => {
   calls.length = 0;
 });
