@@ -3,8 +3,12 @@ import type { Transition } from "motion/react";
 /** The CSS easing tokens (tokens.css), for Motion's tweens. */
 export const ease = {
   out: [0.23, 1, 0.32, 1],
+  inOut: [0.77, 0, 0.175, 1],
   drawer: [0.32, 0.72, 0, 1],
 } as const;
+
+/** An `ease` curve as a CSS easing string, for the Web Animations API. */
+export const cssEase = (curve: readonly number[]) => `cubic-bezier(${curve.join(", ")})`;
 
 /**
  * Springs, in Apple's two designer-facing parameters (bounce ≈ 1 − damping,

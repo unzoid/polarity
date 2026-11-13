@@ -29,13 +29,32 @@
   overflow: hidden;
   animation: fade-in var(--dur-slow) var(--ease-out);
 }
+/* The accent glow behind fluted glass (components/FlutedGlow.tsx). The gradient is the same glow without
+   the glass: it shows until WebGL has drawn, and stays where WebGL isn't available. */
 .account-glow {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(110% 75% at 35% -15%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
-    radial-gradient(80% 60% at 50% 120%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%);
+  /* Carries the page colour too, so the shell can fade away as a whole over the app (data-leaving). */
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(90% 80% at 88% -5%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
+    radial-gradient(80% 60% at 14% 120%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%);
+}
+.account-glow canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 600ms var(--ease-out);
+}
+.account-glow canvas[data-ready] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-glow canvas {
+    transition: none;
+  }
 }
 .account-bar {
   position: relative;
@@ -633,6 +652,50 @@
     color: var(--text);
     background: var(--fill-3);
   }
+}
+
+/* --- Picking a profile: everything but the chosen one clears away and it steps forward while the
+       profile loads (a failure brings the rest back). The spinner only shows if that takes a while. */
+.profiles-title,
+.profiles-actions,
+.profiles-grid li {
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.profiles[data-choosing] :is(.profiles-title, .profiles-actions),
+.profiles[data-choosing] .profiles-grid li:not([data-chosen]) {
+  opacity: 0;
+  pointer-events: none;
+}
+.profiles[data-choosing] .profile-tile {
+  background: transparent;
+}
+.profiles[data-choosing] .profile-tile-art {
+  transform: scale(1.06);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+.profile-tile-busy {
+  animation-delay: 450ms;
+  animation-fill-mode: backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .profiles[data-choosing] .profile-tile-art {
+    transform: none;
+  }
+}
+:root[data-reduce-motion="on"] .profiles[data-choosing] .profile-tile-art {
+  transform: none;
+}
+
+/* Then in: the screen stays over the app a moment (App's Gate) and fades off it, while a copy of the
+   chosen avatar flies into the navbar (screens/account/profileHandoff.ts). */
+.account-shell[data-leaving] {
+  z-index: var(--z-overlay);
+  background: transparent;
+  pointer-events: none;
+}
+.account-shell[data-leaving] > * {
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
 }
 
 /* --- Profile editor */
