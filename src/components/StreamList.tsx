@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { AlertCircle, Check, Filters, Info, Instant, Puzzle } from "./icons";
 import { useRouter } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
-import { useMeta, useStreams } from "../lib/net";
+import { useMeta, usePartialStreams, useStreams } from "../lib/net";
 import { runtimeSeconds } from "../lib/format";
 import { airedAt, NO_TORRENT_ENGINE, READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
 import { torrentsPlayHere } from "../lib/platform";
@@ -35,7 +35,12 @@ export function StreamList({
   const { tab } = useRouter();
   // Desktop settings are the overlay over this page; TV has its own settings screen.
   const showSettings = (page: PageId) => (tv ? tab({ name: "settings", page }) : openSettings(page));
-  const { data, isLoading, isError, error } = useStreams(type, videoId);
+  const whole = useStreams(type, videoId);
+  // While add-ons are still answering, the sources so far: the list fills in as each one does.
+  const partial = usePartialStreams(type, videoId);
+  const { isError, error } = whole;
+  const data = whole.data ?? (whole.isLoading && partial?.streams.length ? partial : undefined);
+  const isLoading = whole.isLoading && !data;
   // An anime's languages (default filter, Best Match) are Settings → Anime's (#235).
   const { settings } = useTitleSettings(type, videoId);
   // The title's length, for Best Match's bitrates: its meta is usually already loaded (the page behind this list).
@@ -139,6 +144,11 @@ export function StreamList({
         </>
       )}
 
+      {!!data.waiting?.length && (
+        <p className="stream-failed t-caption faint" role="status">
+          Still asking {data.waiting.join(", ")}…
+        </p>
+      )}
       {hidden > 0 && <p className="stream-failed t-caption faint">{hidden} more hidden by Settings → Sources</p>}
       {data.failed.length > 0 && (
         <p className="stream-failed t-caption faint">

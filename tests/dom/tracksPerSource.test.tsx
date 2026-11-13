@@ -83,11 +83,11 @@ test("tracks picked for a source are chosen again when it plays again, over the 
   expect(b.set.get("sid")).toBe(1);
   await two.view.unmount();
 
-  // Another source of the same episode starts from the settings.
+  // Another source of the same episode starts from the settings: the full English subtitle, not the signs-only one listed first.
   const c = fakeMpv(renumbered);
   const three = await play(c.mpv, trackMemoryKey(episode, { url: "https://media.example.com/other.mkv" }));
   expect(c.set.get("aid")).toBe(2);
-  expect(c.set.get("sid")).toBe(1);
+  expect(c.set.get("sid")).toBe(2);
   await three.view.unmount();
 });
 

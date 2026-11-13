@@ -370,6 +370,19 @@
   color: var(--t3-muted-fg);
   font-weight: 400;
 }
+/* In a section (PAGE_SECTIONS): its page's name, back to the page's list of sections. */
+.t3s-crumb-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 400;
+  color: var(--t3-muted-fg);
+  cursor: pointer;
+}
+.t3s-crumb-link:hover {
+  color: var(--t3-fg);
+}
 .t3s-header-actions {
   display: flex;
   align-items: center;
@@ -427,6 +440,29 @@
   max-width: 860px;
   margin: 0 auto;
   padding: 2.25rem 1.5rem 3.5rem;
+}
+/* Into a page's section and back out (PAGE_SECTIONS, data-move): the new view comes a little way in from the
+   side it lies on, deeper to the right, as a phone's Settings does. Other page changes show at once. */
+.t3s-page[data-move] {
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+@starting-style {
+  .t3s-page[data-move] {
+    opacity: 0;
+  }
+  .t3s-page[data-move="in"] {
+    transform: translateX(24px);
+  }
+  .t3s-page[data-move="out"] {
+    transform: translateX(-24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t3s-page[data-move] {
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
 }
 
 /* Section: heading outside, bordered group of rows inside. */
@@ -729,6 +765,7 @@
     padding: 0 0.5rem 0 1rem;
   }
   .t3s-crumb-root,
+  .t3s-crumb-link,
   .t3s-crumb-sep,
   .t3s-ghost-label {
     display: none;

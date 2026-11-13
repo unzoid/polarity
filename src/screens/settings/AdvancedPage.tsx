@@ -6,7 +6,7 @@ import { keys } from "../../lib/net";
 import { cropsBars, resetPrefs, usePrefs } from "../../lib/settings";
 import { lookaheadStatus } from "../../lib/playback";
 import { Button } from "../../components/ui/Button";
-import { errorMessage } from "../../lib/errors";
+import { errorMessage, warnFailed } from "../../lib/errors";
 import { ActionRow, Card, ExpandRow, FormRow, PickRow, useExpanded, type Expandable } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { appUpdates, buildChannel, isDesktop, os } from "../../lib/platform";
@@ -16,7 +16,8 @@ import { StremioImport } from "../../components/settings/StremioImport";
 
 export function AdvancedPage() {
   const expand = useExpanded();
-  const autocrop = cropsBars(usePrefs().cropMode);
+  const { cropMode, mpvUserConfig, hdrOutput } = usePrefs();
+  const autocrop = cropsBars(cropMode);
   const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   const account = useAccount();
   return (
@@ -26,6 +27,10 @@ export function AdvancedPage() {
         footer={hasMpv === false ? "Most of these need mpv." : "Saved on this device. Changes apply straight away, even mid-video."}
       >
         <SettingRow id="hwdec" disabled={hasMpv === false} />
+        {/* Windows and macOS hand mpv's HDR picture to the screen; elsewhere the system decides. */}
+        {(os === "windows" || os === "macos") && <SettingRow id="hdrOutput" disabled={hasMpv === false} />}
+        {/* Converted to SDR, subtitles are as bright as SDR anyway. */}
+        {(os === "windows" || os === "macos") && hdrOutput !== "sdr" && <SettingRow id="subtitleHdrPeak" disabled={hasMpv === false} />}
         <SettingRow id="deband" disabled={hasMpv === false} />
         {/* Without mpv there's no autocrop: Fit or Fill window. */}
         <SettingRow id="cropMode" omit={hasMpv === false ? ["bars"] : undefined} />
@@ -33,6 +38,17 @@ export function AdvancedPage() {
         {/* macOS and iOS read every frame anyway, in memory. */}
         {os !== "macos" && os !== "ios" && <SettingRow id="autocropEveryFrame" disabled={hasMpv === false || !autocrop} />}
         <SettingRow id="buffer" />
+        {/* Desktop: a folder of the user's own, which phones and TV boxes don't have. */}
+        {isDesktop && <SettingRow id="mpvUserConfig" disabled={hasMpv === false} />}
+        {isDesktop && mpvUserConfig && (
+          <ActionRow
+            setting="mpvConfigFolder"
+            title="mpv folder"
+            caption="Where mpv.conf, input.conf, scripts/ and shaders/ go"
+            label="Open Folder"
+            onClick={() => void api.openMpvFolder().catch(warnFailed("mpv folder"))}
+          />
+        )}
       </Card>
       {buildChannel === "dev" && <DatabaseCard />}
       {/* Signed in, it's under Account. */}

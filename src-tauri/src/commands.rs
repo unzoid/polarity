@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::join_all;
+use futures::stream::{FuturesUnordered, StreamExt};
 use polar_addon::{rank_asked, Asked, Manifest, Meta, MetaPreview, RankedStream, Stream, WantedEpisode};
 use polar_index::Indexer;
 use polar_library::AnimeLink;
@@ -103,7 +104,7 @@ pub async fn addon_catalog(
     id: String,
     extra: Vec<(String, String)>,
 ) -> Result<Vec<MetaPreview>> {
-    let found = installed(&state).into_iter().find(|a| a.manifest.id == addon);
+    let found = active(&state).into_iter().find(|a| a.manifest.id == addon);
     let addon = found.ok_or_else(|| CmdError::NotFound("that add-on isn't installed".into()))?;
     let declared = addon.manifest.catalogs.iter().find(|c| c.ty == ty && c.id == id);
     if !declared.is_some_and(|c| c.accepts(&extra)) || extra.iter().any(|(_, v)| v.len() > 200) {
@@ -149,7 +150,7 @@ pub async fn meta(state: State<'_, AppState>, ty: String, id: String) -> Result<
         return Ok(state.indexer().meta(&ty, &id).await?);
     }
     // Non-IMDb ids belong to whichever installed addon claims them.
-    let addon = installed(&state)
+    let addon = active(&state)
         .into_iter()
         .find(|a| a.manifest.serves("meta", &ty, &id))
         .ok_or_else(|| CmdError::Unsupported(format!("no addon provides metadata for {id}")))?;
@@ -178,9 +179,13 @@ pub struct StreamsResult {
     asked: Vec<String>,
     /// The ids they were asked for: the episode's, then its other ids.
     ids: Vec<String>,
+    /// The add-ons still to answer: only in a partial answer; none in the whole one.
+    waiting: Vec<String>,
 }
 
-/// Query every installed stream addon concurrently, then rank and dedupe.
+/// Query every installed stream addon concurrently, then rank and dedupe. The ranking so far goes to `partial`
+/// each time an add-on answers before the last (with `waiting` naming the rest), so a list can show sources
+/// as they come; what's returned is the whole answer.
 #[tauri::command]
 pub async fn streams(
     state: State<'_, AppState>,
@@ -192,6 +197,7 @@ pub async fn streams(
     absolute: Option<Vec<u32>>,
     // A later anime season's own titles: a file named by one without a season number is that season's.
     season_names: Option<Vec<String>>,
+    partial: tauri::ipc::Channel<StreamsResult>,
 ) -> Result<StreamsResult> {
     let mut ids = vec![video_id];
     ids.extend(alt_ids.unwrap_or_default());
@@ -201,7 +207,7 @@ pub async fn streams(
         .map(|w| w.with_names(names.iter().map(String::as_str)));
 
     // One request per (addon, id) the addon claims to serve.
-    let jobs: Vec<(InstalledAddon, String)> = installed(&state)
+    let jobs: Vec<(InstalledAddon, String)> = active(&state)
         .into_iter()
         .flat_map(|a| {
             ids.iter()
@@ -213,44 +219,75 @@ pub async fn streams(
 
     let client = &state.addons;
     let kind = ty.as_str();
-    let results = join_all(jobs.iter().map(|(a, id)| async move {
-        let fetch = client.streams(&a.manifest_url, kind, id);
-        let res = tokio::time::timeout(ADDON_TIMEOUT, fetch).await;
-        (a, id, res)
-    }))
-    .await;
+    let filter = state.store.locked().data.settings.stream_filter(&ty);
+    let mut pending: FuturesUnordered<_> = jobs
+        .iter()
+        .enumerate()
+        .map(|(at, (a, id))| async move {
+            let fetch = client.streams(&a.manifest_url, kind, id);
+            (at, tokio::time::timeout(ADDON_TIMEOUT, fetch).await.ok().and_then(|r| r.ok()))
+        })
+        .collect();
+    // Each job's answer in the add-ons' order, whatever order they come in: ties in the ranking keep that order.
+    let mut slots: Vec<Option<Answer>> = vec![None; jobs.len()];
+    while let Some((at, answer)) = pending.next().await {
+        slots[at] = Some(answer);
+        if !pending.is_empty() {
+            // The page may have moved on: nothing to do about a list nobody listens to.
+            let _ = partial.send(summarize(&jobs, &slots, &filter, wanted.as_ref(), &ids));
+        }
+    }
+    Ok(summarize(&jobs, &slots, &filter, wanted.as_ref(), &ids))
+}
 
+/// One request's answer: the add-on's sources, or none when it failed or ran out of time.
+type Answer = Option<Vec<Stream>>;
+
+/// The sources the add-ons answered with so far, ranked, and who failed, answered or is still out. `slots` are
+/// `jobs`' answers, `None` while one is out.
+fn summarize(
+    jobs: &[(InstalledAddon, String)],
+    slots: &[Option<Answer>],
+    filter: &polar_addon::StreamFilter,
+    wanted: Option<&WantedEpisode>,
+    ids: &[String],
+) -> StreamsResult {
+    use std::collections::HashSet;
     // Add-ons go by their manifest URL here: two may share a name (L22).
     let mut all = Vec::new();
-    let mut failed: Vec<&InstalledAddon> = Vec::new();
-    let mut answered = std::collections::HashSet::new();
-    for (a, id, res) in results {
-        match res {
-            Ok(Ok(streams)) => {
+    let mut answered = HashSet::new();
+    let mut out = HashSet::new();
+    for ((a, id), slot) in jobs.iter().zip(slots) {
+        match slot {
+            Some(Some(streams)) => {
                 answered.insert(&a.manifest_url);
-                all.extend(streams.into_iter().map(|stream| Asked {
+                all.extend(streams.iter().cloned().map(|stream| Asked {
                     addon: a.manifest.name.clone(),
                     request: Some(id.clone()),
                     stream,
                 }));
             }
-            _ => failed.push(a),
+            None => {
+                out.insert(&a.manifest_url);
+            }
+            Some(None) => {}
         }
     }
-    // An addon that answered for one of the ids isn't "failed" because it timed out on another,
-    // and one that failed for two ids is named once.
-    let mut named = std::collections::HashSet::new();
-    let failed: Vec<String> = failed
-        .into_iter()
-        .filter(|a| !answered.contains(&a.manifest_url) && named.insert(&a.manifest_url))
-        .map(|a| a.manifest.name.clone())
-        .collect();
-    let mut seen = std::collections::HashSet::new();
-    let asked: Vec<String> =
-        jobs.iter().filter(|(a, _)| seen.insert(&a.manifest_url)).map(|(a, _)| a.manifest.name.clone()).collect();
-    let filter = state.store.locked().data.settings.stream_filter(&ty);
-    let (streams, hidden) = rank_asked(all, &filter, wanted.as_ref());
-    Ok(StreamsResult { streams, failed, hidden, asked, ids })
+    // An addon that answered for one of the ids isn't "failed" because it timed out on another, one still
+    // out for an id isn't failed yet, and each is named once.
+    let named = |keep: &dyn Fn(&String, &Option<Answer>) -> bool| {
+        let mut seen = HashSet::new();
+        jobs.iter()
+            .zip(slots)
+            .filter(|((a, _), slot)| keep(&a.manifest_url, slot) && seen.insert(&a.manifest_url))
+            .map(|((a, _), _)| a.manifest.name.clone())
+            .collect::<Vec<_>>()
+    };
+    let failed = named(&|url, slot| matches!(slot, Some(None)) && !answered.contains(url) && !out.contains(url));
+    let waiting = named(&|url, slot| slot.is_none() && !answered.contains(url));
+    let asked = named(&|_, _| true);
+    let (streams, hidden) = rank_asked(all, filter, wanted);
+    StreamsResult { streams, failed, hidden, asked, ids: ids.to_vec(), waiting }
 }
 
 #[derive(Serialize)]
@@ -308,6 +345,11 @@ fn installed(state: &State<'_, AppState>) -> Vec<InstalledAddon> {
     state.store.locked().data.addons.clone()
 }
 
+/// The add-ons that are on, in the user's order: the ones asked for sources, subtitles, titles and lists.
+fn active(state: &State<'_, AppState>) -> Vec<InstalledAddon> {
+    state.store.locked().data.addons.iter().filter(|a| !a.disabled).cloned().collect()
+}
+
 #[tauri::command]
 pub fn addons_list(state: State<'_, AppState>) -> Vec<InstalledAddon> {
     installed(&state)
@@ -337,16 +379,42 @@ pub async fn addon_install(state: State<'_, AppState>, url: String) -> Result<In
         if url.ends_with("/manifest.json") { url } else { format!("{}/manifest.json", url.trim_end_matches('/')) };
     let mut manifest = state.addons.manifest(&manifest_url).await?;
     manifest.behavior_hints.get_or_insert_with(Default::default);
-    let addon = InstalledAddon { manifest_url, manifest };
-    let saved = addon.clone();
+    let mut addon = InstalledAddon { manifest_url, manifest, disabled: false };
     state.persist_now(|d| {
-        // Reinstalling (or reconfiguring) keeps the addon's place in the order.
-        match d.addons.iter_mut().find(|a| a.manifest.id == saved.manifest.id) {
-            Some(slot) => *slot = saved,
-            None => d.addons.push(saved),
+        // Reinstalling (or reconfiguring) keeps the addon's place in the order, and whether it's on.
+        match d.addons.iter_mut().find(|a| a.manifest.id == addon.manifest.id) {
+            Some(slot) => {
+                addon.disabled = slot.disabled;
+                *slot = addon.clone();
+            }
+            None => d.addons.push(addon.clone()),
         }
     })?;
     Ok(addon)
+}
+
+/// Switch an installed add-on off (kept, asked for nothing) or back on.
+#[tauri::command]
+pub fn addon_set_enabled(state: State<'_, AppState>, id: String, enabled: bool) -> Result<()> {
+    state.persist_now(|d| {
+        if let Some(a) = d.addons.iter_mut().find(|a| a.manifest.id == id) {
+            a.disabled = !enabled;
+        }
+    })
+}
+
+/// Move an installed add-on one place up (`by` < 0) or down in the order: the order titles, subtitles and
+/// lists are asked in, and ties between sources are broken by.
+#[tauri::command]
+pub fn addon_move(state: State<'_, AppState>, id: String, by: i32) -> Result<()> {
+    state.persist_now(|d| {
+        if let Some(at) = d.addons.iter().position(|a| a.manifest.id == id) {
+            let to = if by < 0 { at.checked_sub(1) } else { Some(at + 1).filter(|n| *n < d.addons.len()) };
+            if let Some(to) = to {
+                d.addons.swap(at, to);
+            }
+        }
+    })
 }
 
 #[tauri::command]
@@ -565,7 +633,7 @@ pub async fn subtitles(
     filename: Option<String>,
 ) -> Result<Vec<SubtitleOption>> {
     let addons: Vec<InstalledAddon> =
-        installed(&state).into_iter().filter(|a| a.manifest.serves("subtitles", &ty, &video_id)).collect();
+        active(&state).into_iter().filter(|a| a.manifest.serves("subtitles", &ty, &video_id)).collect();
     let client = &state.addons;
     let file = polar_addon::VideoFile {
         size: video_size.filter(|n| *n > 0),
@@ -794,5 +862,70 @@ mod youtube_tests {
         assert!(!is_youtube_id("dQw4w9WgXc"));
         assert!(!is_youtube_id("dQw4w9WgXcQ&list=x"));
         assert!(!is_youtube_id("dQw4w9WgX/Q"));
+    }
+}
+
+#[cfg(test)]
+mod streams_tests {
+    use super::*;
+
+    fn addon(name: &str) -> InstalledAddon {
+        let manifest = Manifest {
+            id: name.into(),
+            version: "1".into(),
+            name: name.into(),
+            description: None,
+            logo: None,
+            resources: vec![],
+            types: vec![],
+            catalogs: vec![],
+            id_prefixes: None,
+            behavior_hints: None,
+        };
+        InstalledAddon { manifest_url: format!("https://{name}.example.com/manifest.json"), manifest, disabled: false }
+    }
+
+    fn source(title: &str) -> Stream {
+        Stream {
+            url: Some(format!("https://media.example.com/{title}.mkv")),
+            title: Some(title.into()),
+            ..Default::default()
+        }
+    }
+
+    fn summary(jobs: &[(InstalledAddon, String)], slots: &[Option<Answer>]) -> StreamsResult {
+        summarize(jobs, slots, &Settings::default().stream_filter("movie"), None, &["tt0000000".into()])
+    }
+
+    #[test]
+    fn a_partial_answer_names_who_is_still_out() {
+        let jobs = vec![(addon("first"), "tt0000000".into()), (addon("second"), "tt0000000".into())];
+        let so_far = summary(&jobs, &[None, Some(Some(vec![source("film 1080p")]))]);
+        assert_eq!(so_far.streams.len(), 1);
+        assert_eq!(so_far.waiting, vec!["first".to_string()]);
+        assert!(so_far.failed.is_empty());
+        assert_eq!(so_far.asked, vec!["first".to_string(), "second".to_string()]);
+
+        let whole = summary(&jobs, &[Some(None), Some(Some(vec![source("film 1080p")]))]);
+        assert!(whole.waiting.is_empty());
+        assert_eq!(whole.failed, vec!["first".to_string()]);
+    }
+
+    #[test]
+    fn equally_good_sources_keep_the_add_on_order_whoever_answers_first() {
+        let jobs = vec![(addon("first"), "tt0000000".into()), (addon("second"), "tt0000000".into())];
+        let whole =
+            summary(&jobs, &[Some(Some(vec![source("film a 1080p")])), Some(Some(vec![source("film b 1080p")]))]);
+        let addons: Vec<_> = whole.streams.iter().map(|s| s.addon.clone()).collect();
+        assert_eq!(addons, vec!["first".to_string(), "second".to_string()]);
+    }
+
+    #[test]
+    fn an_add_on_still_out_for_one_id_is_not_failed_yet() {
+        let a = addon("both");
+        let jobs = vec![(a.clone(), "tt0000000".into()), (a, "kitsu:1".into())];
+        let so_far = summary(&jobs, &[Some(None), None]);
+        assert!(so_far.failed.is_empty());
+        assert_eq!(so_far.waiting, vec!["both".to_string()]);
     }
 }

@@ -18,6 +18,17 @@ export function nextVideo(meta: Meta, videoId: string): Video | undefined {
     .find((v) => (current.season === 0 ? v.season === 0 : v.season !== 0) && isReleased(v));
 }
 
+/** The episode before `videoId`, crossing back into the previous season; specials only from specials. */
+export function previousVideo(meta: Meta, videoId: string): Video | undefined {
+  const i = meta.videos.findIndex((v) => v.id === videoId);
+  if (i < 0) return undefined;
+  const current = meta.videos[i];
+  return meta.videos
+    .slice(0, i)
+    .reverse()
+    .find((v) => (current.season === 0 ? v.season === 0 : v.season !== 0) && isReleased(v));
+}
+
 export interface UpNext {
   video?: Video;
   /** Resume point in seconds, if partially watched. */

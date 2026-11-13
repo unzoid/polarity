@@ -1225,6 +1225,82 @@ same network:
 - Subtitles: add-on subtitles go to the element as WebVTT tracks; whether the receiver shows them is
   untested. Subtitles inside the file aren't sent.
 
+## The player's wishlist batch (volume to 200%, passthrough, HDR output, audio delay, hold to speed up, screenshots, Picture in Picture, media keys, other players, your own mpv settings, shuffle, Chromecast)
+
+Checked here (Windows): `cargo check`, `clippy -D warnings` and the tests of `polar-player` (screenshot names,
+other players' command lines, Tune presets), `polar-cast` (the CastMessage format, the JSON, and a whole cast
+against a fake TV over an in-memory pipe) and `src-tauri`; `tsc`, `vite build` and the unit and DOM tests
+(volume curve, track memory with the audio delay, the format line, the mini window with fake window calls, hold to
+speed up, shuffle, the next episode's warm-up, `CastMedia`). Nothing was run in the app's window. Needs the app:
+
+- **Volume past 100%** (Settings → Subtitles & Audio → Volume goes up to 200%), with mpv: the slider goes to 200%,
+  louder than 100% and about twice as loud at the top; the built-in player stops at 100%; the TV HUD's pill fills at
+  the limit.
+- **Passthrough**, with an AV receiver on HDMI or optical: Dolby and DTS tracks show as Dolby/DTS on the receiver;
+  AAC still plays; dialogue boost and volume don't apply to passed-through tracks.
+- **HDR video** (Settings → Advanced), on Windows with HDR on: "HDR on this screen" plays HDR10 in HDR; "Convert to
+  SDR" looks right with Windows' HDR off. mpv older than 0.40 refuses "auto": it's sent "no" then.
+- **Audio delay**: Subtitles & Audio → the Audio column's cog; ±0.05 s steps move the sound against the picture and
+  come back for the same source next time.
+- **Hold to speed up**: a mouse held on the picture and a finger on a touch screen play at 2x until let go; letting
+  go doesn't pause; a drag or a pinch never speeds up; nothing in a watch party.
+- **Show the controls when paused** off: pausing leaves the picture clear; the mouse or a key brings the controls.
+- **Screenshots** (Ctrl+S / ⌘S, More → Save Screenshot): a JPEG with the subtitles in Pictures/Polarity; Show Last
+  Screenshot opens Explorer or Finder on it.
+- **Picture in Picture** (More, or I): the window goes to the bottom-right corner of its screen at about a quarter of
+  its width, on top; it can be moved and resized; I, Esc, a double click, fullscreen or Back put it back as it was,
+  maximised or fullscreen included. Check two screens with different scaling, and macOS's own fullscreen.
+- **Media keys and now playing**: Windows: the keyboard's play/pause and next keys while another app is in front; the
+  volume flyout's media panel shows the title, show, poster and a timeline that seeks. macOS (now_playing.m was never
+  compiled here): Control Center's Now Playing and the keyboard's media keys. iOS: the Lock Screen and Control Center.
+  Closing the player clears it.
+- **Play in another player** (More → Play in VLC/mpv/MPC-HC/MPC-BE/PotPlayer/IINA): only installed ones are listed;
+  each starts at the same time with the title; a source needing request headers gets all of them in mpv and IINA,
+  only User-Agent and Referer in VLC, none in MPC and PotPlayer.
+- **Your own mpv settings** (Settings → Advanced, desktop): Open Folder makes the folder with a starter mpv.conf; a
+  shader named there applies from the next video; turning it off goes back to Polarity's own settings.
+- **Shuffle**: on a show's page and in the Episodes panel; each released episode once before any again; Continue
+  Watching, watched ticks and Trakt/Simkl don't change for shuffled episodes.
+- **Next episode warm-up**: as Up Next shows, the next episode's first two sources are asked once (the serving
+  host's log shows the request); with a source that's slow to open the first time, the next episode starts sooner.
+- **Chromecast**, with a Chromecast or a Google TV on the same network (no device was available here): the TV button
+  appears with the device's name; an MP4 or HLS link from the web plays there from the same moment, with the title
+  and backdrop; play/pause, seeking, the skips and volume act on the TV and the time follows it; Stop Casting comes
+  back at the TV's position; an MKV the TV can't play says so and plays here again. Finding receivers listens on
+  mDNS (UDP 5353): Windows may ask once to allow Polarity on private networks. No button for torrents, downloads, files
+  or sources that need request headers (phase 2 of #443), in a watch party, or while AirPlay casts.
+
+## Subtitles and add-ons batch (every add-on subtitle, track kinds, second subtitle, matching a line, a subtitle file, HDR subtitle brightness, add-ons off and in order, sources as they come)
+
+Checked here (Windows): `clippy -D warnings`, the tests of `polar-player` (the `sub-step` and `secondary-sid`
+allowlist, the HDR subtitle preset) and `src-tauri` (the field names, the partial ranking of sources and who's still
+out); `tsc`, `vite build` and the unit and DOM tests (track kinds, which subtitle mpv shows, every add-on file listed,
+the forced, SDH and audio-description choices, the second subtitle from the file and from an add-on). Nothing was run
+in the app's window. Needs the app, with mpv:
+
+- **Every add-on subtitle**: the Subtitles list has one row per file, its add-on under it, numbered when one add-on
+  offers several in a language. Picking the second English one plays it; playing the source again brings it back.
+- **Kinds of tracks**: a file with a forced (signs) English track and a full one starts with the full one; with
+  Settings → Subtitles & Audio → Prefer subtitles for the deaf and hard of hearing, the SDH one. "Only for foreign
+  audio" with English audio shows the signs track if there is one, else nothing. A file whose first English audio
+  is an audio description starts with the film's own. The labels say SDH, Forced or Audio description when the file
+  flags a track and its title doesn't.
+- **Second subtitle**: turn it on (the subtitle cog, or Settings); a Second Subtitles column appears, its pick shows at
+  the top, the first stays at the bottom; an add-on's file is added without replacing the first. The next episode
+  starts with the same second language. Turning it off removes it. Not offered with the built-in player.
+- **Match a line**: with subtitles late, press Next Line as a line is spoken: it shows now and the Delay above
+  changes to match; Previous Line the other way. The delay is remembered for the source like a typed one.
+- **A subtitle file** (desktop): Subtitles → Add from a File… opens the system's dialog for .srt, .ass, .vtt and the
+  rest; the file plays and is listed as "From a file". A video opened from disk with a .srt beside it now lists that
+  subtitle too (it used to load but not be listed).
+- **HDR subtitles** (Settings → Advanced, Windows and macOS, HDR video shown in HDR): Standard and Dim make white
+  subtitles less glaring than Full. Hidden with Convert to SDR.
+- **Add-ons off and in order** (Settings → Add-ons): an add-on switched off stays installed, says Off, and gives no
+  sources, subtitles, Home rows or search results until it's on again; reconfiguring it (installing its new link) keeps it off. Move Up and Move
+  Down change the order, which stays after a restart and isn't synced (each device has its own).
+- **Sources as they come**: with one slow add-on, the source list shows the fast ones' sources first with "Still
+  asking …", then fills in. Auto-pick and Play still wait for every add-on (or its 8 seconds).
+
 ## Downloads page (#15)
 
 Checked here: grouping, seasons, sorting, filters, search, totals and the saved view (`tests/downloadsView.test.ts`);

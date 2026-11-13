@@ -1,6 +1,7 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
 import { isMac } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
+import { MAX_VOLUMES } from "../playback/volume";
 import type { Prefs } from "./prefs";
 import type { Settings } from "../types";
 import type { PageId } from "./pages";
@@ -330,7 +331,41 @@ export const SETTINGS: SettingDef[] = [
       { value: "anyone", label: "Anyone who sees it" },
     ]),
   },
-  { id: "rememberSpeed", page: "playback", title: "Remember playback speed", keywords: "rate faster slower" },
+  { id: "rememberSpeed", page: "playback", title: "Remember playback speed", keywords: "rate faster slower default" },
+  {
+    id: "holdSpeed",
+    page: "playback",
+    title: "Press and hold to speed up",
+    caption: "Hold a finger or the mouse button on the video to play faster until you let go",
+    keywords: "hold long press fast forward 2x speed faster",
+    bind: p("holdSpeed"),
+    control: choice([
+      { value: 0, label: "Off" },
+      { value: 1.5, label: "1.5x" },
+      { value: 2, label: "2x" },
+      { value: 3, label: "3x" },
+    ]),
+  },
+  {
+    id: "showPlayingFormat",
+    page: "playback",
+    title: "Show what's playing under the title",
+    caption: "The picture and sound as they play, such as 4K · Dolby Vision · Dolby Atmos · English 5.1",
+    keywords: "quality resolution hdr dolby vision atmos audio format language badge info stats",
+    bind: p("showPlayingFormat"),
+    control: toggle,
+    tv: "Show Picture and Sound Format",
+  },
+  {
+    id: "pauseShowsControls",
+    page: "playback",
+    title: "Show the controls when paused",
+    caption: "Off: pausing leaves the picture clear. Move the mouse or press a key to bring them back",
+    keywords: "pause controls overlay hide osd clean picture screenshot",
+    bind: p("pauseShowsControls"),
+    control: toggle,
+    tv: "Show Controls When Paused",
+  },
   {
     id: "loadingDetails",
     page: "playback",
@@ -571,6 +606,35 @@ export const SETTINGS: SettingDef[] = [
     ]),
   },
   {
+    id: "preferSdh",
+    page: "subtitles",
+    title: "Prefer subtitles for the deaf and hard of hearing",
+    caption: "When a video has both, pick the SDH ones, which also describe sounds and music",
+    keywords: "sdh cc closed captions hearing impaired deaf accessibility sound effects",
+    bind: p("preferSdh"),
+    control: toggle,
+    tv: "Prefer SDH Subtitles",
+  },
+  {
+    id: "secondSubtitles",
+    page: "subtitles",
+    title: "Show a second subtitle",
+    caption: "Two languages at once, the second at the top of the picture. Pick it in the player's Second Subtitles list.",
+    keywords: "dual subtitles two languages secondary learn language bilingual",
+    bind: p("secondSubtitles"),
+    control: toggle,
+    tv: "Second Subtitle",
+  },
+  {
+    id: "secondSubtitleLanguage",
+    page: "subtitles",
+    title: "Second subtitle language",
+    controlLabel: "Second subtitle language",
+    keywords: "dual subtitles secondary language",
+    bind: p("secondSubtitleLanguage"),
+    control: choice((current) => languageChoices(current, "None")),
+  },
+  {
     id: "dialogueBoost",
     page: "subtitles",
     title: "Boost dialogue",
@@ -587,6 +651,27 @@ export const SETTINGS: SettingDef[] = [
     keywords: "night mode loudness normalize compression leveling",
     bind: p("volumeLeveling"),
     control: toggle,
+  },
+  {
+    id: "maxVolume",
+    page: "subtitles",
+    title: "Volume goes up to",
+    caption: "Past 100% makes quiet films louder than the file itself. Loud scenes can distort.",
+    keywords: "volume boost louder amplify 150 200 percent quiet max maximum",
+    bind: p("maxVolume"),
+    control: choice(MAX_VOLUMES.map((v) => ({ value: v, label: `${v * 100}%` }))),
+    tv: "Volume Goes Up To",
+  },
+  {
+    id: "passthrough",
+    page: "subtitles",
+    title: "Send surround sound to my receiver",
+    caption:
+      "For an AV receiver or soundbar on HDMI or optical: Dolby and DTS go to it as they are, for it to decode. The volume and the sound options above don't apply to them then.",
+    keywords: "passthrough bitstream spdif hdmi optical receiver soundbar dolby dts truehd atmos",
+    bind: p("passthrough"),
+    control: toggle,
+    tv: "Surround to Receiver (Passthrough)",
   },
   { id: "subtitleStyle", page: "subtitles", title: "Subtitle Style", keywords: "captions appearance" },
   { id: "subtitleDelay", page: "subtitles", title: "Delay", keywords: "subtitle sync offset timing" },
@@ -1164,6 +1249,33 @@ export const SETTINGS: SettingDef[] = [
     control: toggle,
   },
   {
+    id: "hdrOutput",
+    page: "advanced",
+    title: "HDR video",
+    caption:
+      "HDR on this screen sends the picture in HDR when Windows or macOS has HDR on. Convert to SDR helps when HDR looks washed out or too dark.",
+    keywords: "hdr dolby vision tone mapping washed out grey dark colours colors sdr display screen",
+    bind: p("hdrOutput"),
+    control: choice([
+      { value: "auto", label: "Automatic" },
+      { value: "screen", label: "HDR on this screen" },
+      { value: "sdr", label: "Convert to SDR" },
+    ]),
+  },
+  {
+    id: "subtitleHdrPeak",
+    page: "advanced",
+    title: "Subtitle brightness in HDR",
+    caption: "White subtitles can glare over HDR video shown in HDR. Standard keeps them as bright as in SDR video.",
+    keywords: "hdr subtitles bright glare blinding dim nits white",
+    bind: p("subtitleHdrPeak"),
+    control: choice([
+      { value: "auto", label: "Full" },
+      { value: "sdr", label: "Standard" },
+      { value: "dim", label: "Dim" },
+    ]),
+  },
+  {
     id: "deband",
     page: "advanced",
     title: "Smooth colour banding",
@@ -1216,6 +1328,17 @@ export const SETTINGS: SettingDef[] = [
       { value: "large", label: "Large (5 min)" },
     ]),
   },
+  {
+    id: "mpvUserConfig",
+    page: "advanced",
+    title: "Use my own mpv settings",
+    caption:
+      "mpv also reads mpv.conf, input.conf, scripts and shaders from Polarity's mpv folder, for options and shaders of your own, such as upscalers. Applies from the next video. Turn it off if videos stop playing.",
+    keywords: "mpv conf config custom options shaders glsl anime4k upscale scripts lua input advanced",
+    bind: p("mpvUserConfig"),
+    control: toggle,
+  },
+  { id: "mpvConfigFolder", page: "advanced", title: "mpv folder", keywords: "mpv conf config folder open shaders scripts" },
   { id: "resetSettings", page: "advanced", title: "Reset all settings", keywords: "defaults restore" },
 
   // About & Updates

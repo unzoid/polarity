@@ -4,6 +4,7 @@ import { WATCH_LOG } from "../../lib/playback/watchLog";
 import { listenProbe, nextProbeId, probeStep } from "./useStartLog";
 import { errorCode, errorMessage, warnFailed } from "../../lib/errors";
 import { playingTrack } from "./trackChoice";
+import { getPrefs } from "../../lib/settings/prefs";
 
 /** The slice of HTMLVideoElement the player, scrubber and track UI rely on. */
 export interface MediaLike extends EventTarget {
@@ -38,6 +39,14 @@ export interface MpvTrack {
   /** For a selected subtitle: 0 = the main one, 1 = the secondary one. */
   "main-selection"?: number;
   "demux-channel-count"?: number;
+  /** The file's flags: only signs and foreign lines, for the deaf and hard of hearing, describing the picture. */
+  forced?: boolean;
+  "hearing-impaired"?: boolean;
+  "visual-impaired"?: boolean;
+  /** FFmpeg's profile: "Dolby TrueHD + Dolby Atmos", "DTS-HD MA", "Main 10"… (newer mpv). */
+  "codec-profile"?: string;
+  /** A video track's Dolby Vision profile (newer mpv). */
+  "dolby-vision-profile"?: number;
 }
 
 /** Detail of the `step` events MpvMedia fires for the loading screen's log. */
@@ -176,7 +185,9 @@ export class MpvMedia extends EventTarget implements MediaLike {
       await this.listening; // never load before we can hear mpv's answers
       const unlisten = await listenProbe(probeId, (e) => this.step(...probeStep(e)));
       try {
-        await call("mpv_load", { url, start, probeId, headers, link, owner: this.owner });
+        // Settings → Advanced → "Use my own mpv settings": mpv restarts with (or without) the user's folder when it changes.
+        const userConfig = getPrefs().mpvUserConfig;
+        await call("mpv_load", { url, start, probeId, headers, link, owner: this.owner, userConfig });
       } finally {
         unlisten();
       }

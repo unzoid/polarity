@@ -71,7 +71,14 @@ export function PlayerLayer({ player, leaving }: { player: PlayerRoute | null; l
     <div className="player-layer" data-leaving={leaving} inert={leaving}>
       <ErrorBoundary key={key} where="player" action={{ label: "Back", onClick: back }}>
         <Suspense fallback={null}>
-          <Player type={player.type} metaId={player.metaId} videoId={player.videoId} stream={player.stream} leaving={leaving} />
+          <Player
+            type={player.type}
+            metaId={player.metaId}
+            videoId={player.videoId}
+            stream={player.stream}
+            shuffle={!!player.shuffle}
+            leaving={leaving}
+          />
         </Suspense>
       </ErrorBoundary>
     </div>

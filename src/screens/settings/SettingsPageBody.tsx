@@ -1,5 +1,6 @@
 import { MarketplacePage } from "../../components/Marketplace";
 import type { PageId } from "../../lib/settings";
+import type { SectionProps } from "../../components/settings/rows";
 import { AboutPage } from "./AboutPage";
 import { AccountPage } from "./AccountPage";
 import { AddonsPage } from "./AddonsPage";
@@ -17,24 +18,25 @@ import { SubtitlesPage } from "./SubtitlesPage";
 
 /**
  * One settings page's content, drawn inside the settings overlay. Options sit in cards; everything saves the
- * moment it changes, except typed values (keys, addresses), which save on their own button.
+ * moment it changes, except typed values (keys, addresses), which save on their own button. A long page
+ * (PAGE_SECTIONS) shows its list of sections, or the one section open.
  */
-export function SettingsPageBody({ page }: { page: PageId }) {
+export function SettingsPageBody({ page, section, openSection }: { page: PageId } & SectionProps) {
   switch (page) {
     case "account":
       return <AccountPage />;
     case "playback":
-      return <PlaybackPage />;
+      return <PlaybackPage section={section} openSection={openSection} />;
     case "sources":
       return <SourcesPage />;
     case "subtitles":
-      return <SubtitlesPage />;
+      return <SubtitlesPage section={section} openSection={openSection} />;
     case "appearance":
       return <AppearancePage />;
     case "browsing":
-      return <BrowsingPage />;
+      return <BrowsingPage section={section} openSection={openSection} />;
     case "anime":
-      return <AnimePage />;
+      return <AnimePage section={section} openSection={openSection} />;
     case "notifications":
       return <NotificationsPage />;
     case "advanced":

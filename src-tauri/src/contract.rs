@@ -53,7 +53,10 @@ fn field_names_match_contract() {
         id_prefixes: None,
         behavior_hints: None,
     };
-    add("InstalledAddon", keys(&InstalledAddon { manifest_url: "https://a.io/manifest.json".into(), manifest }));
+    add(
+        "InstalledAddon",
+        keys(&InstalledAddon { manifest_url: "https://a.io/manifest.json".into(), manifest, disabled: false }),
+    );
     add(
         "Download",
         keys(&Download {
@@ -82,7 +85,14 @@ fn field_names_match_contract() {
     add("LocalChanges", keys(&LocalChanges { changes: Changes::default(), pulled_at: s("2026-01-01") }));
     add(
         "StreamsResult",
-        keys(&StreamsResult { streams: vec![], failed: vec![], hidden: 0, asked: vec![], ids: vec![] }),
+        keys(&StreamsResult {
+            streams: vec![],
+            failed: vec![],
+            hidden: 0,
+            asked: vec![],
+            ids: vec![],
+            waiting: vec![],
+        }),
     );
     add("TorrentLink", keys(&crate::torrent::TorrentLink { url: "http://127.0.0.1:1/t/1/video.mkv".into(), size: 1 }));
     add("Playable.url", keys(&Playable::Url { url: "https://a.io".into() }));

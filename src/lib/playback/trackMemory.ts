@@ -5,7 +5,7 @@ import { ISO3, langMatches } from "./languages";
 import { sourceKey } from "./savedSource";
 
 /**
- * The audio track, subtitle and subtitle delay picked for one source of one episode (#418): the same file (its link,
+ * The audio track, subtitle and their delays picked for one source of one episode (#418): the same file (its link,
  * a torrent's file, or the download). Kept on this device only, never synced. Keys and subtitle ids are stored
  * hashed, so no link, token or title id sits in storage. The least recently played go first past `MAX`.
  */
@@ -35,6 +35,8 @@ export interface RememberedTracks {
   subtitle?: RememberedSubtitle;
   /** Subtitle delay in seconds. */
   delay?: number;
+  /** Audio delay in seconds: positive plays the sound later. */
+  audioDelay?: number;
 }
 
 interface Entry extends RememberedTracks {
@@ -90,7 +92,14 @@ function read(storage: Pick<Storage, "getItem"> | undefined): Record<string, Ent
     if (!isRecord(e)) continue;
     const video = str(e.video);
     if (!video) continue;
-    out[k] = { video, used: num(e.used) ?? 0, audio: traits(e.audio), subtitle: subtitle(e.subtitle), delay: num(e.delay) };
+    out[k] = {
+      video,
+      used: num(e.used) ?? 0,
+      audio: traits(e.audio),
+      subtitle: subtitle(e.subtitle),
+      delay: num(e.delay),
+      audioDelay: num(e.audioDelay),
+    };
   }
   return out;
 }

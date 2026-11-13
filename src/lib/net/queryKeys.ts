@@ -21,6 +21,8 @@ export const keys = {
   metaAll: ["meta"] as const,
   streams: (type: ContentType, videoId: string) => ["streams", type, videoId] as const,
   streamsAll: ["streams"] as const,
+  /** The sources of a video so far, while its add-ons are still answering (`streamsQuery`). */
+  streamsPartial: (type: ContentType, videoId: string) => ["streams-partial", type, videoId] as const,
   subtitles: (type: ContentType, videoId: string | undefined, file?: VideoFile) =>
     ["subtitles", type, videoId, file?.size ?? null, file?.name ?? null] as const,
   progress: (metaId: string) => ["progress", metaId] as const,
@@ -51,6 +53,7 @@ export const keys = {
   personPhoto: (name: string) => ["person-photo", name] as const,
   mpv: ["mpv"] as const,
   mpvLookahead: ["mpv", "lookahead"] as const,
+  externalPlayers: ["external-players"] as const,
   discord: ["discord"] as const,
   storeProblem: ["store-problem"] as const,
   secretsPlace: ["secrets-place"] as const,

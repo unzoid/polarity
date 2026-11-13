@@ -58,6 +58,19 @@ export function checkReadiness(s: RankedStream): Promise<Readiness> {
   return job;
 }
 
+/**
+ * Ask these links ahead of time, as the source list does, so the servers have the file ready by the time
+ * Play asks: the next episode's first choices, near the end of this one. Not on a metered connection.
+ * Returns a function that stops the checks that haven't started.
+ */
+export function warmLinks(streams: RankedStream[]): () => void {
+  if (metered()) return () => {};
+  const urls = streams.map((s) => s.stream.url ?? "").filter((u) => /^https?:\/\//i.test(u));
+  for (const url of urls) want(url, 1);
+  for (const s of streams) void checkReadiness(s);
+  return () => urls.forEach((url) => want(url, -1));
+}
+
 /** The readiness of each of `streams` by link, filled in as checks answer; nothing while `enabled` is off. */
 export function useReadiness(streams: RankedStream[], enabled = true): ReadonlyMap<string, Readiness> {
   const urls = streams.map((s) => s.stream.url ?? "").filter(Boolean);

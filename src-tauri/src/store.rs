@@ -321,6 +321,9 @@ impl Settings {
 pub struct InstalledAddon {
     pub manifest_url: String,
     pub manifest: Manifest,
+    /// Switched off in Settings → Add-ons: kept, but asked for nothing. This device's own, like the order.
+    #[serde(default)]
+    pub disabled: bool,
 }
 
 /// The space used when nobody is signed in.

@@ -35,6 +35,32 @@ export const cachedLookup = (qc: QueryClient) => ({
 });
 
 export function useStreams(type: ContentType, videoId: string | undefined) {
+  const select = useStreamsSelect(videoId);
+  return useQuery({
+    ...streamsQuery(type, videoId ?? ""),
+    enabled: !!videoId,
+    select,
+  });
+}
+
+/**
+ * The sources found so far while a video's add-ons are still answering (`waiting` names the rest), for a list
+ * that shows them as they come; undefined before the first answers and once all have. Nothing else should act
+ * on it: a pick waits for every add-on.
+ */
+export function usePartialStreams(type: ContentType, videoId: string | undefined) {
+  const select = useStreamsSelect(videoId);
+  return useQuery({
+    queryKey: keys.streamsPartial(type, videoId ?? ""),
+    // Filled by streamsQuery, never fetched.
+    queryFn: () => null as StreamsResult | null,
+    enabled: false,
+    select: (d) => (d && select ? select(d) : d ?? undefined),
+  }).data ?? undefined;
+}
+
+/** What an anime's sources go through before they're shown (Settings → Anime); undefined for other titles. */
+function useStreamsSelect(videoId: string | undefined) {
   const anime = useIsAnime(videoId);
   const { animeNo4k } = usePrefs();
   const no4k = anime && animeNo4k;
@@ -53,11 +79,7 @@ export function useStreams(type: ContentType, videoId: string | undefined) {
     },
     [no4k],
   );
-  return useQuery({
-    ...streamsQuery(type, videoId ?? ""),
-    enabled: !!videoId,
-    select: anime ? select : undefined,
-  });
+  return anime ? select : undefined;
 }
 
 /**
@@ -66,7 +88,17 @@ export function useStreams(type: ContentType, videoId: string | undefined) {
  */
 export const streamsQuery = (type: ContentType, videoId: string) => ({
   queryKey: keys.streams(type, videoId),
-  queryFn: () => api.streams(type, videoId),
+  queryFn: async () => {
+    const partial = keys.streamsPartial(type, videoId);
+    // A message that comes in after the whole answer is already out of date.
+    let done = false;
+    try {
+      return await api.streams(type, videoId, (so) => void (!done && queryClient.setQueryData(partial, so)));
+    } finally {
+      done = true;
+      queryClient.removeQueries({ queryKey: partial });
+    }
+  },
   staleTime: ({ state }: { state: { data?: StreamsResult } }) => (state.data && state.data.streams.length + (state.data.hidden ?? 0) > 0 ? 10 * 60_000 : 0),
 });
 
@@ -164,6 +196,9 @@ export const prefetchMeta = (type: ContentType, id: string) =>
   });
 
 export const prefetchStreams = (type: ContentType, videoId: string) => queryClient.prefetchQuery(streamsQuery(type, videoId));
+/** A video's sources, if they've been fetched already (prefetchStreams); never asks the add-ons. */
+export const cachedStreams = (type: ContentType, videoId: string) =>
+  queryClient.getQueryData<StreamsResult>(streamsQuery(type, videoId).queryKey)?.streams;
 
 const preloaded = new Set<string>();
 export function preloadImage(src?: string) {

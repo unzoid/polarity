@@ -92,6 +92,18 @@ const commands: Record<string, (a: Args) => unknown> = {
       : { rottenTomatoes: 91, audience: 87, metacritic: 78, letterboxd: 3.9, trakt: 84, tmdb: 81, imdb: 8.2 },
   trailer: () => null,
   addons_list: () => addons,
+  // No TVs on the network and no other players installed here.
+  cast_devices: () => [],
+  external_players: () => [],
+  addon_set_enabled: (a) => void (addons = addons.map((x) => (x.manifest.id === a.id ? { ...x, disabled: !a.enabled } : x))),
+  addon_move: (a) => {
+    const at = addons.findIndex((x) => x.manifest.id === a.id);
+    const to = at + (Number(a.by) < 0 ? -1 : 1);
+    if (at < 0 || to < 0 || to >= addons.length) return;
+    const next = [...addons];
+    [next[at], next[to]] = [next[to], next[at]];
+    addons = next;
+  },
   // Install links (#163): any example.com add-on answers; an address with "broken" in it doesn't. Installs are counted.
   addon_preview: (a) =>
     String(a.url).includes("broken")
