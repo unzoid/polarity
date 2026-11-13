@@ -472,8 +472,49 @@ test("the torrent notice fits a phone: the upload limit and both buttons inside 
   expect(await fitsWidth(app)).toBe(true);
 });
 
+/** Series and Movies at phone width: Genre and Catalog are two dropdowns sharing the row, no row of buttons (#457). */
+async function browseDropdownsFillRow(app: Page, pick = true) {
+  const trigger = (scope: ReturnType<Page["locator"]>, name: string) => scope.locator(`.select-trigger[aria-label="${name}"]`);
+  for (const tab of ["Series", "Movies"]) {
+    await app.locator(".navbar").getByRole("button", { name: tab, exact: true }).tap();
+    const controls = app.locator('.page[data-active="true"] .discover-controls');
+    const genre = trigger(controls, "Genre");
+    const catalog = trigger(controls, "Catalog");
+    await expect(catalog).toHaveText(/Trending/);
+    await expect(controls.getByRole("radiogroup", { name: "Catalog" })).toHaveCount(0);
+    const [row, g, c] = await Promise.all([controls.boundingBox(), genre.boundingBox(), catalog.boundingBox()]);
+    // Side by side, half the row each, from the row's left edge to its right one.
+    expect(Math.abs(g!.y - c!.y), tab).toBeLessThanOrEqual(1);
+    expect(Math.abs(g!.x - row!.x), tab).toBeLessThanOrEqual(1);
+    expect(Math.abs(c!.x + c!.width - (row!.x + row!.width)), tab).toBeLessThanOrEqual(1);
+    expect(Math.abs(g!.width - c!.width), tab).toBeLessThanOrEqual(1);
+    expect(c!.x, tab).toBeGreaterThan(g!.x + g!.width);
+    // The fake's add-on lists add List: on its own row above, the row's full width.
+    const l = await trigger(controls, "List").boundingBox();
+    expect(l!.y + l!.height, tab).toBeLessThan(g!.y);
+    expect(Math.abs(l!.width - row!.width), tab).toBeLessThanOrEqual(1);
+    expect(await fitsWidth(app), tab).toBe(true);
+  }
+  // The dropdown picks the list as the buttons did (on an iPhone it opens the system's menu, not in a browser).
+  if (!pick) return;
+  const active = app.locator('.page[data-active="true"]');
+  await trigger(active, "Catalog").tap();
+  await expect(app.getByRole("option")).toHaveText(["Trending", "Popular", "Top Rated", "New", "Hidden Gems", "Classics"]);
+  await app.getByRole("option", { name: "Top Rated" }).tap();
+  await expect(trigger(active, "Catalog")).toHaveText(/Top Rated/);
+  await expect(active.locator(".card").first()).toBeVisible();
+}
+
+test("Series and Movies: Genre and Catalog share the row as two dropdowns (#457)", async ({ app }) => {
+  await browseDropdownsFillRow(app);
+});
+
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("Series and Movies: Genre and Catalog share the row as two dropdowns (#457)", async ({ app }) => {
+    await browseDropdownsFillRow(app, false);
+  });
 
   test("a torrent source can't play here: no notice, the player says so, nothing is opened (#458)", async ({ app }) => {
     await playTorrentFilm(app);
