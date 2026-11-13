@@ -111,6 +111,14 @@ opening fullscreen in TV mode; the D-pad moving focus; Back closing the top laye
 the app; leaving TV mode from the TV menu lasting until the app is closed, and TV mode back at the next start. On
 a phone, TV mode must stay off unless chosen. Fire TV: `UiModeManager` reports TV there too (untested).
 
+32-bit TV dongles (#442): the Chromecast with Google TV is said to run a 32-bit (`armeabi-v7a`) Android, so the
+app and libmpv are built for armv7 too (CI's `android` job on `master`; `docs/testing.md`, "Android on a
+device"). Checked here: the app compiles and passes clippy for `armv7-linux-androideabi`; the code was read for
+64-bit assumptions (one size check compared a `u64` as `usize`, fixed in `mal.rs`). The core crates' tests
+couldn't run as 32-bit here (this machine refuses 32-bit system calls), and libmpv for armv7 was never built
+here: CI builds it. On the device: `adb shell getprop ro.product.cpu.abilist` first, then the checks above and
+the player's below, and note the device and Android version here.
+
 ## Android player: libmpv (T-044)
 
 Never built or run here (no Android SDK or NDK). Type-checked with clippy for `aarch64-linux-android`; the
@@ -126,7 +134,7 @@ the page's controls draw over the picture and the picture fills the screen behin
 Home and back to the app: the picture comes back (the surface is given back to mpv) and playback goes on;
 an HTTPS stream plays (mbedTLS reads `cacert.pem`, made from `/system/etc/security/cacerts`); subtitles use
 Roboto; hardware decoding (Settings → Advanced) on and off both play; autocrop (MediaCodec copied back) works;
-a TV box with 2 GB of memory plays a 4K file (the cache is 64 MiB there). Not built: Picture in picture,
+a TV box with 2 GB of memory plays a 4K file (the cache is 64 MiB there, and stays small whatever Settings → Advanced → Buffer says: 32, 64 or 128 MiB; before #442 Normal and Large asked for 192 and 768 MiB once the setting was changed). Not built: Picture in picture,
 background audio, the media session (lock screen controls).
 The same job builds an unsigned release APK and app bundle (`android-release-unsigned`), minified by R8:
 `proguard-rules.pro` keeps `MpvSurface`'s native methods and `polarDevice`; check that a release build, signed with

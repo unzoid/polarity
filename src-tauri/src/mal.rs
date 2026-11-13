@@ -126,7 +126,7 @@ impl Mal {
 
 async fn answer(res: reqwest::Response) -> Result<Answer, String> {
     let status = res.status().as_u16();
-    if res.content_length().is_some_and(|n| n as usize > MAX_BODY) {
+    if res.content_length().is_some_and(|n| n > MAX_BODY as u64) {
         return Err("MyAnimeList's answer is too large".to_owned());
     }
     let bytes = res.bytes().await.map_err(|e| e.without_url().to_string())?;
