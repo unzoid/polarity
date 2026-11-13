@@ -4,6 +4,7 @@ import { WATCH_LOG } from "../../lib/playback/watchLog";
 import { listenProbe, nextProbeId, probeStep } from "./useStartLog";
 import { errorCode, errorMessage, warnFailed } from "../../lib/errors";
 import { playingTrack } from "./trackChoice";
+import { getPrefs } from "../../lib/settings/prefs";
 
 /** The slice of HTMLVideoElement the player, scrubber and track UI rely on. */
 export interface MediaLike extends EventTarget {
@@ -180,7 +181,9 @@ export class MpvMedia extends EventTarget implements MediaLike {
       await this.listening; // never load before we can hear mpv's answers
       const unlisten = await listenProbe(probeId, (e) => this.step(...probeStep(e)));
       try {
-        await call("mpv_load", { url, start, probeId, headers, link, owner: this.owner });
+        // Settings → Advanced → "Use my own mpv settings": mpv restarts with (or without) the user's folder when it changes.
+        const userConfig = getPrefs().mpvUserConfig;
+        await call("mpv_load", { url, start, probeId, headers, link, owner: this.owner, userConfig });
       } finally {
         unlisten();
       }

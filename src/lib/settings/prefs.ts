@@ -88,6 +88,8 @@ export interface Prefs {
   autocropEveryFrame: boolean;
   /** mpv read-ahead. */
   buffer: "small" | "normal" | "large";
+  /** Desktop: mpv reads mpv.conf, input.conf, scripts and shaders from Polarity's own mpv folder (src-tauri player/mod.rs). */
+  mpvUserConfig: boolean;
   /** Torrent sources: most GB their cache on this device may hold; 0 = no limit. */
   torrentCacheGb: number;
   /** Torrent sources: download cap in Mbit/s; 0 = none. (Before #137 it capped upload too.) */
@@ -204,6 +206,7 @@ const DEFAULTS: Prefs = {
   autocropLookahead: true,
   autocropEveryFrame: false,
   buffer: "normal",
+  mpvUserConfig: false,
   torrentCacheGb: 20,
   torrentSpeedMbps: 0,
   torrentUploadMbps: TORRENT_UPLOAD_MBPS,

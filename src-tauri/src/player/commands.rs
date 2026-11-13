@@ -85,6 +85,7 @@ pub fn player_keep_awake(on: bool) {
 /// `polar_player::headers` passes reach the link check and mpv. `link`: a link the user chose
 /// (Watch a Link), checked without the placeholder rule for add-on streams (#474).
 /// `owner`: the page's player that asks, so a load it no longer wants is dropped (`polar_player::turns`).
+/// `user_config`: mpv reads the user's own mpv folder (desktop; restarted with or without it when that changes).
 #[tauri::command]
 // The webview's arguments, plus the three Tauri hands in.
 #[allow(clippy::too_many_arguments)]
@@ -98,6 +99,7 @@ pub async fn mpv_load(
     headers: Option<std::collections::HashMap<String, String>>,
     link: Option<bool>,
     owner: Option<u64>,
+    user_config: Option<bool>,
 ) -> Result<(), CmdError> {
     state.mpv.turns.ask(owner);
     // Web streams, a finished download, or a file the user opened - never any other path on disk.
@@ -121,7 +123,7 @@ pub async fn mpv_load(
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));
     }
     state.mpv.touch();
-    state.mpv.ensure(&app, &window).await.map_err(CmdError::Player)?;
+    state.mpv.ensure(&app, &window, user_config.unwrap_or(false)).await.map_err(CmdError::Player)?;
     let mut options = String::new();
     if let Some(s) = start.filter(|s| *s > 1.0) {
         options = format!("start={s:.2}");
@@ -312,6 +314,13 @@ pub async fn mpv_screenshot(app: AppHandle, state: State<'_, AppState>, title: S
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     *mpv.last_shot.locked() = Some(path);
     Ok(name)
+}
+
+/// Open the user's own mpv folder (made, with a starter mpv.conf, if it isn't there yet).
+#[tauri::command]
+pub fn mpv_config_folder(app: AppHandle) -> Result<(), CmdError> {
+    let dir = super::ensure_user_config_dir(&app).ok_or_else(|| CmdError::Save("couldn't make the mpv folder".into()))?;
+    tauri_plugin_opener::open_path(dir, None::<&str>).map_err(|e| CmdError::Other(e.to_string()))
 }
 
 /// Show the last screenshot in the system's file manager.

@@ -160,6 +160,8 @@ export const api = {
   screenshot: (title: string, at: number) => call<string>("mpv_screenshot", { title, at }),
   /** Show the last screenshot in the file manager. */
   revealScreenshot: () => call<void>("mpv_screenshot_reveal"),
+  /** Open the user's own mpv folder (Settings → Advanced → "Use my own mpv settings"). */
+  openMpvFolder: () => call<void>("mpv_config_folder"),
   /** Whether autocrop's lookahead reads ahead in the video playing now, or why it can't; null with nothing to say. */
   mpvLookahead: () => call<LookaheadState | null>("mpv_lookahead").catch(() => null),
   /** Whether this build can show what plays on Discord (desktop, built with a Discord application). */

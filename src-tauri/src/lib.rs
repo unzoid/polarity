@@ -370,6 +370,7 @@ pub fn run() {
             player::mpv_snapshot,
             player::mpv_screenshot,
             player::mpv_screenshot_reveal,
+            player::mpv_config_folder,
             media_session::media_session,
             player::player_system_bars,
             player::player_keep_awake,

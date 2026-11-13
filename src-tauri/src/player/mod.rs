@@ -166,6 +166,8 @@ impl Engine {
 }
 
 struct Conn {
+    /// Started with the user's own mpv folder ([`user_config_dir`]).
+    user_config: bool,
     engine: Engine,
     writer: WriteHalf<IpcStream>,
     pending: Pending,
@@ -346,12 +348,43 @@ fn gpu_args() -> Vec<String> {
     }
 }
 
+/// Settings → Advanced → "Use my own mpv settings" (desktop): the folder mpv then reads its config,
+/// input.conf, scripts and shaders from, as mpv's own `~~/`. The page can switch it on but never writes
+/// in it: what runs there is only what the user put there.
+pub(super) fn user_config_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_config_dir().ok().map(|d| d.join("mpv"))
+}
+
+/// What a new folder starts with, so the user knows what it is when they open it.
+const USER_CONFIG_README: &str = "\
+# Polarity reads this file, and input.conf, scripts/ and shaders/ in this folder, when
+# Settings → Advanced → \"Use my own mpv settings\" is on. Changes apply from the next video.
+#
+# Polarity's own options come after this file and win where they meet (the window, the
+# controls, the cache). Shaders: put them in shaders/ and name them here, for example
+#   glsl-shaders=~~/shaders/your-shader.glsl
+";
+
+/// The folder, made (with a starter mpv.conf) if it isn't there yet.
+pub(super) fn ensure_user_config_dir(app: &AppHandle) -> Option<PathBuf> {
+    let dir = user_config_dir(app)?;
+    std::fs::create_dir_all(dir.join("shaders")).ok()?;
+    let conf = dir.join("mpv.conf");
+    if !conf.exists() {
+        let _ = std::fs::write(&conf, USER_CONFIG_README);
+    }
+    Some(dir)
+}
+
 impl Mpv {
-    /// Start mpv embedded in `window` if it isn't running yet.
-    async fn ensure(&self, app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    /// Start mpv embedded in `window` if it isn't running yet, or again if it runs with the user's own
+    /// mpv folder and `user_config` asks for none, or the other way round.
+    async fn ensure(&self, app: &AppHandle, window: &WebviewWindow, user_config: bool) -> Result<(), String> {
+        // Phones and TV boxes: there's no folder there a user could put things in.
+        let user_config = user_config && cfg!(not(any(target_os = "android", target_os = "ios")));
         let mut guard = self.conn.lock().await;
         if let Some(conn) = guard.as_mut() {
-            if !conn.closed.load(Ordering::Relaxed) && conn.engine.alive() {
+            if !conn.closed.load(Ordering::Relaxed) && conn.engine.alive() && conn.user_config == user_config {
                 return Ok(());
             }
         }
@@ -368,12 +401,16 @@ impl Mpv {
         let shader_cache = app.path().app_cache_dir().unwrap_or_else(|_| shots.clone()).join("mpv-shaders");
         let _ = std::fs::create_dir_all(&shader_cache);
 
+        // Ignore a user's own mpv.conf and scripts from their mpv install: heavy shaders or interpolation
+        // from a desktop setup don't belong in the embed. Only a folder of Polarity's own, when asked for.
+        let config = match user_config.then(|| ensure_user_config_dir(app)).flatten() {
+            Some(dir) => vec!["--config=yes".to_string(), format!("--config-dir={}", dir.display())],
+            None => vec!["--config=no".to_string()],
+        };
         let mut base: Vec<String> = vec![
             format!("--input-ipc-server={pipe}"),
             "--profile=libmpv".into(), // no OSC/OSD/default key bindings — our UI does that
-            // Ignore a user's own mpv.conf/scripts: heavy shaders or
-            // interpolation from a desktop setup don't belong in the embed.
-            "--config=no".into(),
+            config[0].clone(),
             "--idle=yes".into(),
             "--keep-open=yes".into(),
             "--force-window=yes".into(),
@@ -417,6 +454,8 @@ impl Mpv {
             "--screenshot-tag-colorspace=no".into(),
             format!("--screenshot-directory={}", shots.display()),
         ];
+        // The user's own folder, when it's in use (config[0] is --config itself).
+        base.extend(config.iter().skip(1).cloned());
         // Fonts the app ships for subtitles (OpenDyslexic): mpv otherwise
         // only finds the ones installed on the system.
         if let Some(fonts) = bundled_fonts(app) {
@@ -444,7 +483,7 @@ impl Mpv {
         let quiet = Arc::new(AtomicBool::new(false));
         let closed = Arc::new(AtomicBool::new(false));
         tokio::spawn(read_loop(app.clone(), BufReader::new(reader), pending.clone(), quiet.clone(), closed.clone()));
-        *guard = Some(Conn { engine, writer, pending, quiet, closed });
+        *guard = Some(Conn { user_config: config[0] == "--config=yes", engine, writer, pending, quiet, closed });
         // A fresh mpv starts from the launch arguments above.
         *self.tuned.locked() = Tune::default();
         drop(guard);

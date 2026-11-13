@@ -1286,6 +1286,17 @@ export const SETTINGS: SettingDef[] = [
       { value: "large", label: "Large (5 min)" },
     ]),
   },
+  {
+    id: "mpvUserConfig",
+    page: "advanced",
+    title: "Use my own mpv settings",
+    caption:
+      "mpv also reads mpv.conf, input.conf, scripts and shaders from Polarity's mpv folder, for options and shaders of your own, such as upscalers. Applies from the next video. Turn it off if videos stop playing.",
+    keywords: "mpv conf config custom options shaders glsl anime4k upscale scripts lua input advanced",
+    bind: p("mpvUserConfig"),
+    control: toggle,
+  },
+  { id: "mpvConfigFolder", page: "advanced", title: "mpv folder", keywords: "mpv conf config folder open shaders scripts" },
   { id: "resetSettings", page: "advanced", title: "Reset all settings", keywords: "defaults restore" },
 
   // About & Updates
