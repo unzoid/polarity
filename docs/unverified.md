@@ -1371,7 +1371,57 @@ kept aside, one that can't be read never written over); `cargo clippy` for Linux
 for `aarch64-apple-tvos` and `aarch64-apple-tvos-sim`; `scripts/apple-tv-core.sh` writing `PolarCore.swift`.
 Not checked here, for want of a Mac: the static libraries built with Xcode's toolchain, the XCFramework, and the
 generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.sh` ends with "Wrote
-.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both. No Apple TV app uses them yet.
+.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both.
+
+The app (`apple-tv/`) was written without a Swift compiler: CI's `apple-tv` job (macOS runner) is the first to build
+it, for the simulator, unsigned. Never run. To check, in the tvOS simulator or on an Apple TV (Xcode, your team):
+1. Without an account server in the build (`POLAR_SUPABASE_URL` empty, as in CI): Home opens at once with shelves
+   (Trending Series, New Movies, ...) from Cinemeta. Swiping moves between cards along a shelf and between shelves;
+   the focused card lifts. Account at the top says the build can't sign in.
+2. Click a show: its page has the backdrop, facts, the description, season buttons and the episodes. Menu goes
+   back to Home where you were.
+3. Click an episode: "No sources" (no add-ons) names why. A movie's Play does the same.
+
+Sign-in (part 3) needs a build with the account server: set `POLAR_SUPABASE_URL` and `POLAR_SUPABASE_KEY` (the
+values of `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`) in the target's build settings, with the
+`tv-sign-in` function deployed there. Only `account_settings` (reading the settings document) is tested here
+(`cargo test -p polar-ffi`); the Swift of signing in has never run. To check:
+4. First start: "Sign in to Polarity". Sign In with a Code shows an eight-letter code as ABCD-EFGH and until when it
+   works. On a phone or computer, Settings → Account → Sign in a TV, enter the code: it asks "Sign in on Apple TV?".
+   Approve: within a few seconds the TV goes on (one profile: straight to Home; more: Who's watching).
+   Decline instead: the TV says it was declined. Wait past the time shown: it says the code expired.
+5. Home's rows now follow the profile's TMDB key and its "Titles and descriptions" language, and its add-ons' own
+   catalogs come after the index's rows; an episode lists sources from the add-ons. Account at the top names the
+   profile.
+6. A profile whose keys are sealed with a passphrase: Home says the TV can't open them yet and shows the
+   standard rows. A profile with no add-ons says so.
+7. Quit and start the app again: no sign-in screen, the same profile. Account → Switch Profile shows Who's
+   watching; Sign Out of This Apple TV goes back to the sign-in screen and leaves the phone signed in.
+8. Not Now on the sign-in screen: Home with the standard rows, and no sign-in screen at the next start; Account →
+   Sign In brings it back.
+
+The player (part 4): libmpv and FFmpeg for tvOS from `scripts/ios-mpv.sh <work dir> tv-simulator` (or
+`tv-device`), which copies them into `apple-tv/Vendor`; the app links `Libmpv.framework` and draws with OpenGL ES
+(`MpvPlayer.swift`, `MpvVideoView.swift`, `PlayerScreen.swift`). Checked here: the script's shell syntax, the
+core's `playerOptions()` (`cargo test -p polar-ffi`). Never built here (no Xcode): the tvOS libraries, the Swift,
+the app with them; CI's `apple-tv` job is the first to build them, for the simulator. Never run. To check, with a
+profile whose add-ons include one that serves a test video (for an open film: `bun scripts/open-films-addon.ts
+--host 0.0.0.0`, added to the profile on another device as `http://<this Mac's address>:7878/manifest.json`):
+9. Open the film, Play, pick its source: the picture fills the screen within a few seconds, with sound. The bar at
+   the foot shows the title, how far in it is and the time left, and fades after five seconds.
+10. Play/Pause on the remote, or a click, pauses and plays (the bar stays while paused); left and right move ten
+    seconds back and forward; up shows the bar.
+11. Down opens Audio and Subtitles (only when the file has tracks): choosing one switches to it at once; Subtitles →
+    Off turns them off. Menu closes the list and leaves the video playing.
+12. Menu during playback goes back to the sources. Home's Continue Watching has the film at the place left; opening
+    it from there starts at that place. Play to the end: the player closes by itself, and the film leaves Continue
+    Watching.
+13. Press the TV button during playback and come back: the video is paused at the same place, the picture is
+    still there (not black), and Play carries on.
+14. A source that doesn't play (stop the add-on's server, then pick its source): "This source didn't play" with
+    the reason; Menu goes back to the sources.
+15. Account → Licences: BUNDLED.txt and each library's licence text under "Player", PACKAGES.txt and each Swift
+    package's licence and notice under "Swift packages"; each opens and scrolls with the remote.
 
 ## Screens in headless Chromium (T-051)
 

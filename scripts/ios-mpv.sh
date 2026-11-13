@@ -1,29 +1,35 @@
 #!/usr/bin/env bash
-# Builds libmpv and FFmpeg for the iOS app as LGPL builds (mpv -Dgpl=false, FFmpeg without
-# --enable-gpl or --enable-version3; docs/plan-mobile.md §7), and packs the exact sources that
-# went into them. Runs on macOS with Xcode.
+# Builds libmpv and FFmpeg for the iOS app and the Apple TV app as LGPL builds (mpv -Dgpl=false,
+# FFmpeg without --enable-gpl or --enable-version3; docs/plan-mobile.md §7), and packs the exact
+# sources that went into them. Runs on macOS with Xcode.
 #
-#   scripts/ios-mpv.sh <work dir> [device] [simulator]      default: device
+#   scripts/ios-mpv.sh <work dir> [device] [simulator] [tv-device] [tv-simulator]   default: device
+#
+# device and simulator are iOS's; tv-device and tv-simulator tvOS's, for apple-tv/ (#504).
 #
 # Needs: Xcode (xcrun, xcodebuild), meson, ninja, pkg-config, git, python3.
 #
 # Each LGPL library (mpv, FFmpeg's libraries, libplacebo, FriBidi) is a dynamic library of its
 # own, wrapped as a framework the app embeds (Libmpv.framework, Libavcodec.framework, ...), so
-# anyone can replace it with one built from the sources archive; the app loads libmpv at run
-# time (player/apple.rs) and libmpv loads the rest. The others (dav1d, FreeType, HarfBuzz,
+# anyone can replace it with one built from the sources archive; the iOS app loads libmpv at run
+# time (player/apple.rs), the Apple TV app links it (its Libmpv.framework carries mpv's headers and
+# a module map, so Swift imports it), and libmpv loads the rest. The others (dav1d, FreeType, HarfBuzz,
 # libass; BSD, FTL, MIT, ISC) are linked statically into the library that uses them.
 # Writes into <work dir>/out:
-#   frameworks/<Name>.xcframework       each framework, for each platform built
+#   frameworks/<Name>.xcframework       each framework, for each iOS platform built
+#   tv-frameworks/<Name>.xcframework    the same for each tvOS platform built
 #   licenses/                           licence texts and BUNDLED.txt
 #   polarity-ios-mpv-sources.tar.xz     every source, this script, SOURCES.txt (versions, how
 #                                       each is configured)
 # and copies the frameworks and licences into src-tauri/vendor/ios, where tauri.ios.conf.json
-# takes them from (its list must name every framework in FRAMEWORKS below). The sources archive goes with every release that carries an iOS build.
+# takes them from (its list must name every framework in FRAMEWORKS below), and the tvOS ones into
+# apple-tv/Vendor, where apple-tv/project.yml takes them from (the same list). The sources archive
+# goes with every release that carries an iOS or Apple TV build.
 #
 # Written for the bash 3.2 macOS ships, too.
 set -euo pipefail
 
-work=$(cd "$(dirname "${1:?usage: ios-mpv.sh <work dir> [device] [simulator]}")" && pwd)/$(basename "$1")
+work=$(cd "$(dirname "${1:?usage: ios-mpv.sh <work dir> [device] [simulator] [tv-device] [tv-simulator]}")" && pwd)/$(basename "$1")
 shift
 platforms=("$@")
 [ ${#platforms[@]} -gt 0 ] || platforms=(device)
@@ -32,8 +38,10 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 out="$work/out"
 src="$work/src"
 
-# The oldest iOS the app runs on (tauri.ios.conf.json, bundle.iOS.minimumSystemVersion).
+# The oldest iOS the app runs on (tauri.ios.conf.json, bundle.iOS.minimumSystemVersion), and the
+# oldest tvOS the Apple TV app runs on (apple-tv/project.yml, deploymentTarget).
 IOS_MIN=17.0
+TVOS_MIN=17.0
 
 # The frameworks this build makes, as tauri.ios.conf.json lists them; the build stops if it made
 # others.
@@ -83,9 +91,10 @@ MPV_OPTS="-Dlibmpv=true -Dcplayer=false -Dgpl=false -Dtests=false -Dmanpage-buil
 
 # What each library is, before anything is built (the archive holds sources only).
 {
-	echo "Sources of libmpv and FFmpeg in Polarity's iOS app"
+	echo "Sources of libmpv and FFmpeg in Polarity's iOS and Apple TV apps"
 	echo
-	echo "Built by Polarity's scripts/ios-mpv.sh (included) for iOS $IOS_MIN and later (${platforms[*]}),"
+	echo "Built by Polarity's scripts/ios-mpv.sh (included) for iOS $IOS_MIN and tvOS $TVOS_MIN and later"
+	echo "(this build: ${platforms[*]}),"
 	echo "mpv, FFmpeg's libraries, libplacebo and FriBidi as dynamic libraries (one framework each);"
 	echo "dav1d, FreeType, HarfBuzz and libass static, inside the libraries that use them."
 	echo "Both mpv and FFmpeg are built under the LGPL, version 2.1 or later."
@@ -106,7 +115,7 @@ MPV_OPTS="-Dlibmpv=true -Dcplayer=false -Dgpl=false -Dtests=false -Dmanpage-buil
 	echo "  ffmpeg: $FFMPEG_OPTS"
 	echo "  mpv: $MPV_OPTS"
 	echo
-	echo "To rebuild on a Mac with Xcode: scripts/ios-mpv.sh <work dir> device simulator (it clones the"
+	echo "To rebuild on a Mac with Xcode: scripts/ios-mpv.sh <work dir> device simulator tv-device tv-simulator (it clones the"
 	echo "same versions; or put the folders above under <work dir>/src first to build these copies)."
 } >"$work/SOURCES.txt"
 
@@ -114,7 +123,7 @@ tar -cf - --exclude=.git -C "$work" SOURCES.txt src -C "$root/scripts" ios-mpv.s
 	xz -T0 >"$work/sources.tar.xz"
 mv "$work/sources.tar.xz" "$out/polarity-ios-mpv-sources.tar.xz"
 
-# Libraries and frameworks every iOS device has; libmpv may link nothing else.
+# Libraries and frameworks every iOS and tvOS device has; libmpv may link nothing else.
 system_lib() {
 	case "$1" in
 		/usr/lib/* | /System/Library/*) return 0 ;;
@@ -124,9 +133,11 @@ system_lib() {
 
 for platform in "${platforms[@]}"; do
 	case $platform in
-		device) sdk=iphoneos target="arm64-apple-ios$IOS_MIN" subsystem=ios plist_platform=iPhoneOS ;;
-		simulator) sdk=iphonesimulator target="arm64-apple-ios$IOS_MIN-simulator" subsystem=ios-simulator plist_platform=iPhoneSimulator ;;
-		*) echo "unknown platform $platform (device, simulator)" >&2; exit 1 ;;
+		device) sdk=iphoneos target="arm64-apple-ios$IOS_MIN" subsystem=ios plist_platform=iPhoneOS min=$IOS_MIN ;;
+		simulator) sdk=iphonesimulator target="arm64-apple-ios$IOS_MIN-simulator" subsystem=ios-simulator plist_platform=iPhoneSimulator min=$IOS_MIN ;;
+		tv-device) sdk=appletvos target="arm64-apple-tvos$TVOS_MIN" subsystem=tvos plist_platform=AppleTVOS min=$TVOS_MIN ;;
+		tv-simulator) sdk=appletvsimulator target="arm64-apple-tvos$TVOS_MIN-simulator" subsystem=tvos-simulator plist_platform=AppleTVSimulator min=$TVOS_MIN ;;
+		*) echo "unknown platform $platform (device, simulator, tv-device, tv-simulator)" >&2; exit 1 ;;
 	esac
 	sysroot=$(xcrun --sdk "$sdk" --show-sdk-path)
 	cc=$(xcrun --sdk "$sdk" --find clang)
@@ -243,13 +254,13 @@ for platform in "${platforms[@]}"; do
 				<key>CFBundleShortVersionString</key><string>$version</string>
 				<key>CFBundleVersion</key><string>$version</string>
 				<key>CFBundleSupportedPlatforms</key><array><string>$plist_platform</string></array>
-				<key>MinimumOSVersion</key><string>$IOS_MIN</string>
+				<key>MinimumOSVersion</key><string>$min</string>
 			</dict>
 			</plist>
 		EOF
 	done
 	if [ "$(echo $made | tr ' ' '\n' | sort | tr '\n' ' ')" != "$(echo $FRAMEWORKS | tr ' ' '\n' | sort | tr '\n' ' ')" ]; then
-		echo "made the frameworks$made, not the expected $FRAMEWORKS (update FRAMEWORKS and tauri.ios.conf.json)" >&2
+		echo "made the frameworks$made, not the expected $FRAMEWORKS (update FRAMEWORKS, tauri.ios.conf.json and apple-tv/project.yml)" >&2
 		exit 1
 	fi
 	missing=0
@@ -272,18 +283,52 @@ for platform in "${platforms[@]}"; do
 		done
 	done
 	[ $missing -eq 0 ] || exit 1
+
+	# The Apple TV app links libmpv from Swift: its framework carries mpv's headers and a module map
+	# (`import Libmpv`). The iOS app loads it at run time and needs neither.
+	case $platform in
+		tv-*)
+			fw="$out/$platform/Libmpv.framework"
+			mkdir -p "$fw/Headers" "$fw/Modules"
+			cp "$prefix"/include/mpv/*.h "$fw/Headers/"
+			cat >"$fw/Modules/module.modulemap" <<-EOF
+				framework module Libmpv {
+				    header "client.h"
+				    header "render.h"
+				    header "render_gl.h"
+				    export *
+				}
+			EOF
+			;;
+	esac
 done
 
 
-rm -rf "$out/frameworks"
-mkdir -p "$out/frameworks"
-for name in $FRAMEWORKS; do
-	args=()
-	for platform in "${platforms[@]}"; do
-		args+=(-framework "$out/$platform/$name.framework")
+# One XCFramework per library for iOS (frameworks/) and one for tvOS (tv-frameworks/), each with the
+# platforms of its system that were built.
+ios_platforms=() tv_platforms=()
+for platform in "${platforms[@]}"; do
+	case $platform in
+		tv-*) tv_platforms+=("$platform") ;;
+		*) ios_platforms+=("$platform") ;;
+	esac
+done
+xcframeworks() { # folder platform...
+	local dir=$1 name platform args
+	shift
+	rm -rf "$out/$dir"
+	mkdir -p "$out/$dir"
+	for name in $FRAMEWORKS; do
+		args=()
+		for platform in "$@"; do
+			args+=(-framework "$out/$platform/$name.framework")
+		done
+		xcodebuild -create-xcframework "${args[@]}" -output "$out/$dir/$name.xcframework"
 	done
-	xcodebuild -create-xcframework "${args[@]}" -output "$out/frameworks/$name.xcframework"
-done
+}
+# bash 3.2 counts an empty array as unset under set -u: hence the length checks.
+[ ${#ios_platforms[@]} -eq 0 ] || xcframeworks frameworks "${ios_platforms[@]}"
+[ ${#tv_platforms[@]} -eq 0 ] || xcframeworks tv-frameworks "${tv_platforms[@]}"
 
 licenses="$out/licenses"
 rm -rf "$licenses"
@@ -301,7 +346,7 @@ cp "$src/harfbuzz/COPYING" "$licenses/HarfBuzz-COPYING.txt"
 cp "$src/fribidi/COPYING" "$licenses/FriBidi-COPYING.txt"
 {
 	echo "This app carries libmpv and FFmpeg (LGPL version 2.1 or later), with the libraries they use,"
-	echo "built for iOS from the sources in polarity-ios-mpv-sources.tar.xz, published with each release"
+	echo "built for iOS or tvOS from the sources in polarity-ios-mpv-sources.tar.xz, published with each release"
 	echo "of the app. Each LGPL library is a framework of its own in the app (Libmpv, Libavcodec,"
 	echo "Libavfilter, Libavformat, Libavutil, Libswresample, Libswscale, Libplacebo, Libfribidi), loaded"
 	echo "at run time, and can be replaced with one built from those sources (scripts/ios-mpv.sh in the"
@@ -310,8 +355,19 @@ cp "$src/fribidi/COPYING" "$licenses/FriBidi-COPYING.txt"
 	sed -n '/^Libraries/,/^$/p' "$work/SOURCES.txt"
 } >"$licenses/BUNDLED.txt"
 
-vendor="$root/src-tauri/vendor/ios"
-rm -rf "$vendor"
-mkdir -p "$vendor"
-cp -R "$out/frameworks" "$out/licenses" "$vendor/"
-echo "The frameworks for ${platforms[*]} are in $vendor/frameworks; sources: $out/polarity-ios-mpv-sources.tar.xz"
+if [ ${#ios_platforms[@]} -gt 0 ]; then
+	vendor="$root/src-tauri/vendor/ios"
+	rm -rf "$vendor"
+	mkdir -p "$vendor"
+	cp -R "$out/frameworks" "$out/licenses" "$vendor/"
+	echo "The frameworks for ${ios_platforms[*]} are in $vendor/frameworks"
+fi
+if [ ${#tv_platforms[@]} -gt 0 ]; then
+	vendor="$root/apple-tv/Vendor"
+	rm -rf "$vendor"
+	mkdir -p "$vendor"
+	cp -R "$out/tv-frameworks" "$vendor/frameworks"
+	cp -R "$out/licenses" "$vendor/"
+	echo "The frameworks for ${tv_platforms[*]} are in $vendor/frameworks"
+fi
+echo "Sources: $out/polarity-ios-mpv-sources.tar.xz"

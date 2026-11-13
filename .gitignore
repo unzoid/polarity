@@ -18,3 +18,9 @@ fuzz/artifacts/
 fuzz/coverage/
 # The Apple TV core and its Swift side, written by scripts/apple-tv-core.sh.
 apple-tv/Core/
+# libmpv for tvOS and its licences, written by scripts/ios-mpv.sh tv-simulator / tv-device.
+apple-tv/Vendor/
+# The Apple TV app: the generated Xcode project and Info.plist (apple-tv/project.yml).
+apple-tv/PolarityTV.xcodeproj/
+apple-tv/Generated/
+apple-tv/build/

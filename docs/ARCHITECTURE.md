@@ -65,7 +65,7 @@ machine (see `docs/unverified.md`).
 | Android (phone, tablet) | Tauri 2 mobile, Android System WebView (`mobile_entry_point` in `lib.rs`) | libmpv inside the app, drawing into a `SurfaceView` behind the web view (`player/android.rs`, built in CI by `scripts/android-mpv.sh`); `<video>` when the APK has no libmpv | app-private storage | the whole screen | touch; the back button and gesture as Back (`lib/platform/back.ts`, `lib/ui/systemBack.ts`: open layer, page, Home, then the app goes to the background); the web view ends at the on-screen keyboard (`MainActivity.kt`); keyboard and controllers through the WebView | Play Store / sideload; `canUpdate` false | project in `src-tauri/gen/android`, debug APK built in CI, started in an emulator nightly (`e2e/android/smoke.sh`; never run on a device yet); phone and tablet layouts built (§4) |
 | iOS, iPadOS | Tauri 2 mobile, WKWebView | libmpv inside the app, drawing behind the web view (`ios/mpv_view.m`, `player/apple.rs`; an LGPL build made in CI by `scripts/ios-mpv.sh`; VideoToolbox frames in 8-bit NV12, copied to memory before mpv draws them (`videotoolbox-copy`, #416), and hardware decoding asked for again after a trip to the background); `<video>` (AVFoundation) when the build has no libmpv | app sandbox; downloads in the app's own folder, kept out of backups | the whole screen; the sections (five at most, so no More tab; Search and the Calendar are top bar buttons) are iOS's own tab bar around the web view (`ios/tabs.m`, `lib/platform/nativeTabs.ts`, `components/NativeTabs.tsx`: Liquid Glass on iOS 26, the classic bar before, a sidebar-capable one on an iPad from iOS 18), hidden over the player, Settings and sheets; the player hides the status bar and lets the home indicator fade (`ios/system_bars.m`) | touch; a swipe in from the left edge as Back (iOS's edge recognizer in `ios/back.m`, `lib/platform/backSwipe.ts`: open layer, then page, the page following the finger, `lib/ui/pageDrag.ts`; nothing at a tab's own page); controllers through the Gamepad API | App Store; `canUpdate` false | Xcode project generated in CI (`tauri ios init`), unsigned IPA built there; never run on a device or the simulator; phone and tablet layouts built (§4) |
 | Android TV | the Android build with a leanback launcher entry and a 320x180 banner; touch screen not required | as Android | as Android | fullscreen, TV mode on at every start (`MainActivity.kt` tells the page through `polarDevice.isTv()`, `isTvDevice` in `lib/platform/device.ts`) | remote D-pad as arrow keys, Back (the system Back as Escape; Back with only the menu open on Home leaves), controllers | Play Store | built into the same APK (manifest, banner, TV mode at start); never run on a TV or the TV emulator |
-| Apple TV (tvOS) | no Tauri: tvOS has no web view, and Tauri 2 doesn't target it. A native SwiftUI app instead (below) | libmpv, as on iOS (planned) | the core's own file, `polar-tv.json` (`crates/ffi`) | the whole screen | Siri Remote focus, Menu as Back (planned) | App Store; `canUpdate` false | the core's Swift binding is built (`crates/ffi`, `scripts/apple-tv-core.sh`); the app is not in the tree yet |
+| Apple TV (tvOS) | no Tauri: tvOS has no web view, and Tauri 2 doesn't target it. A native SwiftUI app instead, `apple-tv/` (below) | libmpv, built for tvOS by `scripts/ios-mpv.sh` (LGPL, as on iOS) and linked by the app, drawing with OpenGL ES (`MpvPlayer.swift`, `MpvVideoView.swift`); Siri Remote play/pause, ten-second seeks, audio and subtitle choice (`PlayerScreen.swift`) | the core's own file, `polar-tv.json` (`crates/ffi`) | the whole screen | Siri Remote: focus moves between cards and shelves (`focusSection`), Menu goes back (one `NavigationStack`) | App Store; `canUpdate` false | built for the simulator in CI (unsigned); never run on a device or the simulator; sign-in by code (`Account.swift`) gives Home the profile's add-ons, TMDB key and language; no sync |
 
 ## 4. Layouts from the same components
 
@@ -127,9 +127,23 @@ Owner's decisions (2026-11-13), from the plan in #504:
   (`PolarCore.swift`), both generated, never committed.
 - **supabase-swift** (MIT) signs the TV in, with the code flow of "Sign in a TV" (#133), and reads the account's
   settings document for its add-ons and keys. Sign-in and sync stay out of the core, as on the other apps, where
-  they are TypeScript.
+  they are TypeScript; the core only reads the document (`account_settings`, tested with the core). The account
+  server comes from the build settings `POLAR_SUPABASE_URL` and `POLAR_SUPABASE_KEY` (Info.plist); without them the
+  app has no sign-in and Home shows the index's rows. Keys sealed with a passphrase stay sealed on the TV for now:
+  it says so. The session is kept in the keychain (supabase-swift's default), the chosen profile in `UserDefaults`.
 - **libmpv** plays, built for the tvOS SDK as for iOS: most add-on streams are MKV with HEVC, AC3/DTS and ASS
-  subtitles, which AVPlayer can't open.
+  subtitles, which AVPlayer can't open. `scripts/ios-mpv.sh <work dir> tv-simulator tv-device` builds it into
+  `apple-tv/Vendor` (ignored); unlike the iPhone app, which loads libmpv at run time, the TV app links it: its
+  `Libmpv.framework` carries mpv's headers and a module map, so Swift imports it, and each LGPL library stays a
+  framework of its own in the app. The options are the core's `playerOptions()` (the iPhone's, plus `vo=libmpv`),
+  a source's headers go in as a list (`headerFields`), and progress is saved every 10 seconds, on pause, when the
+  app leaves the screen and on closing. Account → Licences shows libmpv's licences (`Vendor/licenses`) and the
+  Swift packages' (`apple-tv/Notices`).
+- **The app**: `apple-tv/project.yml` (XcodeGen) and `apple-tv/Sources` (SwiftUI): Home (Continue Watching and
+  the core's rows as shelves), a title page (seasons and episodes for a show), the sources list, the player. To
+  build on a Mac: `scripts/apple-tv-core.sh` and `scripts/ios-mpv.sh <work dir> tv-simulator` (or `tv-device`), then
+  `xcodegen generate` in `apple-tv/` and open `PolarityTV.xcodeproj` (signing:
+  your team in Xcode). The bundle identifier is the iPhone app's, so one purchase covers both.
 - **First version**: sign-in, Home, a title page, sources and playback, progress kept on the TV. Sync, watch
   parties, anime grouping, downloads and settings beyond sign-out wait until that runs on a device.
 
