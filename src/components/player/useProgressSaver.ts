@@ -25,6 +25,7 @@ export function useProgressSaver({
   videoId,
   current,
   state,
+  keep = true,
 }: {
   media: RefObject<MediaLike | null>;
   meta?: Meta;
@@ -33,6 +34,8 @@ export function useProgressSaver({
   videoId: string;
   current?: Video;
   state: ReturnType<typeof useSource>["state"];
+  /** Off: nothing is saved (shuffled episodes leave progress and Continue Watching as they were). */
+  keep?: boolean;
 }) {
   const lastSave = useRef(0);
   /** The video already told to a linked AniList list (#83): once per video per opening. */
@@ -40,7 +43,7 @@ export function useProgressSaver({
   const local = isFileId(metaId);
   const save = useCallback(() => {
     const v = media.current;
-    if (!v || !v.duration || !Number.isFinite(v.duration) || !meta || state.status !== "ready") return;
+    if (!keep || !v || !v.duration || !Number.isFinite(v.duration) || !meta || state.status !== "ready") return;
     lastSave.current = Date.now();
     // A file on this device (#204): where it stopped stays on this device, never in the synced library.
     if (local) return void noteFile(state.url, v.currentTime, v.duration);
@@ -66,7 +69,7 @@ export function useProgressSaver({
       told.current = videoId;
       void noteWatched([videoId]);
     }
-  }, [media, meta, metaId, videoId, type, current, state, local]);
+  }, [media, meta, metaId, videoId, type, current, state, local, keep]);
 
   // Opening a file on this device puts it at the top of Recent files.
   const openedPath = local && state.status === "ready" ? state.url : undefined;

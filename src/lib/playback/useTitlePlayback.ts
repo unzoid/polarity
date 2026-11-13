@@ -18,6 +18,6 @@ export function useTitlePlayback(onPick: (req: PlayRequest) => void, beforePlay?
     const local = stream ? undefined : downloadedStream(downloads, req.videoId);
     if (!local && needsPick(autoPick, req, stream)) return onPick(req);
     beforePlay?.();
-    navigate({ name: "player", type: req.type, metaId: req.metaId, videoId: req.videoId, stream: stream?.stream ?? local });
+    navigate({ name: "player", type: req.type, metaId: req.metaId, videoId: req.videoId, stream: stream?.stream ?? local, shuffle: req.shuffle || undefined });
   };
 }

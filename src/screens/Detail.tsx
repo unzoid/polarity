@@ -1,4 +1,5 @@
-import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
+import { LayoutList, LayoutRow, Shuffle, Volume, VolumeMuted } from "../components/icons";
+import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
 import { useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
@@ -279,6 +280,20 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
           <SeasonPicker value={current} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: seasonLabel(s) }))} />
         </div>
         <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} season={current} />
+        {/* The show in random order, from any season; progress stays where it is (lib/playback/shuffle.ts). */}
+        <IconButton
+          variant="glass"
+          label="Shuffle Episodes"
+          title="Shuffle: episodes in random order, your progress left as it is"
+          onClick={() => {
+            const v = randomEpisode(meta);
+            if (!v) return;
+            startShuffle(meta.id, v.id);
+            picker.play({ ...request(v), resumable: false, shuffle: true });
+          }}
+        >
+          <Shuffle size={20} />
+        </IconButton>
         <Segmented
           label="Episode layout"
           value={layout}

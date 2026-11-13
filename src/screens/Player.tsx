@@ -12,6 +12,7 @@ import {
   Pause,
   Play,
   Settings as Cog,
+  Shuffle,
   SkipForward,
   Sources,
   Speed,
@@ -160,6 +161,7 @@ import { usePlayerKeyboard } from "../components/player/usePlayerKeyboard";
 import { useProgressSaver } from "../components/player/useProgressSaver";
 import { useSleepTimer } from "../components/player/useSleepTimer";
 import { SLEEP_CHOICES, sleepLabel, type SleepChoice } from "../lib/playback/sleepTimer";
+import { noteShuffled, shuffledNext, startShuffle } from "../lib/playback/shuffle";
 import { useSimklScrobble } from "../components/player/useSimklScrobble";
 import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
@@ -184,12 +186,15 @@ export function Player({
   metaId,
   videoId,
   stream,
+  shuffle = false,
   leaving = false,
 }: {
   type: ContentType;
   metaId: string;
   videoId: string;
   stream?: Stream;
+  /** The show's episodes in random order; nothing is saved or scrobbled (lib/playback/shuffle.ts). */
+  shuffle?: boolean;
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
@@ -271,9 +276,14 @@ export function Player({
   // --- Progress -------------------------------------------------------------
   // Before AirPlay: leaving the player saves the receiver's position before the cast ends.
   const current = meta?.videos.find((v) => v.id === videoId);
-  const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state });
-  useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
-  useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
+  // An episode shuffle picked leaves progress, Continue Watching and the scrobbles as they were: a random
+  // episode isn't where you are in the show. The one shuffle was turned on in keeps its own.
+  const shuffled = shuffle && type === "series";
+  const [shuffling, setShuffling] = useState(shuffled);
+  useEffect(() => setShuffling(shuffled), [shuffled, videoId]);
+  const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state, keep: !shuffled });
+  useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local && !shuffled });
+  useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local && !shuffled });
   // A phone or tablet doesn't dim and lock while the video plays; paused, it does in its own time.
   const playingNow = started && !paused;
   useEffect(() => {
@@ -454,6 +464,11 @@ export function Player({
   const { animeSkipFiller } = usePrefs();
   // With "Skip filler" on, the next episode that isn't filler; `skipped` says how many were passed over.
   const { next, skipped } = useMemo(() => {
+    // Shuffling: one not played yet in this run, picked once per episode so Up Next doesn't change under you.
+    if (shuffling && meta) {
+      noteShuffled(metaId, videoId);
+      return { next: shuffledNext(meta, videoId), skipped: [] as Video[] };
+    }
     let n = meta && type === "series" ? nextVideo(meta, videoId) : undefined;
     const skipped: Video[] = [];
     while (n && animeSkipFiller && playContext.isFiller(n.id) && meta) {
@@ -461,7 +476,7 @@ export function Player({
       n = nextVideo(meta, n.id);
     }
     return { next: n, skipped };
-  }, [meta, type, videoId, animeSkipFiller]);
+  }, [meta, type, videoId, animeSkipFiller, shuffling, metaId]);
   // A YouTube video is called by its own title once its player says it.
   const [ytTitle, setYtTitle] = useState<string | null>(null);
   // YouTube's player is up with its own controls (#384): the loading screen leaves them clear, even before it plays.
@@ -942,12 +957,21 @@ export function Player({
   );
 
   const playVideo = useCallback(
-    (id: string, s?: Stream) => {
+    (id: string, s?: Stream, keepShuffle = true) => {
       save();
-      replace({ name: "player", type, metaId, videoId: id, stream: s });
+      // A shuffle carries on (Next, autoplay, another source) until the viewer picks an episode themselves.
+      replace({ name: "player", type, metaId, videoId: id, stream: s, shuffle: (shuffling && keepShuffle) || undefined });
     },
-    [save, replace, type, metaId],
+    [save, replace, type, metaId, shuffling],
   );
+  /** An episode the viewer picked from the list: in the show's order again. */
+  const pickEpisode = (id: string) => playVideo(id, undefined, false);
+  /** Shuffle on (a run starting from this episode) or off; this episode plays on either way. */
+  const toggleShuffle = useCallback(() => {
+    if (!shuffling) startShuffle(metaId, videoId);
+    setShuffling(!shuffling);
+    flashNotice(shuffling ? "Shuffle off" : "Shuffle on: episodes in random order, your progress left as it is", 3000);
+  }, [shuffling, metaId, videoId, flashNotice]);
 
   // --- Episodes & sources pickers -------------------------------------------
   const { data: progress } = useProgress(metaId);
@@ -957,6 +981,18 @@ export function Player({
   const shownSeason = pickSeason ?? current?.season ?? seasons[0];
   // Side by side or a list: the same choice as the title page's switch (#226).
   const [episodeLayout, setEpisodeLayout] = useEpisodeLayout();
+  // Beside the layout switch: the show's episodes in random order from here (lib/playback/shuffle.ts).
+  const shuffleButton = type === "series" && !local && (
+    <IconButton
+      variant="panel"
+      aria-pressed={shuffling}
+      label="Shuffle"
+      title={shuffling ? "Shuffle is on: episodes in random order. Your progress is left as it is" : "Shuffle episodes"}
+      onClick={toggleShuffle}
+    >
+      <Shuffle size={19} strokeWidth={2.1} />
+    </IconButton>
+  );
   const layoutSwitch = (
     <Segmented
       label="Episode layout"
@@ -2114,10 +2150,15 @@ export function Player({
                 {
                   title: "Episodes",
                   size: "wide",
-                  header: meta && layoutSwitch,
+                  header: meta && (
+                    <>
+                      {shuffleButton}
+                      {layoutSwitch}
+                    </>
+                  ),
                   value: videoId,
                   options: episodeItems,
-                  onSelect: (id) => id !== videoId && playVideo(id),
+                  onSelect: (id) => id !== videoId && pickEpisode(id),
                 },
               ]
             : // The season to browse in a dropdown, its episodes side by side under it.
@@ -2135,6 +2176,7 @@ export function Player({
                         onChange={(id) => setPickSeason(Number(id))} // browse; playback continues
                         options={seasons.map((n) => ({ value: String(n), label: seasonLabel(n) }))}
                       />
+                      {shuffleButton}
                       {layoutSwitch}
                     </div>
                   ),
@@ -2149,7 +2191,7 @@ export function Player({
                       still={(v) => stillFor(v.id) ?? v.thumbnail}
                       onPlay={(id) => {
                         setOptions(null);
-                        playVideo(id);
+                        pickEpisode(id);
                       }}
                     />
                   ),

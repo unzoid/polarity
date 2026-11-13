@@ -61,6 +61,8 @@ export const LayoutRow = icon(S24.ViewColumnsIcon, S20.ViewColumnsIcon, S16.View
 export const Lock = icon(S24.LockClosedIcon, S20.LockClosedIcon, S16.LockClosedIcon);
 export const Minus = icon(S24.MinusIcon, S20.MinusIcon, S16.MinusIcon);
 export const Moon = icon(S24.MoonIcon, S20.MoonIcon, S16.MoonIcon);
+// Shuffle: episodes in random order.
+export const Shuffle = icon(S24.ArrowsRightLeftIcon, S20.ArrowsRightLeftIcon, S16.ArrowsRightLeftIcon);
 export const Feedback = icon(S24.ChatBubbleLeftEllipsisIcon, S20.ChatBubbleLeftEllipsisIcon, S16.ChatBubbleLeftEllipsisIcon);
 export const More = icon(S24.EllipsisHorizontalIcon, S20.EllipsisHorizontalIcon, S16.EllipsisHorizontalIcon);
 export const Warning = icon(S24.ExclamationTriangleIcon, S20.ExclamationTriangleIcon, S16.ExclamationTriangleIcon);
