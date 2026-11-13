@@ -1,8 +1,9 @@
 //! One cast: a TLS connection to the TV, Google's Default Media Receiver launched on it, a link loaded,
 //! and the controls and status that go back and forth until it's stopped.
 //!
-//! The TV's certificate is its own, self-signed: there's no one to check it against, so any is taken
-//! (the handshake's signature is still checked against it). What's sent is only the link to play and its
+//! The TV's certificate is its own, self-signed: there's no one to check it against, so any is taken.
+//! Its handshake signature isn't checked either: against a certificate nobody vouches for that proves
+//! nothing, and many TVs send an X.509 v1 certificate the usual parser refuses. What's sent is only the link to play and its
 //! title; the TV fetches the link itself.
 
 use std::net::SocketAddr;
@@ -15,7 +16,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use tokio_rustls::rustls::crypto::{ring, verify_tls12_signature, verify_tls13_signature, CryptoProvider};
+use tokio_rustls::rustls::crypto::{ring, CryptoProvider};
 use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use tokio_rustls::rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
 use tokio_rustls::TlsConnector;
@@ -110,7 +111,7 @@ impl Drop for Session {
     }
 }
 
-/// Takes the TV's own certificate; checks only that the handshake was signed with it.
+/// Takes the TV's own certificate as it is (see the module docs).
 #[derive(Debug)]
 struct TvCertificate(Arc<CryptoProvider>);
 
@@ -127,19 +128,19 @@ impl ServerCertVerifier for TvCertificate {
     }
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
-        verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        Ok(HandshakeSignatureValid::assertion())
     }
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
-        verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        Ok(HandshakeSignatureValid::assertion())
     }
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.0.signature_verification_algorithms.supported_schemes()
