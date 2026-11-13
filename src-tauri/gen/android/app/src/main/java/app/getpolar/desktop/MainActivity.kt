@@ -23,6 +23,8 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.widget.FrameLayout
+import androidx.activity.BackEventCompat
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -79,6 +81,55 @@ class MainActivity : TauriActivity() {
     if (!pageListens) return
     val links = IncomingLinks.take() ?: return
     webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('polar-deep-link', { detail: $links }))", null)
+  }
+
+  // Android 14 and later's back gesture, step by step into the page's main frame as `polar-back` events
+  // (src/lib/platform/back.ts onPredictiveBack, #483), so the page moves with the finger. On only while the page
+  // hears it; it then takes every Back, a press too, ahead of Tauri's back button event (AppPlugin), which has
+  // no steps. Off, Back goes to Tauri's callback as before. Android 13 and older send only the press.
+  private val predictiveBack = object : OnBackPressedCallback(false) {
+    private var moving = false
+
+    override fun handleOnBackStarted(backEvent: BackEventCompat) {
+      moving = true
+      sendBack("begin", backEvent.progress)
+    }
+
+    override fun handleOnBackProgressed(backEvent: BackEventCompat) {
+      if (moving) sendBack("move", backEvent.progress)
+    }
+
+    override fun handleOnBackCancelled() {
+      if (moving) sendBack("cancel", 0f)
+      moving = false
+    }
+
+    override fun handleOnBackPressed() {
+      moving = false
+      sendBack("back", 1f)
+    }
+  }
+
+  private fun sendBack(phase: String, progress: Float) {
+    val step = JSONObject().put("phase", phase).put("progress", progress.toDouble())
+    webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('polar-back', { detail: $step }))", null)
+  }
+
+  fun setPredictiveBack(on: Boolean) {
+    predictiveBack.isEnabled = on
+    if (on) putPredictiveBackOnTop()
+  }
+
+  // The dispatcher asks the callback added last first. Tauri's is tied to the activity's lifecycle, so it is added
+  // again each time the activity starts: this one goes back above it once the activity is resumed.
+  private fun putPredictiveBackOnTop() {
+    predictiveBack.remove()
+    onBackPressedDispatcher.addCallback(predictiveBack)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    if (predictiveBack.isEnabled) putPredictiveBackOnTop()
   }
 
   // The torrent engine never runs unseen (#207, src-tauri/src/torrent.rs): after half a minute in the
@@ -185,7 +236,8 @@ open class PolarDevice(private val context: Context, private val tv: Boolean) {
 
 /**
  * The window and app changes, as messages from the app's own pages (src/lib/platform/back.ts, deepLinks.ts):
- * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, and notifications' `notes:…` (NotesWorker.kt).
+ * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, `predictive-back:on|off`, and
+ * notifications' `notes:…` (NotesWorker.kt).
  */
 class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessageListener {
   override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
@@ -200,6 +252,8 @@ class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessa
       "links-ready" -> linksReady(activity)
       "stremio-links:on" -> setStremioLinks(activity, true)
       "stremio-links:off" -> setStremioLinks(activity, false)
+      "predictive-back:on" -> activity.runOnUiThread { activity.setPredictiveBack(true) }
+      "predictive-back:off" -> activity.runOnUiThread { activity.setPredictiveBack(false) }
       else -> if (data.startsWith("notes:")) noteAction(activity, data.removePrefix("notes:"))
     }
   }

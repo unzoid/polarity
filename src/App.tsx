@@ -337,7 +337,7 @@ function DesktopApp() {
 
   // Android's back button and gesture: Escape's Back, then Home, then the app goes to the background.
   // iOS's swipe in from the left edge: Escape's Back only.
-  // iOS's swipe, on a pushed page with nothing over it, moves the page with the finger (#451).
+  // iOS's swipe (#451) and Android 14's back gesture (#483), on a pushed page with nothing over it, move the page with the finger.
   const main = useRef<HTMLElement>(null);
   const now = useRef({ pages, back });
   now.current = { pages, back };
