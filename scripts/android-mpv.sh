@@ -2,7 +2,9 @@
 # Builds libmpv and FFmpeg for the Android app the way mpv-android builds them (GPL build,
 # docs/plan-mobile.md §7), and packs the exact sources that went into them.
 #
-#   scripts/android-mpv.sh <work dir> <arch>...      arch: arm64, x86_64
+#   scripts/android-mpv.sh <work dir> <arch>...      arch: arm64, armv7, x86_64
+#
+# armv7 is for the 32-bit Android of TV dongles such as the Chromecast with Google TV (#442).
 #
 # Needs: ANDROID_HOME (an Android SDK the script may install into), a JDK, and
 # autoconf, pkg-config, libtool, ninja, meson, gperf, nasm, wget, sha256sum.
@@ -168,15 +170,17 @@ readelf=$(echo "$ndk"/toolchains/llvm/prebuilt/*/bin/llvm-readelf)
 system=" libc.so libm.so libdl.so liblog.so libandroid.so libEGL.so libGLESv2.so libGLESv3.so libOpenSLES.so libmediandk.so libz.so libvulkan.so libaaudio.so libnativewindow.so "
 
 for arch in "${archs[@]}"; do
-	./buildall.sh --arch "$arch" mpv
+	# mpv: mpv-android's name for it; triple: the NDK's folder of its C++ runtime.
 	case $arch in
-		arm64) abi=arm64-v8a triple=aarch64-linux-android ;;
-		x86_64) abi=x86_64 triple=x86_64-linux-android ;;
+		arm64) mpv=arm64 abi=arm64-v8a triple=aarch64-linux-android ;;
+		armv7) mpv=armv7l abi=armeabi-v7a triple=arm-linux-androideabi ;;
+		x86_64) mpv=x86_64 abi=x86_64 triple=x86_64-linux-android ;;
 		*) echo "unsupported architecture $arch" >&2; exit 1 ;;
 	esac
+	./buildall.sh --arch "$mpv" mpv
 	libs="$out/jniLibs/$abi"
 	mkdir -p "$libs"
-	for lib in prefix/"$arch"/lib/*.so; do
+	for lib in prefix/"$mpv"/lib/*.so; do
 		cp -L "$lib" "$libs/"
 	done
 	# The NDK's shared C++ runtime, when something links it. (Not `readelf | grep -q`: grep quits at

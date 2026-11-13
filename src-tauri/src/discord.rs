@@ -868,6 +868,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(desktop)]
     fn the_launch_command_opens_polaritys_discord_link() {
         assert_eq!(launch_link(), format!("{}://discord-join", crate::deep_link::SCHEME));
         let entry = register::desktop_entry("123", "/opt/My \"Apps\"/50%/polarity", "polarity://discord-join");

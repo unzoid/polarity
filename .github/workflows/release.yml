@@ -213,7 +213,7 @@ jobs:
         run: |
           scripts/ci-apt.sh autoconf pkgconf libtool ninja-build gperf nasm
           pipx install meson
-          scripts/android-mpv.sh "$RUNNER_TEMP/libmpv" arm64 x86_64
+          scripts/android-mpv.sh "$RUNNER_TEMP/libmpv" arm64 armv7 x86_64
       - name: Put libmpv in the app
         run: cp -R "$RUNNER_TEMP/libmpv/out/jniLibs" "$RUNNER_TEMP/libmpv/out/assets" src-tauri/gen/android/app/src/main/
       - name: Build

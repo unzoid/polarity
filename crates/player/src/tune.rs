@@ -39,6 +39,10 @@ fn on() -> bool {
     true
 }
 
+/// Phones, tablets and TV boxes (a Google TV dongle has 2 GB for everything): the demuxer cache
+/// stays small whatever the Buffer setting ([`Tune::cache`]).
+const SMALL_MEMORY: bool = cfg!(any(target_os = "android", target_os = "ios"));
+
 /// Where libmpv in the app hands our detector each frame in memory (src-tauri's player/apple.rs).
 const FRAMES_IN_MEMORY: bool = cfg!(any(target_os = "macos", target_os = "ios"));
 
@@ -136,10 +140,19 @@ impl Tune {
 
     /// (seconds ahead, max bytes) for the demuxer cache.
     pub fn cache(&self) -> (u32, &'static str) {
-        match self.buffer {
-            BufferSize::Small => (30, "64MiB"),
-            BufferSize::Normal => (90, "192MiB"),
-            BufferSize::Large => (300, "768MiB"),
+        self.cache_with(SMALL_MEMORY)
+    }
+
+    /// [`Tune::cache`] on a desktop, or on a phone or TV box, where Normal is the 64 MiB mpv starts
+    /// with there (`IOS_ARGS`, src-tauri's Android arguments) and Large stays well inside a 2 GB box.
+    fn cache_with(&self, small_memory: bool) -> (u32, &'static str) {
+        match (self.buffer, small_memory) {
+            (BufferSize::Small, false) => (30, "64MiB"),
+            (BufferSize::Normal, false) => (90, "192MiB"),
+            (BufferSize::Large, false) => (300, "768MiB"),
+            (BufferSize::Small, true) => (30, "32MiB"),
+            (BufferSize::Normal, true) => (90, "64MiB"),
+            (BufferSize::Large, true) => (300, "128MiB"),
         }
     }
 
@@ -186,7 +199,17 @@ mod tests {
         assert!(t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm"));
         let off = Tune { dialogue_boost: false, volume_leveling: false, ..t };
         assert_eq!(off.audio_filters(), "");
-        assert_eq!(t.cache(), (300, "768MiB"));
+        assert_eq!(t.cache_with(false), (300, "768MiB"));
+    }
+
+    #[test]
+    fn cache_stays_small_on_phones_and_tv_boxes() {
+        let at = |buffer| Tune { buffer, ..Tune::default() }.cache_with(true);
+        assert_eq!(at(BufferSize::Normal), (90, "64MiB"));
+        assert_eq!(at(BufferSize::Small), (30, "32MiB"));
+        assert_eq!(at(BufferSize::Large), (300, "128MiB"));
+        // Normal is what mpv starts with there.
+        assert!(IOS_ARGS.contains(&"--demuxer-max-bytes=64MiB"));
     }
 
     #[test]

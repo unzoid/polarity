@@ -199,7 +199,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch
         with:
           toolchain: stable
-          targets: aarch64-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       # Caches are saved from master only and restored everywhere: one copy per cache keeps the
       # repository under GitHub's 10 GB, so they aren't evicted and pull requests start warm.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -232,18 +232,19 @@ jobs:
         run: |
           scripts/ci-apt.sh autoconf pkgconf libtool ninja-build gperf nasm
           pipx install meson
-          scripts/android-mpv.sh "$RUNNER_TEMP/libmpv" arm64 x86_64
+          scripts/android-mpv.sh "$RUNNER_TEMP/libmpv" arm64 armv7 x86_64
       - name: Put libmpv in the app
         run: cp -R "$RUNNER_TEMP/libmpv/out/jniLibs" "$RUNNER_TEMP/libmpv/out/assets" src-tauri/gen/android/app/src/main/
-      # Pull requests build the debug APK for arm64 only (what phones run); master builds both. The
-      # emulator test in e2e-app.yml builds its own x86_64 APK.
+      # Pull requests build the debug APK for arm64 only (what phones run); master builds x86_64, arm64
+      # and armv7 (32-bit TV dongles such as the Chromecast with Google TV, #442). The emulator test in
+      # e2e-app.yml builds its own x86_64 APK.
       # The account backend (scripts/accountEnv.ts), so the APK has sign-in: master and tags only. Other branches
       # (dev too) and pull requests build without it, so no artifact outside a release carries production's settings.
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_URL || '' }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && secrets.VITE_SUPABASE_PUBLISHABLE_KEY || '' }}
-        run: bun run tauri android build --ci --debug --apk ${{ github.ref == 'refs/heads/master' && '--target x86_64 --target aarch64' || '--target aarch64' }}
+        run: bun run tauri android build --ci --debug --apk ${{ github.ref == 'refs/heads/master' && '--target x86_64 --target aarch64 --target armv7' || '--target aarch64' }}
       - name: Keep the APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -256,7 +257,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: bun run tauri android build --ci --apk --aab --target x86_64 --target aarch64
+        run: bun run tauri android build --ci --apk --aab --target x86_64 --target aarch64 --target armv7
       - name: Keep the release
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
