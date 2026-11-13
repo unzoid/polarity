@@ -41,6 +41,10 @@ export interface Prefs {
   autoSkipDelay: number;
   /** While a video loads, the list of loading steps with their times under the one line that says how far it got (#469). */
   loadingDetails: boolean;
+  /** Press and hold on the picture plays this much faster until let go; 0 = off. */
+  holdSpeed: number;
+  /** Pausing brings the controls up. Off: the picture stays clear, the controls come with the mouse or a key. */
+  pauseShowsControls: boolean;
 
   // This machine's screen, speakers and GPU:
   /** Interface zoom, 1 = 100%. */
@@ -178,6 +182,8 @@ const DEFAULTS: Prefs = {
   preferFileChapters: true,
   autoSkipDelay: 5,
   loadingDetails: false,
+  holdSpeed: 2,
+  pauseShowsControls: true,
   uiScale: 1,
   pauseOnMinimize: false,
   discordPresence: "app",
@@ -268,6 +274,8 @@ export function readPrefs(v: unknown): Partial<Prefs> {
 export const SYNCED_PREFS = [
   "preferFileChapters",
   "autoSkipDelay",
+  "holdSpeed",
+  "pauseShowsControls",
   "saveRecentSearches",
   "searchSuggestions",
   "matureContent",

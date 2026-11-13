@@ -90,6 +90,7 @@ import { useStepping } from "../components/player/useStepping";
 import { createWindowPin } from "../components/player/windowPin";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
+import { useHoldSpeed } from "../components/player/useHoldSpeed";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
 import {
@@ -163,7 +164,7 @@ import { useAirPlay } from "../components/player/useAirPlay";
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 /** What Subtitles & Audio and Speed say for a YouTube video outside TV mode: they're YouTube's own controls there (#384). TV mode has menus for them (#434). */
 const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
 const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
@@ -302,7 +303,7 @@ export function Player({
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
   // Past 100% only mpv can play (Settings → Subtitles & Audio): a <video>, AirPlay's included, stops at 100%.
-  const { maxVolume } = usePrefs();
+  const { maxVolume, holdSpeed, pauseShowsControls } = usePrefs();
   const volumeTop = engine === "mpv" && !airplay.casting ? maxVolume : 1;
   /** The volume up or down a step, kept within what this player can play. */
   const stepVolume = (by: number) => setVolume((v) => Math.min(volumeTop, Math.max(0, +(Math.min(v, volumeTop) + by).toFixed(2))));
@@ -425,7 +426,8 @@ export function Player({
   // Paused on a stepped frame, the controls hide after the set time, not the paused wait (#346).
   const frameSteps = useStepping(paused, buffering);
   // YouTube's bar stays out of the way while paused too: showing it moves the picture (#384).
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping && !ytFramed);
+  // Settings → Playback can leave the picture clear on pause: the controls then come only with input.
+  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && pauseShowsControls && !frameSteps.stepping && !ytFramed);
   // The focus ring shows only for focus moved by the keyboard, never after a click (#329).
   const keyFocus = useKeyboardFocus();
   const ready = source.state.status === "ready" && !error;
@@ -595,9 +597,12 @@ export function Player({
 
   // A watch party plays at 1x for everyone (its sync nudges the rate itself).
   const inParty = !!party;
+  // Press and hold on the picture: faster until let go (Settings → Playback). Not in a party, nor on YouTube's own player.
+  const hold = useHoldSpeed(holdSpeed > 0 && !inParty && !ytFramed && started, started && !paused);
+  const playRate = hold.held ? holdSpeed : rate;
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : rate;
-  }, [rate, source.state, media, inParty]);
+    if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
+  }, [playRate, source.state, media, inParty]);
 
   // In a party, a source that won't start keeps the whole room waiting: move
   // on to the next one, as picking another source by hand would.
@@ -1431,12 +1436,28 @@ export function Player({
         // can make a click only show/hide the controls instead; a tap always
         // does, as on every phone player (Play/Pause is in the controls).
         // A pinch out fills the screen and a pinch in fits the picture, as phone players do (#176).
-        {...pinch}
+        // Held down, it plays faster until let go (useHoldSpeed).
         onPointerDown={(e) => {
           chromeAtPress.current = chrome.visible;
           pinch.onPointerDown(e);
+          hold.handlers.onPointerDown(e);
         }}
+        onPointerMove={(e) => {
+          pinch.onPointerMove(e);
+          hold.handlers.onPointerMove(e);
+        }}
+        onPointerUp={(e) => {
+          pinch.onPointerUp(e);
+          hold.handlers.onPointerUp();
+        }}
+        onPointerCancel={(e) => {
+          pinch.onPointerCancel(e);
+          hold.handlers.onPointerCancel();
+        }}
+        onPointerLeave={hold.handlers.onPointerLeave}
         onClick={() => {
+          // The release of a hold that sped up: play/pause and the controls stay as they were.
+          if (hold.swallowClick()) return;
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
@@ -1523,6 +1544,11 @@ export function Player({
         </div>
       )}
       {notice && <div className="player-notice t-callout">{notice}</div>}
+      {hold.held && (
+        <div className="player-hold-speed t-callout tabular" role="status">
+          <Speed size={16} aria-hidden /> {holdSpeed}x
+        </div>
+      )}
       {party && ready && started && <PartyHold party={party} videoId={videoId} />}
       {party && <PartyNotes party={party} />}
 
@@ -1696,7 +1722,7 @@ export function Player({
               {sleepLabel(sleep.left)}
             </span>
           )}
-          <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
+          <PlayerClock media={media} display={timeDisplay} rate={inParty ? 1 : playRate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
         <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (

@@ -77,6 +77,8 @@ export function PlaybackPage() {
         <SettingRow id="loadingDetails" />
         <SettingRow id="seekStep" />
         <SettingRow id="controlsHideSecs" />
+        <SettingRow id="pauseShowsControls" />
+        <SettingRow id="holdSpeed" />
         <SettingRow id="clickAction" />
         <SettingRow id="wheelAction" />
       </Card>
