@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { AccountBackend } from "../src/lib/account/backend";
 
 /**
@@ -20,23 +20,30 @@ const device = (keys: Record<string, string> = {}, addons: string[] = []): Devic
 let dev = device();
 const on = (d: Device) => (dev = d);
 
-(globalThis as { localStorage?: unknown }).localStorage = {
+const g = globalThis as { window?: unknown; localStorage?: unknown };
+const before = { window: g.window, localStorage: g.localStorage };
+g.localStorage = {
   getItem: (k: string) => dev.storage.get(k) ?? null,
   setItem: (k: string, v: string) => void dev.storage.set(k, v),
   removeItem: (k: string) => void dev.storage.delete(k),
 };
-mock.module("../src/lib/api", () => ({
-  api: {
-    settings: async () => ({ ...dev.settings }),
-    settingsDefaults: async () => ({ seekStep: 10, tmdbKey: null, omdbKey: null }),
-    saveSettings: async (s: Record<string, unknown>) => (dev.settings = { ...s }),
-    addons: async () => dev.addons.map((u) => ({ manifestUrl: u, manifest: { id: u } })),
-    installAddon: async (u: string) => void dev.addons.push(u),
-    removeAddon: async (id: string) => void (dev.addons = dev.addons.filter((u) => u !== id)),
-    bundledAddons: async () => ["https://subtitles.example.org/manifest.json"],
-  },
-}));
-mock.module("../src/lib/net/queries", () => ({ queryClient: { setQueryData() {}, invalidateQueries() {} } }));
+// The native side answers through window.__TAURI_INTERNALS__ (what @tauri-apps/api's invoke calls). Not mock.module:
+// bun keeps a module mock for every file that runs after this one in the same process (#510).
+const native: Record<string, (args: Record<string, unknown>) => unknown> = {
+  settings_get: () => ({ ...dev.settings }),
+  settings_defaults: () => ({ seekStep: 10, tmdbKey: null, omdbKey: null }),
+  settings_set: ({ settings }) => (dev.settings = { ...(settings as Record<string, unknown>) }),
+  addons_list: () => dev.addons.map((u) => ({ manifestUrl: u, manifest: { id: u } })),
+  addon_install: ({ url }) => void dev.addons.push(url as string),
+  addon_remove: ({ id }) => void (dev.addons = dev.addons.filter((u) => u !== id)),
+  addons_bundled: () => ["https://subtitles.example.org/manifest.json"],
+};
+afterAll(() => {
+  for (const k of ["window", "localStorage"] as const) {
+    if (before[k] === undefined) delete g[k];
+    else g[k] = before[k];
+  }
+});
 
 let stored: { data: Record<string, unknown>; updatedAt: number } | null = null;
 const server = {
@@ -53,6 +60,15 @@ const server = {
 let s: typeof import("../src/lib/account/settingsSync");
 beforeAll(async () => {
   s = await import("../src/lib/account/settingsSync");
+  // Only now: modules that see a `window` when they load take it for a browser's.
+  g.window = {
+    __TAURI_INTERNALS__: {
+      invoke: async (cmd: string, args: Record<string, unknown> = {}) => {
+        if (!native[cmd]) throw { code: "unknown", message: cmd };
+        return native[cmd](args);
+      },
+    },
+  };
   // Each device's keychain: its own map, apart from its web view storage (#195).
   const { setPrivateStorage } = await import("../src/lib/account/localSecrets");
   setPrivateStorage({
