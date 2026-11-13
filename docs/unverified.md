@@ -1371,7 +1371,15 @@ kept aside, one that can't be read never written over); `cargo clippy` for Linux
 for `aarch64-apple-tvos` and `aarch64-apple-tvos-sim`; `scripts/apple-tv-core.sh` writing `PolarCore.swift`.
 Not checked here, for want of a Mac: the static libraries built with Xcode's toolchain, the XCFramework, and the
 generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.sh` ends with "Wrote
-.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both. No Apple TV app uses them yet.
+.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both.
+
+The app (`apple-tv/`) was written without a Swift compiler: CI's `apple-tv` job (macOS runner) is the first to build
+it, for the simulator, unsigned. Never run. To check, in the tvOS simulator or on an Apple TV (Xcode, your team):
+1. Home opens with shelves (Trending Series, New Movies, ...) from Cinemeta (no sign-in yet, so no TMDB key and no
+   add-ons). Swiping moves between cards along a shelf and between shelves; the focused card lifts.
+2. Click a show: its page has the backdrop, facts, the description, season buttons and the episodes. Menu goes
+   back to Home where you were.
+3. Click an episode: "No sources" (no add-ons yet) names why. A movie's Play does the same.
 
 ## Screens in headless Chromium (T-051)
 
