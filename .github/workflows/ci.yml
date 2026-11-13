@@ -432,13 +432,14 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-  # The Apple TV app (apple-tv/, #504): the core for tvOS and its simulator, then the app for the
+  # The Apple TV app (apple-tv/, #504): the core for tvOS and its simulator, libmpv for the tvOS
+  # simulator (scripts/ios-mpv.sh, kept until the script changes, as for iOS), then the app for the
   # simulator, unsigned. Installing on an Apple TV needs the owner's signing, in Xcode.
   apple-tv:
     name: Apple TV build (simulator, unsigned)
     if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -458,9 +459,24 @@ jobs:
           key: apple-tv
           save-if: ${{ github.ref == 'refs/heads/master' }}
       - name: Install build tools
-        run: brew install xcodegen
+        run: brew install meson ninja pkgconf xcodegen
       - name: Build the core
         run: scripts/apple-tv-core.sh
+      - name: Restore tvOS simulator libmpv
+        id: libmpv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tv-libmpv/out
+          key: tvos-libmpv-simulator-${{ hashFiles('scripts/ios-mpv.sh') }}
+      - name: Build tvOS simulator libmpv
+        if: steps.libmpv.outputs.cache-hit != 'true'
+        run: scripts/ios-mpv.sh "$RUNNER_TEMP/tv-libmpv" tv-simulator
+      - name: Put libmpv in the app
+        run: |
+          rm -rf apple-tv/Vendor
+          mkdir -p apple-tv/Vendor
+          cp -R "$RUNNER_TEMP/tv-libmpv/out/tv-frameworks" apple-tv/Vendor/frameworks
+          cp -R "$RUNNER_TEMP/tv-libmpv/out/licenses" apple-tv/Vendor/
       - name: Generate the Xcode project
         working-directory: apple-tv
         run: xcodegen generate
@@ -476,12 +492,21 @@ jobs:
           app=build/Debug-appletvsimulator/Polarity.app
           test -f "$app/Polarity"
           xcrun vtool -show-build "$app/Polarity" | grep -q 'platform TVOSSIMULATOR'
+          test -f "$app/Frameworks/Libmpv.framework/Libmpv"
+          test -f "$app/licenses/BUNDLED.txt"
           ditto -c -k --keepParent "$app" "$RUNNER_TEMP/Polarity-tvOS-simulator-arm64.app.zip"
       - name: Keep the simulator app
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: apple-tv-simulator-app
           path: ${{ runner.temp }}/Polarity-tvOS-simulator-arm64.app.zip
+          retention-days: 14
+      - name: Keep libmpv's tvOS sources
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apple-tv-mpv-sources
+          path: ${{ runner.temp }}/tv-libmpv/out/polarity-ios-mpv-sources.tar.xz
+          compression-level: 0
           retention-days: 14
 
 

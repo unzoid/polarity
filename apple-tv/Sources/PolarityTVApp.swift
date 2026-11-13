@@ -51,6 +51,9 @@ struct RootView: View {
                             .navigationDestination(for: AccountPage.self) { _ in
                                 AccountView()
                             }
+                            .navigationDestination(for: LicencesPage.self) { _ in
+                                LicencesView()
+                            }
                     }
                 }
             }

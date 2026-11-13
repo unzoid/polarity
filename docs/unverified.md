@@ -1400,6 +1400,29 @@ values of `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`) in the target
 8. Not Now on the sign-in screen: Home with the standard rows, and no sign-in screen at the next start; Account →
    Sign In brings it back.
 
+The player (part 4): libmpv and FFmpeg for tvOS from `scripts/ios-mpv.sh <work dir> tv-simulator` (or
+`tv-device`), which copies them into `apple-tv/Vendor`; the app links `Libmpv.framework` and draws with OpenGL ES
+(`MpvPlayer.swift`, `MpvVideoView.swift`, `PlayerScreen.swift`). Checked here: the script's shell syntax, the
+core's `playerOptions()` (`cargo test -p polar-ffi`). Never built here (no Xcode): the tvOS libraries, the Swift,
+the app with them; CI's `apple-tv` job is the first to build them, for the simulator. Never run. To check, with a
+profile whose add-ons include one that serves a test video (for an open film: `bun scripts/open-films-addon.ts
+--host 0.0.0.0`, added to the profile on another device as `http://<this Mac's address>:7878/manifest.json`):
+9. Open the film, Play, pick its source: the picture fills the screen within a few seconds, with sound. The bar at
+   the foot shows the title, how far in it is and the time left, and fades after five seconds.
+10. Play/Pause on the remote, or a click, pauses and plays (the bar stays while paused); left and right move ten
+    seconds back and forward; up shows the bar.
+11. Down opens Audio and Subtitles (only when the file has tracks): choosing one switches to it at once; Subtitles →
+    Off turns them off. Menu closes the list and leaves the video playing.
+12. Menu during playback goes back to the sources. Home's Continue Watching has the film at the place left; opening
+    it from there starts at that place. Play to the end: the player closes by itself, and the film leaves Continue
+    Watching.
+13. Press the TV button during playback and come back: the video is paused at the same place, the picture is
+    still there (not black), and Play carries on.
+14. A source that doesn't play (stop the add-on's server, then pick its source): "This source didn't play" with
+    the reason; Menu goes back to the sources.
+15. Account → Licences: BUNDLED.txt and each library's licence text under "Player", PACKAGES.txt and each Swift
+    package's licence and notice under "Swift packages"; each opens and scrolls with the remote.
+
 ## Screens in headless Chromium (T-051)
 
 - How: `bun run dev`, then open `http://localhost:1420/fake.html` in any browser. The
