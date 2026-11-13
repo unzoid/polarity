@@ -168,10 +168,16 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   const browsing = settings.getByRole("button", { name: "Browsing", exact: true });
   await expect(browsing).toBeVisible();
   await browsing.tap();
-  await expect(settings.getByRole("switch", { name: /^Show the Calendar/ })).toBeVisible();
+  // Browsing is split into sections: its list first, then the section's own view.
   await expect(settings).toHaveAccessibleName("Browsing");
   await expect(browsing).toBeHidden();
-  // The sheet's Back: from the section to the list of sections, then from the list back to the profiles.
+  const pages = settings.getByRole("button", { name: /^Home & Title Pages/ });
+  await pages.tap();
+  await expect(settings.getByRole("switch", { name: /^Show the Calendar/ })).toBeVisible();
+  await expect(settings).toHaveAccessibleName("Home & Title Pages");
+  // The sheet's Back: from the section to its page's list, to the list of pages, then back to the profiles.
+  await profiles.getByRole("button", { name: "Back", exact: true }).tap();
+  await expect(pages).toBeVisible();
   await profiles.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(browsing).toBeVisible();
   await profiles.getByRole("button", { name: "Back", exact: true }).tap();

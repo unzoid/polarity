@@ -1388,7 +1388,7 @@ export function Player({
   // Play in another player installed here (desktop): this one pauses and keeps the place.
   const { data: otherPlayers = [] } = useQuery({
     queryKey: keys.externalPlayers,
-    queryFn: api.externalPlayers,
+    queryFn: async () => (await api.externalPlayers()) ?? [],
     enabled: isDesktop && !tv,
     staleTime: Infinity,
   });

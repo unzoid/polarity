@@ -141,7 +141,8 @@ export class CastMedia extends EventTarget implements MediaLike {
 /** The receivers on the network, kept up to date; starts looking on first use. */
 export function watchDevices(onChange: (devices: CastDevice[]) => void): () => void {
   let off: Promise<Unlisten> | undefined = on<CastDevice[]>("cast://devices", onChange);
-  void call<CastDevice[]>("cast_devices").then(onChange, warnFailed("cast_devices"));
+  // A shell with nothing to say (no cast support there) answers nothing: no TVs.
+  void call<CastDevice[] | null>("cast_devices").then((list) => onChange(list ?? []), warnFailed("cast_devices"));
   return () => {
     void off?.then((f) => f());
     off = undefined;

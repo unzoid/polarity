@@ -59,6 +59,7 @@ test("the Calendar is in the profile menu only while it isn't a navbar tab (#92)
   await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Browsing", exact: true }).click();
+  await settings.getByRole("button", { name: /^Home & Title Pages/ }).click();
   await settings.getByRole("switch", { name: /^Show the Calendar/ }).click();
   await settings.getByRole("button", { name: "Close settings" }).click();
   await expect(settings).toHaveCount(0);
@@ -538,6 +539,8 @@ test("settings change and stay changed", async ({ app }) => {
     return app.getByRole("dialog", { name: /^Settings/ });
   };
   let settings = await open();
+  // Playback opens on its list of sections; Skip intros is under Skipping.
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   const skip = settings.getByRole("switch", { name: /^Skip intros/ });
   await expect(skip).not.toBeChecked();
   await skip.click();
@@ -546,6 +549,7 @@ test("settings change and stay changed", async ({ app }) => {
   await expect(settings).toHaveCount(0);
 
   settings = await open();
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   await expect(settings.getByRole("switch", { name: /^Skip intros/ })).toBeChecked();
   await settings.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(settings.getByRole("heading", { level: 2, name: /Appearance/ }).first()).toBeVisible();
@@ -588,12 +592,14 @@ test("a settings search result is highlighted once, not again when its page or S
   let before = await find();
   await settings.getByRole("button", { name: "Appearance", exact: true }).click();
   await settings.getByRole("button", { name: "Playback", exact: true }).click();
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   await noNewMark(before);
   // Closed before it ends, then opened again.
   before = await find();
   await settings.getByRole("button", { name: "Close settings" }).click();
   await expect(settings).toHaveCount(0);
   await open();
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   await noNewMark(before);
   // Played through: the mark goes with it.
   await find();
@@ -1105,6 +1111,7 @@ test("with Show on Discord set to the title, the player sends what plays, its pa
   await app.getByRole("button", { name: /^Profile/ }).click();
   await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
+  await settings.getByRole("button", { name: /^Player/ }).click();
   await settings.getByRole("combobox", { name: "Show on Discord" }).click();
   await app.getByRole("option", { name: "What you're watching" }).click();
   await settings.getByRole("button", { name: "Close settings" }).click();
@@ -1501,6 +1508,7 @@ test.describe("signed in, on a fresh profile", () => {
     await page.getByRole("button", { name: /^Profile/ }).click();
     await page.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = page.getByRole("dialog", { name: /^Settings/ });
+    await settings.getByRole("button", { name: /^Player/ }).click();
     await settings.getByRole("combobox", { name: "Show on Discord" }).click();
     await page.getByRole("option", { name: mode }).click();
     await expect(settings.getByRole("combobox", { name: "Who can join from Discord" })).toHaveText(/Ask me/);
@@ -2438,6 +2446,7 @@ test("subtitle Font starts at From the subtitles; a picked font is kept (#347)",
     await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("button", { name: "Subtitles & Audio", exact: true }).click();
+    await settings.getByRole("button", { name: /^Subtitle Style/ }).click();
     return settings;
   };
   let settings = await open();
