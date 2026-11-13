@@ -263,6 +263,8 @@ pub fn run() {
             });
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
+            // The system's Now Playing controls reach mpv through it (player/background.rs).
+            player::background::set_app(app.handle());
             app.manage(controllers::Controllers::default());
             controllers::watch(app.handle().clone());
             let handle = app.handle().clone();
@@ -369,6 +371,7 @@ pub fn run() {
             player::mpv_snapshot,
             player::player_system_bars,
             player::player_keep_awake,
+            player::background::now_playing,
             native_tabs::native_tabs,
             native_back::native_back,
             art_focus::art_focus,

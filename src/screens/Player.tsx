@@ -134,6 +134,7 @@ import { watchPage } from "../lib/deepLink";
 import { setWatching } from "../lib/friends";
 import { usePartySync } from "../components/player/usePartySync";
 import { useDiscordPresence } from "../components/player/useDiscordPresence";
+import { useNowPlaying } from "../components/player/useNowPlaying";
 import { LinkForm, PartyBadge, PartyHold, partyHoldText, PartyNotes, PartyStart } from "../components/party/PartyUI";
 import { PartyRoomPane, PartySettingsPane } from "../components/party/PartyMenu";
 import { Moon, More, Pin, Pinned, WatchParty } from "../components/icons";
@@ -618,6 +619,8 @@ export function Player({
     [discordPresence, type, metaId, joinToken, joinParty, partyMembers, discordJoin],
   );
   useDiscordPresence(media, meta, videoId, local ? "off" : discordPresence, presenceLinks);
+  // The lock screen and media controls on phones, which keep the sound playing in the background (#461).
+  useNowPlaying(media, meta, videoId);
   // What friends may see playing (#135); the same rule: never a file on this device.
   const playingVideo = meta?.videos?.find((v) => v.id === videoId);
   const friendsLabel = playingVideo?.season !== undefined && playingVideo.episode !== undefined ? `S${playingVideo.season}:E${playingVideo.episode}` : undefined;

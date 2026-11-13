@@ -16,6 +16,7 @@ export * from "./artFocus";
 export * from "./nativeDialogs";
 export * from "./nativeTabs";
 export * from "./notifications";
+export * from "./nowPlaying";
 export * from "./tapGuard";
 export * from "./updates";
 export * from "./window";

@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Notifications about the shows you follow and your downloads (#209), asked for when first switched on -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Playing on in the background and with the screen locked (#461): a media playback service while the
+         player shows a title, and the processor kept on while it plays (PlaybackService.kt) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -46,6 +51,11 @@
                 <data android:scheme="stremio" />
             </intent-filter>
         </activity-alias>
+
+        <service
+            android:name=".PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

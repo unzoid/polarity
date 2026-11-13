@@ -13,6 +13,7 @@
 //!   * [`headers`]: which of an add-on's request headers playback sends.
 //!   * [`certs`]: one certificate bundle from a folder of certificates (Android's mpv).
 //!   * [`turns`]: which player's load and stop count at the one mpv.
+//!   * [`now_playing`]: when the system's Now Playing controls hear where playback is (#461).
 //!   * [`video_path`]: one log line on how mpv decodes and draws the video (#416).
 
 pub mod allow;
@@ -22,6 +23,7 @@ pub mod crop;
 pub mod frames;
 pub mod headers;
 pub mod lookahead;
+pub mod now_playing;
 pub mod png;
 pub mod sampler;
 pub mod tune;

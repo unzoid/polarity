@@ -141,8 +141,8 @@ the page's controls draw over the picture and the picture fills the screen behin
 Home and back to the app: the picture comes back (the surface is given back to mpv) and playback goes on;
 an HTTPS stream plays (mbedTLS reads `cacert.pem`, made from `/system/etc/security/cacerts`); subtitles use
 Roboto; hardware decoding (Settings → Advanced) on and off both play; autocrop (MediaCodec copied back) works;
-a TV box with 2 GB of memory plays a 4K file (the cache is 64 MiB there). Not built: Picture in picture,
-background audio, the media session (lock screen controls).
+a TV box with 2 GB of memory plays a 4K file (the cache is 64 MiB there). Not built: Picture in picture.
+Background audio and the lock screen controls: see "Playing on in the background (#461)".
 The same job builds an unsigned release APK and app bundle (`android-release-unsigned`), minified by R8:
 `proguard-rules.pro` keeps `MpvSurface`'s native methods and `polarDevice`; check that a release build, signed with
 any key for testing, starts and plays like the debug one.
@@ -167,14 +167,37 @@ iPad, in both orientations, clear of the notch and the home indicator; the loadi
 an MKV with HEVC video and AC3 or DTS audio plays with picture and sound (also with the silent switch on);
 ASS and PGS subtitles show; the page's controls draw over the picture and it fills the screen behind them;
 rotating while playing keeps the picture right; Home and back: the picture comes back and playback goes on
-(drawing stops in the background; audio may stop with it: background audio isn't built); an HTTPS stream
+(drawing stops in the background, the sound plays on: see #461 below); an HTTPS stream
 plays (Secure Transport, the system's certificates); hardware decoding (Settings → Advanced) on and off both
 play; autocrop zooms past the bars (our detector on every frame; no cropdetect in this build) and Settings →
 Advanced has no "Check every frame for black bars"; a downloaded file plays offline and its folder is not in
 an iCloud backup (Settings → Apple Account → iCloud → Manage Storage → Backups lists the app's size without
 it); the IPA (a zip) holds `licenses/mpv/` with each library's licence and `BUNDLED.txt` in the app.
-Not built: Picture in picture, background audio, lock screen controls, AirPlay on iOS (#19 is macOS), signing
-and TestFlight (the owner's Apple developer account).
+Not built: Picture in picture, AirPlay on iOS (#19 is macOS), signing and TestFlight (the owner's Apple
+developer account).
+
+## Playing on in the background (#461)
+
+mpv's sound plays on with the app in the background or the screen locked, with the system's Now Playing
+controls (`src-tauri/src/player/background.rs`; iOS `src/ios/now_playing.m`, `Info.ios.plist`'s audio
+background mode; Android `PlaybackService.kt`, a media playback foreground service). When the controls are
+told where playback is is tested (`polar-player`: `now_playing`), the words they show too (tests/nowPlaying.test.ts);
+the Rust is type-checked for iOS and Android. Not run on a device or emulator with libmpv: the Objective-C and
+Kotlin are only compiled in CI. The web view's `<video>` (a build without libmpv) isn't covered, nor a TV
+(no service there: it behaves as before). What to look for, on an iPhone and an Android phone:
+1. Play an episode, then go Home, and lock the screen: the sound goes on. The lock screen shows the episode's
+   title, the show and its number under it, the poster, the time going on, play/pause and 10 s back and on;
+   on Android also the notification shade (a "Playing now" notification; tapping it opens the app).
+2. Pause and play from the lock screen and from headphones; drag the time: mpv follows, and the app shows the
+   same when opened again. Back in the app the picture comes back within a moment (iOS turns the video track
+   off in the background and on again).
+3. Close the player: the controls and the notification go within two seconds. Next episode by autoplay: the
+   controls stay up and change to it.
+4. Android: swipe the app away from the recent apps while playing: the sound stops and the notification goes.
+   With the screen off for half an hour (unplugged), playback is still going (the wake lock while playing).
+5. A torrent source still stops after half a minute in the background on Android (#207).
+6. Battery and memory over an hour in the background; a phone call in the middle (nothing handles the
+   interruption specially: see whether the sound comes back after it).
 
 ## iOS: five tabs, no More (#449)
 
