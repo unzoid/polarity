@@ -1362,6 +1362,17 @@ because mpv's `panscan` wasn't on the list of properties the player may set
 5. Phone or tablet: the full-screen button cycles the same way; pinch out fills, pinch in fits.
    TV mode: the controller's crop binding cycles and says the mode.
 
+## Apple TV core (`crates/ffi`, #504)
+
+The core's Swift binding for the Apple TV app (docs/ARCHITECTURE.md, "Apple TV"). Checked on the Linux dev machine:
+`cargo test -p polar-ffi` (an add-on on a local server: Home's rows, a title page, sources ranked and kept to
+http(s) links with only User-Agent/Referer/Origin passed, progress kept across starts, a file that doesn't parse
+kept aside, one that can't be read never written over); `cargo clippy` for Linux and, with a stand-in C compiler,
+for `aarch64-apple-tvos` and `aarch64-apple-tvos-sim`; `scripts/apple-tv-core.sh` writing `PolarCore.swift`.
+Not checked here, for want of a Mac: the static libraries built with Xcode's toolchain, the XCFramework, and the
+generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.sh` ends with "Wrote
+.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both. No Apple TV app uses them yet.
+
 ## Screens in headless Chromium (T-051)
 
 - How: `bun run dev`, then open `http://localhost:1420/fake.html` in any browser. The

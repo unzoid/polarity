@@ -16,3 +16,5 @@ e2e/.report/
 fuzz/corpus/
 fuzz/artifacts/
 fuzz/coverage/
+# The Apple TV core and its Swift side, written by scripts/apple-tv-core.sh.
+apple-tv/Core/

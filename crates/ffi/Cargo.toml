@@ -1,0 +1,33 @@
+[package]
+name = "polar-ffi"
+description = "The core crates for the native apps (Apple TV), through UniFFI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "polar_ffi"
+# staticlib: linked into the tvOS app (one per target, packed as an XCFramework).
+# cdylib: what `uniffi-bindgen` reads the interface from when it writes the Swift side.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[features]
+# The `uniffi-bindgen` tool below; the app's library doesn't need it.
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+polar-addon.workspace = true
+polar-index.workspace = true
+polar-library.workspace = true
+polar-player.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+uniffi = { version = "0.32", features = ["tokio"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]

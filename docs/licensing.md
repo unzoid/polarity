@@ -19,6 +19,7 @@ installed by the user.
 | Notifications (#209): `zbus` (Linux), `windows` (Windows toasts) | MIT (zbus); MIT or Apache-2.0 (windows) | `Cargo.lock`; both were already in the build through other crates and are now direct dependencies of `src-tauri` |
 | Notifications on Android: AndroidX WorkManager (`androidx.work:work-runtime-ktx`) | Apache-2.0 | `src-tauri/gen/android/app/build.gradle.kts`; in the APK with the other AndroidX libraries |
 | libc (all but Windows) and windows-sys (Windows): free disk space on the Downloads page (`src-tauri/src/disk.rs`) | MIT OR Apache-2.0 | Direct dependencies of `src-tauri`, already built in through other crates; `Cargo.lock`, each crate's licence in its package |
+| UniFFI (`uniffi`, Apple TV app): the core's Swift binding (`crates/ffi`) and the Swift code it generates (`PolarCore.swift`, from UniFFI's templates) | MPL-2.0 | `crates/ffi/Cargo.toml`, `Cargo.lock`; used unchanged, its source at the version `Cargo.lock` names is mozilla/uniffi-rs on GitHub and crates.io |
 | npm and Rust dependencies | Each package's own | `bun.lock`, `Cargo.lock` |
 
 Third-party logos (TMDB's in Settings → About → Credits) are shown only as credits and links to

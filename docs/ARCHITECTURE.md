@@ -15,12 +15,13 @@ src-tauri/src                            the native shell: commands, player, dow
 crates/addon, anime, index, library,     the core: add-on protocol, anime ids and filler, search/metadata, library and sync,
   player                                 the player's rules (mpv allow-lists, picture/sound presets, autocrop)
   torrent                                the torrent engine for add-on torrent streams (librqbit), served on loopback
+crates/ffi                               the core for the native Apple TV app, through UniFFI (Swift)
 ```
 
 Rules:
 
 - **The core crates hold no platform code.** They build and test on any system with
-  `cargo test -p polar-addon -p polar-library -p polar-anime -p polar-index -p polar-player -p polar-torrent`. Their only
+  `cargo test -p polar-addon -p polar-library -p polar-anime -p polar-index -p polar-player -p polar-torrent -p polar-ffi`. Their only
   `cfg` outside tests is `#[cfg(unix)]` in `crates/library/src/saver.rs`, which makes
   `polarity.json` owner-only (0600) where the system has Unix permissions; elsewhere it does
   nothing. Paths come in from the shell (`app_data_dir`, `app_cache_dir`), never from the
@@ -64,7 +65,7 @@ machine (see `docs/unverified.md`).
 | Android (phone, tablet) | Tauri 2 mobile, Android System WebView (`mobile_entry_point` in `lib.rs`) | libmpv inside the app, drawing into a `SurfaceView` behind the web view (`player/android.rs`, built in CI by `scripts/android-mpv.sh`); `<video>` when the APK has no libmpv | app-private storage | the whole screen | touch; the back button and gesture as Back (`lib/platform/back.ts`, `lib/ui/systemBack.ts`: open layer, page, Home, then the app goes to the background); the web view ends at the on-screen keyboard (`MainActivity.kt`); keyboard and controllers through the WebView | Play Store / sideload; `canUpdate` false | project in `src-tauri/gen/android`, debug APK built in CI, started in an emulator nightly (`e2e/android/smoke.sh`; never run on a device yet); phone and tablet layouts built (§4) |
 | iOS, iPadOS | Tauri 2 mobile, WKWebView | libmpv inside the app, drawing behind the web view (`ios/mpv_view.m`, `player/apple.rs`; an LGPL build made in CI by `scripts/ios-mpv.sh`; VideoToolbox frames in 8-bit NV12, copied to memory before mpv draws them (`videotoolbox-copy`, #416), and hardware decoding asked for again after a trip to the background); `<video>` (AVFoundation) when the build has no libmpv | app sandbox; downloads in the app's own folder, kept out of backups | the whole screen; the sections (five at most, so no More tab; Search and the Calendar are top bar buttons) are iOS's own tab bar around the web view (`ios/tabs.m`, `lib/platform/nativeTabs.ts`, `components/NativeTabs.tsx`: Liquid Glass on iOS 26, the classic bar before, a sidebar-capable one on an iPad from iOS 18), hidden over the player, Settings and sheets; the player hides the status bar and lets the home indicator fade (`ios/system_bars.m`) | touch; a swipe in from the left edge as Back (iOS's edge recognizer in `ios/back.m`, `lib/platform/backSwipe.ts`: open layer, then page, the page following the finger, `lib/ui/pageDrag.ts`; nothing at a tab's own page); controllers through the Gamepad API | App Store; `canUpdate` false | Xcode project generated in CI (`tauri ios init`), unsigned IPA built there; never run on a device or the simulator; phone and tablet layouts built (§4) |
 | Android TV | the Android build with a leanback launcher entry and a 320x180 banner; touch screen not required | as Android | as Android | fullscreen, TV mode on at every start (`MainActivity.kt` tells the page through `polarDevice.isTv()`, `isTvDevice` in `lib/platform/device.ts`) | remote D-pad as arrow keys, Back (the system Back as Escape; Back with only the menu open on Home leaves), controllers | Play Store | built into the same APK (manifest, banner, TV mode at start); never run on a TV or the TV emulator |
-| Apple TV (tvOS) | none yet: tvOS has no web view, and Tauri 2 doesn't target it | — | — | — | — | — | needs a native tvOS app (SwiftUI) using the core crates through a C/Swift binding; cycle 3 decides |
+| Apple TV (tvOS) | no Tauri: tvOS has no web view, and Tauri 2 doesn't target it. A native SwiftUI app instead (below) | libmpv, as on iOS (planned) | the core's own file, `polar-tv.json` (`crates/ffi`) | the whole screen | Siri Remote focus, Menu as Back (planned) | App Store; `canUpdate` false | the core's Swift binding is built (`crates/ffi`, `scripts/apple-tv-core.sh`); the app is not in the tree yet |
 
 ## 4. Layouts from the same components
 
@@ -112,6 +113,25 @@ native code is the project's own (owner's decision, 2026-11-07), on crates alrea
 
 A click's payload is checked by `payloadRoute` (`lib/notifications/store.ts`) before anything opens:
 only a title page, Library or Downloads.
+
+### Apple TV (#504)
+
+tvOS can't run the React interface, so the Apple TV gets a native SwiftUI app on the same core crates.
+Owner's decisions (2026-11-13), from the plan in #504:
+
+- **UniFFI** (Mozilla, MPL-2.0) carries the core to Swift. `crates/ffi` is the only crate that knows about
+  it: it wraps `polar-addon`, `polar-index`, `polar-library` and `polar-player` in one `Core` object (Home's
+  rows, title pages, sources ranked by the core and kept to links the TV can play, progress in
+  `polar-tv.json`) and `playerOptions()`. `scripts/apple-tv-core.sh` builds it as a static library for
+  `aarch64-apple-tvos` and `aarch64-apple-tvos-sim` (an XCFramework) and writes the Swift side
+  (`PolarCore.swift`), both generated, never committed.
+- **supabase-swift** (MIT) signs the TV in, with the code flow of "Sign in a TV" (#133), and reads the account's
+  settings document for its add-ons and keys. Sign-in and sync stay out of the core, as on the other apps, where
+  they are TypeScript.
+- **libmpv** plays, built for the tvOS SDK as for iOS: most add-on streams are MKV with HEVC, AC3/DTS and ASS
+  subtitles, which AVPlayer can't open.
+- **First version**: sign-in, Home, a title page, sources and playback, progress kept on the TV. Sync, watch
+  parties, anime grouping, downloads and settings beyond sign-out wait until that runs on a device.
 
 ## 5. Adding a platform
 
