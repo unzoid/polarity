@@ -387,12 +387,13 @@ mod tests {
             self.r.read_exact(&mut body).await.unwrap();
             CastMessage::decode(&body).unwrap()
         }
-        /// The next message that isn't a heartbeat.
+        /// The next message that isn't a heartbeat or a status poll: both come on timers (a poll at once when
+        /// playing starts), so a slow machine can see one land before the message a test waits for.
         async fn expect(&mut self, kind: &str) -> (CastMessage, Value) {
             loop {
                 let msg = self.next().await;
                 let v: Value = serde_json::from_str(&msg.payload).unwrap();
-                if v["type"] == "PING" {
+                if v["type"] == "PING" || v["type"] == "GET_STATUS" {
                     continue;
                 }
                 assert_eq!(v["type"], kind, "{v}");
