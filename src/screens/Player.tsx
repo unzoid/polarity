@@ -1306,8 +1306,28 @@ export function Player({
   // "4K · Dolby Vision · Dolby Atmos · English 5.1" under the title, once it plays (Settings → Playback).
   const playingFormat = usePlayingFormat(started && !airplay.casting ? media : null, showPlayingFormat && !ytFramed);
 
-  /** "More" has items of its own (screenshots, Picture in Picture), so it shows whatever fits. */
-  const moreItems = canShoot || canMini;
+  // Play in another player installed here (desktop): this one pauses and keeps the place.
+  const { data: otherPlayers = [] } = useQuery({
+    queryKey: keys.externalPlayers,
+    queryFn: api.externalPlayers,
+    enabled: isDesktop && !tv,
+    staleTime: Infinity,
+  });
+  const canHandOff = isDesktop && !tv && !ytId && source.state.status === "ready" && otherPlayers.length > 0;
+  const handOff = (player: { id: string; name: string }) => {
+    if (source.state.status !== "ready") return;
+    const v = videoRef.current;
+    v?.pause();
+    void api
+      .externalPlay(player.id, source.state.url, heading || title, v?.currentTime ?? 0, requestHeaders(source.state.stream))
+      .then(
+        () => flashNotice(`Playing in ${player.name}. Your place here is kept.`, 4000),
+        (e) => flashNotice(errorMessage(e), 4000),
+      );
+  };
+
+  /** "More" has items of its own (screenshots, Picture in Picture, other players), so it shows whatever fits. */
+  const moreItems = canShoot || canMini || canHandOff;
 
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
@@ -1736,6 +1756,12 @@ export function Player({
                       Show Last Screenshot
                     </MenuItem>
                   )}
+                  {canHandOff &&
+                    otherPlayers.map((p) => (
+                      <MenuItem key={p.id} onClick={() => handOff(p)}>
+                        {`Play in ${p.name}`}
+                      </MenuItem>
+                    ))}
                   {watchLog && (
                     <MenuItem
                       onClick={() =>

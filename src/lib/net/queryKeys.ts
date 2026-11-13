@@ -51,6 +51,7 @@ export const keys = {
   personPhoto: (name: string) => ["person-photo", name] as const,
   mpv: ["mpv"] as const,
   mpvLookahead: ["mpv", "lookahead"] as const,
+  externalPlayers: ["external-players"] as const,
   discord: ["discord"] as const,
   storeProblem: ["store-problem"] as const,
   secretsPlace: ["secrets-place"] as const,

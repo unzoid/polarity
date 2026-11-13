@@ -160,6 +160,11 @@ export const api = {
   screenshot: (title: string, at: number) => call<string>("mpv_screenshot", { title, at }),
   /** Show the last screenshot in the file manager. */
   revealScreenshot: () => call<void>("mpv_screenshot_reveal"),
+  /** Other players installed here that a video can be handed to (desktop). */
+  externalPlayers: () => call<{ id: string; name: string }[]>("external_players").catch(() => []),
+  /** Play in one of them, from `start` seconds; `headers` are the add-on's request headers. */
+  externalPlay: (player: string, url: string, title: string, start: number, headers: Record<string, string> | null) =>
+    call<void>("external_play", { player, url, title, start, headers }),
   /** Open the user's own mpv folder (Settings → Advanced → "Use my own mpv settings"). */
   openMpvFolder: () => call<void>("mpv_config_folder"),
   /** Whether autocrop's lookahead reads ahead in the video playing now, or why it can't; null with nothing to say. */

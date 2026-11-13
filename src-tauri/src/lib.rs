@@ -8,6 +8,7 @@ mod dev_channel;
 mod discord;
 mod disk;
 mod downloads;
+mod external_player;
 mod imdb;
 mod introdb;
 mod keychain;
@@ -372,6 +373,8 @@ pub fn run() {
             player::mpv_screenshot_reveal,
             player::mpv_config_folder,
             media_session::media_session,
+            external_player::external_players,
+            external_player::external_play,
             player::player_system_bars,
             player::player_keep_awake,
             native_tabs::native_tabs,
