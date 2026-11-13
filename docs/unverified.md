@@ -1371,7 +1371,34 @@ kept aside, one that can't be read never written over); `cargo clippy` for Linux
 for `aarch64-apple-tvos` and `aarch64-apple-tvos-sim`; `scripts/apple-tv-core.sh` writing `PolarCore.swift`.
 Not checked here, for want of a Mac: the static libraries built with Xcode's toolchain, the XCFramework, and the
 generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.sh` ends with "Wrote
-.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both. No Apple TV app uses them yet.
+.../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both.
+
+The app (`apple-tv/`) was written without a Swift compiler: CI's `apple-tv` job (macOS runner) is the first to build
+it, for the simulator, unsigned. Never run. To check, in the tvOS simulator or on an Apple TV (Xcode, your team):
+1. Without an account server in the build (`POLAR_SUPABASE_URL` empty, as in CI): Home opens at once with shelves
+   (Trending Series, New Movies, ...) from Cinemeta. Swiping moves between cards along a shelf and between shelves;
+   the focused card lifts. Account at the top says the build can't sign in.
+2. Click a show: its page has the backdrop, facts, the description, season buttons and the episodes. Menu goes
+   back to Home where you were.
+3. Click an episode: "No sources" (no add-ons) names why. A movie's Play does the same.
+
+Sign-in (part 3) needs a build with the account server: set `POLAR_SUPABASE_URL` and `POLAR_SUPABASE_KEY` (the
+values of `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`) in the target's build settings, with the
+`tv-sign-in` function deployed there. Only `account_settings` (reading the settings document) is tested here
+(`cargo test -p polar-ffi`); the Swift of signing in has never run. To check:
+4. First start: "Sign in to Polarity". Sign In with a Code shows an eight-letter code as ABCD-EFGH and until when it
+   works. On a phone or computer, Settings → Account → Sign in a TV, enter the code: it asks "Sign in on Apple TV?".
+   Approve: within a few seconds the TV goes on (one profile: straight to Home; more: Who's watching).
+   Decline instead: the TV says it was declined. Wait past the time shown: it says the code expired.
+5. Home's rows now follow the profile's TMDB key and its "Titles and descriptions" language, and its add-ons' own
+   catalogs come after the index's rows; an episode lists sources from the add-ons. Account at the top names the
+   profile.
+6. A profile whose keys are sealed with a passphrase: Home says the TV can't open them yet and shows the
+   standard rows. A profile with no add-ons says so.
+7. Quit and start the app again: no sign-in screen, the same profile. Account → Switch Profile shows Who's
+   watching; Sign Out of This Apple TV goes back to the sign-in screen and leaves the phone signed in.
+8. Not Now on the sign-in screen: Home with the standard rows, and no sign-in screen at the next start; Account →
+   Sign In brings it back.
 
 ## Screens in headless Chromium (T-051)
 
