@@ -88,6 +88,7 @@ import { isMpv, MpvMedia, type MediaLike, type StepDetail } from "../components/
 import { createFrameStepper, DEFAULT_FPS, measureFps, stepFrame } from "../components/player/frameStep";
 import { useStepping } from "../components/player/useStepping";
 import { createWindowPin } from "../components/player/windowPin";
+import { createMiniWindow } from "../components/player/miniWindow";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
@@ -890,22 +891,38 @@ export function Player({
     });
   }, [pinner, flashNotice]);
 
+  // --- Picture in Picture on desktop: the window as a small player in a corner, on top of the others ---
+  const canMini = canPin && !tv;
+  const [mini, setMini] = useState(false);
+  const miniPlayer = useMemo(() => createMiniWindow(win, setMini), []);
+  // Leaving the player, or TV mode, puts the window back as it was.
+  useEffect(() => {
+    if (tv) void miniPlayer.leave();
+  }, [tv, miniPlayer]);
+  useEffect(() => () => void miniPlayer.leave(), [miniPlayer]);
+  // Pin locks the window's size and place: never both at once.
+  const toggleMini = useCallback(() => void pinner.unpin().then(() => miniPlayer.toggle()), [pinner, miniPlayer]);
+
   const toggleFullscreen = useCallback(async () => {
     if (tv) return;
+    // From Picture in Picture, its own size first (fullscreen again if it was), then fullscreen.
+    if (miniPlayer.mini) await miniPlayer.leave();
     const next = !(await win.isFullscreen());
     // Going fullscreen unpins first.
     await pinner.setFullscreen(next);
     setFullscreen(next);
-  }, [tv, pinner]);
+  }, [tv, pinner, miniPlayer]);
 
   // Fade back to the page first, *then* leave fullscreen: resizing the window
   // while mpv's native picture is up is what flickers, so do it once the page
   // is opaque on top.
   const exit = useCallback(async () => {
+    // Picture in Picture: the window's own size and place again (and fullscreen if it was, left below).
+    if (miniPlayer.mini) await miniPlayer.leave();
     const fs = !tv && (await win.isFullscreen());
     back();
     if (fs) window.setTimeout(() => void win.setFullscreen(false), PLAYER_EXIT_MS);
-  }, [back, tv]);
+  }, [back, tv, miniPlayer]);
 
   /**
    * The Settings page a playback problem names. In TV mode (#435): Sources is TV's own Sources settings; Add-ons, which
@@ -1118,8 +1135,12 @@ export function Player({
           void toggleFullscreen();
           return true;
         case "pinWindow":
-          if (!canPin) return false;
+          if (!canPin || mini) return false;
           togglePin();
+          return true;
+        case "miniPlayer":
+          if (!canMini) return false;
+          toggleMini();
           return true;
         case "fill":
           if (ytFramed) return false;
@@ -1156,6 +1177,11 @@ export function Player({
         case "escape":
           if (tv) {
             void exit();
+            return true;
+          }
+          // Picture in Picture goes back to the full window first.
+          if (miniPlayer.mini) {
+            void miniPlayer.leave();
             return true;
           }
           // Leave fullscreen first; a second Esc backs out of the player.
@@ -1247,13 +1273,13 @@ export function Player({
   // "4K · Dolby Vision · Dolby Atmos · English 5.1" under the title, once it plays (Settings → Playback).
   const playingFormat = usePlayingFormat(started && !airplay.casting ? media : null, showPlayingFormat && !ytFramed);
 
-  /** "More" has items of its own (screenshots), so it shows whatever fits. */
-  const moreItems = canShoot;
+  /** "More" has items of its own (screenshots, Picture in Picture), so it shows whatever fits. */
+  const moreItems = canShoot || canMini;
 
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
   const actionRow = useRef<HTMLDivElement>(null);
-  const showPin = canPin && !fullscreen;
+  const showPin = canPin && !fullscreen && !mini;
   const showFill = !tv && isDesktop;
   const barFit = useBarFit(
     topBar,
@@ -1498,6 +1524,8 @@ export function Player({
           if (!isDesktop) return cycleCrop();
           // Pinned, the window stays as it is (#266).
           if (pinner.pinned) return;
+          // Picture in Picture: back to the full window, as the mini players of phones and browsers do.
+          if (miniPlayer.mini) return void miniPlayer.leave();
           void toggleFullscreen();
         }}
         onWheel={(e) => {
@@ -1658,6 +1686,11 @@ export function Player({
                   {more && showFill && (
                     <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
                       {`Crop: ${cropModeLabel(crop)}`}
+                    </MenuCheckItem>
+                  )}
+                  {canMini && (
+                    <MenuCheckItem checked={mini} onCheckedChange={toggleMini} meta={shortcutText("miniPlayer")}>
+                      Picture in Picture
                     </MenuCheckItem>
                   )}
                   {canShoot && (

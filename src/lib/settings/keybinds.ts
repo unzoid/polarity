@@ -23,6 +23,7 @@ export type Action =
   | "mute"
   | "fullscreen"
   | "pinWindow"
+  | "miniPlayer"
   | "fill"
   | "skip"
   | "nextEpisode"
@@ -49,6 +50,7 @@ export const ACTIONS: { id: Action; label: string; group: ActionGroup; when?: st
   { id: "mute", label: "Mute", group: "player" },
   { id: "fullscreen", label: "Fullscreen", group: "player" },
   { id: "pinWindow", label: "Pin window on top", group: "player", when: "While watching, on desktop" },
+  { id: "miniPlayer", label: "Picture in Picture", group: "player", when: "While watching, on desktop" },
   { id: "fill", label: "Crop mode: Fit, Crop black bars, Fill window", group: "player" },
   { id: "skip", label: "Skip intro / recap", group: "player" },
   { id: "nextEpisode", label: "Next episode", group: "player" },
@@ -78,6 +80,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   mute: ["m"],
   fullscreen: ["f"],
   pinWindow: ["p"],
+  miniPlayer: ["i"],
   fill: ["z"],
   skip: ["s"],
   nextEpisode: ["n"],
