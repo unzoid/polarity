@@ -133,7 +133,8 @@ class MainActivity : TauriActivity() {
   }
 
   // The torrent engine never runs unseen (#207, src-tauri/src/torrent.rs): after half a minute in the
-  // background it stops, whatever is playing. Coming back sooner keeps it. No foreground service.
+  // background it stops, whatever is playing. Coming back sooner keeps it. The playback service (#461,
+  // PlaybackService.kt) keeps the app running for mpv's sound, not for the engine.
   private val background = Handler(Looper.getMainLooper())
   private val stopTorrents = Runnable { TorrentEngine.background() }
 

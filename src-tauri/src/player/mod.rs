@@ -25,7 +25,8 @@
 //!
 //! Here: [`Mpv`], the engines and the IPC reader. [`commands`] holds the
 //! `mpv_*` commands, [`autocrop`] the black-bar zoom, [`preroll`] its probe of
-//! the opening, [`ipc`] the transport.
+//! the opening, [`ipc`] the transport, [`background`] the system's Now Playing
+//! controls and playing on in the background on phones (#461).
 
 #[cfg(target_os = "android")]
 mod android;
@@ -34,6 +35,7 @@ mod apple;
 #[cfg(target_os = "android")]
 pub use android::preload;
 mod autocrop;
+pub mod background;
 mod commands;
 mod ipc;
 mod preroll;
@@ -816,6 +818,9 @@ async fn read_loop(
                     let _ = app.emit("mpv://property", json!({ "name": name, "data": data, "held": true }));
                     continue;
                 }
+                if let Some(data) = data {
+                    background::observe(&name, data);
+                }
                 let _ = app.emit("mpv://property", json!({ "name": name, "data": data }));
             }
             Some(event) => {
@@ -828,6 +833,7 @@ async fn read_loop(
         }
     }
     closed.store(true, Ordering::Relaxed);
+    background::stopped();
     // Nothing will answer now: dropping the senders fails every waiting request at once.
     pending.locked().clear();
     if !quiet.load(Ordering::Relaxed) {

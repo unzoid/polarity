@@ -25,6 +25,7 @@ fn main() {
             "src/ios/back.m",
             "src/ios/focus.m",
             "src/ios/keys.m",
+            "src/ios/now_playing.m",
             "src/apple/notes.m",
         ],
         _ => &[],
