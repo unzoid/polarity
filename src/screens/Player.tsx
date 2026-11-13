@@ -60,7 +60,7 @@ import {
   resumeFrom,
   startPosition,
 } from "../lib/playback";
-import { downloadedStream, episodeState, isLocalFile, nextVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
+import { downloadedStream, episodeState, isLocalFile, nextVideo, previousVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
 import { Scrubber } from "../components/player/Scrubber";
 import { useSource } from "../components/player/useSource";
@@ -93,6 +93,7 @@ import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
 import { usePlayingFormat } from "../components/player/usePlayingFormat";
+import { useMediaSession } from "../components/player/useMediaSession";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
 import {
@@ -174,6 +175,8 @@ const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
 const HOLD_SHOWS_MS = 1200;
 /** With "Up next" set to the very end, it appears this many seconds before. */
 const NEXT_UP_AT_END = 12;
+/** A media key's Previous this early in an episode goes to the one before; later it starts this one again. */
+const PREVIOUS_RESTARTS_S = 5;
 
 
 export function Player({
@@ -1207,6 +1210,36 @@ export function Player({
     },
     // Any other key brings the controls back too, with the focus ring where the keyboard left it (#329).
     () => poke(true, "key"),
+  );
+
+  // Media keys, headset buttons and the system's now-playing controls (Windows' media overlay, macOS's
+  // Now Playing, the iPhone's Lock Screen). Previous goes back to the start, or within its first seconds
+  // to the episode before, as music players do. Not for YouTube's player, which has its own.
+  const previous = meta && type === "series" && !local ? previousVideo(meta, videoId) : undefined;
+  useMediaSession(
+    started && !ytId && !airplay.casting ? media : null,
+    meta || title
+      ? {
+          title: heading || title,
+          subtitle: current ? title : undefined,
+          artwork: meta?.poster ?? meta?.background,
+          canNext: !!next,
+          canPrevious: true,
+        }
+      : null,
+    (key, position) => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (key === "play") void v.play().catch(() => {});
+      else if (key === "pause") v.pause();
+      else if (key === "toggle") togglePlay();
+      else if (key === "next" && next) playVideo(next.id);
+      else if (key === "seek" && position != null) seekTo(position, "the system's controls");
+      else if (key === "previous") {
+        if (v.currentTime < PREVIOUS_RESTARTS_S && previous) playVideo(previous.id);
+        else seekTo(0, "the system's controls");
+      }
+    },
   );
 
   // Warm the next episode's sources well before the credits.

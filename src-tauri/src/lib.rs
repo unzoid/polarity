@@ -15,6 +15,7 @@ mod local_files;
 mod locks;
 mod logging;
 mod mal;
+mod media_session;
 mod native_back;
 mod native_dialogs;
 mod native_tabs;
@@ -369,6 +370,7 @@ pub fn run() {
             player::mpv_snapshot,
             player::mpv_screenshot,
             player::mpv_screenshot_reveal,
+            media_session::media_session,
             player::player_system_bars,
             player::player_keep_awake,
             native_tabs::native_tabs,

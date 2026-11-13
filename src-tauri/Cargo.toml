@@ -42,8 +42,16 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32
 # the version the deep-link plugin already uses.
 windows-registry = "0.6"
 # Notifications (#209): toasts. Already in the build through tauri and wry; only its toast and
-# XML parts are added.
-windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications"] }
+# XML parts are added. The player's media keys and the media overlay (media_session/smtc.rs): the
+# window's SystemMediaTransportControls.
+windows = { version = "0.62", features = [
+  "Data_Xml_Dom",
+  "UI_Notifications",
+  "Media",
+  "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_System_WinRT",
+] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # gilrs has no Android or iOS backend; phones and TVs see controllers through the Gamepad API.
