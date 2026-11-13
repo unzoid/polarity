@@ -29,12 +29,14 @@ import {
   useFormFactor,
   usePageFocus,
   usePageMotion,
+  usePresence,
   cardMotionVars,
   cardOrigin,
   watchCardTaps,
   useSystemBack,
   watchInputModality,
 } from "./lib/ui";
+import { PROFILES_EXIT_MS } from "./screens/account/profileHandoff";
 import { CardMenuHost } from "./components/CardMenu";
 import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
@@ -154,7 +156,26 @@ export function App() {
 }
 
 function Gate() {
-  const { status, profile, profilesView } = useAccount();
+  const { status, profilesView } = useAccount();
+  // Going in from the profile screen, it stays on top of the app a moment to hand over (ProfilesScreen).
+  // Anywhere else (signing out) it goes at once.
+  const picker = usePresence(status === "profiles" ? profilesView : null, PROFILES_EXIT_MS);
+  const handingOver = picker.leaving && (status === "ready" || status === "guest");
+  return (
+    <>
+      {status !== "profiles" && <GateScreen />}
+      {picker.shown && (status === "profiles" || handingOver) && (
+        <Suspense fallback={<div className="account-shell" />}>
+          <ProfilesScreen initial={picker.shown} leaving={handingOver} />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
+/** What the account's status shows, but the profile screen (Gate keeps that one in its own place). */
+function GateScreen() {
+  const { status, profile } = useAccount();
   const { data: settings, isFetched } = useSettings();
   const shell = <div className="account-shell" />;
   switch (status) {
@@ -173,11 +194,7 @@ function Gate() {
         </Suspense>
       );
     case "profiles":
-      return (
-        <Suspense fallback={shell}>
-          <ProfilesScreen initial={profilesView} />
-        </Suspense>
-      );
+      return null;
     case "guest":
     case "ready":
       // Each profile starts on its start page with its own navigation. Wait

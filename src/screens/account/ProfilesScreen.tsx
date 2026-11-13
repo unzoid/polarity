@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Edit, Plus } from "../../components/icons";
-import { useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/ui/Button";
 import { TextField } from "../../components/ui/TextField";
@@ -7,6 +7,7 @@ import { BusyRing } from "../../components/BusyLabel";
 import { AVATAR_GROUPS, type AvatarId, AVATARS, nextAvatar, type Profile, useAccount } from "../../lib/account";
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
+import { flyToNavbar } from "./profileHandoff";
 
 const MAX_PROFILES = 5;
 
@@ -26,11 +27,24 @@ function moveFocus(e: KeyboardEvent<HTMLElement>) {
 }
 
 /** "Who's watching?" plus managing profiles (add, rename, icon, delete). */
-export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manage" }) {
+export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?: "pick" | "manage"; leaving?: boolean }) {
   const account = useAccount();
   const [view, setView] = useState<View>({ name: initial });
   const [entering, setEntering] = useState<string | null>(null);
+  const chosenArt = useRef<HTMLSpanElement>(null);
   const managing = view.name === "manage";
+
+  useEffect(() => {
+    const avatar = chosenArt.current?.querySelector<HTMLElement>(".avatar");
+    if (!leaving || !avatar) return;
+    // A frame on, so the app underneath has laid out its navbar. If that frame comes late (the app's
+    // first render was heavy), the avatar has already begun fading with the screen: let it.
+    const start = performance.now();
+    const frame = requestAnimationFrame((now) => {
+      if (now - start < 120) flyToNavbar(avatar);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [leaving]);
 
   if (view.name === "edit") {
     return (
@@ -49,8 +63,10 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
     setEntering(p.id);
     try {
       await account.chooseProfile(p);
-    } finally {
+    } catch (e) {
+      // Only a failure brings the others back; once in, the chosen one stays alone while the screen leaves.
       setEntering(null);
+      throw e;
     }
   };
 
@@ -58,6 +74,7 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
 
   return (
     <AccountShell
+      leaving={leaving}
       header={
         <button className="account-bar-link" onClick={() => void account.signOut()}>
           Sign Out
@@ -65,11 +82,11 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
       }
     >
       {/* Managing is a mode of the same screen: Done and Manage Profiles change it in place (#93). */}
-      <div className="profiles">
+      <div className="profiles" data-choosing={!!entering || undefined}>
         <h1 className="profiles-title">{managing ? "Manage Profiles" : "Who's watching?"}</h1>
         <ul className="profiles-grid" onKeyDown={moveFocus}>
           {account.profiles.map((p, i) => (
-            <li key={p.id} style={{ "--i": i } as CSSProperties}>
+            <li key={p.id} style={{ "--i": i } as CSSProperties} data-chosen={entering === p.id || undefined}>
               <button
                 data-tile
                 className="profile-tile"
@@ -80,15 +97,15 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
                 autoFocus={p.id === highlighted}
                 aria-label={managing ? `Edit ${p.name}` : p.name}
               >
-                <span className="profile-tile-art">
+                <span className="profile-tile-art" ref={entering === p.id ? chosenArt : undefined}>
                   <Avatar id={p.avatar} />
                   <span className="profile-tile-overlay profile-tile-edit" aria-hidden>
                     <span className="profile-tile-pencil">
                       <Edit size={22} strokeWidth={2.25} />
                     </span>
                   </span>
-                  {entering === p.id && (
-                    <span className="profile-tile-overlay">
+                  {entering === p.id && !leaving && (
+                    <span className="profile-tile-overlay profile-tile-busy">
                       <BusyRing size={28} />
                     </span>
                   )}
@@ -113,16 +130,18 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
             </li>
           )}
         </ul>
-        {managing ? (
-          <Button variant="primary" size="sm" onClick={() => setView({ name: "pick" })}>
-            Done
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm" onClick={() => setView({ name: "manage" })}>
-            <Edit size={16} strokeWidth={2.25} />
-            Manage Profiles
-          </Button>
-        )}
+        <div className="profiles-actions">
+          {managing ? (
+            <Button variant="primary" size="sm" onClick={() => setView({ name: "pick" })}>
+              Done
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setView({ name: "manage" })}>
+              <Edit size={16} strokeWidth={2.25} />
+              Manage Profiles
+            </Button>
+          )}
+        </div>
       </div>
     </AccountShell>
   );
