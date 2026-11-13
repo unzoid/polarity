@@ -22,6 +22,9 @@ targets:
   PolarityTV:
     type: application
     platform: tvOS
+    # A shared scheme, so xcodebuild builds through it (CI): a scheme build also builds the Swift
+    # packages' own package dependencies, which a -target build leaves out.
+    scheme: {}
     sources:
       - path: Sources
       - path: Core/PolarCore.swift

@@ -467,13 +467,14 @@ jobs:
       - name: Build the app for the simulator
         working-directory: apple-tv
         run: |
-          xcodebuild -project PolarityTV.xcodeproj -target PolarityTV -configuration Debug \
-            -sdk appletvsimulator ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project PolarityTV.xcodeproj -scheme PolarityTV -configuration Debug \
+            -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/DerivedData \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
       - name: Check the app is a tvOS simulator build
         working-directory: apple-tv
         run: |
           set -euo pipefail
-          app=build/Debug-appletvsimulator/Polarity.app
+          app=build/DerivedData/Build/Products/Debug-appletvsimulator/Polarity.app
           test -f "$app/Polarity"
           xcrun vtool -show-build "$app/Polarity" | grep -q 'platform TVOSSIMULATOR'
           ditto -c -k --keepParent "$app" "$RUNNER_TEMP/Polarity-tvOS-simulator-arm64.app.zip"
