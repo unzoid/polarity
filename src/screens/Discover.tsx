@@ -5,7 +5,7 @@ import { PosterGrid } from "../components/title/PosterGrid";
 import { Segmented } from "../components/Segmented";
 import { Dropdown } from "../components/Dropdown";
 import { api } from "../lib/api";
-import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catalogTitle, useAddonCatalogs, useListable } from "../lib/catalog";
+import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catalogTitle, useAddonCatalogs, useBrowseVisible, useListable } from "../lib/catalog";
 import { catalogBound, keepWithinLimit, useViewingLimit } from "../lib/catalog";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -69,7 +69,8 @@ export function Discover({
   // Titles over the profile's viewing limit stay out; pages are still counted whole for `skip`.
   const all = keepWithinLimit(query.data?.pages.flat() ?? [], viewing);
   // Nothing to play and nothing to show (#337) stays out.
-  const items = useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id))) ?? [];
+  // Hidden titles too, and watched ones when asked (lib/catalog/browseFilter.ts); the grid's pager fills a short page.
+  const items = useBrowseVisible(useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id)))) ?? [];
 
   return (
     <div className="scroll">

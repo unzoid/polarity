@@ -5,6 +5,7 @@ export * from "./addonCatalogs";
 export * from "./ageRating";
 export * from "./viewingLimit";
 export * from "./addonRows";
+export * from "./browseFilter";
 export * from "./calendar";
 export * from "./genres";
 export * from "./listable";

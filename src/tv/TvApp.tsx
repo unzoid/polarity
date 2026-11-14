@@ -40,6 +40,7 @@ import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { SecretsSyncToast } from "../components/SecretsSyncToast";
 import { LockedKeysToast } from "../components/LockedKeysToast";
+import { HiddenTitleToast } from "../components/HiddenTitleToast";
 
 function TvScreen({ route }: { route: Route }) {
   switch (route.name) {
@@ -276,6 +277,7 @@ export function TvApp() {
         <AccountFullToast tv />
         <SecretsSyncToast tv />
         <LockedKeysToast tv />
+        <HiddenTitleToast tv />
       </main>
       <PlayerLayer player={player} leaving={leaving} />
     </div>

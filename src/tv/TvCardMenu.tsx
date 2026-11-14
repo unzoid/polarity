@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Check, Close, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
+import { Check, Close, Hidden, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
 import { episodeCode } from "../lib/format";
 import { useRouter } from "../lib/router";
 import { useTitleActions } from "../lib/library";
@@ -171,6 +171,8 @@ function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => 
         icon: a.inPlaylist ? <Check size={24} /> : <PlaylistIcon size={24} />,
         onPick: () => onLayer({ kind: "playlists" }),
       },
+      // Out of Home, Discover and recommendations; its page offers Unhide (lib/library/hiddenTitles.ts).
+      { label: a.hidden ? "Unhide This Title" : "Hide This Title", icon: <Hidden size={24} />, onPick: act(a.toggleHidden) },
     ],
   ];
 

@@ -25,6 +25,7 @@ import { prefetchStreams, useMeta, useProgress, useRatings, useStreams } from ".
 import type { ContentType, Meta, MetaPreview, Video } from "../lib/types";
 import { IconButton } from "../components/ui/Button";
 import { SimklPanel } from "../components/title/SimklPanel";
+import { HiddenTitleNote, HideTitleButton } from "../components/title/HiddenTitleControls";
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
 import { BatchDownload } from "../components/BatchDownload";
@@ -194,6 +195,7 @@ function DetailHero({
           playlist
           download={item.type === "movie"}
         >
+          <HideTitleButton item={item} />
           {trailer.visible && (
             <IconButton
               variant="glass"
@@ -206,6 +208,7 @@ function DetailHero({
             </IconButton>
           )}
         </TitleActions>
+        <HiddenTitleNote item={item} />
         <SimklPanel item={item} />
       </div>
 

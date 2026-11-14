@@ -1467,6 +1467,23 @@ Not checked here, for want of a Mac: the static libraries built with Xcode's too
 generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.sh` ends with "Wrote
 .../PolarCoreFFI.xcframework and .../PolarCore.swift" and `apple-tv/Core` holds both. No Apple TV app uses them yet.
 
+## Hide watched, hide a title, bulk remove from Continue Watching
+
+Checked with `bun run typecheck` and `bun run test` (`tests/browseFilter.test.ts`: what a shelf shows, the
+hidden-title list and its cap; `tests/dom/continueEdit.test.tsx`: Edit, Select All, Remove (n), Done, Escape). Never
+looked at in the app, on a phone or on a TV. To check:
+1. Settings → Browsing → Home & Title Pages → Hide watched titles on: a film you finished leaves Home's shelves, the
+   hero, Movies and "Because you watched" rows; a show only once every released episode is watched. Both stay in
+   Continue Watching (when part-way), the Library and Search. A shelf left short fills from the catalog's next page.
+2. Right-click a card (long press on a phone, X on TV) → Hide This Title: it leaves Home, the hero, Movies/Series and
+   the TV rails; the toast's Undo brings it back (TV's toast has no Undo: its page has Unhide). Search finds it; its
+   page says it is hidden, with Unhide. Settings → Browsing lists it with Unhide. On a second device signed in to the
+   same profile the title is hidden after settings sync.
+3. Home → Continue Watching → Edit: Tab reaches each card as a checkbox (a screen reader reads its name and checked
+   state), Space picks it; Select All, Remove (n) takes them out and their history stays in Library → Watched;
+   Done or Escape leaves Edit. On a phone the row's buttons wrap under the heading without overlapping it.
+4. iOS: the native card menu shows Hide This Title with its eye symbol.
+
 ## Screens in headless Chromium (T-051)
 
 - How: `bun run dev`, then open `http://localhost:1420/fake.html` in any browser. The

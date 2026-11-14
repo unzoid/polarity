@@ -6,6 +6,7 @@ import { Card, PickRow, SectionList, type SectionProps, ToggleRow } from "../../
 import { SettingRow } from "../../components/settings/SettingRow";
 import { LimitFromProfile } from "../../components/profileLock/LimitFromProfile";
 import { useLimitFromProfile } from "../../lib/catalog";
+import { HiddenTitlesCard } from "../../components/settings/HiddenTitlesCard";
 
 /** Its sections (PAGE_SECTIONS.browsing): General, Home & Title Pages, Cards & Episodes. */
 export function BrowsingPage({ section, openSection }: SectionProps) {
@@ -54,7 +55,9 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
           <Card title="Home">
             <SettingRow id="heroAutoplay" />
             <SettingRow id="showContinueWatching" />
+            <SettingRow id="hideWatched" />
           </Card>
+          <HiddenTitlesCard />
           <Card title="Title Pages">
             <SettingRow id="trailerAutoplay" />
             {(data.trailerAutoplay ?? true) && <SettingRow id="trailerSound" />}
