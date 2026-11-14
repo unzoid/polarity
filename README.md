@@ -82,6 +82,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
         <li>Plays most files with mpv, inside the app window (Windows, macOS)</li>
         <li>Source, subtitles, audio and speed from the player bar</li>
         <li>Episodes in the player, and a Next Episode button</li>
+        <li>Shows in another episode order than aired (DVD, absolute, story arcs), where TMDB lists one</li>
         <li>Skip intros and recaps, and skip filler episodes in anime</li>
         <li>Subtitle, sound and picture settings that apply straight away, even mid-video</li>
         <li>Black bars inside the picture cropped away with mpv, if you turn it on</li>

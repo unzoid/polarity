@@ -68,6 +68,23 @@ pub fn renumber(videos: Vec<Video>, imdb: &[Video]) -> Vec<Video> {
     out
 }
 
+/// Which of `imdb` each of `videos` is, by the rules [`renumber`] matches by; `None` where nothing
+/// matches. Each of `imdb` is taken at most once, in the order `videos` come. Used to find the
+/// episodes another list (an episode order) names in an already renumbered one.
+pub fn matches(videos: &[Video], imdb: &[Video]) -> Vec<Option<usize>> {
+    let mut used = vec![false; imdb.len()];
+    videos
+        .iter()
+        .map(|v| {
+            let found = pick(v, imdb, &used);
+            if let Some(i) = found {
+                used[i] = true;
+            }
+            found
+        })
+        .collect()
+}
+
 /// Which unused IMDb episode is `v`?
 fn pick(v: &Video, imdb: &[Video], used: &[bool]) -> Option<usize> {
     let free = || imdb.iter().enumerate().filter(|(i, _)| !used[*i]);
@@ -242,6 +259,13 @@ mod tests {
         let tmdb = vec![ep(1, 1, Some("2020-01-01"), "A"), ep(1, 2, Some("2030-01-01"), "New")];
         let imdb = vec![ep(0, 1, Some("2019-06-01"), "Special"), ep(1, 1, Some("2020-01-01"), "1")];
         assert_eq!(ids(&renumber(tmdb, &imdb)), [("tt1:0:1", "Special"), ("tt1:1:1", "A"), ("tt1:1:2", "New")]);
+    }
+
+    #[test]
+    fn matches_finds_each_episode_once() {
+        let imdb = vec![ep(1, 1, Some("2020-01-01"), "1"), ep(1, 2, Some("2020-07-02"), "2")];
+        let tmdb = vec![ep(2, 1, Some("2020-07-01"), "C"), ep(1, 1, Some("2020-01-01"), "A"), ep(1, 1, None, "again")];
+        assert_eq!(matches(&tmdb, &imdb), [Some(1), Some(0), None]);
     }
 
     #[test]

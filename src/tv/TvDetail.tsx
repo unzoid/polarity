@@ -5,13 +5,15 @@ import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { TitleDetails } from "../components/title/TitleDetails";
 import { Info } from "../components/icons";
 import { episodeState, progressMap, renamePlaylist, seasonsOf, upNext, usePlaylists, watchedFraction } from "../lib/library";
+import { shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
+import { TvEpisodeOrders } from "./TvEpisodeOrders";
 import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
 import { TitleHeading } from "../components/title/TitleHeading";
 import { ProgressBar } from "../components/title/Card";
 import { Still } from "../components/StillPlaceholder";
 import { animeEntries, entryMeta, pickTitle, stillFor } from "../lib/anime";
 import { StreamList } from "../components/StreamList";
-import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, seasonLabel, shortRuntime } from "../lib/format";
+import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, shortRuntime } from "../lib/format";
 import { usePlayTarget, useTitlePlayback } from "../lib/playback";
 import { useLibrary, useMeta, useProgress, useStreams, useToggleLibrary } from "../lib/net";
 import { usePrefs } from "../lib/settings";
@@ -351,10 +353,22 @@ function EpisodesPanel({
   const seasonList = useRef<HTMLDivElement>(null);
   useFocusTrap(ref);
   const { data: progress } = useProgress(meta.id);
+  const orders = useEpisodeOrders(meta);
+  const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
-  const next = useMemo(() => upNext(meta, progress ?? []), [meta, progress]);
-  const [season, setSeason] = useState(next.video?.season ?? seasons[0]);
-  const episodes = meta.videos.filter((v) => v.season === season);
+  // The seasons, or the chosen episode order's groups (lib/library/episodeOrder.ts).
+  const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
+  const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
+  const [season, setSeason] = useState((next.video && shelfGroupOf(next.video, view)) ?? seasons[0]);
+  // Another order lists other groups: open on the one up next is in.
+  const shownOrder = useRef(view?.id);
+  useEffect(() => {
+    if (shownOrder.current === view?.id) return;
+    shownOrder.current = view?.id;
+    setSeason((next.video && shelfGroupOf(next.video, view)) ?? groups[0]?.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+  const episodes = groups.find((g) => g.id === season)?.videos ?? [];
   const map = useMemo(() => progressMap(progress), [progress]);
   const entryId = (episodes.find((v) => v.id === next.video?.id) ?? episodes.find(isReleased))?.id;
   // A long season draws only the episodes on and near the screen (#436).
@@ -379,18 +393,19 @@ function EpisodesPanel({
     <div className="tv-panel tv-episodes" ref={ref} data-nav-scope role="dialog" aria-label="Episodes">
       <aside className="tv-episodes-side">
         <TitleHeading name={meta.name} logo={meta.logo} logos={meta.logos} look="tv-panel" />
+        <TvEpisodeOrders orders={orders} />
         <div className="tv-seasons" ref={seasonList} data-nav-scroll="center" data-nav-memory data-nav-prefer-entry>
-          {seasons.map((s) => (
+          {groups.map((g) => (
             <button
-              key={s}
+              key={g.id}
               className="tv-season"
-              aria-current={s === season || undefined}
-              data-nav-entry={s === season || undefined}
-              onFocus={() => setSeason(s)}
-              onClick={() => setSeason(s)}
+              aria-current={g.id === season || undefined}
+              data-nav-entry={g.id === season || undefined}
+              onFocus={() => setSeason(g.id)}
+              onClick={() => setSeason(g.id)}
             >
-              <span>{seasonLabel(s)}</span>
-              <span className="tv-season-count">{meta.videos.filter((v) => v.season === s).length} episodes</span>
+              <span>{g.label}</span>
+              <span className="tv-season-count">{g.videos.length} episodes</span>
             </button>
           ))}
         </div>
@@ -428,7 +443,9 @@ function EpisodesPanel({
                 </span>
                 <span className="tv-episode-text">
                   <span className="tv-episode-kicker">
-                    {v.id === next.video?.id && next.kind !== "start" ? `Up Next · Episode ${v.episode}` : `Episode ${v.episode}`}
+                    {v.id === next.video?.id && next.kind !== "start"
+                      ? `Up Next · Episode ${view?.number.get(v.id) ?? v.episode}`
+                      : `Episode ${view?.number.get(v.id) ?? v.episode}`}
                   </span>
                   <span className="tv-episode-title">{v.title}</span>
                   {v.overview && <span className="tv-episode-overview">{v.overview}</span>}
@@ -436,7 +453,7 @@ function EpisodesPanel({
                 </span>
               </button>
               {openable && (
-                <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${v.episode}`}>
+                <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${view?.number.get(v.id) ?? v.episode}`}>
                   <Sources size={26} />
                 </button>
               )}

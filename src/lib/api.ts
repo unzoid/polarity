@@ -33,6 +33,7 @@ import type {
 } from "./types";
 import { settingsChanged } from "./settings/changes";
 import type { AnimeLink } from "./library/identity";
+import type { EpisodeOrder, EpisodeOrderInfo } from "./library/episodeOrder";
 import type { DiscordActivity } from "./playback/discordPresence";
 import type { TorrentLimits } from "./playback/torrent";
 import type { LookaheadState } from "./playback/lookahead";
@@ -68,6 +69,10 @@ export const api = {
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
+  /** The orders a show can be watched in besides as aired (TMDB's episode groups); empty without a TMDB key. */
+  episodeOrders: (id: string) => call<EpisodeOrderInfo[]>("episode_orders", { id }),
+  /** One of those orders, its episodes as the show's own episode ids. */
+  episodeOrder: (id: string, order: string) => call<EpisodeOrder>("episode_order", { id, order }),
   /**
    * Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime).
    * `onPartial` gets the ranking so far each time an add-on answers before the last.

@@ -10,7 +10,8 @@ import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer"
 import { cardMenu } from "../components/CardMenu";
 import { FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
-import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
+import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, shelfGroupOf, shelfGroups, upNext, useEpisodeOrders } from "../lib/library";
+import { EpisodeOrderPicker } from "../components/title/EpisodeOrderPicker";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
@@ -19,7 +20,7 @@ import { TitleHeading, useHeadingReady } from "../components/title/TitleHeading"
 import { RatingRing } from "../components/RatingRing";
 import { Segmented } from "../components/Segmented";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
-import { episodeCode, formatRuntime, joinFacts, seasonLabel } from "../lib/format";
+import { episodeCode, formatRuntime, joinFacts } from "../lib/format";
 import { type PlayRequest, trailerFor, useFileTrailer, usePlayTarget } from "../lib/playback";
 import { prefetchStreams, useMeta, useProgress, useRatings, useStreams } from "../lib/net";
 import type { ContentType, Meta, MetaPreview, Video } from "../lib/types";
@@ -239,21 +240,32 @@ function SeriesBody({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: bo
 
 function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boolean) => void; episode?: string }) {
   const { data: progress } = useProgress(meta.id);
+  const orders = useEpisodeOrders(meta);
+  const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
-  const next = useMemo(() => upNext(meta, progress ?? []), [meta, progress]);
+  const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
+  const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
   // A link to one episode (#163) opens on its season, with its sources listed (nothing plays by itself).
   const linked = episode ? meta.videos.find((v) => v.id === episode) : undefined;
-  const [season, setSeason] = useState<number | undefined>(linked?.season);
+  const [season, setSeason] = useState<number | undefined>(linked && shelfGroupOf(linked, view));
   const picker = useSourcePicker(onSheet);
+
+  // Another episode order lists other groups: open on the one up next is in.
+  const shownOrder = useRef(view?.id);
+  useEffect(() => {
+    if (shownOrder.current === view?.id) return;
+    shownOrder.current = view?.id;
+    setSeason(undefined);
+  }, [view]);
 
   // Open on the season you're actually in, not always season 1 — so wait
   // for watch progress before choosing.
   useEffect(() => {
-    if (season === undefined && progress !== undefined && next.video) setSeason(next.video.season);
-  }, [next.video, season, progress]);
+    if (season === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
+  }, [next.video, season, progress, view]);
 
-  const current = season ?? seasons[0];
-  const episodes = meta.videos.filter((v) => v.season === current);
+  const current = groups.some((g) => g.id === season) ? season! : (groups[0]?.id ?? seasons[0]);
+  const episodes = groups.find((g) => g.id === current)?.videos ?? [];
   const map = useMemo(() => progressMap(progress), [progress]);
 
   const [layout, setLayout] = useEpisodeLayout();
@@ -277,9 +289,15 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
     <section className="seasons">
       <div className="seasons-bar">
         <div className="seasons-picker">
-          <SeasonPicker value={current} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: seasonLabel(s) }))} />
+          <SeasonPicker value={current} onChange={setSeason} options={groups.map((g) => ({ id: g.id, label: g.label }))} />
         </div>
-        <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} season={current} />
+        <EpisodeOrderPicker orders={orders} />
+        {view ? (
+          // An order's group: its own batch, apart from the seasons'.
+          <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} part={current} />
+        ) : (
+          <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} season={current} />
+        )}
         {/* The show in random order, from any season; progress stays where it is (lib/playback/shuffle.ts). */}
         <IconButton
           variant="glass"
@@ -308,6 +326,7 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
         item={meta}
         layout={layout}
         episodes={episodes}
+        numbers={view?.number}
         progress={map}
         runtime={meta.runtime}
         upNextId={next.kind !== "start" ? next.video?.id : undefined}

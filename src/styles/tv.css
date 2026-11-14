@@ -1062,6 +1062,11 @@
   background: var(--pill-light);
   color: var(--text-on-light);
 }
+/* The episode order choice (TvEpisodeOrders.tsx): its few rows above the seasons, which keep the scrolling. */
+.tv-episode-orders {
+  flex: none;
+  padding-block: 0;
+}
 .tv-season-count {
   font-size: 0.8rem;
   font-weight: 500;

@@ -1702,3 +1702,18 @@ generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.s
   6. B hosts and leaves: the next member becomes host and everyone gets a note.
   7. TV mode: the menu (side menu → Watch Party) works with the remote; the player's Watch Party panel has the
      same parts.
+
+## Episode orders
+
+- Other episode orders from TMDB's episode groups (`crates/index/src/episode_order.rs`, `tmdb/orders.rs`,
+  `src/lib/library/episodeOrder.ts`). Tested against a fake TMDB (listing, reading one order, groups and episodes
+  put in order) and with made-up lists for the mapping onto the episode list (air dates first, IMDb's numbering,
+  repeats, specials, episodes left out); the front end's grouping, numbering, next and previous in tests/episodeOrder.test.ts.
+  Not run against TMDB itself or in the app. To check, with a TMDB key, on a show TMDB lists episode groups for:
+  1. Its page shows "Episode order" beside the season picker; a show with none, or no TMDB key, shows nothing new.
+  2. Pick an order: the picker lists its groups, the episodes are numbered by their place in each, and the aired
+     episodes it leaves out are under "Not in This Order" at the end. Watched marks and progress are the same as before.
+  3. Play an episode: the player's Episodes panel lists the order's groups; Up Next, autoplay and Previous follow
+     the order; Trakt/Simkl, downloads and notifications still name the aired season and episode.
+  4. Back on the page, Play/Resume goes by the order. Reopen the app: the choice stays (this device only).
+  5. Phone (the picker wraps under the seasons) and TV (the order list above the seasons, with the remote).

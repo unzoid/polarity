@@ -163,6 +163,18 @@ pub async fn imdb_for_tmdb(state: State<'_, AppState>, ty: String, id: u64) -> R
     Ok(state.indexer().imdb_for_tmdb(&ty, id).await?)
 }
 
+/// The orders a show can be watched in besides as aired (TMDB's episode groups); empty without a TMDB key.
+#[tauri::command]
+pub async fn episode_orders(state: State<'_, AppState>, id: String) -> Result<Vec<polar_index::EpisodeOrderInfo>> {
+    Ok(state.indexer().episode_orders(&id).await?)
+}
+
+/// One of those orders, its episodes as ids of the show's episode list.
+#[tauri::command]
+pub async fn episode_order(state: State<'_, AppState>, id: String, order: String) -> Result<polar_index::EpisodeOrder> {
+    Ok(state.indexer().episode_order(&id, &order).await?)
+}
+
 // --- Streams -------------------------------------------------------------
 
 #[derive(Serialize)]
