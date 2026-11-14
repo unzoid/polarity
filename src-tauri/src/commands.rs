@@ -163,6 +163,12 @@ pub async fn imdb_for_tmdb(state: State<'_, AppState>, ty: String, id: u64) -> R
     Ok(state.indexer().imdb_for_tmdb(&ty, id).await?)
 }
 
+/// A person's page by TMDB id: who they are and their titles; not found without a TMDB key.
+#[tauri::command]
+pub async fn person(state: State<'_, AppState>, id: u64) -> Result<polar_index::PersonPage> {
+    Ok(state.indexer().person(id).await?)
+}
+
 // --- Streams -------------------------------------------------------------
 
 #[derive(Serialize)]

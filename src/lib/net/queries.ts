@@ -22,6 +22,10 @@ export const useCatalog = (type: ContentType, id: string, genre?: string, enable
 export const useRecommend = (type: ContentType, id: string, enabled = true) =>
   useQuery({ queryKey: keys.recommend(type, id), queryFn: () => api.recommend(type, id), enabled, staleTime: 60 * 60_000 });
 
+/** A person's page (TMDB): who they are and their titles. */
+export const usePerson = (id: number) =>
+  useQuery({ queryKey: keys.person(id), queryFn: () => api.person(id), staleTime: 6 * 60 * 60_000, retry: 1 });
+
 export const useMeta = (type: ContentType, id: string, enabled = true) => useQuery({ ...metaQuery(type, id), enabled });
 
 /** The query behind {@link useMeta}, for asking several titles at once. */

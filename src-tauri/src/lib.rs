@@ -289,6 +289,7 @@ pub fn run() {
             commands::search_movies,
             commands::meta,
             commands::imdb_for_tmdb,
+            commands::person,
             commands::streams,
             commands::resolve_stream,
             torrent::torrent_open,

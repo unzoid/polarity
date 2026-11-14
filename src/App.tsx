@@ -14,6 +14,7 @@ import { Library, LibraryCollection, LibraryPlaylist } from "./screens/Library";
 import { Calendar } from "./screens/Calendar";
 import { Search } from "./screens/Search";
 import { Detail } from "./screens/Detail";
+import { Person } from "./screens/Person";
 import { Anime, AnimeBrowse, AnimeSchedule } from "./screens/Anime";
 import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
@@ -101,6 +102,8 @@ function Screen({ route }: { route: Route }) {
       return <AnimeSchedule />;
     case "anime-browse":
       return <AnimeBrowse />;
+    case "person":
+      return <Person id={route.id} name={route.title} />;
     case "player":
       return null; // rendered as a full-window layer below
   }

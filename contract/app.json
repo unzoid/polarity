@@ -7,6 +7,7 @@
   "Imported": ["library","progress"],
   "InstalledAddon": ["disabled","manifest","manifestUrl"],
   "LocalChanges": ["library","links","progress","pulledAt"],
+  "PersonPage": ["acting","biography","birthplace","born","died","directing","id","knownFor","name","photo"],
   "Playable.external": ["kind","url"],
   "Playable.torrent": ["kind"],
   "Playable.unsupported": ["kind","reason"],

@@ -199,6 +199,24 @@ pub struct Meta {
     /// Everything else worth knowing, for the title's Details.
     #[serde(default)]
     pub details: MetaDetails,
+    /// Directors, creators and writers, `character` holding the job, where the source names them by id (TMDB),
+    /// so their names can open their pages.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub crew: Vec<Person>,
+    /// The title's other videos (featurettes, clips, further trailers), official ones first. YouTube only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extras: Vec<Extra>,
+}
+
+/// One of a title's other videos, played in the trailer player.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Extra {
+    pub name: String,
+    /// What it is, as TMDB says: "Featurette", "Behind the Scenes", "Clip", "Bloopers", "Teaser", "Trailer"…
+    pub kind: String,
+    /// The YouTube video id.
+    pub key: String,
 }
 
 /// One cast member.
@@ -211,6 +229,9 @@ pub struct Person {
     /// Portrait URL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub photo: Option<String>,
+    /// TMDB's id for the person, where the source is TMDB: their page opens from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tmdb_id: Option<u64>,
 }
 
 /// The fine print about a title. Every field is optional: sources differ.

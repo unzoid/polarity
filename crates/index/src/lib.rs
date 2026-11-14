@@ -14,7 +14,10 @@
 mod cache;
 mod cinemeta;
 pub mod curate;
+mod person;
 mod tmdb;
+
+pub use person::PersonPage;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -90,6 +93,8 @@ pub struct Indexer {
     pools: TtlCache<String, Arc<OnceCell<Vec<MetaPreview>>>>,
     /// IMDb's episode numbering for TMDB series.
     numbering: cinemeta::Cinemeta,
+    /// People's pages by TMDB id.
+    people: TtlCache<u64, PersonPage>,
 }
 
 impl Indexer {
@@ -104,6 +109,7 @@ impl Indexer {
             metas: TtlCache::new(Duration::from_secs(6 * 60 * 60), 2048),
             pools: TtlCache::new(Duration::from_secs(3 * 60 * 60), 64),
             numbering: cinemeta::Cinemeta::new(),
+            people: TtlCache::new(Duration::from_secs(6 * 60 * 60), 256),
         }
     }
 
@@ -243,6 +249,18 @@ impl Indexer {
         };
         self.metas.insert(key, meta.clone());
         Ok(meta)
+    }
+
+    /// A person's page by their TMDB id: who they are and the titles they act in or directed. Only
+    /// TMDB names people by id; without a TMDB key there are none to ask for (not found).
+    pub async fn person(&self, tmdb_id: u64) -> Result<PersonPage> {
+        let Backend::Tmdb(t) = &self.backend else { return Err(IndexError::NotFound) };
+        if let Some(hit) = self.people.get(&tmdb_id) {
+            return Ok(hit);
+        }
+        let page = t.person(tmdb_id).await?;
+        self.people.insert(tmdb_id, page.clone());
+        Ok(page)
     }
 
     /// The IMDb id of a TMDB title, for links that carry TMDB's id (#208). Only TMDB knows its own

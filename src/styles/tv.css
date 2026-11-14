@@ -2644,3 +2644,79 @@
 .tv-card-more .tv-card-fallback {
   font-weight: 650;
 }
+
+/* A person's page (TvPerson.tsx): photo, name, facts and biography, then their titles as rails. */
+.tv-person {
+  padding: 4rem 0 4rem;
+}
+.tv-person-head {
+  display: flex;
+  gap: 2.5rem;
+  align-items: flex-start;
+  padding: 0 var(--tv-gutter) 2rem;
+}
+.tv-person-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 13rem;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  font-size: 2rem;
+  font-weight: 700;
+}
+.tv-person-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tv-person-text {
+  max-width: 56rem;
+  min-width: 0;
+}
+.tv-person-facts {
+  margin: -0.5rem 0 1rem;
+  font-size: 1.25rem;
+  color: var(--text-2);
+}
+.tv-person-bio {
+  margin: 0 0 1.25rem;
+  font-size: 1.25rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  color: var(--text-2);
+}
+
+/* A title's extras panel (TvExtras.tsx): tiles with the name and kind under them. */
+.tv-extras .tv-rail {
+  margin-top: 2rem;
+}
+.tv-extra .tv-card-img {
+  position: absolute;
+  inset: 0;
+}
+.tv-extra-fallback {
+  align-content: center;
+  gap: 0.25rem;
+}
+.tv-extra-caption {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+.tv-extra-name {
+  font-size: 1.125rem;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-extra-kind {
+  font-size: 1rem;
+  color: var(--text-3);
+}

@@ -12,6 +12,7 @@ import { ArrowUpRight } from "../icons";
 import { Img } from "../Img";
 import { imdbUrl } from "../RatingRing";
 import { Chip } from "../ui/Chip";
+import { useRouter } from "../../lib/router";
 
 /**
  * Everything about a title below the fold: who's in it (with faces where the source has them), the facts,
@@ -152,15 +153,29 @@ export function DetailsLinks({ label, children }: { label: string; children: Rea
   );
 }
 
-function Cast({ person: p }: { person: { name: string; character?: string; photo?: string } }) {
+function Cast({ person: p }: { person: { name: string; character?: string; photo?: string; tmdbId?: number } }) {
   // No photo from the metadata source: look the name up on IMDb. Initials until it answers (or if it can't).
   const { data: found } = usePersonPhoto(p.name, !p.photo);
+  const { navigate } = useRouter();
   const photo = p.photo ?? found ?? undefined;
-  return (
-    <li className="person">
+  const face = (
+    <>
       <span className="person-photo">{photo ? <Img src={photo} alt="" /> : <span aria-hidden>{initials(p.name)}</span>}</span>
       <span className="person-name">{p.name}</span>
       {p.character && <span className="person-role">{p.character}</span>}
+    </>
+  );
+  // With TMDB's id the face and name open the person's page (Cinemeta's names have none).
+  const id = p.tmdbId;
+  return (
+    <li className="person">
+      {id != null ? (
+        <button className="person-open" onClick={() => navigate({ name: "person", id, title: p.name })}>
+          {face}
+        </button>
+      ) : (
+        face
+      )}
     </li>
   );
 }

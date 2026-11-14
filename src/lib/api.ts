@@ -12,6 +12,7 @@ import type {
   Manifest,
   Meta,
   MetaPreview,
+  PersonPage,
   Playable,
   Readiness,
   Progress,
@@ -68,6 +69,8 @@ export const api = {
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
+  /** A person's page by TMDB id: who they are and their titles; fails as not found without a TMDB key. */
+  person: (id: number) => call<PersonPage>("person", { id }),
   /**
    * Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime).
    * `onPartial` gets the ranking so far each time an add-on answers before the last.
