@@ -386,6 +386,8 @@ pub fn run() {
             cast::cast_stop,
             player::player_system_bars,
             player::player_keep_awake,
+            player::player_brightness,
+            player::player_set_brightness,
             native_tabs::native_tabs,
             native_back::native_back,
             art_focus::art_focus,

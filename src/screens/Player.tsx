@@ -98,6 +98,11 @@ import { createMiniWindow } from "../components/player/miniWindow";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
+import { useSwipeLevels } from "../components/player/useSwipeLevels";
+import { useScreenBrightness } from "../components/player/useScreenBrightness";
+import { BrightnessHud } from "../components/player/BrightnessHud";
+import { TouchLockLayer, useTouchLock } from "../components/player/TouchLock";
+import { Lock } from "../components/icons";
 import { usePlayingFormat } from "../components/player/usePlayingFormat";
 import { useMediaSession } from "../components/player/useMediaSession";
 import { useChromecast } from "../components/player/useChromecast";
@@ -480,7 +485,9 @@ export function Player({
   // The top bar's "More" menu (#396) keeps the controls up while it's open.
   const [moreOpen, setMoreOpen] = useState(false);
   // Playing on a TV, nobody watches this screen: the controls that drive the TV stay up.
-  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting;
+  // Phones and tablets: locked against touches (TouchLock.tsx), the controls stay hidden.
+  const touchLock = useTouchLock(touch && !tv);
+  const chromeVisible = !touchLock.locked && (chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting);
   // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
   const [ytPlayed, setYtPlayed] = useState(false);
   useEffect(() => {
@@ -652,6 +659,26 @@ export function Player({
   // Press and hold on the picture: faster until let go (Settings → Playback). Not in a party, nor on YouTube's own player.
   const hold = useHoldSpeed(holdSpeed > 0 && !inParty && !ytFramed && started, started && !paused);
   const playRate = hold.held ? holdSpeed : rate;
+  // Phones and tablets: a finger up or down the right half sets the volume, the left the screen's brightness
+  // (useSwipeLevels; Settings → Controls & TV turns it off). Not in TV mode, while locked or held, nor on YouTube's player.
+  const { swipeGestures } = usePrefs();
+  const brightness = useScreenBrightness(touch && !tv);
+  const swipe = useSwipeLevels({
+    enabled: touch && !tv && swipeGestures && !touchLock.locked && started && !ytFramed,
+    begin: (side) => {
+      if (hold.held) return null;
+      if (side === "left") return brightness.level == null ? null : { level: brightness.level, max: 1 };
+      return { level: muted ? 0 : Math.min(volume, volumeTop), max: volumeTop };
+    },
+    change: (side, level) => {
+      if (side === "left") return brightness.set(level);
+      const before = muted ? 0 : Math.min(volume, volumeTop);
+      if (level === before) return;
+      setMuted(false);
+      setVolume(level);
+      setVolumePing((p) => ({ n: p.n + 1, dir: level > before ? "up" : "down" }));
+    },
+  });
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
   }, [playRate, source.state, media, inParty]);
@@ -1620,28 +1647,33 @@ export function Player({
         // can make a click only show/hide the controls instead; a tap always
         // does, as on every phone player (Play/Pause is in the controls).
         // A pinch out fills the screen and a pinch in fits the picture, as phone players do (#176).
-        // Held down, it plays faster until let go (useHoldSpeed).
+        // Held down, it plays faster until let go (useHoldSpeed). A finger up or down sets volume or brightness (useSwipeLevels).
         onPointerDown={(e) => {
           chromeAtPress.current = chrome.visible;
           pinch.onPointerDown(e);
           hold.handlers.onPointerDown(e);
+          swipe.handlers.onPointerDown(e);
         }}
         onPointerMove={(e) => {
           pinch.onPointerMove(e);
           hold.handlers.onPointerMove(e);
+          swipe.handlers.onPointerMove(e);
         }}
         onPointerUp={(e) => {
           pinch.onPointerUp(e);
           hold.handlers.onPointerUp();
+          swipe.handlers.onPointerUp(e);
         }}
         onPointerCancel={(e) => {
           pinch.onPointerCancel(e);
           hold.handlers.onPointerCancel();
+          swipe.handlers.onPointerCancel(e);
         }}
         onPointerLeave={hold.handlers.onPointerLeave}
         onClick={() => {
-          // The release of a hold that sped up: play/pause and the controls stay as they were.
-          if (hold.swallowClick()) return;
+          // The release of a hold that sped up, or of a swipe: play/pause and the controls stay as they were.
+          const held = hold.swallowClick();
+          if (swipe.swallowClick() || held) return;
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
@@ -1904,6 +1936,11 @@ export function Player({
                 {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
               </IconButton>
             )}
+            {touchLock.available && (
+              <IconButton variant="player" onClick={touchLock.lock} label="Lock screen" title="Lock screen">
+                <Lock size={22} />
+              </IconButton>
+            )}
             {!tv && !isDesktop && (
               <IconButton
                 variant="player"
@@ -2157,6 +2194,11 @@ export function Player({
       />
 
       {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
+      {/* Phones and tablets: the swipes' levels, each at the edge of its half. */}
+      {touch && !tv && (
+        <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} side="right" held={swipe.active === "right"} />
+      )}
+      {brightness.available && <BrightnessHud level={brightness.level ?? 0} held={swipe.active === "left"} media={media} />}
 
       <SkipButton
         active={started ? skip.active : null}
@@ -2357,6 +2399,15 @@ export function Player({
         />
       )}
       {sourceInfo.panel}
+      {/* Over everything while locked: touches go nowhere but its Unlock chip; playback carries on. */}
+      {touchLock.locked && (
+        <TouchLockLayer
+          onUnlock={() => {
+            touchLock.unlock();
+            poke(false, "unlocked");
+          }}
+        />
+      )}
     </div>
   );
 }

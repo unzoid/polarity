@@ -37,6 +37,8 @@ const GROUPS: { heading?: string; pages: PageId[] }[] = [
 
 /** Settings for TV mode, left out of search where there is none (tvMode.ts). */
 const TV_ONLY = new Set(["tvMode", "showTvButton"]);
+/** Shown on phones and tablets only (ControlsPage). */
+const TOUCH_ONLY = new Set(["swipeGestures"]);
 
 /** Where a search result's row can be on its page. */
 const ROW_LABELS = ".settings-row-title, .settings-group-title, .sub-setting-label, .shortcut-label";
@@ -110,7 +112,8 @@ export function SettingsOverlay({
   const searchInput = useRef<HTMLInputElement>(null);
   // A phone has no room for the sidebar beside a page: it shows one or the other, the list of
   // sections first, as a phone's own Settings app does. Back (or Escape) goes from a page to the list.
-  const phone = useFormFactor().form === "phone";
+  const { form, touch } = useFormFactor();
+  const phone = form === "phone";
   const [view, setView] = useState<"list" | "page">("list");
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -179,9 +182,9 @@ export function SettingsOverlay({
   const results = useMemo(
     () =>
       searchSettings(query, (id) => pageOf(id).label, new Set(pages.map((p) => p.id))).filter(
-        (entry) => tvModeAvailable || !TV_ONLY.has(entry.id),
+        (entry) => (tvModeAvailable || !TV_ONLY.has(entry.id)) && (touch || !TOUCH_ONLY.has(entry.id)),
       ),
-    [query, pages], // eslint-disable-line react-hooks/exhaustive-deps
+    [query, pages, touch], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const [selected, setSelected] = useState(0);
   const resultsList = useRef<HTMLDivElement>(null);

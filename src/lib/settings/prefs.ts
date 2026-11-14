@@ -43,6 +43,8 @@ export interface Prefs {
   loadingDetails: boolean;
   /** Press and hold on the picture plays this much faster until let go; 0 = off. */
   holdSpeed: number;
+  /** Phones and tablets: a finger swiped up or down the picture sets the volume (right half) and brightness (left). This device's own. */
+  swipeGestures: boolean;
   /** Pausing brings the controls up. Off: the picture stays clear, the controls come with the mouse or a key. */
   pauseShowsControls: boolean;
   /** Under the title in the player: what's playing ("4K · Dolby Vision · Dolby Atmos · English 5.1"). */
@@ -195,6 +197,7 @@ const DEFAULTS: Prefs = {
   autoSkipDelay: 5,
   loadingDetails: false,
   holdSpeed: 2,
+  swipeGestures: true,
   pauseShowsControls: true,
   showPlayingFormat: true,
   uiScale: 1,

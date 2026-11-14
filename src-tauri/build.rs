@@ -20,6 +20,7 @@ fn main() {
             "src/ios/mpv_view.m",
             "src/ios/files.m",
             "src/ios/system_bars.m",
+            "src/ios/brightness.m",
             "src/ios/tabs.m",
             "src/ios/dialogs.m",
             "src/ios/back.m",

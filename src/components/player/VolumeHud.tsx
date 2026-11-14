@@ -30,6 +30,8 @@ export function VolumeHud({
   muted,
   ping,
   media,
+  side = "left",
+  held = false,
 }: {
   volume: number;
   /** The loudest it goes (1 = 100%; more where Settings allows a boost): the pill full. */
@@ -37,9 +39,24 @@ export function VolumeHud({
   muted: boolean;
   ping: VolumePing;
   media: MediaLike | null;
+  /** The edge it lives on: the right for a phone's swipe on the right half (useSwipeLevels). */
+  side?: "left" | "right";
+  /** A finger is on it (a swipe): it stays, and lingers once let go. */
+  held?: boolean;
 }) {
   const reduce = useReducedMotion();
-  const [visible, setVisible] = useState(false);
+  const [shown, setVisible] = useState(false);
+  const visible = shown || held;
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    const was = wasHeld.current;
+    wasHeld.current = held;
+    if (!was || held) return;
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), LINGER_MS);
+    return () => clearTimeout(t);
+  }, [held]);
+  const fromX = side === "left" ? -24 : 24;
   const pill = useRef<HTMLDivElement | null>(null);
   const last = useRef({ n: ping.n, volume });
   // Read by the ping effect without re-running it (a re-run would cancel the hide timer).
@@ -83,11 +100,12 @@ export function VolumeHud({
       {visible && (
         <motion.div
           className="volume-hud"
+          data-side={side}
           role="status"
           aria-label={muted ? "Muted" : `Volume ${Math.round(volume * 100)}%`}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, x: -24, scale: 0.94 }}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, x: fromX, scale: 0.94 }}
           animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, x: -24, scale: 0.94, transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] } }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, x: fromX, scale: 0.94, transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] } }}
           transition={PRESENCE}
         >
           <div
