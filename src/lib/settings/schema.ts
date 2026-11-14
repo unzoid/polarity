@@ -1,4 +1,5 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
+import { LIMIT_STEPS } from "../catalog/ageRating";
 import { isMac } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
 import { MAX_VOLUMES } from "../playback/volume";
@@ -822,6 +823,28 @@ export const SETTINGS: SettingDef[] = [
       { value: "hide", label: "Hide" },
     ]),
     tv: "Mature Anime",
+  },
+  {
+    id: "viewingLimit",
+    page: "browsing",
+    title: "Hide titles rated above",
+    caption: "Age ratings come from TMDB. Titles above the limit leave Home, Movies, Shows and Search, and don't open or play",
+    keywords: "age rating certification parental kids family children limit pg",
+    bind: p("viewingLimit"),
+    control: choice([{ value: 0, label: "No limit" }, ...LIMIT_STEPS.map((age) => ({ value: age, label: String(age) }))]),
+    // Film lists are asked for within the limit, so pages come back full.
+    invalidates: [["catalog"], ["discover"], ["featured"]],
+    tv: "Age Limit",
+  },
+  {
+    id: "viewingHideUnrated",
+    page: "browsing",
+    title: "Also hide titles without a rating",
+    caption: "With a limit set. Titles from add-ons and without a TMDB key have none",
+    keywords: "age rating unrated certification parental kids",
+    bind: p("viewingHideUnrated"),
+    control: toggle,
+    tv: "Hide Unrated Titles",
   },
   {
     id: "searchSuggestions",

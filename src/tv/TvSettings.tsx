@@ -109,7 +109,7 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     ...(torrentsPlayHere ? ["torrentUploadMbps", "torrentCacheGb", "torrentKeepSharing"] : []),
     ...(os === "android" ? ["torrentMobileData"] : []),
   ],
-  browsing: ["trailerAutoplay", "trailerSound", "showCardRatings", "cardRatingPosition", "matureContent", "showCalendar", "showContinueWatching"],
+  browsing: ["trailerAutoplay", "trailerSound", "showCardRatings", "cardRatingPosition", "viewingLimit", "viewingHideUnrated", "matureContent", "showCalendar", "showContinueWatching"],
   tv: ["uiSounds", "uiSoundVolume", "padHints", "padStick", "padPlayerVolume", "controllerAlerts"],
 };
 

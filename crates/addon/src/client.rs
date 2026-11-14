@@ -271,6 +271,7 @@ impl RawMeta {
             release_info: value_to_string(self.release_info).or_else(|| value_to_string(self.year)),
             imdb_rating: value_to_string(self.imdb_rating),
             genres: strings(self.genres.or(self.genre)),
+            certification: None,
         };
         let people = self
             .app_extras

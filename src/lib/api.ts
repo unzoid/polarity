@@ -57,8 +57,9 @@ export const api = {
   /** The anime cache folder (fillers.json, anime-list-mini.json) and their size. */
   animeCache: () => call<CacheInfo>("anime_cache"),
   animeCacheClear: () => call<void>("anime_cache_clear"),
-  catalog: (type: ContentType, id: string, skip = 0, genre?: string) =>
-    call<MetaPreview[]>("catalog", { ty: type, id, skip, genre }),
+  /** `bound`: an age limit's highest film rating, which TMDB's discover lists apply (lib/catalog/viewingLimit.ts catalogBound). */
+  catalog: (type: ContentType, id: string, skip = 0, genre?: string, bound?: { certCountry: string; certMax: string }) =>
+    call<MetaPreview[]>("catalog", { ty: type, id, skip, genre, ...bound }),
   /** Titles like `id`, for "Because you watched …". */
   recommend: (type: ContentType, id: string) => call<MetaPreview[]>("recommend", { ty: type, id }),
   search: (query: string) => call<SearchResults>("search", { query }),

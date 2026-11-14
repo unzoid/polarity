@@ -304,6 +304,12 @@
   font-size: 0.95rem;
   font-weight: 600;
 }
+/* The age rating's box (AgeRatingBadge), sized to the facts line from across the room. */
+.tv-facts .format-badge {
+  height: 1.35em;
+  padding: 0 0.35em;
+  font-size: 0.75em;
+}
 .tv-facts > span::before {
   content: "•";
   display: inline-block;

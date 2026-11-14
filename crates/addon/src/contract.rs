@@ -42,6 +42,7 @@ fn preview() -> MetaPreview {
         release_info: s("2024"),
         imdb_rating: s("7.5"),
         genres: vec!["Drama".into()],
+        certification: s("TV-14"),
     }
 }
 

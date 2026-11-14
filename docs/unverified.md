@@ -1438,6 +1438,24 @@ because mpv's `panscan` wasn't on the list of properties the player may set
 5. Phone or tablet: the full-screen button cycles the same way; pinch out fills, pinch in fits.
    TV mode: the controller's crop binding cycles and says the mode.
 
+## Age ratings and the viewing limit
+
+Checked by tests only: the ratings table and discover's bound (`tests/ageRating.test.ts`), shelves and title
+pages under a limit (`tests/dom/viewingLimit.test.tsx`), and TMDB's ratings and certification filter against the
+fake TMDB in `crates/index/src/tmdb.rs`. Never run against TMDB itself or on a device. To check, with a TMDB key:
+
+1. A film and a series page show their rating as a small box in the heading line (desktop, phone, TV) and in
+   Details → Rated. With Titles and descriptions set to Deutsch (Deutschland), German ratings (0, 6, 12, 16, 18)
+   show where TMDB has them, US ones otherwise.
+2. Settings → Browsing → Family → Hide titles rated above: 12. Home's rows and hero, Movies, Shows, Search and the
+   "Because you watched" rows leave out PG-13, R, TV-14 and TV-MA titles; genre rows on Movies still fill a page.
+   TV mode shows the same.
+3. A link to an R-rated film, or one in the Library or Continue Watching, opens "Not shown at this profile's limit"
+   and doesn't play from Continue Watching.
+4. Also hide titles without a rating: titles from add-ons and Cinemeta (no TMDB key) leave too.
+5. The Anime section leaves out ecchi titles while a limit is set, whatever Mature content says.
+6. A second device on the same profile picks the limit up after a sync round.
+
 ## Apple TV core (`crates/ffi`, #504)
 
 The core's Swift binding for the Apple TV app (docs/ARCHITECTURE.md, "Apple TV"). Checked on the Linux dev machine:

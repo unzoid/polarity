@@ -89,8 +89,12 @@ pub async fn catalog(
     id: String,
     skip: Option<u32>,
     genre: Option<String>,
+    // An age limit's bound for TMDB's film lists: the country and its highest certification allowed.
+    cert_country: Option<String>,
+    cert_max: Option<String>,
 ) -> Result<Vec<MetaPreview>> {
-    Ok(state.indexer().catalog(&ty, &id, skip.unwrap_or(0), genre.as_deref()).await?)
+    let bound = cert_country.as_deref().zip(cert_max.as_deref());
+    Ok(state.indexer().catalog_within(&ty, &id, skip.unwrap_or(0), genre.as_deref(), bound).await?)
 }
 
 /// One page of an installed addon's catalog (#206), its extra arguments

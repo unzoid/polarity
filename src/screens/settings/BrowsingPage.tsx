@@ -34,7 +34,9 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
             <SettingRow id="language" caption={data.tmdbKey ? undefined : "Needs a TMDB key (Services → Artwork and episode info)"} />
           </Card>
           <Card title="Family">
-            <SettingRow id="matureContent" />
+            <SettingRow id="viewingLimit" />
+        {prefs.viewingLimit > 0 && <SettingRow id="viewingHideUnrated" />}
+        <SettingRow id="matureContent" />
           </Card>
           <Card title="Search">
             <SettingRow id="searchSuggestions" />

@@ -4,6 +4,7 @@ import { api } from "../api";
 import { keys, useAddons } from "../net/queries";
 import { setPrefs, usePrefs } from "../settings/prefs";
 import type { MetaPreview } from "../types";
+import { keepWithinLimit, useViewingLimit } from "./viewingLimit";
 import {
   type AddonCatalog,
   addonCatalogs,
@@ -46,14 +47,18 @@ export function catalogItems(c: AddonCatalog, list: readonly MetaPreview[]): Met
  * A Home row's titles: the catalog's first page. A failing or slow add-on fails only its own
  * query (the backend gives up after a few seconds), and the row leaves itself out.
  */
-export const useAddonCatalogRow = (c: AddonCatalog, enabled = true) =>
-  useQuery({
+export const useAddonCatalogRow = (c: AddonCatalog, enabled = true) => {
+  // Add-ons give no age ratings: with a limit that hides unrated titles, the row empties and leaves itself out.
+  const viewing = useViewingLimit();
+  return useQuery({
     queryKey: keys.addonCatalog(c.addon, c.type, c.id),
     queryFn: async () => catalogItems(c, await api.addonCatalog(c.addon, c.type, c.id, catalogExtra(c, {}))),
     enabled,
     staleTime: 30 * 60_000,
     retry: false,
+    select: useCallback((list: MetaPreview[]) => keepWithinLimit(list, viewing), [viewing]),
   });
+};
 
 /** At most this many add-on catalogs are asked per search, the first in add-on order: a manifest can declare hundreds. */
 const MAX_SEARCHED = 12;

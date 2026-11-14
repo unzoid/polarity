@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent,
 import { NameList } from "../components/title/NameList";
 import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
-import { TitleDetails } from "../components/title/TitleDetails";
+import { AgeRatingBadge, TitleDetails } from "../components/title/TitleDetails";
 import { Info } from "../components/icons";
 import { episodeState, progressMap, renamePlaylist, seasonsOf, upNext, usePlaylists, watchedFraction } from "../lib/library";
 import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
@@ -15,6 +15,7 @@ import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isRe
 import { usePlayTarget, useTitlePlayback } from "../lib/playback";
 import { useLibrary, useMeta, useProgress, useStreams, useToggleLibrary } from "../lib/net";
 import { usePrefs } from "../lib/settings";
+import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 import { useArtGate } from "../lib/ui";
 import type { ContentType, Meta, MetaPreview, RankedStream, Video } from "../lib/types";
 import { useBack, useFocusTrap, usePageActive } from "./shell";
@@ -46,7 +47,9 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
     const record = loaded && entry !== undefined && animeSeparateEntries ? animeEntries.entry(id, entry) : undefined;
     return record && loaded ? entryMeta(loaded, record, pickTitle(record.title, animeTitles) || loaded.name) : loaded;
   }, [loaded, entry, animeSeparateEntries, animeTitles, id]);
-  const shown: MetaPreview | undefined = meta ?? preview;
+  // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
+  const verdict = useTitleVerdict(loaded ?? preview, !!loaded || isError);
+  const shown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
   const active = usePageActive();
   const [panels, setPanels] = useState<Panel[]>([]);
   const push = (p: Panel) => setPanels((ps) => [...ps, p]);
@@ -54,7 +57,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   useBack(active && panels.length > 0, pop);
 
   // The trailer behind the art, while nothing's open over the page.
-  const trailer = useBackdropTrailer(id, { active: active && panels.length === 0 });
+  const trailer = useBackdropTrailer(id, { active: active && panels.length === 0 && verdict === "show" });
   // The logo or name waits for the backdrop (#173).
   const gate = useArtGate(shown?.background);
 
@@ -67,6 +70,13 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   const play = (videoId: string, subtitle: string, opts: { stream?: RankedStream; resumable?: boolean } = {}) =>
     playback({ type, metaId: id, videoId, subtitle, resumable: opts.resumable }, opts.stream);
 
+  if (verdict === "hide") {
+    return (
+      <div className="tv-note">
+        <EmptyState variant="tv">{LIMIT_NOTICE}</EmptyState>
+      </div>
+    );
+  }
   if (!shown) {
     return isError ? (
       <div className="tv-note">
@@ -84,7 +94,12 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
       </TvBackdrop>
       <div className="tv-detail-body" {...gate}>
         <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" pending={!meta && !isError} />
-        <Facts facts={titleFacts(shown, [formatRuntime(meta?.runtime)])} />
+        <Facts
+          facts={[
+            ...titleFacts(shown, [formatRuntime(meta?.runtime)]),
+            ...(shown.certification ? [<AgeRatingBadge key="rated" certification={shown.certification} />] : []),
+          ]}
+        />
         {shown.description && <p className="tv-detail-description">{shown.description}</p>}
         <Credits meta={meta} />
         {/* A series' Play depends on watch history: wait for it, or focus would land on the wrong button. */}
