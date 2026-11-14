@@ -168,6 +168,11 @@ export interface Prefs {
 
   /** Which add-ons' catalogs are Home rows, and their order: JSON (lib/catalog/addonCatalogs.ts, #206). */
   addonCatalogsHome: string;
+
+  /** Leave titles the profile has watched out of Home, Discover and recommendations (lib/catalog/browseFilter.ts). */
+  hideWatched: boolean;
+  /** Titles hidden from browsing: JSON (lib/library/hiddenTitles.ts). */
+  hiddenTitles: string;
 }
 
 /**
@@ -251,6 +256,8 @@ const DEFAULTS: Prefs = {
   animeNo4k: true,
   animePreferredGroups: "",
   addonCatalogsHome: "",
+  hideWatched: false,
+  hiddenTitles: "",
 };
 
 const STORAGE = "polar.prefs";
@@ -318,6 +325,8 @@ export const SYNCED_PREFS = [
   "animeNo4k",
   "animePreferredGroups",
   "addonCatalogsHome",
+  "hideWatched",
+  "hiddenTitles",
 ] as const satisfies readonly (keyof Prefs)[];
 
 export function setPrefs(patch: Partial<Prefs>, { quiet = false } = {}) {

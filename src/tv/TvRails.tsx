@@ -7,7 +7,7 @@ import { episodeCode, formatRemaining } from "../lib/format";
 import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
 import { useRouter } from "../lib/router";
 import { useArtGate, useCardIntent } from "../lib/ui";
-import { useListable, type Shape, type Shelf } from "../lib/catalog";
+import { useBrowseShelf, useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
 import { StageProvider, TvStage, useStage, useStageSeed } from "./TvStage";
 import { isMenuKey, openCardMenu } from "./TvCardMenu";
@@ -216,7 +216,9 @@ export function TvShelfRail({ shelf, enabled, exclude }: { shelf: Shelf; enabled
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
-  const { data, isError } = isCatalog ? catalog : recommended;
+  const { data: found, isError } = isCatalog ? catalog : recommended;
+  // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
+  const data = useBrowseShelf(found, isCatalog ? { type: shelf.type, id: shelf.id, genre: shelf.genre } : undefined);
   const items = useMemo(() => {
     if (!data) return undefined;
     const fresh = data.filter((m) => !exclude.has(m.id));

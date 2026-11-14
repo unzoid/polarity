@@ -793,6 +793,17 @@ export const SETTINGS: SettingDef[] = [
     tv: "Continue Watching",
   },
   {
+    id: "hideWatched",
+    page: "browsing",
+    title: "Hide watched titles",
+    caption: "Movies and shows you've finished leave Home, Movies, Series and recommendations. Continue Watching, the Library and Search still show them",
+    keywords: "watched seen finished hide filter home discover shelves recommendations",
+    bind: p("hideWatched"),
+    control: toggle,
+    tv: "Hide Watched Titles",
+  },
+  { id: "hiddenTitles", page: "browsing", title: "Hidden titles", keywords: "hidden hide unhide never show again blocked titles home discover" },
+  {
     id: "hideEpisodeThumbs",
     page: "browsing",
     title: "Blur unwatched episode pictures",

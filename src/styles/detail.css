@@ -1496,3 +1496,16 @@
 :root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon.episode-download.download-reveal {
   right: calc(72px - 0.25rem);
 }
+
+/* A hidden title's page (HiddenTitleControls.tsx): what that means, and Unhide. */
+.detail-hidden-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.75rem 0 0;
+  color: var(--text-2);
+}
+.detail-hidden-note .btn.btn-sm {
+  min-width: 0;
+}

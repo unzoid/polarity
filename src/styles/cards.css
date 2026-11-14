@@ -1240,3 +1240,61 @@ video.trailer-video {
   color: var(--text-3);
   white-space: nowrap;
 }
+
+/* Continue Watching's Edit (ContinueEditRow.tsx): its buttons beside the heading; each card under a
+   checkbox that covers its art, the card itself inert. */
+.cw-edit .row-header {
+  align-items: center;
+  gap: 0.75rem;
+}
+.cw-edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.cw-edit .btn.btn-sm {
+  min-width: 0;
+}
+.cw-select {
+  position: relative;
+}
+.cw-select-card {
+  transition: opacity var(--dur-press);
+}
+.cw-select:not([data-selected]) .cw-select-card {
+  opacity: 0.7;
+}
+.cw-select-toggle {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-card);
+  cursor: pointer;
+}
+.cw-select-toggle:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+.cw-select-mark {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  background: var(--scrim-3);
+  color: var(--accent-fg);
+}
+.cw-select[data-selected] .cw-select-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+@media (max-width: 600px) {
+  .cw-edit-count {
+    display: none;
+  }
+}

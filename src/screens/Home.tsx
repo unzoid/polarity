@@ -9,7 +9,7 @@ import { TitleHeading } from "../components/title/TitleHeading";
 import { LandscapeCard, PosterCard, useIntent } from "../components/PosterCard";
 import { ArtTitle, Card, ProgressBar } from "../components/title/Card";
 import { Shelf } from "../components/title/Shelf";
-import { Row } from "../components/Row";
+import { ContinueEditRow } from "../components/ContinueEditRow";
 import { api } from "../lib/api";
 import { episodeCode, formatRemaining, joinFacts, kindFacts } from "../lib/format";
 import {
@@ -30,6 +30,9 @@ import {
   shelfRoute,
   todaysShelves,
   useAddonCatalogRow,
+  useBrowseFeatured,
+  useBrowseShelf,
+  useBrowseVisible,
   useFeatured,
   useHomeCatalogs,
   useListable,
@@ -58,8 +61,10 @@ const NO_TITLES: MetaPreview[] = [];
 const EAGER_SHELVES = 2;
 
 export function Home() {
-  const { data: items } = useFeatured();
-  const [index, setIndex] = useState(0);
+  // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
+  const items = useBrowseFeatured(useFeatured().data);
+  const [picked, setIndex] = useState(0);
+  const index = items?.length ? Math.min(picked, items.length - 1) : 0;
   const seeds = useSeeds();
   const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
   const shownAbove = useShownAbove(shelves, items ?? NO_TITLES);
@@ -70,7 +75,7 @@ export function Home() {
 
   return (
     <div className="scroll home">
-      <HeroCarousel items={items} index={index} setIndex={setIndex} />
+      {items?.length !== 0 && <HeroCarousel items={items} index={index} setIndex={setIndex} />}
       <div className="rows home-rows">
         {(settings?.showContinueWatching ?? true) && <ContinueRow />}
         {addonRows.map((c) => (
@@ -346,7 +351,8 @@ function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: bo
   const { navigate } = useRouter();
   const to = shelfRoute(shelf);
   // Nothing to play and nothing to show (#337) stays out.
-  const shown = useListable(data);
+  // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
+  const shown = useBrowseShelf(useListable(data), isCatalog ? { type: shelf.type, id: shelf.id, genre: shelf.genre } : undefined);
   const items = useMemo(() => {
     const fresh = (shown ?? []).filter((m) => !exclude.has(m.id));
     return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (shown ?? []);
@@ -384,7 +390,7 @@ function LazyShelf({ shelf, eager, exclude }: { shelf: HomeShelf; eager: boolean
 function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   const [ref, near] = useNearViewport<HTMLDivElement>();
   const { data: found, isError } = useAddonCatalogRow(catalog, near);
-  const data = useListable(found);
+  const data = useBrowseVisible(useListable(found));
   const { navigate } = useRouter();
   return (
     <div ref={ref} data-addon-row={catalog.id}>
@@ -405,13 +411,8 @@ function ContinueRow() {
   const items = useMemo(() => data ?? [], [data]);
   const order = useMemo(() => items.map((p) => p.videoId).join(" "), [items]);
   if (!items.length) return null;
-  return (
-    <Row title="Continue Watching" shape="landscape" order={order}>
-      {items.map((p) => (
-        <ContinueCard key={p.videoId} progress={p} />
-      ))}
-    </Row>
-  );
+  // Edit picks several cards to remove at once (components/ContinueEditRow.tsx).
+  return <ContinueEditRow items={items} order={order} card={(p) => <ContinueCard progress={p} />} />;
 }
 
 /**

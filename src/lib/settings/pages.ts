@@ -135,8 +135,8 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "pages",
       label: "Home & Title Pages",
-      caption: "The carousel, Continue Watching, trailers and the calendar",
-      settings: ["heroAutoplay", "showContinueWatching", "trailerAutoplay", "trailerSound", "showCalendar"],
+      caption: "The carousel, Continue Watching, hidden titles, trailers and the calendar",
+      settings: ["heroAutoplay", "showContinueWatching", "hideWatched", "hiddenTitles", "trailerAutoplay", "trailerSound", "showCalendar"],
     },
     {
       id: "cards",

@@ -3,8 +3,8 @@ import { NameList } from "../components/title/NameList";
 import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { TitleDetails } from "../components/title/TitleDetails";
-import { Info } from "../components/icons";
-import { episodeState, progressMap, renamePlaylist, seasonsOf, upNext, usePlaylists, watchedFraction } from "../lib/library";
+import { Hidden, Info } from "../components/icons";
+import { episodeState, hideTitle, progressMap, renamePlaylist, seasonsOf, unhideTitle, upNext, useIsHidden, usePlaylists, watchedFraction } from "../lib/library";
 import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
 import { TitleHeading } from "../components/title/TitleHeading";
 import { ProgressBar } from "../components/title/Card";
@@ -47,6 +47,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
     return record && loaded ? entryMeta(loaded, record, pickTitle(record.title, animeTitles) || loaded.name) : loaded;
   }, [loaded, entry, animeSeparateEntries, animeTitles, id]);
   const shown: MetaPreview | undefined = meta ?? preview;
+  const hidden = useIsHidden(id);
   const active = usePageActive();
   const [panels, setPanels] = useState<Panel[]>([]);
   const push = (p: Panel) => setPanels((ps) => [...ps, p]);
@@ -87,6 +88,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
         <Facts facts={titleFacts(shown, [formatRuntime(meta?.runtime)])} />
         {shown.description && <p className="tv-detail-description">{shown.description}</p>}
         <Credits meta={meta} />
+        {hidden && <p className="tv-detail-hidden">Hidden from Home, Movies, Series and recommendations.</p>}
         {/* A series' Play depends on watch history: wait for it, or focus would land on the wrong button. */}
         {type === "movie" || meta ? (
           <Actions item={shown} meta={meta} play={play} push={push} />
@@ -148,6 +150,7 @@ function Actions({
   const toggle = useToggleLibrary();
   const inLibrary = library?.some((l) => l.id === item.id);
   const inPlaylist = usePlaylistChecklist(item).inAny;
+  const hidden = useIsHidden(item.id);
   const subtitle = item.type === "series" && next?.video ? episodeLine(next.video) : item.name;
   // Warm the sources for Play while the page is read.
   useStreams(item.type, videoId);
@@ -178,6 +181,11 @@ function Actions({
         icon={<PlaylistIcon size={26} />}
         label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
         onClick={() => push({ kind: "playlists" })}
+      />
+      <ActionPill
+        icon={<Hidden size={26} />}
+        label={hidden ? "Unhide" : "Hide This Title"}
+        onClick={() => (hidden ? unhideTitle(item.id) : hideTitle(item))}
       />
     </div>
   );

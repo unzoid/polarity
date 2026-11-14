@@ -2644,3 +2644,9 @@
 .tv-card-more .tv-card-fallback {
   font-weight: 650;
 }
+/* A hidden title's page (TvDetail.tsx): said above its actions, which hold Unhide. */
+.tv-detail-hidden {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-2);
+}

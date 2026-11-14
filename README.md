@@ -67,6 +67,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
       <h3>Browse</h3>
       <ul>
         <li>Home with a featured hero, Continue Watching and trending rows</li>
+        <li>Hide titles you've watched, or any title, from Home and browsing; clear several from Continue Watching at once</li>
         <li>Series and Movies pages, and browsing by genre</li>
         <li>An Anime section with its own search, details and episode lists</li>
         <li>Search with recent searches</li>

@@ -6,6 +6,7 @@ export * from "./downloads";
 export * from "./downloadsView";
 export * from "./episodeState";
 export * from "./episodes";
+export * from "./hiddenTitles";
 export * from "./identity";
 export * from "./letterboxdImport";
 export * from "./playlistChecklist";

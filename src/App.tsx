@@ -53,6 +53,7 @@ import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
 import { LockedKeysToast } from "./components/LockedKeysToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
+import { HiddenTitleToast } from "./components/HiddenTitleToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
@@ -441,6 +442,7 @@ function DesktopApp() {
         <ErrorBoundary where="toasts" quiet>
           <ControllerToast tv={false} />
           <SeriesPickToast />
+          <HiddenTitleToast tv={false} />
           <UpdateToast hidden={!!playing} />
         </ErrorBoundary>
       </main>

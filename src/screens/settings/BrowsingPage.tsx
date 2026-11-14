@@ -4,6 +4,7 @@ import { usePrefs } from "../../lib/settings";
 import { clearRecentSearches } from "../../lib/catalog";
 import { Card, PickRow, SectionList, type SectionProps, ToggleRow } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { HiddenTitlesCard } from "../../components/settings/HiddenTitlesCard";
 
 /** Its sections (PAGE_SECTIONS.browsing): General, Home & Title Pages, Cards & Episodes. */
 export function BrowsingPage({ section, openSection }: SectionProps) {
@@ -48,7 +49,9 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
           <Card title="Home">
             <SettingRow id="heroAutoplay" />
             <SettingRow id="showContinueWatching" />
+            <SettingRow id="hideWatched" />
           </Card>
+          <HiddenTitlesCard />
           <Card title="Title Pages">
             <SettingRow id="trailerAutoplay" />
             {(data.trailerAutoplay ?? true) && <SettingRow id="trailerSound" />}

@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { useRouter } from "../lib/router";
 import { useTitleActions } from "../lib/library";
 import type { MetaPreview, Progress } from "../lib/types";
-import { Check, Close, Info, Minus, Play, PlaylistIcon, Plus, Reset, Trailer, Watched } from "./icons";
+import { Check, Close, Hidden, Info, Minus, Play, PlaylistIcon, Plus, Reset, Trailer, Watched } from "./icons";
 import { PlaylistChecklist, usePlaylistChecklist } from "./title/PlaylistChecklist";
 import { nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
@@ -167,6 +167,8 @@ function useLinkedChoices(target: Target): Choices {
       run: a.toggleLibrary,
     },
     { id: "playlists", label: a.inPlaylist ? "Playlists" : "Add to Playlist", icon: a.inPlaylist ? <Check /> : <PlaylistIcon />, symbol: "text.badge.plus", playlists: true },
+    // Out of Home, Discover and recommendations; Search still finds it (lib/library/hiddenTitles.ts).
+    { id: "hide", label: a.hidden ? "Unhide This Title" : "Hide This Title", icon: <Hidden />, symbol: a.hidden ? "eye" : "eye.slash", run: a.toggleHidden },
   ];
 
   const out: Choice[] = [];

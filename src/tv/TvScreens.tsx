@@ -14,6 +14,7 @@ import {
   trendingPicks,
   useAddonCatalogRow,
   useAddonSearches,
+  useBrowseVisible,
   useHomeCatalogs,
   useSeeds,
   useShownAbove,
@@ -43,10 +44,12 @@ export function TvHome() {
   const seeds = useSeeds();
   const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
   const trending = useTrending();
-  const picks = useMemo(
+  const allPicks = useMemo(
     () => (trending.series && trending.movies ? trendingPicks(trending.series, trending.movies, [], 20) : undefined),
     [trending.series, trending.movies],
   );
+  // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
+  const picks = useBrowseVisible(allPicks);
   const shownAbove = useShownAbove(shelves, picks ?? NO_TITLES);
   const { data: watching } = useContinueWatching();
   const watched = useMemo(() => new Set((watching ?? []).map((p) => p.metaId)), [watching]);
@@ -73,7 +76,8 @@ export function TvHome() {
 
 /** An add-on's catalog as a rail; a failing, slow or empty one leaves itself out. */
 function TvAddonRail({ catalog, enabled }: { catalog: AddonCatalog; enabled: boolean }) {
-  const { data, isError } = useAddonCatalogRow(catalog, enabled);
+  const { data: found, isError } = useAddonCatalogRow(catalog, enabled);
+  const data = useBrowseVisible(found);
   if (isError) return null;
   return <TvItemsRail title={catalogTitle(catalog)} items={data} shape="poster" />;
 }
