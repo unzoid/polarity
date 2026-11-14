@@ -113,6 +113,8 @@ function basePreview(type: "movie" | "series", name: string, i: number): MetaPre
     releaseInfo: type === "movie" ? String(2024 - (i % 30)) : `${2019 + (i % 6)}–`,
     imdbRating: (6 + ((i * 7) % 35) / 10).toFixed(1),
     genres: [GENRES[i % GENRES.length], GENRES[(i + 3) % GENRES.length]],
+    // Every fifth title has none, as with Cinemeta or an add-on.
+    certification: (type === "movie" ? ["G", "PG", "PG-13", "R", undefined] : ["TV-Y7", "TV-PG", "TV-14", "TV-MA", undefined])[i % 5],
   };
 }
 

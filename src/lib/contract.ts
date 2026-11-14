@@ -64,6 +64,7 @@ export const contract = {
   Meta: {
     background: true,
     cast: true,
+    certification: true,
     description: true,
     details: true,
     director: true,
@@ -101,6 +102,7 @@ export const contract = {
   } satisfies Keys<MetaDetails>,
   MetaPreview: {
     background: true,
+    certification: true,
     description: true,
     genres: true,
     id: true,

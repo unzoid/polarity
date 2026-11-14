@@ -131,6 +131,10 @@ export interface Prefs {
 
   /** Ecchi anime (AniList's adult titles never show): as is, blurred, or left out. Synced. */
   matureContent: "show" | "blur" | "hide";
+  /** Titles rated for older than this age leave browsing and can't be opened or played; 0 for no limit. Synced. Read only through useViewingLimit (lib/catalog/viewingLimit.ts). */
+  viewingLimit: number;
+  /** With a limit, titles without an age rating go too. Synced. */
+  viewingHideUnrated: boolean;
 
   // Anime:
   /** The Anime section at all: off removes its tab in desktop and TV mode. */
@@ -234,6 +238,8 @@ const DEFAULTS: Prefs = {
   notifyDownloads: false,
   notifyScope: "library",
   matureContent: "show",
+  viewingLimit: 0,
+  viewingHideUnrated: false,
   animeEnabled: true,
   animeHiddenShelves: "",
   animeCardScores: true,
@@ -301,6 +307,8 @@ export const SYNCED_PREFS = [
   "saveRecentSearches",
   "searchSuggestions",
   "matureContent",
+  "viewingLimit",
+  "viewingHideUnrated",
   "animeEnabled",
   "animeHiddenShelves",
   "animeCardScores",

@@ -130,7 +130,7 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
       id: "general",
       label: "General",
       caption: "Start page, language, family and search",
-      settings: ["startPage", "language", "matureContent", "searchSuggestions", "saveRecentSearches"],
+      settings: ["startPage", "language", "viewingLimit", "viewingHideUnrated", "matureContent", "searchSuggestions", "saveRecentSearches"],
     },
     {
       id: "pages",

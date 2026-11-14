@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimeCard } from "../components/anime/AnimeCard";
 import { PosterCard } from "../components/PosterCard";
 import { Shelf } from "../components/title/Shelf";
@@ -22,6 +22,9 @@ import {
   useRecentSearches,
   useListable,
   useSearchText,
+  catalogBound,
+  keepWithinLimit,
+  useViewingLimit,
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
 import { useRouter } from "../lib/router";
@@ -219,11 +222,13 @@ function GenreTile({ genre, image, pending }: { genre: string; image?: string; p
 }
 
 function useGenreRow(type: ContentType, genre: string, enabled = true) {
+  const viewing = useViewingLimit();
   return useQuery({
     queryKey: keys.genreRow(type, genre),
-    queryFn: () => api.catalog(type, "popular", 0, genre),
+    queryFn: () => api.catalog(type, "popular", 0, genre, catalogBound(type)),
     staleTime: 30 * 60_000,
     enabled,
+    select: useCallback((list: MetaPreview[]) => keepWithinLimit(list, viewing), [viewing]),
   });
 }
 
@@ -245,6 +250,7 @@ function Results({ text }: { text: string }) {
   const anime = useAnimeResults(animeEnabled && hasQuery ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
   const aliases = useAnimeAliases();
   const fromAddons = useAddonSearches(hasQuery ? deferred : "");
+  const viewing = useViewingLimit();
 
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
@@ -270,7 +276,9 @@ function Results({ text }: { text: string }) {
       <div className="rows search-rows" onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}>
         {searchRows(genre, !!anime.genre).map((row) => rows[row])}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
-        {fromAddons.map((r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} />)}
+        {fromAddons.map(
+          (r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items && keepWithinLimit(r.items, viewing)} />,
+        )}
       </div>
       {nothing && <EmptyState>Nothing found for “{deferred}”.</EmptyState>}
     </>

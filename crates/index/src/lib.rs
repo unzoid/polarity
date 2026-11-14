@@ -117,11 +117,24 @@ impl Indexer {
 
     /// `genre` narrows a catalog to one genre ("Action", "Sci-Fi", …).
     pub async fn catalog(&self, ty: &str, id: &str, skip: u32, genre: Option<&str>) -> Result<Vec<MetaPreview>> {
+        self.catalog_within(ty, id, skip, genre, None).await
+    }
+
+    /// [`Indexer::catalog`] with an age limit's certification bound (`(country, highest)`), which TMDB's
+    /// film `/discover` lists apply ([`tmdb::Tmdb::catalog_within`]); Cinemeta has no ratings and ignores it.
+    pub async fn catalog_within(
+        &self,
+        ty: &str,
+        id: &str,
+        skip: u32,
+        genre: Option<&str>,
+        bound: Option<(&str, &str)>,
+    ) -> Result<Vec<MetaPreview>> {
         check_type(ty)?;
         let genre = genre.map(str::trim).filter(|g| !g.is_empty());
         let c = match &self.backend {
             // Its own cache: one growing list per catalog, sliced by `skip`.
-            Backend::Tmdb(t) => return t.catalog(ty, id, skip, genre).await,
+            Backend::Tmdb(t) => return t.catalog_within(ty, id, skip, genre, bound).await,
             Backend::Cinemeta(c) => c,
         };
         let key = format!("{ty}/{id}/{}/{skip}", genre.unwrap_or(""));

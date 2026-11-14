@@ -170,6 +170,10 @@ pub struct MetaPreview {
     pub imdb_rating: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub genres: Vec<String>,
+    /// The age rating ("PG-13", "TV-14", "12") for the metadata language's region, else the US one,
+    /// where the source has it (TMDB).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certification: Option<String>,
 }
 
 /// Full detail for one title, including its episodes.

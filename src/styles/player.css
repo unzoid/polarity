@@ -1512,6 +1512,14 @@ html[data-player="mpv"] .main {
     opacity: 0;
   }
 }
+/* A title over the profile's viewing limit, started from outside its page (PlayerLayer.tsx PlayGate). */
+.player-limit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
 .player-layer[data-leaving="true"] {
   opacity: 0;
   transition-duration: 260ms; /* PLAYER_EXIT_MS */

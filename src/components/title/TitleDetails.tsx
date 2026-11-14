@@ -30,7 +30,8 @@ export function TitleDetails({ meta, links: showLinks = true }: { meta: Meta; li
     ["Runtime", formatRuntime(meta.runtime)],
     ["Status", isSeries ? d.status : undefined],
     ["Seasons", d.seasons ? `${d.seasons} ${d.seasons === 1 ? "season" : "seasons"}${d.episodes ? ` · ${d.episodes} episodes` : ""}` : undefined],
-    ["Rated", ratings?.rated ?? undefined],
+    // TMDB's rating for the metadata language's region first, then MDBList's or OMDb's.
+    ["Rated", meta.certification ?? ratings?.rated ?? undefined],
     [isSeries ? "Created by" : "Director", meta.director?.join(", ")],
     ["Writers", d.writers?.join(", ")],
     [isSeries ? "Network" : "Studio", d.studios?.join(", ")],
@@ -280,6 +281,16 @@ const Splat = () => (
  * add-ons have subtitles. Read off the sources you can actually play (the
  * same, cached lookup the player makes), so a badge is a promise it keeps.
  */
+/** The title's age rating (TMDB's), boxed like the format badges, in its heading line on every layout. */
+export function AgeRatingBadge({ certification }: { certification?: string }) {
+  if (!certification) return null;
+  return (
+    <span className="format-badge" role="img" aria-label={`Rated ${certification}`} title="Age rating">
+      {certification}
+    </span>
+  );
+}
+
 export function FormatBadges({ type, videoId }: { type: ContentType; videoId?: string }) {
   const { data: streams } = useStreams(type, videoId);
   const { data: subs } = useQuery({

@@ -24,6 +24,8 @@ export interface MetaPreview {
   releaseInfo?: string;
   imdbRating?: string;
   genres?: string[];
+  /** The age rating ("PG-13", "TV-14", "12") for the metadata language's region, else the US one; TMDB only. */
+  certification?: string;
 }
 
 export interface Video {

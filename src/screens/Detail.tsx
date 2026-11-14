@@ -8,7 +8,7 @@ import { useEpisodeLayout } from "../lib/settings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
-import { FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
+import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
 import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
@@ -30,6 +30,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { BatchDownload } from "../components/BatchDownload";
 import { DetailArt } from "../components/DetailArt";
 import { errorMessage } from "../lib/errors";
+import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 
 /**
  * Title page in the Apple TV layout: the art fills the window, the title
@@ -39,8 +40,10 @@ import { errorMessage } from "../lib/errors";
  */
 export function Detail({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: meta, isError, error } = useMeta(type, id);
+  // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
+  const verdict = useTitleVerdict(meta ?? preview, !!meta || isError);
   // Render instantly from the catalog preview; fill in when full meta arrives.
-  const shown: MetaPreview | undefined = meta ?? preview;
+  const shown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
 
   // The trailer behind the page: only while it's the page on top, and paused
   // once you've scrolled down to read or a sheet or the big trailer is open.
@@ -51,7 +54,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   const onSheet = useCallback((open: boolean) => setSheets((n) => Math.max(0, n + (open ? 1 : -1))), []);
   const bigTrailer = !!useTrailerOpen();
   const trailer = useBackdropTrailer(id, {
-    active: onTop,
+    active: onTop && verdict === "show",
     paused: scrolledAway || sheets > 0 || bigTrailer,
   });
 
@@ -64,6 +67,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   // logo are all there, then everything at once (detail.css).
   const together = usePageTogether(!!meta || isError);
 
+  if (verdict === "hide") return <EmptyState>{LIMIT_NOTICE}</EmptyState>;
   if (isError && !shown) return <EmptyState>Couldn't load this title: {errorMessage(error)}</EmptyState>;
   if (!shown) return phone ? <div className="detail" ref={together.ref} data-ready={together.state}><DetailSkeleton /></div> : <DetailPending />;
 
@@ -174,6 +178,7 @@ function DetailHero({
           {/* The score row carries IMDb's when a ratings key found it. */}
           {item.imdbRating && ratings?.imdb == null && <RatingRing value={item.imdbRating} imdbId={item.id} />}
           {facts && <span>{facts}</span>}
+          <AgeRatingBadge certification={meta?.certification ?? item.certification} />
           <FormatBadges type={item.type} videoId={videoId} />
         </p>
         <ScoreRow ratings={ratings} />
