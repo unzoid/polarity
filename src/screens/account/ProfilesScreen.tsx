@@ -8,6 +8,8 @@ import { AVATAR_GROUPS, type AvatarId, AVATARS, nextAvatar, type Profile, useAcc
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
 import { flyToNavbar } from "./profileHandoff";
+import { useGuard } from "../../components/profileLock/useGuard";
+import { ProfileLockRows } from "../../components/profileLock/ProfileLockRows";
 
 const MAX_PROFILES = 5;
 
@@ -31,6 +33,7 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
   const account = useAccount();
   const [view, setView] = useState<View>({ name: initial });
   const [entering, setEntering] = useState<string | null>(null);
+  const guard = useGuard();
   const chosenArt = useRef<HTMLSpanElement>(null);
   const managing = view.name === "manage";
 
@@ -59,7 +62,9 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
   }
 
   const choose = async (p: Profile) => {
-    if (managing) return setView({ name: "edit", profile: p });
+    if (managing) return (await guard.manage()) && setView({ name: "edit", profile: p });
+    // Its PIN first, if it has one (the profile's tile stays as it is until then).
+    if (!(await guard.enter(p))) return;
     setEntering(p.id);
     try {
       await account.chooseProfile(p);
@@ -119,7 +124,7 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
               <button
                 data-tile
                 className="profile-tile profile-add"
-                onClick={() => setView({ name: "edit", profile: null })}
+                onClick={() => void guard.manage().then((ok) => ok && setView({ name: "edit", profile: null }))}
                 disabled={!!entering}
               >
                 <span className="profile-tile-art">
@@ -136,7 +141,7 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
               Done
             </Button>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setView({ name: "manage" })}>
+            <Button variant="outline" size="sm" onClick={() => void guard.manage().then((ok) => ok && setView({ name: "manage" }))}>
               <Edit size={16} strokeWidth={2.25} />
               Manage Profiles
             </Button>
@@ -242,6 +247,8 @@ export function ProfileEditor({
           )}
         </div>
       </div>
+      {/* Kept as each is changed, apart from Save: the profile as the account has it now. */}
+      {profile && <ProfileLockRows profile={account.profiles.find((p) => p.id === profile.id) ?? profile} />}
       <div className="profile-editor-actions">
         <Button variant="primary" size="sm" type="submit" disabled={busy} busy={busy}>
           Save

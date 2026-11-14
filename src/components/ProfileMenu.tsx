@@ -24,6 +24,7 @@ import { lazyNamed, useFormFactor } from "../lib/ui";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { ProfileEditSheet } from "./ProfileEditSheet";
+import { useGuard } from "./profileLock/useGuard";
 import { Avatar } from "./Avatar";
 import { Sheet } from "./Sheet";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./ui/Popover";
@@ -330,6 +331,8 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
   // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
   const [managing, setManaging] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // From a restricted profile, Manage asks first (lib/account/profileRules.ts).
+  const guard = useGuard();
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me, settingsOpen ? "settings" : editing ? "edit" : undefined);
   // What Settings says its view is (its name, and where its Back goes), for the sheet's header.
   const [settingsHead, setSettingsHead] = useState<SettingsHead>();
@@ -400,7 +403,7 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
                 groups={groups}
                 pick={pick}
                 managing={managing}
-                onManage={() => setManaging((m) => !m)}
+                onManage={() => (managing ? setManaging(false) : void guard.manage().then((ok) => ok && setManaging(true)))}
                 onEdit={(id) => setEditing(id)}
                 meId={me?.id}
               />

@@ -23,6 +23,7 @@ import {
 import { parsePresence } from "../party/messages";
 import { friendFromState, isProfileId, parseInvite } from "../friends/messages";
 import { normalizeAvatar } from "./avatars";
+import { lockFromRow, lockToRow, type LockRow } from "./profileLock";
 import { fromHex, toHex } from "../library/playlistCodec";
 import { decodeEntries, encodeEntries, newestAt, type EntryToPack } from "./progressCodec";
 import { keychainStorage } from "../platform/keychain";
@@ -281,6 +282,23 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
       },
     },
 
+    // A sign-in code to the signed-in account's own email; the new session it gives is the same user's.
+    reauth: {
+      async start(captchaToken) {
+        const email = (await db.auth.getSession()).data.session?.user.email;
+        if (!email) throw new AccountError("unknown", "Your sign-in on this device has expired. Sign in again first.");
+        const { error } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: false, captchaToken } });
+        if (error) throw authError(error);
+      },
+      async verify(code) {
+        const before = (await db.auth.getSession()).data.session?.user;
+        if (!before?.email) throw new AccountError("unknown", "Your sign-in on this device has expired. Sign in again first.");
+        const { data, error } = await db.auth.verifyOtp({ email: before.email, token: code.replace(/\s/g, ""), type: "email" });
+        if (error) throw authError(error);
+        if (data.user?.id !== before.id) throw new AccountError("invalid_code", "That code is wrong or has expired.");
+      },
+    },
+
     // supabase/functions/tv-sign-in (#133). The client sends the session's token along when there is one.
     tvSignIn: {
       async start(device) {
@@ -315,28 +333,27 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
 
     profiles: {
       async list() {
-        const { data, error } = await db
-          .from("profiles")
-          .select("id, name, avatar, position")
-          .order("position")
-          .order("created_at");
+        const { data, error } = await withLockColumns((columns) =>
+          db.from("profiles").select(columns).order("position").order("created_at"),
+        );
         if (error) throw dbError(error);
-        return data.map(toProfile);
+        return (data as unknown as ProfileRow[]).map(toProfile);
       },
       async create(input) {
-        const { data, error } = await db.from("profiles").insert(input).select("id, name, avatar, position").single();
+        const { data, error } = await withLockColumns((columns) => db.from("profiles").insert(input).select(columns).single());
         if (error) throw dbError(error);
-        return toProfile(data);
+        return toProfile(data as unknown as ProfileRow);
       },
       async update(id, patch) {
-        const { data, error } = await db
-          .from("profiles")
-          .update(patch)
-          .eq("id", id)
-          .select("id, name, avatar, position")
-          .single();
+        const { data, error } = await withLockColumns((columns) => db.from("profiles").update(patch).eq("id", id).select(columns).single());
         if (error) throw dbError(error);
-        return toProfile(data);
+        return toProfile(data as unknown as ProfileRow);
+      },
+      async setLock(id, patch) {
+        // No fallback: without the columns there's nowhere to keep it (`not_set_up`).
+        const { data, error } = await db.from("profiles").update(lockToRow(patch)).eq("id", id).select(PROFILE_LOCK_COLUMNS).single();
+        if (error) throw dbError(error);
+        return toProfile(data as unknown as ProfileRow);
       },
       async remove(id) {
         const { error } = await db.from("profiles").delete().eq("id", id);
@@ -484,12 +501,24 @@ function toFriend(v: unknown): FriendEntry | undefined {
   return { id, name: str(v.name) ?? "", avatar: normalizeAvatar(str(v.avatar) ?? ""), state, incoming: v.incoming === true };
 }
 
-const toProfile = (r: { id: string; name: string; avatar: string; position: number }): Profile => ({
-  id: r.id,
-  name: r.name,
-  avatar: normalizeAvatar(r.avatar),
-  position: r.position,
-});
+type ProfileRow = { id: string; name: string; avatar: string; position: number } & LockRow;
+
+const toProfile = (r: ProfileRow): Profile => {
+  const lock = lockFromRow(r);
+  return { id: r.id, name: r.name, avatar: normalizeAvatar(r.avatar), position: r.position, ...(lock && { lock }) };
+};
+
+const PROFILE_COLUMNS = "id, name, avatar, position";
+const PROFILE_LOCK_COLUMNS = `${PROFILE_COLUMNS}, pin_hash, viewing_limit, viewing_hide_unrated`;
+
+/**
+ * A profile query with the PIN and limit columns, or, on a server not migrated for them yet, without: the
+ * profiles still work there, with no PIN or limit (`Profile.lock` left out).
+ */
+export async function withLockColumns<R extends { error: PostgrestError | null }>(run: (columns: string) => PromiseLike<R>): Promise<R> {
+  const first = await run(PROFILE_LOCK_COLUMNS);
+  return first.error && isMissingColumn(first.error) ? run(PROFILE_COLUMNS) : first;
+}
 
 /** `library.kind` and `progress.kind`: 0 movie, 1 series; on library rows + REMOVED for a removal. */
 const SERIES = 1;

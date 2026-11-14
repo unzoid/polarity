@@ -12,7 +12,7 @@ in §6.
 
 | Table | Key | Per row | Grows with |
 |---|---|---|---|
-| `profiles` | id | name, avatar, position | ≤ 5 per account |
+| `profiles` | id | name, avatar, position; PIN hash and viewing limit (§10) | ≤ 5 per account |
 | `library_items` | profile, meta id | type, name, poster URL, added/updated ms, deleted | titles saved (and removed: tombstones stay) |
 | `watch_progress` | profile, video id | meta id, type, name, background URL, poster URL, season, episode, episode title, position, duration (float8), updated ms, legacy `stream` jsonb | **every episode and movie ever started** |
 | `playlists` | id | name, titles packed in `bytea` (~4-5 B a title, `src/lib/library/playlistCodec.ts`) | playlists (≤ 100 a profile) |
@@ -322,7 +322,7 @@ the project's 500 MB. The caps leave room for a real household: the heavy test p
 
 | Table | Per row | Rows | Worst case per account |
 | --- | --- | --- | --- |
-| `profiles` | name 1-40 characters, avatar an id (`[a-z0-9-]`, up to 32) | 5 an account | ~1 KiB |
+| `profiles` | name 1-40 characters, avatar an id (`[a-z0-9-]`, up to 32), PIN hash up to 400 characters (§10) | 5 an account | ~3 KiB |
 | `library` | `meta_id` up to 200 bytes | 5,000 a profile, 10,000 an account | 10,000 × 764 B = 7.3 MiB |
 | `progress` | `meta_id` up to 200 bytes; one entry, up to 512 bytes (32 KB with every episode kept) | 5,000 a profile, 10,000 an account | 10,000 × 1.27 KiB = 12.4 MiB |
 | `anime_links` | ids and the canonical id's format | 5,000 a profile | 25,000 × 146 B = 3.5 MiB |
@@ -430,3 +430,27 @@ travels.
   `SUPABASE_SERVICE_ROLE_KEY`, which Supabase provides to functions.
 - Tests: `tests/sql/tvSignIn.test.ts` (PGlite), `tests/tvSignInFunction.test.ts` (the function's steps with an
   in-memory database), `tests/tvSignIn.test.ts` (the app's waiting loop).
+
+## 10. Profile PINs and viewing limits
+
+`supabase/migrations/20261115000000_profile_pin_and_limit.sql` adds three columns to `profiles`:
+
+| Column | What | Check |
+| --- | --- | --- |
+| `pin_hash` | the profile's PIN as `pbkdf2-sha256$<iterations>$<salt>$<hash>` (`src/lib/account/pin.ts`: WebCrypto PBKDF2-HMAC-SHA256, 600,000 rounds, a 16-byte random salt per PIN, unpadded base64url); never the PIN. Null: no PIN | the shape above, up to 400 characters |
+| `viewing_limit` | the highest age a title may be rated for. Null: none on the profile, and its Browsing setting (synced with its settings) applies | 1 to 21 |
+| `viewing_hide_unrated` | titles without a rating hidden too | default false |
+
+- Every device of the account reads them with the profiles and caches them with the list, so a PIN is asked
+  and checked, and a limit applied, offline too. A PIN hashed with fewer rounds than the app's is hashed
+  again once it's typed right, so the count can be raised later.
+- Row-level security is `profiles`' own ("own profiles"), unchanged. Apps without this feature never select or
+  write the columns. This version against a database without them asks again without them
+  (`withLockColumns` in `src/lib/account/supabase.ts`): profiles work, PINs and limits aren't offered.
+- "Forgot PIN" and unlocking a restricted profile's account settings when no profile has a PIN use a sign-in code
+  sent to the account's own email (`reauth` in `src/lib/account/backend.ts`: `signInWithOtp` with
+  `shouldCreateUser: false`, then `verifyOtp` for the same user), under the auth rate limits of §8.2.
+- Wrong PINs back off on the device (`src/lib/account/pinTries.ts`): 3 free, then 30 s doubling to an hour, kept
+  in `localStorage` per profile.
+- Tests: `tests/sql/profilePinLimit.test.ts` (PGlite), `tests/pin.test.ts`, `tests/pinTries.test.ts`,
+  `tests/profileRules.test.ts`, `tests/profileGuard.test.ts`, `tests/dom/profileLock.test.tsx`.

@@ -3,6 +3,7 @@ import type { PageId } from "../../lib/settings";
 import type { SectionProps } from "../../components/settings/rows";
 import { AboutPage } from "./AboutPage";
 import { AccountPage } from "./AccountPage";
+import { ManageGate } from "../../components/profileLock/ManageGate";
 import { AddonsPage } from "./AddonsPage";
 import { AdvancedPage } from "./AdvancedPage";
 import { AnimePage } from "./AnimePage";
@@ -24,7 +25,11 @@ import { SubtitlesPage } from "./SubtitlesPage";
 export function SettingsPageBody({ page, section, openSection }: { page: PageId } & SectionProps) {
   switch (page) {
     case "account":
-      return <AccountPage />;
+      return (
+        <ManageGate>
+          <AccountPage />
+        </ManageGate>
+      );
     case "playback":
       return <PlaybackPage section={section} openSection={openSection} />;
     case "sources":

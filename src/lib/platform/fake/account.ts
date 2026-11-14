@@ -1,6 +1,7 @@
 import { AccountError, type AccountBackend, type AccountUser, type FriendEntry, type FriendPresence, type FriendSettings, type FriendsHandlers, type PartyHandlers, type PartyPresence, type Profile } from "../../account/backend";
 import { normalizeAvatar } from "../../account/avatars";
 import { normalizeTvCode, type TvClaim } from "../../account/tvSignIn";
+import { NO_LOCK, type ProfileLock } from "../../account/profileLock";
 
 /**
  * A stand-in account for fake.html (`fake.html?account=1`): signed in, with one profile, and watch
@@ -89,6 +90,8 @@ const setState = (id: string, patch: Partial<FriendEntry> | null) => {
 
 const profile: Profile = { id: "fake-profile", name: "Robin", avatar: normalizeAvatar(""), position: 0 };
 const user: AccountUser = { id: "fake-user", email: "robin@example.com" };
+/** The profile's PIN and viewing limit (profileLock.ts), kept while the page is open. */
+let profileLock: ProfileLock = { ...NO_LOCK };
 
 let signedIn = true;
 /** `fake.html?account=signed-out`. */
@@ -225,10 +228,21 @@ export const fakeAccount: AccountBackend = {
     },
   },
   profiles: {
-    list: async () => [profile],
-    create: async (input) => ({ ...profile, ...input }),
-    update: async (_id, patch) => ({ ...profile, ...patch }),
+    list: async () => [{ ...profile, lock: { ...profileLock } }],
+    create: async (input) => ({ ...profile, ...input, lock: { ...NO_LOCK } }),
+    update: async (_id, patch) => ({ ...profile, ...patch, lock: { ...profileLock } }),
     remove: async () => {},
+    setLock: async (_id, patch) => {
+      profileLock = { ...profileLock, ...patch };
+      return { ...profile, lock: { ...profileLock } };
+    },
+  },
+  // Any code goes, as at sign-in.
+  reauth: {
+    start: async () => {},
+    verify: async (code) => {
+      if (!code.trim()) throw new AccountError("invalid_code", "That code is wrong or has expired.");
+    },
   },
   sync: {
     pull: async () => ({ library: [], progress: [], links: [], cursor: null }),

@@ -4,12 +4,15 @@ import { usePrefs } from "../../lib/settings";
 import { clearRecentSearches } from "../../lib/catalog";
 import { Card, PickRow, SectionList, type SectionProps, ToggleRow } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { LimitFromProfile } from "../../components/profileLock/LimitFromProfile";
+import { useLimitFromProfile } from "../../lib/catalog";
 
 /** Its sections (PAGE_SECTIONS.browsing): General, Home & Title Pages, Cards & Episodes. */
 export function BrowsingPage({ section, openSection }: SectionProps) {
   const { data } = useSettings();
   const update = useUpdateSettings();
   const prefs = usePrefs();
+  const fromProfile = useLimitFromProfile();
   if (!data) return null;
   switch (section) {
     case "general":
@@ -34,8 +37,9 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
             <SettingRow id="language" caption={data.tmdbKey ? undefined : "Needs a TMDB key (Services → Artwork and episode info)"} />
           </Card>
           <Card title="Family">
-            <SettingRow id="viewingLimit" />
-        {prefs.viewingLimit > 0 && <SettingRow id="viewingHideUnrated" />}
+            {/* A restricted profile's limit is its own, set in its edit sheet behind a PIN. */}
+            {fromProfile ? <LimitFromProfile /> : <SettingRow id="viewingLimit" />}
+        {!fromProfile && prefs.viewingLimit > 0 && <SettingRow id="viewingHideUnrated" />}
         <SettingRow id="matureContent" />
           </Card>
           <Card title="Search">

@@ -1,0 +1,192 @@
+/* Profile PINs and viewing limits (components/profileLock): the PIN prompt over the Watch Party dialog's look
+   (styles/party.css), and a profile's PIN and limit rows in its edit sheet. */
+
+.pin-dialog {
+  gap: 0.75rem;
+}
+.pin-dialog .party-dialog-icon {
+  margin-bottom: 0.25rem;
+}
+.pin-dialog-text {
+  margin-bottom: 0.25rem;
+}
+.pin-text {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-2);
+}
+.pin-error {
+  min-height: 1.25em;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+.pin-cancel {
+  margin-top: 0.25rem;
+}
+
+.pin-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.pin-dots {
+  display: flex;
+  gap: 0.875rem;
+}
+.pin-dot {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+.pin-dot[data-filled] {
+  background: var(--text);
+  box-shadow: none;
+}
+.pin-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 4rem);
+  gap: 0.5rem;
+}
+.pin-key {
+  display: grid;
+  place-items: center;
+  height: 3rem;
+  border-radius: var(--r-md);
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--glass-control);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
+}
+.pin-key:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.pin-key:disabled {
+  opacity: 0.4;
+}
+.pin-key:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pin-key:not(:disabled):hover {
+    background: var(--fill-2);
+  }
+}
+/* TV mode: the TV keyboard's keys (styles/tv.css .tv-key), larger, lit when focused. */
+.pin-dialog[data-tv] .pin-keys {
+  grid-template-columns: repeat(3, 5rem);
+}
+.pin-dialog[data-tv] .pin-key {
+  height: 3.5rem;
+  border-radius: 0.55rem;
+  color: var(--text-2);
+  background: var(--fill-2);
+}
+.pin-dialog[data-tv] .pin-key:focus {
+  outline: none;
+  background: var(--pill-light);
+  color: var(--text-on-light);
+  transform: scale(1.08);
+}
+
+.pin-whose-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+.pin-whose-profile,
+.pin-whose-current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--fs-md);
+  color: var(--text-2);
+}
+.pin-whose-profile .avatar {
+  width: 4rem;
+}
+.pin-whose-current {
+  flex-direction: row;
+}
+.pin-whose-current .avatar {
+  width: 1.75rem;
+}
+.pin-account,
+.pin-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.profile-lock {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1.5rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: rgb(var(--ink) / 0.025);
+}
+.profile-lock > * + * {
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.07);
+}
+.profile-lock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+.profile-lock-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.profile-lock-title {
+  font-weight: 600;
+}
+.profile-lock-caption {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.profile-lock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.profile-lock-note,
+.profile-lock-advice {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.profile-lock-advice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.625rem;
+  color: var(--text);
+}
+.profile-lock-advice p {
+  margin: 0;
+}
+@media (max-width: 560px) {
+  .profile-lock-row {
+    flex-wrap: wrap;
+  }
+}
