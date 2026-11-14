@@ -47,6 +47,9 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     keepAboveKeyboard()
+    // Makes the app's own folder on each storage volume (an SD card), which downloads may be moved to
+    // without a storage permission (downloads_volumes in src-tauri/src/downloads.rs lists them).
+    runCatching { getExternalFilesDirs(null) }
     launchNote = intent?.getStringExtra(Notes.EXTRA)
     // Recreated (turned, resized): the link that started it was already handed over.
     if (savedInstanceState == null) IncomingLinks.offer(intent)

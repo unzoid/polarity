@@ -294,6 +294,31 @@ export const SETTINGS: SettingDef[] = [
     control: { kind: "number", min: 50, max: 100, unit: "%" },
     invalidates: [["continue"], ["history"]],
   },
+  {
+    id: "autoDownloadNext",
+    page: "playback",
+    title: "Keep the next episodes downloaded",
+    caption:
+      "When you finish a downloaded episode, this many episodes after it are downloaded with the first source that can be. Only while Polarity is open; waits for Wi-Fi and stops when space runs low.",
+    keywords: "download next episodes automatically rolling offline queue",
+    bind: p("autoDownloadNext"),
+    control: choice([
+      { value: 0, label: "Off" },
+      { value: 1, label: "1" },
+      { value: 2, label: "2" },
+      { value: 3, label: "3" },
+      { value: 5, label: "5" },
+    ]),
+  },
+  {
+    id: "autoDownloadRemoveWatched",
+    page: "playback",
+    title: "Remove downloaded episodes once watched",
+    caption: "Deletes a downloaded episode's file after you finish it and close the player.",
+    keywords: "delete downloads watched episodes free space automatically",
+    bind: p("autoDownloadRemoveWatched"),
+    control: toggle,
+  },
   { id: "startFullscreen", page: "playback", title: "Start in fullscreen", keywords: "full screen", bind: s("startFullscreen", false), control: toggle },
   {
     id: "pauseOnMinimize",

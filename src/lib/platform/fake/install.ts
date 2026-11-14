@@ -182,7 +182,11 @@ const commands: Record<string, (a: Args) => unknown> = {
   notifications_take_launch: () => null,
   download_pause: (a) => void (downloads = downloads.map((d) => (d.id === a.id ? { ...d, state: "paused" } : d))),
   download_resume: (a) => void (downloads = downloads.map((d) => (d.id === a.id ? { ...d, state: "downloading" } : d))),
-  downloads_storage: () => ({ dir: "~/Videos/Polarity", free: null }),
+  downloads_storage: () => ({ dir: "~/Videos/Polarity", free: null, custom: false }),
+  // The download folder: no SD card, the folder dialog cancelled, the default kept.
+  downloads_volumes: () => [],
+  downloads_pick_folder: () => null,
+  downloads_set_folder: () => ({ dir: "~/Videos/Polarity", free: null, custom: false }),
   controllers_list: () => [],
   mpv_available: () => false,
   // Discord: what the player sends is kept for browser tests to read.
