@@ -97,6 +97,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
       <h3>Library</h3>
       <ul>
         <li>Watchlist, history and your own playlists</li>
+        <li>Export your library and history to a file, and import it on another device or profile</li>
         <li>Downloads to watch later, a single episode or a whole season</li>
         <li>A right-click menu on any card for quick actions</li>
       </ul>

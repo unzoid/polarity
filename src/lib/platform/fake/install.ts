@@ -140,6 +140,12 @@ const commands: Record<string, (a: Args) => unknown> = {
     progress.unshift(...rows);
     return { library: fresh.length, progress: rows.length };
   },
+  library_export: (a) => `polarity-${a.format === "csv" ? "history" : "library"}-2026-01-01.${a.format === "csv" ? "csv" : "json"}`,
+  anime_links_import: (a) => {
+    const links = (a as { links: AnimeLink[] }).links.filter((l) => (animeLinks.get(l.anilist)?.updatedAt ?? -1) < l.updatedAt);
+    for (const l of links) animeLinks.set(l.anilist, l);
+    return links.length;
+  },
   continue_watching: () => progress,
   watch_history: () => progress,
   anime_links: () => [...animeLinks.values()],

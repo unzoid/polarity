@@ -33,6 +33,7 @@ import type {
 } from "./types";
 import { settingsChanged } from "./settings/changes";
 import type { AnimeLink } from "./library/identity";
+import type { ExportPlaylist } from "./library/polarityExport";
 import type { DiscordActivity } from "./playback/discordPresence";
 import type { TorrentLimits } from "./playback/torrent";
 import type { LookaheadState } from "./playback/lookahead";
@@ -129,6 +130,13 @@ export const api = {
   saveProgressMany: (progress: Progress[]) => call<void>("progress_save_many", { progress }),
   /** Library items and progress from another app, keeping their times; newer entries here win. */
   importLibrary: (library: LibraryItem[], progress: Progress[]) => call<Imported>("library_import", { library, progress }),
+  /**
+   * Writes the profile's library and history where the user picks (desktop save dialog): "json" to
+   * import again, "csv" for a spreadsheet. Resolves to the file's name, or null when cancelled.
+   */
+  exportLibrary: (format: "json" | "csv", playlists: ExportPlaylist[]) => call<string | null>("library_export", { format, playlists }),
+  /** A Polarity export's anime links, keeping their times; newer ones here win. Resolves to how many were added. */
+  importAnimeLinks: (links: AnimeLink[]) => call<number>("anime_links_import", { links }),
   continueWatching: () => call<Progress[]>("continue_watching"),
   /** The latest video per title you've watched (finished or under way), newest first. */
   watchHistory: () => call<Progress[]>("watch_history"),

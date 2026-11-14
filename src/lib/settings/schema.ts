@@ -169,6 +169,8 @@ export const SETTINGS: SettingDef[] = [
     title: "Import from Letterboxd",
     keywords: "import letterboxd watchlist watched diary films movies export zip csv file",
   },
+  { id: "polarityExport", page: "account", title: "Export library and history", keywords: "export backup save download library history watched progress playlists json csv spreadsheet file" },
+  { id: "polarityImport", page: "account", title: "Import a Polarity export", keywords: "import restore backup move device profile library history playlists json file" },
   // Friends (#135): kept on the account server per profile, drawn by the page (components/friends/FriendsSettings.tsx).
   { id: "friendsEnabled", page: "account", title: "Friends", keywords: "friends friend code list online invite watch party join social" },
   { id: "friendsOnline", page: "account", title: "Who sees you're online", keywords: "friends privacy online status presence hide invisible" },
