@@ -11,6 +11,8 @@ import { refreshLocalViews, sync } from "./sync";
 import { deviceLabel, waitForApproval, type TvSignInRequest, type TvWaitResult } from "./tvSignIn";
 import { isTvDevice, os } from "../platform/device";
 import { formFactor } from "../platform/formFactor";
+import type { Authenticator } from "./backend";
+import { accountSecurity, forgetSignedInByDevice, markSignedInByDevice, secondStepFor, tidyCode, type AccountSecurity } from "./twoStep";
 
 /**
  *  - loading:    restoring the session
@@ -72,7 +74,19 @@ export interface Account {
   signOutBlocked: number | null;
   cancelSignOut(): void;
   deleteAccount(): Promise<void>;
+  /**
+   * Two-step sign-in: the email code was right, and the account asks for a code from an authenticator
+   * app too. The authenticators to pick from; until `verifyTwoStep`, nobody is signed in and nothing syncs.
+   */
+  twoStep: Authenticator[] | null;
+  verifyTwoStep(id: string, code: string): Promise<void>;
+  /** Back to the start of signing in; the half-done session is dropped. */
+  cancelTwoStep(): Promise<void>;
+  /** Settings → Account: changing the email address, two-step sign-in. `null` without a provider. */
+  security: AccountSecurity | null;
 }
+
+const sameUser = (a: AccountUser | null, b: AccountUser) => !!a && a.id === b.id && a.email === b.email && a.newEmail === b.newEmail;
 
 /** The account `useAccount` reads; tests provide their own. */
 export const AccountContext = createContext<Account | null>(null);
@@ -94,6 +108,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [canCancelSignIn, setCanCancel] = useState(false);
   const [profilesView, setProfilesView] = useState<"pick" | "manage">("pick");
   const [signOutBlocked, setSignOutBlocked] = useState<number | null>(null);
+  const [twoStep, setTwoStep] = useState<Authenticator[] | null>(null);
+  /** The second step was asked on launch: "Who's watching?" follows it, as after any launch. */
+  const twoStepOnLaunch = useRef(false);
   const statusRef = useRef(status);
   statusRef.current = status;
   /** The signed-in account's profiles, as last listed: whose add-ons and keys a new profile may start with (#429). */
@@ -165,7 +182,18 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     (async () => {
       const u = await backend.auth.current().catch(() => null);
       if (cancelled) return;
-      if (u) {
+      // A session that stopped between the email code and the authenticator code asks for the second again.
+      const second = u && (await secondStepFor(backend, u).catch(warnFailed("Checking two-step sign-in")));
+      if (cancelled) return;
+      if (u && second) {
+        // Signed out until the code is in, as without a session.
+        await api.activateSpace(null);
+        markDeviceSettings();
+        if (cancelled) return;
+        twoStepOnLaunch.current = true;
+        setTwoStep(second);
+        setStatus("signed-out");
+      } else if (u) {
         await afterSignIn(u, { launch: true }).catch(() => setStatus("signed-out"));
       } else {
         await api.activateSpace(null);
@@ -182,7 +210,11 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!backend) return;
     return backend.auth.onChange((u) => {
+      // The same user read again (an email change confirmed): the address shown follows.
+      if (u) setUser((cur) => (cur && cur.id === u.id && !sameUser(cur, u) ? u : cur));
+      if (!u) setTwoStep(null);
       if (u || !["ready", "profiles", "onboarding"].includes(statusRef.current)) return;
+      forgetSignedInByDevice();
       sync.stop();
       sync.setProfiles([]);
       setUser(null);
@@ -194,6 +226,17 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       setStatus("signed-out");
     });
   }, []);
+
+  const security = useMemo(() => backend && accountSecurity(backend, (u) => setUser((cur) => (cur && cur.id === u.id && !sameUser(cur, u) ? u : cur))), []);
+
+  // An email change waiting for its codes may be confirmed on another device: read the user again on coming back.
+  const waitingEmail = !!user?.newEmail;
+  useEffect(() => {
+    if (!waitingEmail || !security) return;
+    const back = () => document.visibilityState === "visible" && void security.refreshUser().catch(() => {});
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  }, [waitingEmail, security]);
 
   const value = useMemo<Account>(() => {
     const need = () => {
@@ -237,9 +280,28 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         await need().auth.sendCode(email.trim().toLowerCase(), captchaToken);
       },
       async verifyCode(email, code) {
-        const u = await need().auth.verifyCode(email.trim().toLowerCase(), code.replace(/\s/g, ""));
+        const b = need();
+        forgetSignedInByDevice();
+        const u = await b.auth.verifyCode(email.trim().toLowerCase(), code.replace(/\s/g, ""));
+        // An authenticator code comes next: not signed in until it's in.
+        const second = await secondStepFor(b, u);
+        if (second) {
+          twoStepOnLaunch.current = false;
+          return setTwoStep(second);
+        }
         await afterSignIn(u, { launch: false });
       },
+      twoStep,
+      async verifyTwoStep(id, code) {
+        const u = await need().twoStep.verify(id, tidyCode(code));
+        setTwoStep(null);
+        await afterSignIn(u, { launch: twoStepOnLaunch.current });
+      },
+      async cancelTwoStep() {
+        setTwoStep(null);
+        await need().auth.signOut().catch(warnFailed("Signing out on the server"));
+      },
+      security,
       tvSignIn: {
         start: () => need().tvSignIn.start(deviceLabel(os, formFactor().form, isTvDevice)),
         wait(request, signal) {
@@ -249,6 +311,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
             signal,
             async onApproved(tokenHash) {
               const u = await b.tvSignIn.finish(tokenHash);
+              // Approved by a device signed in in full: no authenticator code on this one.
+              markSignedInByDevice(u.id);
               // A new device: "Who's watching?" unless the account has one profile.
               await afterSignIn(u, { launch: true });
             },
@@ -328,6 +392,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         sync.stop();
         sync.setProfiles([]);
         await b.auth.signOut().catch(warnFailed("Signing out on the server"));
+        forgetSignedInByDevice();
         await forgetLocal();
         setUser(null);
         setProfile(null);
@@ -340,6 +405,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         sync.stop();
         sync.setProfiles([]);
         await b.auth.deleteAccount();
+        forgetSignedInByDevice();
         await forgetLocal();
         setUser(null);
         setProfile(null);
@@ -347,7 +413,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         setStatus("signed-out");
       },
     };
-  }, [status, user, profiles, profile, canCancelSignIn, profilesView, signOutBlocked, afterSignIn, enter, setProfiles]);
+  }, [status, user, profiles, profile, canCancelSignIn, profilesView, signOutBlocked, twoStep, security, afterSignIn, enter, setProfiles]);
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
 }

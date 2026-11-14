@@ -1359,6 +1359,42 @@ Account → Sign in a TV). Not checked: a real Supabase project, Deno, or a real
 9. Supabase's own projects with the new publishable keys: check `generateLink` + `verifyOtp({ token_hash, type:
    "magiclink" })` still signs in (the function and the app use supabase-js 2).
 
+## Changing the email and two-step sign-in
+
+Checked here: the screens and their states against the stand-in account (`tests/dom/accountSecurity.test.tsx`:
+turning on with a wrong and a right code, a backup, turning off, the sign-in's second step with a wrong code and
+another authenticator, back to sign in, a device signed in by approval, the email change with a taken address and
+both codes), the QR image and error mapping (`tests/twoStep.test.ts`). Not checked: anything against a real
+Supabase project. With the dashboard set up as `docs/supabase-storage.md` §10 says:
+
+1. **Email change, secure change on:** Settings → Account → Email address, a new address. Both addresses get the
+   "Change Email Address" email, each with its own code. The new address's code first: no error, the row still
+   shows the old address ("Now enter the code sent to …"); then the current one's: the address changes. Also try
+   the current address's code first (the app asks for the new one first: note what Supabase answers).
+2. **Secure change off:** one code, to the new address, changes it at once.
+3. An address another account has: what Supabase answers (the app expects `email_exists`, "already used by another
+   account"; Supabase may instead answer as if it worked). Many changes in a row: "Too many attempts".
+4. After the change: is the session still at `aal2` for an account with two-step on (Authentication → Users → the
+   user's sessions, or `getAuthenticatorAssuranceLevel`)? If it drops to `aal1`, the next launch asks for an
+   authenticator code.
+5. A change confirmed on another device: coming back to the app (the window to the front) shows the new address.
+6. **Turning on:** the QR code shows in Settings on Windows, macOS, Linux, Android and iOS (an SVG `data:` image;
+   the web view's `img-src` allows `data:`), an authenticator app scans it, the key typed by hand works too, a
+   wrong code is refused, the right one turns it on. Other signed-in devices: signed out (supabase-js says
+   verifying a factor ends the other sessions)? A TV signed in by approval too?
+7. **Signing in:** email code, then "Two-step sign-in". Nothing syncs and no profile shows before the authenticator
+   code. A wrong code, a code from an authenticator removed meanwhile, a code typed after waiting a few minutes.
+   Quit at the second step and start again: it asks for the code again (not signed in).
+8. **Two authenticators:** "Use another authenticator" lists both; either one's code signs in.
+9. **A TV signed in by approval** while two-step is on: no code asked, now or after restarting the TV. Then sign in
+   with the second step on a computer: does the TV stay signed in? (If Supabase ends sessions below `aal2` when a
+   code is verified, every TV signed in this way is signed out each time.)
+10. **Backup and removal on a TV's session:** "Add a Backup Authenticator" asks for a code first, then shows the QR
+    code; removing one, and "Turn Off", ask for a code and work. After turning off, the next email sign-in asks for
+    no authenticator code.
+11. Supabase's answers for a wrong code (`mfa_verification_failed`), MFA off in the dashboard
+    (`mfa_totp_enroll_not_enabled`) and too many tries: the app's messages for each.
+
 ## Notifications (#209)
 
 Checked here: what's new (time zones, undated episodes, a whole season at once, the one-a-day rule,
