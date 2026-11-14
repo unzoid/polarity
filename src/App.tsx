@@ -48,6 +48,7 @@ import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { SignOutDialog } from "./components/SignOutDialog";
+import { PinHost } from "./components/profileLock/PinHost";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
@@ -151,6 +152,7 @@ export function App() {
     <MotionConfig reducedMotion={reduce === "on" ? "always" : reduce === "off" ? "never" : "user"}>
       <Gate />
       <SignOutDialog />
+      <PinHost />
     </MotionConfig>
   );
 }

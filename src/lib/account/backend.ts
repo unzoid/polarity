@@ -8,6 +8,8 @@ import type { ContentType, Progress, SyncLibraryItem } from "../types";
 import { count, isRecord, str } from "../parse";
 import { normalizeAvatar, type AvatarId } from "./avatars";
 import type { TvClaim, TvSignInRequest } from "./tvSignIn";
+import { readLock, type ProfileLock } from "./profileLock";
+export type { ProfileLock } from "./profileLock";
 
 export interface AccountUser {
   id: string;
@@ -19,6 +21,8 @@ export interface Profile {
   name: string;
   avatar: AvatarId;
   position: number;
+  /** Its PIN and viewing limit (profileLock.ts); `undefined` while the account server has no place for them. */
+  lock?: ProfileLock;
 }
 
 export type ProfileInput = Pick<Profile, "name" | "avatar">;
@@ -27,7 +31,8 @@ export type ProfileInput = Pick<Profile, "name" | "avatar">;
 export function readProfile(v: unknown): Profile | undefined {
   const id = isRecord(v) ? str(v.id) : undefined;
   if (!isRecord(v) || !id) return;
-  return { id, name: str(v.name) ?? "", avatar: normalizeAvatar(str(v.avatar) ?? ""), position: count(v.position) ?? 0 };
+  const lock = readLock(v.lock);
+  return { id, name: str(v.name) ?? "", avatar: normalizeAvatar(str(v.avatar) ?? ""), position: count(v.position) ?? 0, ...(lock && { lock }) };
 }
 
 export type AccountErrorCode =
@@ -269,6 +274,19 @@ export interface AccountBackend {
     create(input: ProfileInput & { position: number }): Promise<Profile>;
     update(id: string, patch: Partial<ProfileInput>): Promise<Profile>;
     remove(id: string): Promise<void>;
+    /** Its PIN and viewing limit (profileLock.ts). `not_set_up` while the server has no place for them. */
+    setLock(id: string, patch: Partial<ProfileLock>): Promise<Profile>;
+  };
+
+  /**
+   * Proving it's the account's owner again, on a device already signed in: a code sent to the account's email,
+   * as at sign-in. Removing a forgotten profile PIN and unlocking a restricted profile's account settings need it.
+   */
+  reauth: {
+    /** `captchaToken`: once the server has asked for one (`captcha_needed`), the solved one. */
+    start(captchaToken?: string): Promise<void>;
+    /** `invalid_code` when the code is wrong or has expired, or belongs to another account. */
+    verify(code: string): Promise<void>;
   };
 
   sync: {

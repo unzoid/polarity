@@ -4,6 +4,8 @@ import { queryClient } from "../net/queryClient";
 import { keys } from "../net/queryKeys";
 import type { ContentType, Settings } from "../types";
 import { allowed, discoverBound, regionOf } from "./ageRating";
+import { getActiveLock, onActiveLock, useActiveLock } from "../account/unlock";
+import type { ProfileLock } from "../account/profileLock";
 
 /**
  * The profile's viewing limit: the highest age a title may be rated for (null: no limit) and whether titles
@@ -16,7 +18,12 @@ export interface ViewingLimit {
   hideUnrated: boolean;
 }
 
-const limitOf = (p: Pick<Prefs, "viewingLimit" | "viewingHideUnrated">): ViewingLimit => {
+/**
+ * The limit from the profile's own row when it has one there (a restricted profile, set in its edit sheet behind
+ * a PIN: lib/account/profileRules.ts), else from the profile's Browsing setting.
+ */
+export const limitOf = (p: Pick<Prefs, "viewingLimit" | "viewingHideUnrated">, lock: ProfileLock | null = null): ViewingLimit => {
+  if (lock?.viewingLimit != null) return { limit: lock.viewingLimit, hideUnrated: lock.hideUnrated };
   const limit = p.viewingLimit > 0 ? p.viewingLimit : null;
   return { limit, hideUnrated: limit !== null && p.viewingHideUnrated };
 };
@@ -24,11 +31,24 @@ const limitOf = (p: Pick<Prefs, "viewingLimit" | "viewingHideUnrated">): Viewing
 /** The viewing limit, for components; the same object until it changes. */
 export function useViewingLimit(): ViewingLimit {
   const { viewingLimit, viewingHideUnrated } = usePrefs();
-  return useMemo(() => limitOf({ viewingLimit, viewingHideUnrated }), [viewingLimit, viewingHideUnrated]);
+  const lock = useActiveLock();
+  return useMemo(() => limitOf({ viewingLimit, viewingHideUnrated }, lock), [viewingLimit, viewingHideUnrated, lock]);
 }
 
 /** The viewing limit now, for code outside React. */
-export const getViewingLimit = (): ViewingLimit => limitOf(getPrefs());
+export const getViewingLimit = (): ViewingLimit => limitOf(getPrefs(), getActiveLock());
+
+/** Whether the limit is the profile's own (Settings → Browsing then shows it, read-only: "Set in the profile"). */
+export const useLimitFromProfile = () => useActiveLock()?.viewingLimit != null;
+
+// The film lists ask within the limit (`catalogBound`): a new limit from the profile asks again, as the setting does.
+let lastLimit = getActiveLock()?.viewingLimit ?? null;
+onActiveLock(() => {
+  const limit = getActiveLock()?.viewingLimit ?? null;
+  if (limit === lastLimit) return;
+  lastLimit = limit;
+  for (const key of [["catalog"], ["discover"], ["featured"]]) void queryClient.invalidateQueries({ queryKey: key });
+});
 
 /** Whether a title may show under the limit (lib/catalog/ageRating.ts `allowed`). */
 export const withinLimit = (item: { certification?: string } | undefined, v: ViewingLimit) =>

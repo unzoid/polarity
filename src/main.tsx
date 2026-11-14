@@ -41,6 +41,7 @@ import "./styles/friends.css";
 import "./styles/open-files.css";
 import "./styles/screens.css";
 import "./styles/account.css";
+import "./styles/pin.css";
 import "./styles/settings-overlay.css";
 import "./styles/marketplace.css";
 import "./styles/anime.css";

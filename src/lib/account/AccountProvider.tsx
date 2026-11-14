@@ -11,6 +11,10 @@ import { refreshLocalViews, sync } from "./sync";
 import { deviceLabel, waitForApproval, type TvSignInRequest, type TvWaitResult } from "./tvSignIn";
 import { isTvDevice, os } from "../platform/device";
 import { formFactor } from "../platform/formFactor";
+import type { ProfileLock } from "./profileLock";
+import { hasPin } from "./profileRules";
+import { guardEnter, guardLockChange, guardManage, type GuardContext } from "./profileGuard";
+import { endUnlocks, setActiveLock, type Reauth } from "./unlock";
 
 /**
  *  - loading:    restoring the session
@@ -62,6 +66,10 @@ export interface Account {
   createFirstProfile(input: ProfileInput): Promise<void>;
   updateProfile(id: string, patch: Partial<ProfileInput>): Promise<void>;
   deleteProfile(id: string): Promise<void>;
+  /** A profile's PIN or viewing limit (profileLock.ts); the screens ask first (profileGuard.ts `guardLockChange`). */
+  setProfileLock(id: string, patch: Partial<ProfileLock>): Promise<void>;
+  /** What the PIN prompts need from the account (profileGuard.ts). */
+  guardContext(): GuardContext;
   /**
    * Pushes every profile's changes first. When some still haven't reached the account (offline,
    * a server error), nothing is dropped: `signOutBlocked` says how many, and the sign-out dialog
@@ -101,6 +109,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   const setProfiles = useCallback((userId: string, list: Profile[]) => {
     setProfilesState(list);
+    // The profile in use as the list now has it: a PIN or limit set on another device applies here too.
+    setProfile((cur) => (cur && list.find((p) => p.id === cur.id)) ?? cur);
     siblings.current = list.map((p) => p.id);
     sync.setProfiles(list.map((p) => p.id));
     localStorage.setItem(profilesKey(userId), JSON.stringify(list));
@@ -120,6 +130,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     // addons can take a moment, so don't hold the app for it.
     await Promise.race([restoreSettings(p.id, before ?? null).catch(warnFailed("Restoring the profile's settings")), new Promise((r) => setTimeout(r, 1500))]);
     localStorage.setItem(LAST_PROFILE_KEY, p.id);
+    // Its viewing limit applies from the first render; an unlock of the profile before ends.
+    setActiveLock(p.lock);
+    endUnlocks();
     setProfile(p);
     refreshLocalViews();
     setStatus("ready");
@@ -144,11 +157,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       setProfiles(u.id, list);
       // New account: name the first profile and pick its icon.
       if (!list.length) return setStatus("onboarding");
-      if (list.length === 1) return enter(list[0]);
+      // A profile with a PIN isn't gone into without it: "Who's watching?" asks.
+      if (list.length === 1 && !hasPin(list[0])) return enter(list[0]);
       // Coming back to the app with one remembered profile: still ask, like
       // every streaming app, unless this is a mid-session re-sign-in.
       const last = list.find((p) => p.id === localStorage.getItem(LAST_PROFILE_KEY));
-      if (!launch && last) return enter(last);
+      if (!launch && last && !hasPin(last)) return enter(last);
       setProfilesView("pick");
       setStatus("profiles");
     },
@@ -178,6 +192,23 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     };
   }, [afterSignIn]);
 
+  // The viewing limit follows the profile in use (lib/catalog/viewingLimit.ts reads it).
+  useEffect(() => setActiveLock(profile?.lock), [profile]);
+
+  // Back to the app: the profiles again, at most once a minute, so a limit or PIN set on another device
+  // reaches a profile already in use here.
+  useEffect(() => {
+    if (!backend || status !== "ready" || !user) return;
+    let listedAt = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || Date.now() - listedAt < 60_000) return;
+      listedAt = Date.now();
+      backend?.profiles.list().then((l) => setProfiles(user.id, l), () => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [status, user, setProfiles]);
+
   // Session ended elsewhere (revoked, expired refresh token).
   useEffect(() => {
     if (!backend) return;
@@ -187,6 +218,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       sync.setProfiles([]);
       setUser(null);
       setProfile(null);
+      setActiveLock(null);
+      endUnlocks();
       void api
         .activateSpace(null)
         .then(() => restoreDeviceSettings().catch(warnFailed("Restoring this device's settings")))
@@ -222,6 +255,31 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       await api.activateSpace(null);
       await restoreDeviceSettings().catch(warnFailed("Restoring this device's settings"));
       refreshLocalViews();
+    };
+
+    const setProfileLock = async (id: string, patch: Partial<ProfileLock>) => {
+      const u = requireUser();
+      const updated = await need().profiles.setLock(id, patch);
+      setProfiles(u.id, profiles.map((p) => (p.id === id ? updated : p)));
+      if (profile?.id === id) setProfile(updated);
+    };
+    const guardContext = (): GuardContext => {
+      const b = backend;
+      const reauth: Reauth | null = b && user ? { email: user.email, start: (t) => b.reauth.start(t), verify: (c) => b.reauth.verify(c) } : null;
+      return { actor: profile, profiles, reauth, setLock: setProfileLock };
+    };
+    /** Refused at a PIN prompt: what the screen shows, if it went on without asking first. */
+    const refused = () => new Error("That needs a PIN first.");
+    const mayManage = async () => {
+      if (!(await guardManage(guardContext()))) throw refused();
+    };
+    const showProfiles = (view: "pick" | "manage") => {
+      setProfilesView(view);
+      void sync.finish();
+      setStatus("profiles");
+      // Refresh the list in the background (renamed on another device…).
+      const u = user;
+      if (u && backend) backend.profiles.list().then((l) => setProfiles(u.id, l), () => {});
     };
 
     return {
@@ -275,17 +333,24 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         setCanCancel(false);
         setStatus("guest");
       },
-      chooseProfile: enter,
+      async chooseProfile(p) {
+        // A profile with a PIN asks for it, from wherever it's chosen (profileGuard.ts); cancelled, nothing happens.
+        if (!(await guardEnter(p, guardContext()))) return;
+        await enter(p);
+      },
       profilesView,
       switchProfile(view = "pick") {
-        setProfilesView(view);
-        void sync.finish();
-        setStatus("profiles");
-        // Refresh the list in the background (renamed on another device…).
-        const u = user;
-        if (u && backend) backend.profiles.list().then((l) => setProfiles(u.id, l), () => {});
+        // From a restricted profile, managing asks first (profileRules.ts).
+        if (view === "manage" && status === "ready") {
+          void guardManage(guardContext()).then((ok) => ok && showProfiles(view));
+          return;
+        }
+        showProfiles(view);
       },
+      setProfileLock,
+      guardContext,
       async createProfile(input) {
+        await mayManage();
         const u = requireUser();
         const created = await need().profiles.create({ ...input, position: profiles.length });
         setProfiles(u.id, [...profiles, created]);
@@ -301,6 +366,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         await enter(first);
       },
       async updateProfile(id, patch) {
+        await mayManage();
         const u = requireUser();
         const updated = await need().profiles.update(id, patch);
         setProfiles(u.id, profiles.map((p) => (p.id === id ? updated : p)));
@@ -309,6 +375,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       async deleteProfile(id) {
         const u = requireUser();
         if (profiles.length <= 1) throw new Error("An account needs at least one profile.");
+        // Managing first, then the profile's own PIN when it has one.
+        const target = profiles.find((p) => p.id === id);
+        if (target && !(await guardLockChange(target, guardContext()))) throw refused();
         await need().profiles.remove(id);
         await api.forgetSpace(id);
         forgetProfile(id);

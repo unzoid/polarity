@@ -5,6 +5,7 @@ import { openSettings } from "../lib/settings";
 import { IconPicker } from "../screens/account/ProfilesScreen";
 import { Avatar } from "./Avatar";
 import { Captions, ChevronRight, Edit, Play, Trash } from "./icons";
+import { ProfileLockRows } from "./profileLock/ProfileLockRows";
 
 /**
  * A profile's page in the phone's profile sheet (ProfileMenu.tsx), from Manage: its picture (tap for the icons), its
@@ -85,6 +86,7 @@ export function ProfileEditSheet({ id, onDone }: { id: string; onDone: () => voi
           {error}
         </p>
       )}
+      <ProfileLockRows profile={profile} />
       {/* Settings belong to the profile in use: only its own are offered here. */}
       {inUse && (
         <div className="profile-sheet-card">

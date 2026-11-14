@@ -1720,3 +1720,30 @@ generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.s
   6. B hosts and leaves: the next member becomes host and everyone gets a note.
   7. TV mode: the menu (side menu → Watch Party) works with the remote; the player's Watch Party panel has the
      same parts.
+
+## Profile PINs and viewing limits
+
+`supabase/migrations/20261115000000_profile_pin_and_limit.sql` (the owner applies it), `lib/account/pin.ts`,
+`pinTries.ts`, `profileRules.ts`, `profileGuard.ts`, `unlock.ts`, `components/profileLock/*`. Tested in PGlite and with
+happy-dom; not run against the real project, in the app, on a phone or on a TV. To check:
+
+1. Before the migration, this version signs in and lists, adds, renames and deletes profiles as before; the edit
+   sheet says a PIN and a viewing limit aren't available yet. After it, an older app version still does all of that.
+   Adding a profile right after the migration: one row, not two (`withLockColumns` asks again without the columns
+   only when the first answer is a missing column).
+2. Set a PIN on profile A (Manage Profiles → A, or the phone's sheet → Manage → A). Another device of the account,
+   after listing the profiles: choosing A asks for the PIN, on "Who's watching?", from the profile menu and TV's
+   side menu, and at start when A is the only profile. Offline (network off, restart): still asked, and checked.
+3. Three wrong PINs: the prompt waits 30 s; the next wrong one 60 s; restarting the app keeps the wait.
+4. "Forgot PIN?": the account's email gets a sign-in code (the same email template as sign-in); with it the PIN is
+   removed. With CAPTCHA on (§8.1 of docs/supabase-storage.md) the check shows first.
+5. Give profile B a viewing limit of 9. In B: Settings → Browsing shows the limit read-only, "Set in the profile";
+   Manage Profiles, the phone sheet's Manage and Settings → Account ask for A's PIN; with two profiles with PINs, it
+   asks whose first. Without any PIN on an unrestricted profile, they ask for an emailed code, and B's edit sheet
+   says anyone can switch away from it, offering a PIN for the profile in use.
+6. A limit changed on one device reaches another device's open profile when that app comes back to the front
+   (at most once a minute) or next lists the profiles.
+7. TV mode and a phone: the prompt's keys move with the arrows (remote) and take the remote's number keys; Back
+   closes it without leaving the page under it; over the phone's profile sheet the prompt takes focus and taps.
+8. The 600,000 PBKDF2 rounds take a moment on a slow TV or phone (WebCrypto, in the web view): typing the fourth
+   digit to the answer should stay under about a second.
