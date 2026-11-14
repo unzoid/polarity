@@ -367,6 +367,16 @@ export const SETTINGS: SettingDef[] = [
     tv: "Show Controls When Paused",
   },
   {
+    id: "pauseDetails",
+    page: "playback",
+    title: "Show details while paused",
+    caption: "Paused for a few seconds, the picture dims and shows the title, its overview and cast. Any key or touch brings the picture back",
+    keywords: "pause screen details cast actors overview synopsis description dim idle",
+    bind: p("pauseDetails"),
+    control: toggle,
+    tv: "Show Details While Paused",
+  },
+  {
     id: "loadingDetails",
     page: "playback",
     title: "Detailed loading information",
@@ -1237,6 +1247,15 @@ export const SETTINGS: SettingDef[] = [
   { id: "mal", page: "services", title: "MyAnimeList", keywords: "mal anime list account link sign in import tracking" },
   { id: "trakt", page: "services", title: "Trakt", keywords: "trakt scrobble history watchlist ratings account link sign in import tracking" },
   { id: "simkl", page: "services", title: "Simkl", keywords: "simkl scrobble history watchlist ratings anime list account link sign in import tracking" },
+  {
+    id: "askRating",
+    page: "services",
+    title: "Ask for a rating after finishing",
+    caption: "When a film or the last episode out of a show ends, a small card lets you rate it on your linked Trakt or Simkl",
+    keywords: "rate rating stars score prompt ask finish ended trakt simkl",
+    bind: p("askRating"),
+    control: toggle,
+  },
 
   // Advanced
   {

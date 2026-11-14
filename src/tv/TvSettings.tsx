@@ -90,6 +90,7 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     "resumePlayback",
     "seekStep",
     "pauseShowsControls",
+    "pauseDetails",
     "showPlayingFormat",
     "audioLanguage",
     "subtitleLanguage",

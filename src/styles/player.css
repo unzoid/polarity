@@ -2726,3 +2726,268 @@ img.load-mark-base[data-logo-look^="halo"] {
   font-weight: 650;
   color: var(--text);
 }
+
+/* --- Pause screen (PauseScreen.tsx): paused and left alone, the frame dims and the details sit bottom-left.
+       It takes no input (pointer-events: none): a click, tap or key reaches the player, which removes it at once.
+       It fades in slowly and leaves without a fade; with reduced motion it simply appears. */
+.pause-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 max(4rem, var(--safe-right)) calc(4.5rem + var(--safe-bottom)) max(4rem, var(--safe-left));
+  background:
+    linear-gradient(to right, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0.45) 55%, rgb(0 0 0 / 0.25)),
+    linear-gradient(to top, rgb(0 0 0 / 0.6), transparent 60%);
+  color: var(--text);
+  pointer-events: none;
+  animation: fade-in var(--dur-reveal) var(--ease-out);
+}
+.pause-screen-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  max-width: min(40rem, 60vw);
+}
+.pause-screen-logo {
+  display: block;
+  max-width: min(22rem, 100%);
+  max-height: 7rem;
+  object-fit: contain;
+  object-position: left bottom;
+  margin-bottom: 0.25rem;
+}
+.pause-screen-name,
+.pause-screen-episode,
+.pause-screen-overview {
+  margin: 0;
+}
+.pause-screen-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.pause-screen-episode {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.pause-screen-code {
+  color: var(--text-2);
+  margin-right: 0.25rem;
+}
+.pause-screen-overview {
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pause-screen-cast {
+  display: flex;
+  gap: 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.pause-screen-person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  width: 5.5rem;
+  text-align: center;
+}
+.pause-screen-photo {
+  display: grid;
+  place-items: center;
+  width: 3.75rem;
+  height: 3.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: var(--r-round);
+  overflow: hidden;
+  background: var(--fill-3);
+  color: var(--text-2);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.pause-screen-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pause-screen-person-name,
+.pause-screen-character {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pause-screen-person-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.pause-screen-character {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.tv .pause-screen {
+  padding-inline: var(--tv-gutter);
+}
+/* A phone, or a narrow window: tighter, a shorter overview, fewer faces (the row never scrolls sideways). */
+:root[data-form="phone"] .pause-screen,
+:root[data-compact="true"] .pause-screen {
+  padding: 0 max(1.25rem, var(--safe-right)) calc(2rem + var(--safe-bottom)) max(1.25rem, var(--safe-left));
+}
+:root[data-form="phone"] .pause-screen-body,
+:root[data-compact="true"] .pause-screen-body {
+  max-width: 100%;
+  gap: 0.5rem;
+}
+:root[data-form="phone"] .pause-screen-logo,
+:root[data-compact="true"] .pause-screen-logo {
+  max-height: 4.5rem;
+}
+:root[data-form="phone"] .pause-screen-overview,
+:root[data-compact="true"] .pause-screen-overview {
+  -webkit-line-clamp: 3;
+}
+:root[data-form="phone"] .pause-screen-cast,
+:root[data-compact="true"] .pause-screen-cast {
+  gap: 0.5rem;
+  overflow: hidden;
+}
+:root[data-form="phone"] .pause-screen-person,
+:root[data-compact="true"] .pause-screen-person {
+  flex: none;
+  width: 4.5rem;
+}
+/* A phone on its side: too short for the faces. */
+@media (max-height: 420px) {
+  .pause-screen-cast {
+    display: none;
+  }
+  .pause-screen-overview {
+    -webkit-line-clamp: 2;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pause-screen {
+    animation: none;
+  }
+}
+
+/* --- Rating card (RatingPrompt.tsx): after a film or a show's last episode out, in Up Next's corner (never both). */
+.rating-prompt {
+  position: absolute;
+  right: max(3rem, var(--safe-right));
+  bottom: calc(10rem + var(--safe-bottom));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 0.875rem;
+  border-radius: var(--r-panel);
+  background: var(--surface-float);
+  box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
+  animation: fade-in var(--dur-slow) var(--ease-out);
+}
+.player[data-options="true"] .rating-prompt {
+  visibility: hidden;
+}
+.rating-prompt-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.rating-prompt-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.rating-prompt-kicker {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+.rating-prompt-title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.rating-prompt-dismiss.btn-icon {
+  flex: none;
+  width: 2.375rem;
+  height: 2.375rem;
+  background: var(--fill-3);
+  box-shadow: none;
+}
+.rating-prompt-scale {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 0.25rem;
+}
+.rating-prompt-score {
+  height: 2.375rem;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--fill-3);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .rating-prompt-score:hover {
+    background: var(--fill-4);
+  }
+}
+.rating-prompt-done {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+/* A phone or a narrow window: across the bottom, two rows of five, each a full touch target. */
+:root[data-form="phone"] .rating-prompt,
+:root[data-compact="true"] .rating-prompt {
+  right: max(1rem, var(--safe-right));
+  left: max(1rem, var(--safe-left));
+  bottom: calc(8rem + var(--safe-bottom));
+  width: auto;
+}
+:root[data-compact="true"] .rating-prompt-scale {
+  grid-template-columns: repeat(5, 1fr);
+}
+:root[data-touch="true"] .rating-prompt-score {
+  height: var(--hit);
+}
+.tv .rating-prompt {
+  right: var(--tv-gutter);
+  width: min(30rem, 46vw);
+}
+.tv .rating-prompt :is(.rating-prompt-score, .btn):focus {
+  outline: none;
+  background: var(--pill-light);
+  color: var(--text-on-light);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rating-prompt {
+    animation: none;
+  }
+}

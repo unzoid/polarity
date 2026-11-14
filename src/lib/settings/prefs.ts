@@ -47,6 +47,10 @@ export interface Prefs {
   pauseShowsControls: boolean;
   /** Under the title in the player: what's playing ("4K · Dolby Vision · Dolby Atmos · English 5.1"). */
   showPlayingFormat: boolean;
+  /** Paused and left alone, the frame dims and shows the title, its overview and cast (components/player/PauseScreen.tsx). */
+  pauseDetails: boolean;
+  /** A film or a show's last released episode finished: a card asks for a rating on the linked Trakt or Simkl. */
+  askRating: boolean;
 
   // This machine's screen, speakers and GPU:
   /** Interface zoom, 1 = 100%. */
@@ -197,6 +201,8 @@ const DEFAULTS: Prefs = {
   holdSpeed: 2,
   pauseShowsControls: true,
   showPlayingFormat: true,
+  pauseDetails: true,
+  askRating: true,
   uiScale: 1,
   pauseOnMinimize: false,
   discordPresence: "app",
@@ -295,6 +301,8 @@ export const SYNCED_PREFS = [
   "holdSpeed",
   "pauseShowsControls",
   "showPlayingFormat",
+  "pauseDetails",
+  "askRating",
   "preferSdh",
   "secondSubtitles",
   "secondSubtitleLanguage",

@@ -88,6 +88,8 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
         <li>Source filters, a check of each stream before it plays, and what each source carries</li>
         <li>Video files on your computer, with the rest of their folder as episodes</li>
         <li>Resume where you left off, and AirPlay on macOS</li>
+        <li>Paused for a moment, the title, its overview and cast over the dimmed picture</li>
+        <li>With Trakt or Simkl linked, a card to rate a film or show when you finish it</li>
       </ul>
     </td>
   </tr>

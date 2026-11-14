@@ -1438,6 +1438,26 @@ because mpv's `panscan` wasn't on the list of properties the player may set
 5. Phone or tablet: the full-screen button cycles the same way; pinch out fills, pinch in fits.
    TV mode: the controller's crop binding cycles and says the mode.
 
+## Pause screen and rating card (player)
+
+`components/player/PauseScreen.tsx` and `RatingPrompt.tsx`; when each shows is tested (`tests/pauseScreen.test.ts`,
+`tests/ratingPrompt.test.ts`), the components in `tests/dom`. Not run in the app, over mpv, on a phone, a TV or against
+a linked Trakt or Simkl. To check:
+
+1. Pause a film with mpv, then with the built-in player, and leave it: the controls hide, about 3 s later the picture
+   dims and the logo (or name), the overview and up to six cast members show. An episode adds its code and title.
+2. Move the mouse, press a key or tap: it goes at once, and the input does what it would have (Space plays, a click
+   plays or pauses as set, a tap shows the controls). It never shows over YouTube's player, with a panel or menu open,
+   with Up Next, the sleep timer's prompt, a party note or the player's own notice up, or on a stepped frame.
+3. Settings → Playback → On-Screen Controls → "Show details while paused" off: it never shows. With reduced motion on,
+   it appears without the fade. Phone upright and on its side, TV mode: the text fits, the cast row hides when short.
+4. Link Trakt (or Simkl), let its ratings load, play an unrated film to the end: "Rate <title>" shows in Up Next's
+   corner; a score shows "Rated n of 10 on Trakt" and the title page's star shows it. Dismiss on another film: it
+   doesn't come back for that film on this device. Not after an episode with another one out, a shuffle, a local
+   file, a party link or as a party member who isn't host; a show's last episode out asks for the show.
+5. Settings → Services: "Ask for a rating after finishing" shows only with Trakt or Simkl linked; off, no card.
+6. TV mode: the card's scores are reachable with the remote (not checked how focus gets to them).
+
 ## Apple TV core (`crates/ffi`, #504)
 
 The core's Swift binding for the Apple TV app (docs/ARCHITECTURE.md, "Apple TV"). Checked on the Linux dev machine:
