@@ -320,6 +320,8 @@ private fun setStremioLinks(activity: Activity, on: Boolean) {
 /**
  * Links meant for Stremio that reached the activity (#163), kept until the page takes them: the one
  * that started the app comes before the page listens. Only stremio:// links, not too long, latest few.
+ * And a TV's QR code (#133), `polarity://tv-sign-in/<code>`, the one Polarity link a phone receives
+ * (AndroidManifest.xml); the page parses it (src/lib/deepLink) and only asks.
  */
 object IncomingLinks {
   private const val MAX_LEN = 4096
@@ -330,7 +332,8 @@ object IncomingLinks {
   fun offer(intent: Intent?): Boolean {
     if (intent?.action != Intent.ACTION_VIEW) return false
     val link = intent.dataString ?: return false
-    val ours = link.startsWith("stremio://", ignoreCase = true) && link.length <= MAX_LEN && link.all { it in '!'..'~' }
+    val scheme = link.startsWith("stremio://", ignoreCase = true) || link.startsWith("polarity://tv-sign-in/")
+    val ours = scheme && link.length <= MAX_LEN && link.all { it in '!'..'~' }
     if (!ours) return false
     waiting.addLast(link)
     while (waiting.size > MAX_WAITING) waiting.removeFirst()
