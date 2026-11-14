@@ -1320,6 +1320,30 @@
   display: flex;
   gap: 0.5rem;
 }
+/* Saved and Watched in full: search, filters and sort under the title, the count under them. */
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 var(--gutter) 0.75rem var(--content-start);
+}
+.library-search.search-field-pill {
+  width: 14rem;
+  height: 38px;
+  border: 0;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
+}
+.library-filter-summary {
+  margin: 0;
+  padding: 0 var(--gutter) 1rem var(--content-start);
+}
+:root[data-form="phone"] .library-search.search-field-pill {
+  flex: 1 1 100%;
+  width: auto;
+}
 .playlist-view {
   padding-top: calc(var(--nav-h) + 1.75rem);
 }

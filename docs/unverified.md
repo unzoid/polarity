@@ -1702,3 +1702,20 @@ generated Swift compiled. To check on a Mac with Xcode: `scripts/apple-tv-core.s
   6. B hosts and leaves: the next member becomes host and everyone gets a note.
   7. TV mode: the menu (side menu → Watch Party) works with the remote; the player's Watch Party panel has the
      same parts.
+
+## Library: search, filters and sorts in Saved and Watched
+
+Checked with unit tests (`tests/libraryView.test.ts`) and a DOM test of the search and Clear Filters
+(`tests/dom/libraryFilters.test.tsx`); never looked at in the app or on a TV. To check:
+
+1. Library → Saved with a few dozen titles: Genre and Year appear as titles are looked up, the count line says
+   "Still looking up …" meanwhile, and nothing disappears until its details are in. Reopen the page: the facts
+   are there at once (kept on the device for a week).
+2. Combine Show, Status, Genre and Year; the count follows; a combination with no titles names the filters that
+   hide everything, and Clear Filters brings them back. Each collection remembers its own choices after a restart.
+3. Status on a show: Watched only once its last aired episode was watched to the end.
+4. Phone width: the controls wrap under the search field without overflowing.
+5. TV: Library's Arrange rail (Show, Status, Sort) is reachable with the D-pad, each press steps the choice,
+   and the Saved and Watched rails follow.
+6. Search for "horror", "sci fi" and (with Anime on) "isekai": the genre rows' headings open Movies or Series
+   with that genre, and Anime → Browse with it.

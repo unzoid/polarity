@@ -27,6 +27,8 @@ import { useBack, usePageActive } from "./shell";
 import { focusWhenReady } from "./spatial";
 import { usePlaylistItem } from "../components/Playlists";
 import { localStream, type PlaylistItem, useDownloads, usePlaylists } from "../lib/library";
+import { arrangeLibrary, needsFacts, useSavedEntries, useWatchedEntries } from "../lib/library";
+import { TvArrangeRail, useTvLibraryView } from "./TvLibraryArrange";
 import { episodeCode } from "../lib/format";
 import { useRouter } from "../lib/router";
 import { TvBrowse, TvCard, TvContinueRail, TvItemsRail, TvRail, TvShelfRail, type RailRow } from "./TvRails";
@@ -120,6 +122,14 @@ export function TvLibrary() {
   const { navigate } = useRouter();
   // Only what's here to watch: a download still coming down can't play yet.
   const ready = (downloads ?? []).filter((d) => d.state === "done");
+  // Type, status and sort for Saved and Watched; titles are looked up only when the view needs it.
+  const [view, setView] = useTvLibraryView();
+  const lookUp = needsFacts(view);
+  const savedEntries = useSavedEntries(lookUp);
+  const watchedEntries = useWatchedEntries(lookUp);
+  const filters = useMemo(() => ({ ...view, query: "" }), [view]);
+  const shownSaved = useMemo(() => savedEntries && arrangeLibrary(savedEntries, filters).items, [savedEntries, filters]);
+  const shownHistory = useMemo(() => watchedEntries && arrangeLibrary(watchedEntries, filters).items, [watchedEntries, filters]);
 
   if (saved?.length === 0 && history?.length === 0 && playlists.length === 0 && !downloads?.length) {
     return (
@@ -154,13 +164,20 @@ export function TvLibrary() {
           </TvRail>
         ) : null,
     },
-    { key: "saved", render: () => <TvItemsRail title="Saved" items={saved} shape="poster" watching={watching} saved /> },
+    {
+      key: "arrange",
+      render: () =>
+        saved?.length || history?.length ? (
+          <TvArrangeRail view={view} onChange={setView} nothing={shownSaved?.length === 0 && shownHistory?.length === 0} />
+        ) : null,
+    },
+    { key: "saved", render: () => <TvItemsRail title="Saved" items={shownSaved} shape="poster" watching={watching} saved /> },
     {
       key: "watched",
       render: () =>
-        history?.length ? (
+        shownHistory?.length ? (
           <TvRail title="Watched">
-            {history.map((p) => (
+            {shownHistory.map((p) => (
               <TvCard key={p.metaId} item={progressItem(p)} shape="landscape" progress={progressFraction(p)} entry={p} />
             ))}
           </TvRail>

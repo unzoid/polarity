@@ -887,6 +887,13 @@
   justify-content: center;
   transform-origin: center;
 }
+/* Library's Arrange rail: type, status and sort, each press steps to the next choice. */
+.tv-arrange-pill {
+  flex: none;
+  min-width: 0;
+  background: var(--fill-1);
+  white-space: nowrap;
+}
 
 /* --- Settings ------------------------------------------------------------- */
 .tv-settings {
