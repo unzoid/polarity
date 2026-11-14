@@ -4,6 +4,7 @@
 export * from "./artFocus";
 export * from "./artGate";
 export * from "./cardIntent";
+export * from "./clamped";
 export * from "./detents";
 export * from "./dismiss";
 export * from "./formFactor";

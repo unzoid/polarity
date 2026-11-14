@@ -12,6 +12,7 @@ import { FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleD
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
 import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
+import { EpisodeRatings } from "../components/title/EpisodeRatings";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 import { Img } from "../components/Img";
@@ -314,6 +315,14 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
         onPlay={(v) => picker.play(request(v))}
         onSources={(v) => picker.choose(request(v))}
         menu={(v) => cardMenu(meta, episodeEntry(meta, v, map.get(v.id)), { episode: true })}
+      />
+      {/* A cell opens its episode as a link to it does (#163): its season, its sources listed. */}
+      <EpisodeRatings
+        videos={meta.videos}
+        onOpen={(v) => {
+          setSeason(v.season);
+          picker.choose(request(v));
+        }}
       />
       <SourcePicker picker={picker} />
     </section>

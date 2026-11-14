@@ -71,6 +71,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
         <li>An Anime section with its own search, details and episode lists</li>
         <li>Search with recent searches</li>
         <li>IMDb ratings on cards and title pages, and trailers on the title backdrop</li>
+        <li>A show's episode ratings season by season, in one table</li>
         <li>A calendar built from the shows in your library and the ones you're watching</li>
         <li>Notifications when a show you follow has a new episode or season, or a download finishes (off until you turn them on)</li>
       </ul>
