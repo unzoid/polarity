@@ -236,6 +236,7 @@ function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const deferred = useDeferredValue(query);
   const { animeEnabled } = usePrefs();
+  const { navigate } = useRouter();
 
   // Keystrokes update the field instantly; the network waits for a pause.
   useEffect(() => {
@@ -265,7 +266,16 @@ function Results({ text }: { text: string }) {
     movies: <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
     series: <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
     anime: animeEnabled && (
-      <AnimeRow key="anime" title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />
+      <AnimeRow
+        key="anime"
+        title={anime.title}
+        items={anime.items}
+        loading={anime.loading}
+        failed={anime.failed}
+        retry={anime.retry}
+        // A genre or kind of show: the heading opens it in Anime → Browse.
+        onOpen={anime.browse && (() => navigate({ name: "anime-browse", ...anime.browse }))}
+      />
     ),
   };
   const nothing = !waiting && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
@@ -287,17 +297,39 @@ function Results({ text }: { text: string }) {
 
 function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   const { data } = useGenreRow(type, genre);
-  return <ResultRow title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`} items={data} />;
+  const { navigate } = useRouter();
+  // The heading opens the genre's whole list in Movies or Series.
+  return (
+    <ResultRow
+      title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`}
+      items={data}
+      onOpen={() => navigate({ name: "discover", type, genre })}
+    />
+  );
 }
 
 /** Leaves out what can't play and has nothing to show (#337): a stub whose poster and backdrop don't load. */
-function ResultRow({ title, items: found }: { title: string; items?: MetaPreview[] }) {
+function ResultRow({ title, items: found, onOpen }: { title: string; items?: MetaPreview[]; onOpen?: () => void }) {
   const items = useListable(found);
   if (items && !items.length) return null;
-  return <Shelf title={title} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
+  return <Shelf title={title} onOpen={onOpen} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
 }
 
-function AnimeRow({ title, items, loading, failed, retry }: { title: string; items?: Card[]; loading: boolean; failed: boolean; retry: () => void }) {
+function AnimeRow({
+  title,
+  items,
+  loading,
+  failed,
+  retry,
+  onOpen,
+}: {
+  title: string;
+  items?: Card[];
+  loading: boolean;
+  failed: boolean;
+  retry: () => void;
+  onOpen?: () => void;
+}) {
   // A failed search isn't "no anime": it says so, with a way to try again (test report 1, item 28).
   if (failed && !items?.length)
     return (
@@ -309,5 +341,5 @@ function AnimeRow({ title, items, loading, failed, retry }: { title: string; ite
       </section>
     );
   if (!loading && !items?.length) return null;
-  return <Shelf title={title} items={items} card={(a) => <AnimeCard key={a.id} item={a} />} />;
+  return <Shelf title={title} onOpen={onOpen} items={items} card={(a) => <AnimeCard key={a.id} item={a} />} />;
 }

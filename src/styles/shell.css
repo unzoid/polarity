@@ -1147,6 +1147,7 @@ html[data-os="mac"] {
 /* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
 .discover-controls .select-trigger,
 .library-toolbar .select-trigger,
+.library-filters .select-trigger,
 .downloads-toolbar .select-trigger,
 .seasons-picker .select-trigger:not([data-size="large"]) {
   width: auto;

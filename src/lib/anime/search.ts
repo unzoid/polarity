@@ -34,6 +34,8 @@ export function useAnimeResults(query: string, retry?: string) {
     title: genre || tag ? `Popular ${genre ?? tag} Anime` : "Anime",
     /** The genre or kind of show the search names, asked for by popularity (#338). */
     genre: genre ?? tag,
+    /** Where Anime → Browse lists the same genre or tag in full; none for a title search. */
+    browse: genre ? { genre } : tag ? { tag } : undefined,
     items: items && shown(genre || tag ? items : byRelevance(items, searched)),
     /** Every entry found, before one per franchise: what hides the same shows' Cinemeta results (a later part listed on its own, test report 1, item 10). */
     all: items,
