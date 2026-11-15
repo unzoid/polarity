@@ -18,6 +18,7 @@ import { PolarityExport } from "../../components/settings/PolarityExport";
 import { CopySetup } from "../../components/settings/CopySetup";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { FriendsSettings } from "../../components/friends/FriendsSettings";
+import { useLinkedTvCode } from "../../lib/account";
 
 export function AccountPage() {
   const account = useAccount();
@@ -275,6 +276,14 @@ function TvSignInRow(props: Expandable) {
       setAsking(null);
       setCode("");
     },
+  });
+  // A code from the TV's QR code: filled in and looked up, so the question comes up; the person still answers it.
+  useLinkedTvCode((linked) => {
+    if (!props.open) props.onToggle();
+    setAsking(null);
+    setDone(null);
+    setCode(formatTvCode(linked));
+    look.mutate(linked);
   });
   const typedWrong = code.replace(/[^A-Za-z0-9]/g, "").length >= 8 && !isTvCode(code);
   return (

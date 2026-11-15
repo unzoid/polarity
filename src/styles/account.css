@@ -198,6 +198,24 @@
 .auth-device-code + .auth-fine {
   margin-top: 0;
 }
+/* The same code as a QR code (TvSignInQr): black on white in every theme, its quiet zone drawn in. On a TV,
+   big enough for a phone to read from the couch while the rest still fits on the screen. */
+.auth-device-qr {
+  margin: 1.25rem 0 0;
+}
+.auth-device-qr svg {
+  display: block;
+  width: 10rem;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 0.5rem;
+}
+:root[data-tv="true"] .auth-device-qr svg {
+  width: min(13rem, 30vh);
+}
+.auth-device-qr .auth-fine {
+  margin-top: 0.75rem;
+}
 .auth-link {
   margin-top: 1.25rem;
   font-size: var(--fs-sm);

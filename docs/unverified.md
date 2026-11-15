@@ -1384,6 +1384,24 @@ Account → Sign in a TV). Not checked: a real Supabase project, Deno, or a real
 9. Supabase's own projects with the new publishable keys: check `generateLink` + `verifyOtp({ token_hash, type:
    "magiclink" })` still signs in (the function and the app use supabase-js 2).
 
+### The QR code next to the code
+
+Checked here: the link (`polarity://tv-sign-in/<code>`, `tests/deepLink.test.ts`), the QR code drawn for the
+code shown and redrawn for a new one, and a linked code landing on "Sign in on <device>?" without an answer
+(`tests/dom/tvSignInQr.test.tsx`). Not checked: a camera, an Android build with the new intent filter, a real TV.
+
+1. Android TV (or a computer) on Sign in with your phone: a QR code shows under the code, black on white in the
+   light and dark themes. From the couch, an Android phone's camera reads it.
+2. The phone has Polarity, signed in: the camera offers to open Polarity, which opens on Settings → Account →
+   Sign in a TV asking "Sign in on Android TV?". Nothing is approved until Approve.
+3. The phone is a guest: Polarity opens its sign-in screen; after signing in and picking a profile it lands on
+   the same question. Cancelling the sign-in drops the code.
+4. Wait out the code (or Deny), Get a new code: the QR code changes with it, and scanning the new one asks
+   about the new code.
+5. TalkBack on the TV: the QR code reads as "QR code for the code ABCD-EFGH".
+6. Not wired: iPhone (the iOS app registers no `polarity://` link yet), a dev build's `polarity-dev://`
+   links on Android (the intent filter has the released scheme only), and the Apple TV app's own code screen.
+
 ## Notifications (#209)
 
 Checked here: what's new (time zones, undated episodes, a whole season at once, the one-a-day rule,

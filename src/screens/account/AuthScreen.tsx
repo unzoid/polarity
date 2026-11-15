@@ -11,6 +11,7 @@ import { PRIVACY_URL, TERMS_URL } from "../../lib/settings";
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
 import { Captcha } from "./Captcha";
+import { TvSignInQr } from "./TvSignInQr";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** The server only sends a new code once a minute. */
@@ -288,6 +289,7 @@ function DeviceStep({ tv, onBack }: { tv: boolean; onBack: () => void }) {
           Waiting for approval · the code expires in {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}
         </p>
       )}
+      {state.kind === "code" && <TvSignInQr code={state.request.code} />}
       {state.kind === "over" && (
         <>
           <ErrorLine error={{ message: state.message }} />
