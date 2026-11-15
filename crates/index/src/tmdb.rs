@@ -21,6 +21,7 @@ use crate::cache::TtlCache;
 use crate::{curate, IndexError, Result, PAGE_SIZE};
 
 pub(crate) mod orders;
+mod people;
 
 const API: &str = "https://api.themoviedb.org/3";
 const IMG: &str = "https://image.tmdb.org/t/p";
@@ -597,6 +598,7 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
     };
 
     let trailer_yt_id = d["videos"]["results"].as_array().map(Vec::as_slice).and_then(pick_trailer);
+    let extras = people::extras(&d["videos"]["results"], trailer_yt_id.as_deref());
 
     let people = d["credits"]["cast"]
         .as_array()
@@ -607,6 +609,7 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
                         name: str_of(&p["name"])?,
                         character: str_of(&p["character"]).or_else(|| str_of(&p["roles"][0]["character"])),
                         photo: str_of(&p["profile_path"]).map(|path| format!("{IMG}/w185{path}")),
+                        tmdb_id: p["id"].as_u64(),
                     })
                 })
                 .take(24)
@@ -676,6 +679,8 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
         trailer_source: trailer_yt_id.as_ref().map(|_| "tmdb".to_string()),
         trailer_yt_id,
         videos,
+        crew: people::crew(d, is_series),
+        extras,
     }
 }
 
@@ -795,6 +800,8 @@ mod tests {
                         } else {
                             ("404 Not Found", String::new())
                         }
+                    } else if path == "/person/77" {
+                        ("200 OK", fake_person(query).to_string())
                     } else if path == "/movie/601/images" {
                         // Asked for in the original language only.
                         assert!(query.contains("include_image_language=zh"), "{query}");
@@ -857,6 +864,81 @@ mod tests {
             }
         });
         (base, hits)
+    }
+
+    /// A made-up person: three films acted in (101 the most voted on, 100 without an IMDb id), a talk show
+    /// and a film as themselves, which their page leaves out, and two films directed, one also acted in.
+    fn fake_person(query: &str) -> Value {
+        assert!(query.contains("append_to_response=combined_credits"), "{query}");
+        let film = |id: u64, votes: u64, character: &str| json!({ "id": id, "media_type": "movie", "title": format!("T{id}"), "vote_count": votes, "character": character });
+        json!({
+            "id": 77,
+            "name": "Ada Brennan",
+            "biography": "  An actor and director, made up for tests.  ",
+            "birthday": "1970-01-01",
+            "deathday": null,
+            "place_of_birth": "Example Town",
+            "known_for_department": "Acting",
+            "profile_path": "/ada.jpg",
+            "combined_credits": {
+                "cast": [
+                    film(102, 40, "Nora"),
+                    film(101, 900, "Clara"),
+                    film(100, 5000, "Mira"),
+                    film(103, 9000, "Self"),
+                    { "id": 9, "media_type": "tv", "name": "Late Talk", "vote_count": 99999, "genre_ids": [10767], "character": "Guest" },
+                    film(102, 40, "Nora (voice)"),
+                ],
+                "crew": [
+                    { "id": 104, "media_type": "movie", "title": "T104", "vote_count": 10, "job": "Director" },
+                    { "id": 101, "media_type": "movie", "title": "T101", "vote_count": 900, "job": "Director" },
+                    { "id": 106, "media_type": "movie", "title": "T106", "vote_count": 1, "job": "Producer" },
+                ],
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn a_person_page_lists_roles_and_directing_most_voted_first() {
+        let (api, hits) = fake_tmdb().await;
+        let tmdb = local(api);
+        let before = hits.load(Ordering::SeqCst);
+        let page = tmdb.person(77).await.unwrap();
+        // The person, then one lookup per title kept (101, 102, 100, 104): 101 is in both lists, asked for once.
+        assert_eq!(hits.load(Ordering::SeqCst) - before, 5);
+        assert_eq!(page.name, "Ada Brennan");
+        assert_eq!(page.biography.as_deref(), Some("An actor and director, made up for tests."));
+        assert_eq!(page.photo.as_deref(), Some("https://image.tmdb.org/t/p/w342/ada.jpg"));
+        assert_eq!((page.born.as_deref(), page.died), (Some("1970-01-01"), None));
+        assert_eq!(page.known_for.as_deref(), Some("Acting"));
+        let ids = |list: &[MetaPreview]| list.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+        // 100 has no IMDb id; 103 is themselves, the talk show an appearance; 102 once.
+        assert_eq!(ids(&page.acting), ["tt101", "tt102"]);
+        assert_eq!(ids(&page.directing), ["tt101", "tt104"]);
+        assert_eq!(page.acting[1].logo.as_deref(), Some("https://image.tmdb.org/t/p/w500/en102.png"));
+        // Without a TMDB person of that id, it's not found.
+        assert!(matches!(tmdb.person(78).await, Err(IndexError::NotFound)));
+    }
+
+    #[test]
+    fn details_name_people_by_id_and_list_extras() {
+        let d = json!({
+            "id": 1,
+            "title": "Made Up Film",
+            "credits": {
+                "cast": [{ "id": 77, "name": "Ada Brennan", "character": "Nora" }],
+                "crew": [{ "id": 78, "name": "Ines Marchetti", "job": "Director" }],
+            },
+            "videos": { "results": [
+                { "site": "YouTube", "key": "main", "type": "Trailer", "official": true, "name": "Trailer" },
+                { "site": "YouTube", "key": "making", "type": "Featurette", "official": true, "name": "Making Of" },
+            ]},
+        });
+        let meta = detail_to_meta("movie", "tt0000001", &d, Vec::new(), Vec::new());
+        assert_eq!(meta.people[0].tmdb_id, Some(77));
+        assert_eq!(meta.crew[0].tmdb_id, Some(78));
+        assert_eq!(meta.trailer_yt_id.as_deref(), Some("main"));
+        assert_eq!(meta.extras.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["making"]);
     }
 
     fn local(api: String) -> Tmdb {

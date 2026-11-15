@@ -1,6 +1,8 @@
 import { LayoutList, LayoutRow, Shuffle, Volume, VolumeMuted } from "../components/icons";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
+import { ExtrasShelf } from "../components/title/ExtrasShelf";
+import { personIds } from "../lib/catalog";
 import { useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
@@ -104,6 +106,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
         {phone && art}
         <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
+        {meta && <ExtrasShelf meta={meta} />}
         {type === "movie" && meta && (
           <section className="about">
             <h2 className="t-title2">About</h2>
@@ -217,12 +220,12 @@ function DetailHero({
         <dl className="detail-credits t-callout">
           {meta.cast?.length ? (
             <div>
-              <dt>Starring</dt> <dd><NameList names={meta.cast.slice(0, 3)} /></dd>
+              <dt>Starring</dt> <dd><NameList names={meta.cast.slice(0, 3)} ids={personIds(meta)} /></dd>
             </div>
           ) : null}
           {meta.director?.length ? (
             <div>
-              <dt>{isSeries ? "Created by" : "Director"}</dt> <dd><NameList names={meta.director.slice(0, 2)} /></dd>
+              <dt>{isSeries ? "Created by" : "Director"}</dt> <dd><NameList names={meta.director.slice(0, 2)} ids={personIds(meta)} /></dd>
             </div>
           ) : null}
         </dl>

@@ -1,4 +1,4 @@
-import type { InstalledAddon, LibraryItem, Meta, MetaPreview, Progress, Settings, StreamsResult, Video } from "../../types";
+import type { InstalledAddon, LibraryItem, Meta, MetaPreview, PersonPage, Progress, Settings, StreamsResult, Video } from "../../types";
 import type { Download } from "../../library/downloads";
 import { longAnimeMeta } from "./longAnime";
 
@@ -250,6 +250,29 @@ export function meta(id: string): Meta | null {
   };
 }
 
+/** The fixtures' made-up people: the cast's TMDB ids start here, the director's is 50 on. */
+const PERSON_ID = 7000;
+
+/** A made-up person's page: invented biography, the first movies and shows as their titles. */
+export function person(id: number): PersonPage | null {
+  const k = id - PERSON_ID;
+  const cast = ["Ada Brennan", "Tomas Okafor", "Mei Lindqvist", "Rafael Duarte", "June Halloway", "Oskar Veldt"];
+  const name = k === 50 ? "Ines Marchetti" : cast[k];
+  if (!name) return null;
+  const directs = k === 50;
+  return {
+    id,
+    name,
+    photo: art(name.split(" ").map((w) => w[0]).join(""), k, 342, 513),
+    biography: `${name} is a made-up ${directs ? "director" : "actor"} for the app's fixtures. ${BLURB}\n\n${BLURB}`,
+    born: `19${70 + k % 20}-0${1 + (k % 9)}-14`,
+    birthplace: "Example Town",
+    knownFor: directs ? "Directing" : "Acting",
+    acting: directs ? [] : [...movies.slice(k, k + 8), ...series.slice(k, k + 4)],
+    directing: directs ? movies.slice(0, 6) : k === 0 ? movies.slice(10, 12) : [],
+  };
+}
+
 function baseMeta(id: string): Meta | null {
   const i = all.findIndex((m) => m.id === id);
   if (i < 0) return null;
@@ -272,7 +295,20 @@ function baseMeta(id: string): Meta | null {
         185,
         278,
       ),
+      // Made-up TMDB person ids: the names open their pages (person() below).
+      tmdbId: PERSON_ID + k,
     })),
+    crew: [{ name: "Ines Marchetti", character: "Director", tmdbId: PERSON_ID + 50 }],
+    // One title with extras, for the Extras shelf (placeholder ids; tests refuse YouTube).
+    ...(p.name === "Paper Lanterns"
+      ? {
+          extras: [
+            { name: "Making the Film", kind: "Behind the Scenes", key: "xxxxxxxxxx1" },
+            { name: "On the Water", kind: "Clip", key: "xxxxxxxxxx2" },
+            { name: "Second Trailer", kind: "Trailer", key: "xxxxxxxxxx3" },
+          ],
+        }
+      : {}),
     videos: p.type === "series" ? episodes(p, i) : [],
     // One title with a TMDB trailer, for the trailer player's tests (the id is a placeholder; tests refuse YouTube).
     ...(p.name === "Paper Lanterns" ? { trailerYtId: "xxxxxxxxxxx", trailerSource: "tmdb" as const } : {}),

@@ -1794,3 +1794,17 @@ Checked with unit tests (`tests/libraryView.test.ts`) and a DOM test of the sear
      the order; Trakt/Simkl, downloads and notifications still name the aired season and episode.
   4. Back on the page, Play/Resume goes by the order. Reopen the app: the choice stays (this device only).
   5. Phone (the picker wraps under the seasons) and TV (the order list above the seasons, with the remote).
+## Cast pages and extras
+
+The TMDB mapping (person page, crew ids, extras, the number of lookups) is tested against the fake TMDB in
+`crates/index/src/tmdb.rs`, the page's pure parts in `tests/people.test.ts`; the screens are only type-checked
+and were not looked at. Not run against TMDB itself, nor in the app. To check with a TMDB key:
+1. A title's cast faces and the Starring / Director names open the person's page: photo, name, facts, the
+   biography's start with More, then Acting and Directing grids that open each title. Without a key the names
+   stay plain text.
+2. A title with featurettes or clips shows an Extras row under its page; each tile plays in the trailer player.
+   A title with none shows no row. Tiles show YouTube's still, or their name and kind.
+3. TV mode: the Extras pill on a title opens a row of tiles; Enter plays one over the panel and Back closes the
+   player, then the panel. The cast in Details and the credit names open the person's page; its rails move with
+   the remote.
+4. A popular actor's page (many titles) loads without TMDB answering 429 for long.

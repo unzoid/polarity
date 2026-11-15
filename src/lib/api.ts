@@ -12,6 +12,7 @@ import type {
   Manifest,
   Meta,
   MetaPreview,
+  PersonPage,
   Playable,
   Readiness,
   Progress,
@@ -74,6 +75,8 @@ export const api = {
   episodeOrders: (id: string) => call<EpisodeOrderInfo[]>("episode_orders", { id }),
   /** One of those orders, its episodes as the show's own episode ids. */
   episodeOrder: (id: string, order: string) => call<EpisodeOrder>("episode_order", { id, order }),
+  /** A person's page by TMDB id: who they are and their titles; fails as not found without a TMDB key. */
+  person: (id: number) => call<PersonPage>("person", { id }),
   /**
    * Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime).
    * `onPartial` gets the ranking so far each time an add-on answers before the last.

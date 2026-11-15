@@ -254,6 +254,8 @@ impl RawMeta {
             videos,
             people: rest.people,
             details: rest.details,
+            crew: Vec::new(),
+            extras: Vec::new(),
         })
     }
 
@@ -281,7 +283,12 @@ impl RawMeta {
                 cast.iter()
                     .filter_map(|p| {
                         let text = |k: &str| p[k].as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned);
-                        Some(Person { name: text("name")?, character: text("character"), photo: text("photo") })
+                        Some(Person {
+                            name: text("name")?,
+                            character: text("character"),
+                            photo: text("photo"),
+                            tmdb_id: None,
+                        })
                     })
                     .take(24)
                     .collect()

@@ -140,6 +140,34 @@ fn field_names_match_contract() {
             groups: vec![group],
         }),
     );
+    let preview = polar_addon::MetaPreview {
+        id: "tt0000001".into(),
+        ty: "movie".into(),
+        name: "Film".into(),
+        poster: None,
+        background: None,
+        logo: None,
+        logos: vec![],
+        description: None,
+        release_info: None,
+        imdb_rating: None,
+        genres: vec![],
+    };
+    add(
+        "PersonPage",
+        keys(&polar_index::PersonPage {
+            id: 1,
+            name: "P".into(),
+            photo: s("p"),
+            biography: s("b"),
+            born: s("1970-01-01"),
+            died: s("2020-01-01"),
+            birthplace: s("Example Town"),
+            known_for: s("Acting"),
+            acting: vec![preview.clone()],
+            directing: vec![preview],
+        }),
+    );
 
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../contract/app.json");
     let actual = Value::Object(types);

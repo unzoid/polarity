@@ -291,6 +291,7 @@ pub fn run() {
             commands::imdb_for_tmdb,
             commands::episode_orders,
             commands::episode_order,
+            commands::person,
             commands::streams,
             commands::resolve_stream,
             torrent::torrent_open,

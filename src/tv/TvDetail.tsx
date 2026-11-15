@@ -3,10 +3,12 @@ import { NameList } from "../components/title/NameList";
 import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { AgeRatingBadge, TitleDetails } from "../components/title/TitleDetails";
-import { Hidden, Info } from "../components/icons";
+import { Hidden, Info, Trailer } from "../components/icons";
 import { episodeState, hideTitle, progressMap, renamePlaylist, seasonsOf, unhideTitle, upNext, useIsHidden, usePlaylists, watchedFraction } from "../lib/library";
 import { shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { TvEpisodeOrders } from "./TvEpisodeOrders";
+import { TvExtrasPanel } from "./TvExtras";
+import { personIds } from "../lib/catalog";
 import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
 import { TitleHeading } from "../components/title/TitleHeading";
 import { ProgressBar } from "../components/title/Card";
@@ -31,6 +33,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 type Panel =
   | { kind: "episodes" }
   | { kind: "details" }
+  | { kind: "extras" }
   | { kind: "sources"; videoId: string; subtitle: string }
   | { kind: "playlists" }
   /** Name a playlist: rename `playlistId`, or create one holding the title. */
@@ -126,6 +129,8 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
           />
         ) : p.kind === "details" && meta ? (
           <DetailsPanel key={i} meta={meta} />
+        ) : p.kind === "extras" && meta ? (
+          <TvExtrasPanel key={i} meta={meta} />
         ) : p.kind === "playlists" ? (
           <PlaylistsPanel
             key={i}
@@ -189,6 +194,7 @@ function Actions({
         onClick={() => videoId && push({ kind: "sources", videoId, subtitle })}
       />
       {meta && <ActionPill icon={<Info size={26} />} label="Details" onClick={() => push({ kind: "details" })} />}
+      {meta?.extras?.length ? <ActionPill icon={<Trailer size={26} />} label="Extras" onClick={() => push({ kind: "extras" })} /> : null}
       <ActionPill
         icon={inLibrary ? <Check size={26} /> : <Plus size={26} />}
         label={inLibrary ? "In Library" : "Add to Library"}
@@ -345,13 +351,13 @@ function Credits({ meta }: { meta?: Meta }) {
       {meta.cast?.length ? (
         <div>
           <dt>Starring</dt>
-          <dd><NameList names={meta.cast.slice(0, 3)} /></dd>
+          <dd><NameList names={meta.cast.slice(0, 3)} ids={personIds(meta)} /></dd>
         </div>
       ) : null}
       {meta.director?.length ? (
         <div>
           <dt>{meta.type === "series" ? "Created by" : "Director"}</dt>
-          <dd><NameList names={meta.director.slice(0, 2)} /></dd>
+          <dd><NameList names={meta.director.slice(0, 2)} ids={personIds(meta)} /></dd>
         </div>
       ) : null}
     </dl>

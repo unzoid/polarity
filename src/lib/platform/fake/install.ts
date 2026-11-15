@@ -87,6 +87,7 @@ const commands: Record<string, (a: Args) => unknown> = {
     return a.order === "aa01" ? { id: "aa01", name: "DVD Order", kind: "dvd", groups } : Promise.reject({ code: "not_found", message: "not found" });
   },
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
+  person: (a) => fx.person(Number(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   streams: () =>
     sourcesCase === "filtered" ? { streams: [], failed: [], hidden: 5 } : sourcesCase === "none" ? { streams: [], failed: [], asked: [] } : fx.streams(),
   subtitles: () => [],

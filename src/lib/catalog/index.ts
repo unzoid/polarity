@@ -10,6 +10,7 @@ export * from "./calendar";
 export * from "./genres";
 export * from "./listable";
 export * from "./marketplace";
+export * from "./people";
 export * from "./personPhoto";
 export * from "./recentSearches";
 export * from "./searchQuery";

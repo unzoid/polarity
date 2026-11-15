@@ -179,6 +179,12 @@ pub async fn episode_order(state: State<'_, AppState>, id: String, order: String
     Ok(state.indexer().episode_order(&id, &order).await?)
 }
 
+/// A person's page by TMDB id: who they are and their titles; not found without a TMDB key.
+#[tauri::command]
+pub async fn person(state: State<'_, AppState>, id: u64) -> Result<polar_index::PersonPage> {
+    Ok(state.indexer().person(id).await?)
+}
+
 // --- Streams -------------------------------------------------------------
 
 #[derive(Serialize)]
