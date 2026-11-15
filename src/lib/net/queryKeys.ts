@@ -52,6 +52,7 @@ export const keys = {
   seekrAll: ["seekr"] as const,
   skipSegments: (videoId: string) => ["skip-segments", videoId] as const,
   trailer: (imdbId: string | undefined) => ["trailer", imdbId] as const,
+  episodeRatings: (imdbId: string) => ["episodeRatings", imdbId] as const,
   personPhoto: (name: string) => ["person-photo", name] as const,
   mpv: ["mpv"] as const,
   mpvLookahead: ["mpv", "lookahead"] as const,

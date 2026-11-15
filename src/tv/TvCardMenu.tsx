@@ -186,7 +186,8 @@ function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => 
     if (!menu || !layer) return;
     const measure = () => {
       const box = layer.getBoundingClientRect();
-      const card = anchor.getBoundingClientRect();
+      // The frame, not the card: on the Library's shelves a focused card's frame opens out past its slot.
+      const card = (anchor.querySelector(".tv-card-frame") ?? anchor).getBoundingClientRect();
       const w = menu.offsetWidth;
       const h = menu.offsetHeight;
       const right = card.right - box.left + GAP;

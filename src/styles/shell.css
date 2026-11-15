@@ -342,81 +342,38 @@
   );
   pointer-events: none;
 }
-/* Once the page scrolls under it, the bar is a progressive blur, as on iOS:
-   what passes beneath is most out of focus at the top edge and sharpens to
-   nothing a little below the bar, with no solid fill and no hard line.
-   Stacked layers, each blurrier than the last and masked to a thinner band
-   at the top; a light tint keeps the tabs readable over bright art. */
-.navbar-fade {
-  position: absolute;
+/* Once the page scrolls under it, the bar is a progressive blur, as on iOS
+   (components/EdgeBlur.tsx, pointed up): what passes beneath is most out of
+   focus at the top edge and sharpens to nothing a little below the bar, with
+   no solid fill and no hard line. A light tint keeps the tabs readable over
+   bright art. */
+.edge-blur.navbar-fade {
   inset: 0 0 auto 0;
   height: calc(var(--nav-h) + 2.75rem);
   z-index: -1;
-  pointer-events: none;
+  --edge-shown: 0;
 }
-/* The fade is on each layer, not the container: opacity on a parent would
-   cut the layers' blur off from the page behind it. */
-.navbar-fade::before,
-.navbar-fade i {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+.edge-blur.navbar-fade::before,
+.edge-blur.navbar-fade i {
   transition: opacity var(--dur-base) var(--ease-std);
 }
-.navbar-fade::before {
-  content: "";
-  /* Black under the white tabs in dark mode; the near-white page, stronger, under the dark ones in light. */
-  background: color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent);
+/* Black under the white tabs in dark mode; the near-white page, stronger, under the dark ones in light. */
+.edge-blur.navbar-fade::before {
+  background: linear-gradient(to top, transparent, color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent) 70%);
 }
-/* The shape is a wide ellipse hanging from the top edge, not a straight
-   band: the blur is deepest in the middle and its lower edge curves up
-   toward the corners, like the soft cut-out around a phone's status bar. */
-.navbar-fade::before,
-.navbar-fade i {
-  --fade: radial-gradient(ellipse 125% 100% at 50% 0%, #000 var(--solid), transparent var(--end));
-  -webkit-mask-image: var(--fade);
-  mask-image: var(--fade);
-}
-.navbar-fade::before {
-  --solid: 0%;
-  --end: 92%;
-}
-.navbar[data-scrolled="true"] .navbar-fade::before,
-.navbar[data-scrolled="true"] .navbar-fade i {
-  opacity: 1;
-}
-.navbar-fade i:nth-child(1) {
-  backdrop-filter: blur(2px);
-  --solid: 45%;
-  --end: 100%;
-}
-.navbar-fade i:nth-child(2) {
-  backdrop-filter: blur(6px);
-  --solid: 32%;
-  --end: 82%;
-}
-.navbar-fade i:nth-child(3) {
-  backdrop-filter: blur(14px);
-  --solid: 20%;
-  --end: 64%;
-}
-.navbar-fade i:nth-child(4) {
-  backdrop-filter: blur(28px);
-  --solid: 0%;
-  --end: 44%;
+.navbar[data-scrolled="true"] .navbar-fade {
+  --edge-shown: 1;
 }
 /* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
-   the stacked blurs. Four masked blurs taken again on every frame of a scroll are more than a phone's web view
+   the stacked blurs. Six masked blurs taken again on every frame of a scroll are more than a phone's web view
    keeps up with over moving art; one unmasked layer is cheap. */
-:root[data-form="phone"] .navbar-fade {
+:root[data-form="phone"] .edge-blur.navbar-fade {
   height: var(--nav-h);
 }
-:root[data-form="phone"] .navbar-fade i {
+:root[data-form="phone"] .edge-blur.navbar-fade i {
   display: none;
 }
-:root[data-form="phone"] .navbar-fade::before {
-  -webkit-mask-image: none;
-  mask-image: none;
+:root[data-form="phone"] .edge-blur.navbar-fade::before {
   background: rgb(18 18 18 / 0.8);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
   backdrop-filter: blur(20px) saturate(150%);
@@ -945,11 +902,13 @@ html[data-os="mac"] {
 }
 
 /* --- Segmented control. The selected state is a clipped "active" copy; the
-       clip moves with a transition, except for keyboard changes (instant). */
+       clip moves with a transition, except for keyboard changes (instant).
+       Sized in rem (3px, 44px, 32px at the 16px root) so it grows with its label
+       and icons where the root is larger (TV mode). */
 .segmented {
   position: relative;
   display: inline-flex;
-  padding: 3px;
+  padding: 0.1875rem;
   border-radius: var(--r-pill);
   background: var(--glass);
   backdrop-filter: var(--blur-control);
@@ -958,8 +917,8 @@ html[data-os="mac"] {
 }
 .segmented-item {
   position: relative;
-  min-width: 44px;
-  height: 32px;
+  min-width: 2.75rem;
+  height: 2rem;
   padding: 0 1rem;
   border-radius: var(--r-pill);
   font-weight: 600;
@@ -971,7 +930,7 @@ html[data-os="mac"] {
 }
 .segmented-active {
   position: absolute;
-  inset: 3px;
+  inset: 0.1875rem;
   display: flex;
   pointer-events: none;
   background: var(--pill-light);

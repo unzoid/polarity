@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
-import { AmbientWash } from "../components/AmbientWash";
 import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
 import { Img } from "../components/Img";
@@ -175,18 +174,8 @@ export function HeroCarousel({
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colour: on a phone its most prominent one glowing in from the
-          top right corner (Netflix's); elsewhere its main colour, one dimmed tint per backdrop, fading down from the
-          top and cross-fading with it. */}
-      {phone ? (
-        <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} />
-      ) : (
-        <div className="hero-ambient" aria-hidden>
-          {items.map((it, i) => (
-            <AmbientWash key={it.id} src={it.background} current={i === index} flat />
-          ))}
-        </div>
-      )}
+      {/* The page around the card takes on a dark shade of the art's colour, as Netflix's, fading down the window. */}
+      <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} area={phone ? "middle" : "whole"} />
       <div className="hero-stage">
       {count > 1 && <HeroPeek item={items[(index - 1 + count) % count]} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />}
       <div

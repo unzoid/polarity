@@ -13,7 +13,7 @@ first (see `AGENTS.md`).
 | TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers and a title's other videos (YouTube ids), logos, people's pages (`/person/{id}` with `combined_credits`) | `crates/index/src/tmdb.rs`, `crates/index/src/tmdb/people.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
 | Cinemeta | Catalog, search and metadata when there is no TMDB key; IMDb ids for anime ani.zip can't link | `crates/index/src/cinemeta.rs`, `src/lib/anime/search.ts` | None | None published |
 | metahub images | Posters, backgrounds, logos and episode stills for IMDb ids | `cinemeta.rs`, `src/lib/account/titleDisplay.ts`, `src/lib/anime/landscapeArt.ts` | None | None published |
-| IMDb GraphQL | Trailers as video files | `src-tauri/src/imdb.rs`, `trailers.rs` | None | Links expire after about a day |
+| IMDb GraphQL | Trailers as video files; each episode's IMDb rating for Episode Ratings (the owner's decision, 15/11/2026: TMDB's per-episode scores were too few and ran low), TMDB's kept for a show IMDb rates none of | `src-tauri/src/imdb.rs`, `trailers.rs`, `episode_ratings.rs` | None | Trailer links expire after about a day; episode ratings are cached 12 h per show, at most 5 pages of 250 episodes |
 | IMDb suggestion | Cast photo when the catalog has none | `src/lib/catalog/personPhoto.ts` | None | None published |
 | MDBList | Scores from several sites, certification | `src-tauri/src/ratings.rs` | The user's own | 1,000 a day on the free tier, cached 6 h |
 | OMDb | Scores, awards, rating | `ratings.rs` | The user's own | 1,000 a day on the free tier |

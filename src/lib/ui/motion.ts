@@ -22,6 +22,8 @@ export const springs = {
   sheet: { type: "spring", bounce: 0, duration: 0.35 },
   /** A step settling into place (sign-in): a hint of overshoot, nothing more. */
   settle: { type: "spring", bounce: 0.15, duration: 0.45 },
+  /** One panel of tabs giving way to the next (Episode Ratings' views): quick, no overshoot. */
+  tabs: { type: "spring", bounce: 0, duration: 0.3 },
 } satisfies Record<string, Transition>;
 
 /**

@@ -125,8 +125,9 @@
 .player-icon {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  /* 44px at the 16px root; in rem so it holds its (rem-sized) icon at TV mode's type, as big as Back there. */
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: var(--r-pill);
   transition:
     transform var(--dur-press) var(--ease-out),
@@ -138,6 +139,12 @@
   justify-self: start;
   margin-left: calc(var(--nav-start) - var(--bar-left));
   margin-top: calc(var(--back-top) - var(--bar-top));
+}
+/* Fullscreen (and TV mode, always fullscreen) has no navbar to line up with: Back takes the corner, as far in and
+   as high as the controls at the other end. */
+.player[data-fullscreen] .player-top > .player-back {
+  margin-left: 0.5rem;
+  margin-top: 0;
 }
 /* A bare glyph on the video: a soft shadow keeps it readable on bright frames, like the bars' other controls. */
 .player-back {
@@ -215,8 +222,7 @@
 .player-transport-main {
   width: 104px;
   height: 104px;
-}
-/* Seek back / ahead (SkipTransport.tsx): the arrow and its number share the circle. A press slides
+}/* Seek back / ahead (SkipTransport.tsx): the arrow and its number share the circle. A press slides
    the number out past the circle's outer side as "+10" (−10 going back), the arrow turning with it,
    and folds it back in a moment later. Transitions, not keyframes: presses come in quick runs, and
    each one retargets from wherever the last left off. */
@@ -408,7 +414,7 @@
   align-items: center;
   gap: 0.625rem;
   white-space: nowrap;
-  height: 44px;
+  height: 2.75rem;
   padding: 0 0.75rem;
   border-radius: var(--r-md);
   font-size: var(--fs-lg);
@@ -581,7 +587,7 @@
 .player-volume-slider {
   display: flex;
   align-items: center;
-  height: 44px;
+  height: 2.75rem;
 }
 /* Folded (#396): the slider opens below its icon, on a pill that reads over any picture, while the pointer
    is over either, the keyboard is in it, or (a touch screen) the icon was tapped. Hidden, it keeps its size

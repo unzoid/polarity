@@ -214,6 +214,7 @@ export type Expandable = { open: boolean; onToggle: () => void };
 /** A row that opens in place to show its controls. */
 export function ExpandRow({
   icon: Icon,
+  lead,
   title,
   caption,
   value,
@@ -221,22 +222,27 @@ export function ExpandRow({
   onToggle,
   setting,
   accessory,
+  handle,
   children,
 }: Expandable & {
   /** The schema id (lib/settings/schema.ts) or another name the page finds the row by. */
   setting?: string;
   icon?: IconT;
+  /** A picture of its own where the icon goes (an add-on's logo), when a glyph won't do. */
+  lead?: ReactNode;
   title: string;
   caption?: ReactNode;
   /** Short current state on the right ("On", a server address…). */
   value?: ReactNode;
-  /** A small button of its own beside the chevron (an add-on's Copy Link): over the row, not inside its button. */
+  /** Small buttons of their own beside the chevron (an add-on's Copy Link): over the row, not inside its button. */
   accessory?: ReactNode;
+  /** A control of its own at the row's start, over its edge (an add-on's drag handle). */
+  handle?: ReactNode;
   children: ReactNode;
 }) {
   const row = (
     <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle} data-accessory={accessory ? "" : undefined}>
-      {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
+      {lead ?? (Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />)}
       <RowText title={title} caption={caption} />
       {value != null && <span className="settings-row-value">{value}</span>}
       <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
@@ -244,10 +250,11 @@ export function ExpandRow({
   );
   return (
     <div className="settings-expand" data-open={open} data-setting={setting}>
-      {accessory ? (
+      {accessory || handle ? (
         <div className="settings-expand-head">
           {row}
-          <div className="settings-expand-accessory">{accessory}</div>
+          {handle && <div className="settings-expand-handle">{handle}</div>}
+          {accessory && <div className="settings-expand-accessory">{accessory}</div>}
         </div>
       ) : (
         row

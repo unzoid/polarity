@@ -16,6 +16,7 @@
   "Playable.unsupported": ["kind","reason"],
   "Playable.url": ["kind","url"],
   "PreviewTrack": ["cues","sourceDurationMs"],
+  "EpisodeRating": ["episode","rating","season","votes"],
   "Ratings": ["audience","awards","imdb","imdbVotes","letterboxd","links","metacritic","rated","rottenTomatoes","tmdb","trakt"],
   "SearchResults": ["movies","series"],
   "Segments": ["intro","outro","postCredits","recap"],

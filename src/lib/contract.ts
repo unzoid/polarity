@@ -13,6 +13,7 @@ import type {
   Extra,
   CustomTheme,
   Imported,
+  EpisodeRating,
   ExternalRatings,
   InstalledAddon,
   LibraryItem,
@@ -226,6 +227,7 @@ export const contract = {
   "Playable.unsupported": { kind: true, reason: true } satisfies Keys<Extract<Playable, { kind: "unsupported" }>>,
   "Playable.url": { kind: true, url: true } satisfies Keys<Extract<Playable, { kind: "url" }>>,
   PreviewTrack: { cues: true, sourceDurationMs: true } satisfies Keys<SeekTrack>,
+  EpisodeRating: { episode: true, rating: true, season: true, votes: true } satisfies Keys<EpisodeRating>,
   Ratings: {
     audience: true,
     awards: true,

@@ -1959,3 +1959,45 @@ file picker on a phone. Phones have no export: the share sheet takes only text a
 To check on a desktop: Settings → Account → Export library and history → Export… for each format, save,
 open both files; then in another profile Import a Polarity export with the JSON and compare Library,
 Watched and Playlists.
+## Requests batch: season menu, ratings dialog, progressive blur, hero colour, Shift to select, TV quick actions
+
+Checked by unit and component tests (`tests/episodeRatings.test.ts`, `tests/dom/episodeRatings.test.tsx`,
+`tests/dom/continueEdit.test.tsx`, the Rust test in `src-tauri/src/episode_ratings.rs`) and type checks only;
+never looked at in a window, on a phone or on a TV. To check:
+
+1. A series' season bar: one round "…" button (Season Options) in place of Download Season and Shuffle. Its menu
+   has Download Season (or "Season Downloaded", greyed), Shuffle Episodes and, for a rated show, Episode Ratings.
+   A download under way shows its progress strip beside the button.
+2. Episode Ratings opens over the page: the page goes softly out of focus, more toward the bottom, under a light
+   wash and grain; the chart sits on a dark card: a column per season, a row per episode, the averages last over
+   a bar of their colour, the legend (Absolute Cinema to Garbage) above. Up and down move through a season, left
+   and right between seasons. Escape, a click outside and the small Close shut it; a cell closes it and lists that
+   episode's sources. TV's Episode Ratings panel is turned the same way.
+3. The numbers are IMDb's (a well-known show's pilot matches its IMDb page), and shows that showed no table
+   before now do. Offline, or for a show IMDb rates none of, TMDB's numbers show as before.
+4. The navbar once scrolled, a shelf's paddles on hover and a series' fold blur with no hard line and no
+   banding; scrolling a long Home stays smooth (compare frame rate with the previous build).
+5. Home, desktop and phone: the page takes a dark shade of the art's colour, full at the top of the window and
+   fading evenly down, as Netflix's; a grey or blue-grey picture gives a dark cool neutral, not a hue from a few
+   tinted pixels. The card has a fine light edge and no shadow. On a phone the buttons are pills, the second a
+   see-through grey. Light mode: a pale tint instead.
+6. Continue Watching with a mouse: no Edit button; pointing at the row shows "Hold Shift to select". Holding
+   Shift eases the checkmarks in along the row and the bar's round buttons (select all, the bin, done) in one
+   after another, with nothing jumping; let go with nothing picked and they ease out. Pick one and they stay
+   until Done, Escape or Remove; the bin asks for a second click with its lid open. Typing a capital letter in a
+   field doesn't show them. A touch screen still has Edit.
+7. TV, a title's page: Episode Ratings (series), Add to Playlist and Hide This Title are round icons in a row
+   above Play, lined up on the actions' icons; Play still has focus on arrival; Up reaches the row, the focused
+   icon turns light and its name shows just right of the row. Moving the mouse across the row doesn't flicker.
+8. A PIN asked for one profile shows that profile's picture over the keypad instead of a lock.
+9. Episode Ratings' views (the switch above the legend, remembered on the device): Wrapped (each season's
+   episodes as coloured tiles), Timeline (every episode as a dot along the show with seasons as bands, or each
+   season's average; the Trendline switch draws a moving average; hovering a dot names it, clicking opens it) and
+   Episode List (season chips, then rows with rating, number, title, IMDb votes and air date). In light mode the
+   card is light and every label reads. On TV, a focused cell lifts with a tight white ring.
+10. The player in fullscreen and in TV mode: Back sits in the top left corner, as far in as the controls are
+   from the right edge.
+11. A title page on desktop: Play, Trailer and Library in view, then the dots. Pressing them opens the row in place:
+   Playlist, Choose source, Download (an icon now, like the others), the Trakt rating when linked and Hide This
+   Title come in one after another while the dots turn into a close; pressing again or Escape folds them. A
+   download under way stays in view beside Library with its ring. A phone keeps one row of round buttons.

@@ -1635,6 +1635,7 @@ export function Player({
       className="player"
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
+      data-fullscreen={fullscreen || tv || undefined}
       data-mini={mini || undefined}
       data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
@@ -1979,12 +1980,13 @@ export function Player({
             title={withShortcut(`Back ${seekStep}s`, "seekBack")}
           />
           <IconButton variant="transport" className="player-transport-main" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut("Play/Pause", "playPause")}>
+            {/* In px like the circle (player.css), not the rem a number gives. */}
             {frameSteps.spinner ? (
-              <Spinner className="player-spinner" size={52} label="Buffering" />
+              <Spinner className="player-spinner" size="52px" label="Buffering" />
             ) : paused ? (
-              <Play size={64} fill="currentColor" strokeWidth={0} />
+              <Play size="64px" fill="currentColor" strokeWidth={0} />
             ) : (
-              <Pause size={64} fill="currentColor" strokeWidth={0} />
+              <Pause size="64px" fill="currentColor" strokeWidth={0} />
             )}
           </IconButton>
           <SkipTransport

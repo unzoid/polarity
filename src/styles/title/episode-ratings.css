@@ -1,6 +1,7 @@
-/* Episode Ratings (components/title/EpisodeRatings.tsx): a season per row, an episode per cell, tinted by
-   its rating (--rating-* in tokens.css). The table scrolls inside its own box both ways; the season column,
-   the average column and the episode numbers stay put. */
+/* Episode Ratings (components/title/EpisodeRatings.tsx): a season per column, an episode per row, each cell
+   coloured by its rating (--rating-* in tokens.css), the seasons' averages in the last row. The legend sits
+   above. The table scrolls inside its own box both ways; the season numbers, the episode numbers and the
+   averages stay put. */
 .episode-ratings {
   padding: 2rem var(--gutter) 0 var(--content-start);
 }
@@ -8,59 +9,60 @@
   margin: 0 0 1rem;
 }
 .episode-ratings-box {
+  --cell-bg: var(--surface-1);
   max-width: 100%;
   max-height: min(70vh, 40rem);
   width: fit-content;
   overflow: auto;
-  overscroll-behavior-x: contain;
-  border-radius: var(--r-md);
-  background: var(--surface-1);
-  box-shadow: inset 0 0 0 1px var(--hairline);
+  overscroll-behavior: contain;
+  background: var(--cell-bg);
   /* A focused cell scrolls clear of the sticky headers. */
-  scroll-padding: 2rem 4rem 0 3.5rem;
+  scroll-padding: 2rem 0 3rem 3rem;
 }
 .episode-ratings-table {
   border-collapse: separate;
-  border-spacing: 2px;
+  border-spacing: 4px;
   font-size: var(--fs-sm);
 }
 .episode-ratings-table th {
   font-weight: 600;
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: var(--fs-xs);
   padding: 0.25rem;
   white-space: nowrap;
+  text-align: center;
 }
 .episode-ratings-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--surface-1);
+  background: var(--cell-bg);
 }
-.episode-ratings-table .episode-ratings-season,
+.episode-ratings-table .episode-ratings-episode,
 .episode-ratings-table .episode-ratings-corner {
   position: sticky;
   left: 0;
   z-index: 1;
-  min-width: 2.75rem;
-  padding: 0 0.5rem;
-  text-align: left;
-  color: var(--text-2);
-  background: var(--surface-1);
+  min-width: 2.25rem;
+  padding: 0 0.375rem 0 0;
+  text-align: right;
+  background: var(--cell-bg);
 }
 .episode-ratings-table .episode-ratings-corner {
   z-index: 2;
 }
-.episode-ratings-table .episode-ratings-average {
+.episode-ratings-table tfoot :is(th, td) {
   position: sticky;
-  right: 0;
+  bottom: 0;
   z-index: 1;
-  padding-left: 0.5rem;
-  background: var(--surface-1);
-  box-shadow: inset 1px 0 0 var(--hairline);
+  padding-top: 0.5rem;
+  background: var(--cell-bg);
 }
-.episode-ratings-table thead .episode-ratings-average {
+.episode-ratings-table tfoot th {
   z-index: 2;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
 }
 .episode-ratings-table td {
   padding: 0;
@@ -68,61 +70,71 @@
 .episode-ratings-cell {
   display: grid;
   place-items: center;
-  min-width: 2.5rem;
+  width: 2.75rem;
   height: 2rem;
-  padding: 0 0.25rem;
-  border-radius: var(--r-xs);
-  font-weight: 600;
+  border-radius: 6px;
+  font-weight: 650;
+  font-size: 0.9375rem;
   color: var(--text-3);
   background: var(--fill-2);
 }
 button.episode-ratings-cell {
-  width: 100%;
   cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-std);
 }
-button.episode-ratings-cell:hover {
-  transform: scale(1.08);
+@media (hover: hover) and (pointer: fine) {
+  button.episode-ratings-cell:hover {
+    transform: scale(1.1);
+  }
 }
 button.episode-ratings-cell:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
 }
 .episode-ratings-cell[data-upcoming] {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--hairline);
 }
-.episode-ratings-average .episode-ratings-cell {
-  font-weight: 750;
-}
 
-/* The tint: steps 0–4 take the low ink, 5–7 the high (tokens.css). */
+/* The colour: white ink on every step but Average and Good, which take dark. */
 .episode-ratings [data-step] > .episode-ratings-cell,
 .episode-ratings-legend [data-step] > .episode-ratings-swatch {
-  color: var(--rating-ink-low);
+  color: var(--rating-ink-light);
   background: var(--step-fill);
 }
-.episode-ratings :is([data-step="5"], [data-step="6"], [data-step="7"]) > .episode-ratings-cell {
-  color: var(--rating-ink-high);
+.episode-ratings :is([data-step="2"], [data-step="3"]) > .episode-ratings-cell {
+  color: var(--rating-ink-dark);
 }
-.episode-ratings [data-step="0"] { --step-fill: var(--rating-0); }
-.episode-ratings [data-step="1"] { --step-fill: var(--rating-1); }
-.episode-ratings [data-step="2"] { --step-fill: var(--rating-2); }
-.episode-ratings [data-step="3"] { --step-fill: var(--rating-3); }
-.episode-ratings [data-step="4"] { --step-fill: var(--rating-4); }
-.episode-ratings [data-step="5"] { --step-fill: var(--rating-5); }
-.episode-ratings [data-step="6"] { --step-fill: var(--rating-6); }
-.episode-ratings [data-step="7"] { --step-fill: var(--rating-7); }
+:is(.episode-ratings, .ratings-views) [data-step="0"] { --step-fill: var(--rating-0); }
+:is(.episode-ratings, .ratings-views) [data-step="1"] { --step-fill: var(--rating-1); }
+:is(.episode-ratings, .ratings-views) [data-step="2"] { --step-fill: var(--rating-2); }
+:is(.episode-ratings, .ratings-views) [data-step="3"] { --step-fill: var(--rating-3); }
+:is(.episode-ratings, .ratings-views) [data-step="4"] { --step-fill: var(--rating-4); }
+:is(.episode-ratings, .ratings-views) [data-step="5"] { --step-fill: var(--rating-5); }
+:is(.episode-ratings, .ratings-views) [data-step="6"] { --step-fill: var(--rating-6); }
+
+/* A season's average: the number in large type over a bar of its colour. */
+.episode-ratings-avg {
+  display: block;
+  width: 2.75rem;
+  padding-bottom: 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 750;
+  text-align: center;
+  color: var(--text);
+  border-bottom: 3px solid var(--step-fill, var(--fill-2));
+}
 
 .episode-ratings-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem 1rem;
-  margin: 0.75rem 0 0;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.75rem;
   padding: 0;
   list-style: none;
   font-size: var(--fs-xs);
-  color: var(--text-3);
+  font-weight: 500;
+  color: var(--text-2);
 }
 .episode-ratings-legend li {
   display: inline-flex;
@@ -130,8 +142,8 @@ button.episode-ratings-cell:focus-visible {
   gap: 0.375rem;
 }
 .episode-ratings-swatch {
-  width: 0.75rem;
-  height: 0.75rem;
+  width: 0.625rem;
+  height: 0.625rem;
   border-radius: var(--r-round);
 }
 .episode-ratings-sr {
@@ -151,26 +163,484 @@ button.episode-ratings-cell:focus-visible {
   padding: 4.5rem var(--tv-gutter) 2rem;
 }
 .episode-ratings[data-variant="tv"] .episode-ratings-box {
+  --cell-bg: transparent;
   flex: 0 1 auto;
   min-height: 0;
   max-height: none;
-  scroll-padding: 2.5rem 5rem 0 4.5rem;
+  scroll-padding: 2.5rem 0 3.5rem 4rem;
 }
-.episode-ratings[data-variant="tv"] .episode-ratings-table {
-  font-size: var(--fs-lg);
+.episode-ratings[data-variant="tv"] .episode-ratings-table :is(thead th, tfoot th, tfoot td, .episode-ratings-episode, .episode-ratings-corner) {
+  background: var(--tone-sunk);
 }
 .episode-ratings[data-variant="tv"] .episode-ratings-table th {
   font-size: var(--fs-md);
 }
+.episode-ratings[data-variant="tv"] :is(.episode-ratings-cell, .episode-ratings-avg) {
+  width: 3.5rem;
+}
 .episode-ratings[data-variant="tv"] .episode-ratings-cell {
-  min-width: 3.5rem;
-  height: 2.75rem;
+  height: 2.6rem;
+  font-size: var(--fs-lg);
+}
+/* The focused cell lifts over its neighbours with a tight white ring, rather than a ring floating apart from it. */
+.episode-ratings[data-variant="tv"] button.episode-ratings-cell {
+  position: relative;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .episode-ratings[data-variant="tv"] button.episode-ratings-cell:focus {
-  outline: var(--tv-ring) solid var(--text);
-  outline-offset: var(--tv-ring-gap);
-  transform: scale(1.08);
+  z-index: 2;
+  outline: none;
+  transform: scale(1.14);
+  box-shadow:
+    0 0 0 3px var(--text),
+    0 8px 22px rgb(0 0 0 / 0.55);
 }
 .episode-ratings[data-variant="tv"] .episode-ratings-legend {
   font-size: var(--fs-md);
+}
+
+/* --- The dialog (EpisodeRatingsDialog), opened from a season's menu: the page goes softly out of focus,
+   more toward the bottom (.edge-blur), under a light wash and grain; the chart sits on a dark card. The scrim
+   fades by its wash and each blur layer's own opacity (--edge-shown): opacity on the scrim itself would cut the
+   blur off from the page. */
+.ratings-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  background-color: rgb(0 0 0 / 0.18);
+  --edge-tint: 0.12;
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+.ratings-dialog-scrim .edge-blur::before,
+.ratings-dialog-scrim .edge-blur i {
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+/* Grain: fractal noise, mixed in softly so it reads as texture, not dirt. */
+.ratings-dialog-scrim::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.ratings-dialog-scrim[data-starting-style],
+.ratings-dialog-scrim[data-ending-style] {
+  background-color: transparent;
+  --edge-shown: 0;
+}
+.ratings-dialog-scrim[data-starting-style]::after,
+.ratings-dialog-scrim[data-ending-style]::after {
+  opacity: 0;
+}
+
+/* The card: near-black in dark mode, the page's raised surface in light, so the labels on it read in either. */
+:root {
+  --ratings-card: #121212;
+}
+:root[data-scheme="light"] {
+  --ratings-card: var(--surface-1);
+}
+.ratings-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  z-index: calc(var(--z-sheet) + 1);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 4rem);
+  padding: 0.875rem 0.75rem 0.75rem;
+  border-radius: 10px;
+  background: var(--ratings-card);
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 30px 80px rgb(0 0 0 / 0.35);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+.ratings-dialog[data-starting-style],
+.ratings-dialog[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+.ratings-dialog-scrim[data-ending-style],
+.ratings-dialog[data-ending-style] {
+  transition-duration: 150ms;
+}
+.ratings-dialog:focus {
+  outline: none;
+}
+.ratings-dialog-close.icon-btn,
+.ratings-dialog-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 0;
+  color: var(--text-3);
+}
+/* In the dialog the table fills it: no page gutters, the box as tall as the dialog allows. */
+.episode-ratings[data-variant="dialog"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+/* The table sets the card's width; the legend wraps within it rather than widening it. */
+.episode-ratings[data-variant="dialog"] .episode-ratings-legend {
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+  padding: 0 2.25rem 0 0.25rem;
+}
+.episode-ratings[data-variant="dialog"] .episode-ratings-box {
+  --cell-bg: var(--ratings-card);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* --- The dialog's views (EpisodeRatingsViews.tsx): the switch, then the view in a frame that eases to its
+   height, then the legend. Every view has the same width, so switching never resizes the card sideways; each
+   scrolls inside --body-max. */
+.ratings-views {
+  --body-max: min(60vh, 36rem);
+  display: flex;
+  flex-direction: column;
+  width: min(58rem, calc(100vw - 4rem));
+  min-height: 0;
+}
+.ratings-views-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 2.5rem 1rem 0;
+}
+/* Clips the panels sliding past its sides, and a taller one leaving while the height eases down. */
+.ratings-views-frame {
+  overflow: clip;
+}
+.ratings-views-frame > div {
+  position: relative;
+}
+.ratings-views-panel {
+  width: 100%;
+}
+.ratings-views .episode-ratings[data-variant="dialog"] .episode-ratings-box {
+  max-height: var(--body-max);
+  margin-inline: auto;
+}
+.ratings-scroll {
+  max-height: var(--body-max);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* The legend closes the card: quiet, centred, each name with its range. */
+.ratings-views > .episode-ratings-legend {
+  justify-content: center;
+  gap: 0.375rem 1.125rem;
+  margin: 1rem 0 0;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--hairline);
+}
+.episode-ratings-range {
+  margin-left: 0.25rem;
+  color: var(--text-3);
+  font-weight: 500;
+}
+/* Every view colours by --step-fill (set inline): white ink, dark on Mixed and Good. */
+:is(.ratings-tile, .ratings-list-badge, .ratings-season-avg)[data-step] {
+  color: var(--rating-ink-light);
+  background: var(--step-fill);
+}
+:is(.ratings-tile, .ratings-list-badge, .ratings-season-avg):is([data-step="2"], [data-step="3"]) {
+  color: var(--rating-ink-dark);
+}
+/* A season's average beside its name: a small pill in its colour. */
+.ratings-season-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.625rem;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+.ratings-season-avg {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.5rem;
+  height: 1.375rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wrapped: a season's episodes as tiles that wrap, each with its number and title over the rating. */
+.ratings-wrapped {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0.125rem 0.25rem 0.25rem;
+}
+.ratings-wrapped-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+}
+.ratings-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.375rem;
+  min-width: 0;
+  height: 4.75rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 12px;
+  text-align: left;
+  background: var(--fill-2);
+  color: var(--text-3);
+  /* A glass edge along the top, as Polarity's cards and buttons have. */
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22);
+  cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+.ratings-tile-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  min-width: 0;
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+.ratings-tile-ep {
+  flex: none;
+  opacity: 0.7;
+}
+.ratings-tile-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.85;
+}
+.ratings-tile-num {
+  font-size: 1.625rem;
+  line-height: 1;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ratings-tile:hover {
+    transform: translateY(-2px);
+  }
+}
+.ratings-tile:active {
+  transform: scale(0.97);
+}
+.ratings-tile:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* Timeline: its own options, then the chart, scaled to the width. */
+.ratings-timeline-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.ratings-timeline-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-2);
+}
+.ratings-timeline-plot {
+  position: relative;
+}
+.ratings-timeline-plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.ratings-timeline-band {
+  fill: var(--fill-1);
+}
+.ratings-timeline-grid {
+  stroke: var(--hairline);
+}
+.ratings-timeline-axis {
+  fill: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ratings-timeline-line {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1.5;
+  opacity: 0.55;
+}
+.ratings-timeline-area {
+  fill: url(#ratings-trend-fill);
+}
+.ratings-timeline-fill-top {
+  stop-color: var(--accent);
+  stop-opacity: 0.22;
+}
+.ratings-timeline-fill-bottom {
+  stop-color: var(--accent);
+  stop-opacity: 0;
+}
+.ratings-timeline-trendline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.ratings-timeline-mark {
+  stroke: var(--ratings-card);
+  stroke-width: 2;
+  transition: r var(--dur-fast) var(--ease-out);
+}
+.ratings-timeline-dot {
+  cursor: pointer;
+}
+.ratings-timeline-value {
+  fill: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+/* The name of the dot under the pointer, above it; below it near the top, where the frame would clip it. */
+.ratings-timeline-tip {
+  position: absolute;
+  z-index: 1;
+  translate: -50% calc(-100% - 12px);
+  max-width: 18rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 8px 24px rgb(0 0 0 / 0.35);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.ratings-timeline-tip[data-flip] {
+  translate: calc(-100% + 1rem) calc(-100% - 12px);
+}
+.ratings-timeline-tip[data-below] {
+  translate: -50% 12px;
+}
+.ratings-timeline-tip[data-flip][data-below] {
+  translate: calc(-100% + 1rem) 12px;
+}
+.ratings-empty {
+  padding: 2rem 0;
+  text-align: center;
+}
+
+/* Episode List: the season from a menu, its average beside it, then its episodes as rows. */
+.ratings-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ratings-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.625rem;
+}
+.ratings-list-avg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-3);
+}
+.ratings-list-rows {
+  max-height: calc(var(--body-max) - 3.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ratings-list-row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.875rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-std);
+}
+.ratings-list-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ratings-list-row:not(:disabled):hover {
+    background: var(--fill-2);
+  }
+}
+.ratings-list-row:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+.ratings-list-badge {
+  display: grid;
+  place-items: center;
+  height: 1.875rem;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  background: var(--fill-2);
+  color: var(--text-3);
+}
+.ratings-list-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ratings-list-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 650;
+}
+.ratings-list-sub {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.ratings-list-votes {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ratings-tile {
+    transition: none;
+  }
+  .ratings-tile:is(:hover, :active) {
+    transform: none;
+  }
 }

@@ -1,4 +1,4 @@
-import { LayoutList, LayoutRow, Shuffle, Volume, VolumeMuted } from "../components/icons";
+import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
 import { ExtrasShelf } from "../components/title/ExtrasShelf";
@@ -15,7 +15,7 @@ import { openTrailer, useTrailerOpen } from "../components/Trailer";
 import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, shelfGroupOf, shelfGroups, upNext, useEpisodeOrders } from "../lib/library";
 import { EpisodeOrderPicker } from "../components/title/EpisodeOrderPicker";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
-import { EpisodeRatings } from "../components/title/EpisodeRatings";
+import { SeasonActions } from "../components/title/SeasonActions";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 import { Img } from "../components/Img";
@@ -32,7 +32,6 @@ import { SimklPanel } from "../components/title/SimklPanel";
 import { HiddenTitleNote, HideTitleButton } from "../components/title/HiddenTitleControls";
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
-import { BatchDownload } from "../components/BatchDownload";
 import { DetailArt } from "../components/DetailArt";
 import { errorMessage } from "../lib/errors";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
@@ -199,8 +198,8 @@ function DetailHero({
           item={item}
           playlist
           download={item.type === "movie"}
+          more={<HideTitleButton item={item} />}
         >
-          <HideTitleButton item={item} />
           {trailer.visible && (
             <IconButton
               variant="glass"
@@ -304,26 +303,26 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
           <SeasonPicker value={current} onChange={setSeason} options={groups.map((g) => ({ id: g.id, label: g.label }))} />
         </div>
         <EpisodeOrderPicker orders={orders} />
-        {view ? (
-          // An order's group: its own batch, apart from the seasons'.
-          <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} part={current} />
-        ) : (
-          <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} season={current} />
-        )}
-        {/* The show in random order, from any season; progress stays where it is (lib/playback/shuffle.ts). */}
-        <IconButton
-          variant="glass"
-          label="Shuffle Episodes"
-          title="Shuffle: episodes in random order, your progress left as it is"
-          onClick={() => {
+        {/* Download Season, Shuffle and Episode Ratings, in one menu. An order's group downloads as its own
+            batch, apart from the seasons'. Shuffle plays the show in random order, from any season, progress left
+            where it is (lib/playback/shuffle.ts). A ratings cell opens its episode as a link to it does (#163):
+            its season, its sources listed. */}
+        <SeasonActions
+          meta={meta}
+          episodes={downloadableEpisodes(episodes)}
+          season={view ? undefined : current}
+          part={view ? current : undefined}
+          onShuffle={() => {
             const v = randomEpisode(meta);
             if (!v) return;
             startShuffle(meta.id, v.id);
             picker.play({ ...request(v), resumable: false, shuffle: true });
           }}
-        >
-          <Shuffle size={20} />
-        </IconButton>
+          onOpenEpisode={(v) => {
+            setSeason(v.season);
+            picker.choose(request(v));
+          }}
+        />
         <Segmented
           label="Episode layout"
           value={layout}
@@ -345,14 +344,6 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
         onPlay={(v) => picker.play(request(v))}
         onSources={(v) => picker.choose(request(v))}
         menu={(v) => cardMenu(meta, episodeEntry(meta, v, map.get(v.id)), { episode: true })}
-      />
-      {/* A cell opens its episode as a link to it does (#163): its season, its sources listed. */}
-      <EpisodeRatings
-        videos={meta.videos}
-        onOpen={(v) => {
-          setSeason(v.season);
-          picker.choose(request(v));
-        }}
       />
       <SourcePicker picker={picker} />
     </section>

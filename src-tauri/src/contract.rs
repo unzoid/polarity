@@ -117,6 +117,10 @@ fn field_names_match_contract() {
     add("Span", keys(&crate::introdb::Span { start: 0.0, end: 1.0 }));
     add("Segments", keys(&crate::introdb::Segments::default()));
     add("Ratings", keys(&crate::ratings::Ratings::default()));
+    add(
+        "EpisodeRating",
+        keys(&crate::episode_ratings::EpisodeRating { season: 1, episode: 1, rating: 8.0, votes: Some(1) }),
+    );
     add("CmdError", keys(&CmdError::Other("x".into())));
     add(
         "EpisodeOrderInfo",

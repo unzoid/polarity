@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { setPinAsker, type PinAnswer, type PinRequest } from "../../lib/account/unlock";
 import { useDismiss } from "../../lib/ui/dismiss";
 import { useTvMode } from "../../tv/tvMode";
+import { Avatar } from "../Avatar";
 import { Lock } from "../icons";
 import { Button } from "../ui/Button";
 import { PinFlow } from "./PinFlow";
@@ -46,14 +47,20 @@ export function PinHost() {
   useDismiss(!!pending, () => finish(null));
 
   const request = pending?.request;
+  const who = request?.kind === "check" && request.profiles.length === 1 ? request.profiles[0] : null;
   return (
     <Dialog.Root open={!!pending} onOpenChange={(open) => !open && finish(null)}>
       <Dialog.Portal>
         <Dialog.Backdrop className="party-dialog-scrim" />
         <Dialog.Popup className="party-dialog pin-dialog" data-tv={tv || undefined} data-nav-scope={tv || undefined}>
-          <div className="party-dialog-icon" aria-hidden>
-            <Lock size={22} />
-          </div>
+          {/* Whose PIN it is: that profile's picture; a lock for a new PIN, the account, or a choice of profiles. */}
+          {who ? (
+            <Avatar id={who.avatar} className="pin-dialog-avatar" />
+          ) : (
+            <div className="party-dialog-icon" aria-hidden>
+              <Lock size={22} />
+            </div>
+          )}
           {request && (
             <>
               <Dialog.Title className="party-dialog-title">{request.title}</Dialog.Title>

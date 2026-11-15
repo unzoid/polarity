@@ -70,7 +70,7 @@ export function TvSettings({ page }: { page?: string }) {
                 onClick={() => go(c.id)}
               >
                 <span className="tv-settings-label">{c.title}</span>
-                <ChevronRight size={24} className="tv-settings-chevron" />
+                <ChevronRight size={18} className="tv-settings-chevron" />
               </button>
             ))}
           </>

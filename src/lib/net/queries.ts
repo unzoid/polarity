@@ -153,6 +153,15 @@ export function useRatings(type: ContentType, id: string) {
   });
 }
 
+/** A show's IMDb episode ratings (the Episode Ratings chart); none until the id is known. */
+export const useImdbEpisodeRatings = (imdbId: string | undefined) =>
+  useQuery({
+    queryKey: keys.episodeRatings(imdbId ?? ""),
+    queryFn: () => api.episodeRatings(imdbId!),
+    enabled: !!imdbId,
+    staleTime: 12 * 60 * 60_000,
+  });
+
 export const useProgress = (metaId: string) =>
   useQuery({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 });
 

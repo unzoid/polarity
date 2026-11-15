@@ -801,6 +801,105 @@
 .t3s .settings-expand-accessory {
   right: calc(1.25rem + 18px + 0.375rem);
 }
+/* A handle at the row's start (ExpandRow `handle`), in the row's left padding. */
+.settings-expand-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Settings → Add-ons: the installed ones, dragged into the order they're asked in. */
+.addon-item {
+  position: relative;
+  outline: none; /* focused only by a click (tabIndex -1); the handle shows keyboard focus */
+}
+.addon-item[data-lifted] {
+  background: var(--t3-bg, var(--tone-1));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28), 0 0 0 1px var(--fill-2);
+  border-radius: 11px;
+}
+.addon-item[data-lifted] .settings-row-button {
+  cursor: grabbing;
+}
+.addon-item .settings-row-button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.addon-item[data-off] .settings-row-text,
+.addon-item[data-off] .settings-row-icon {
+  opacity: 0.5;
+}
+/* Room before the chevron for Copy Link and the On/Off pill. */
+.addon-item .settings-row-button[data-accessory] .settings-chevron {
+  margin-left: calc(36px + 0.375rem + 5.25rem + 0.5rem);
+}
+.addon-item .settings-expand-accessory {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.addon-grip {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 2.5rem;
+  color: var(--t3-muted-fg, var(--text-2));
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+.addon-item:hover .addon-grip,
+.addon-grip:focus-visible,
+.addon-item[data-lifted] .addon-grip {
+  opacity: 1;
+}
+@media (hover: none) {
+  .addon-grip {
+    opacity: 1;
+  }
+}
+.addon-logo {
+  width: 24px;
+  height: 24px;
+  margin: -2px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.addon-power {
+  width: 5.25rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+}
+.addon-power[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: color-mix(in srgb, var(--accent) 55%, var(--t3-fg, #fff));
+}
+.addon-power[aria-pressed="false"] {
+  background: var(--fill-1);
+  color: var(--t3-muted-fg, var(--text-2));
+}
+@media (hover: hover) and (pointer: fine) {
+  .addon-power:hover {
+    filter: brightness(1.15);
+  }
+}
+.addon-power:disabled {
+  cursor: default;
+}
+.addon-item .settings-expand-actions {
+  flex-wrap: wrap;
+}
+.addon-error {
+  flex-basis: 100%;
+}
 /* The opened part fades in under its row. The height change itself is
    instant: animating height would re-lay out the page on every frame. */
 .settings-expand-body {

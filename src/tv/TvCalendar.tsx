@@ -84,7 +84,7 @@ export function TvCalendar() {
           <p className="tv-cal-range">
             {thisWeek ? "This week" : weekRange(days)}
             {thisWeek && <span> · {weekRange(days)}</span>}
-            {loading && <Spinner size={18} label="Loading" />}
+            {loading && <Spinner size={13} label="Loading" />}
           </p>
         </div>
         <div className="tv-cal-pager">
@@ -94,13 +94,13 @@ export function TvCalendar() {
             </button>
           )}
           <button className="tv-cal-page tv-cal-icon" aria-label="Previous week" onClick={() => show(weekStart(start, -1), false)}>
-            <ChevronLeft size={26} />
+            <ChevronLeft size={19} />
           </button>
           <button className="tv-cal-page tv-cal-icon" aria-label="Choose a week" ref={chooser} onClick={() => setPicking(true)}>
-            <Calendar size={24} />
+            <Calendar size={18} />
           </button>
           <button className="tv-cal-page tv-cal-icon" aria-label="Next week" onClick={() => show(weekStart(start, 1), false)}>
-            <ChevronRight size={26} />
+            <ChevronRight size={19} />
           </button>
         </div>
       </header>
@@ -212,11 +212,11 @@ function TvWeekPicker({
       <div className="tv-week" ref={ref} data-nav-scope role="dialog" aria-label="Choose a week">
         <header className="tv-week-head">
           <button className="tv-week-turn" onClick={() => turn(-1)} aria-label="Previous month">
-            <ChevronLeft size={26} />
+            <ChevronLeft size={19} />
           </button>
           <h2 className="tv-week-month">{monthYear.format(new Date(month.year, month.month, 1))}</h2>
           <button className="tv-week-turn" onClick={() => turn(1)} aria-label="Next month">
-            <ChevronRight size={26} />
+            <ChevronRight size={19} />
           </button>
         </header>
         <div className="tv-week-names" aria-hidden>

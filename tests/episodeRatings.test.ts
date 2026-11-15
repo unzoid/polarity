@@ -7,7 +7,12 @@ import {
   RATING_STEPS,
   ratingGrid,
   ratingStep,
+  imdbVotes,
+  showImdbId,
+  timeline,
+  trend,
   showRatingGrid,
+  withImdbRatings,
 } from "../src/lib/library/episodeRatings";
 import type { Video } from "../src/lib/types";
 
@@ -36,9 +41,10 @@ test("each rating takes the last step it reaches, on a fixed scale", () => {
   expect(ratingStep(1)).toBe(0);
   expect(ratingStep(4.99)).toBe(0);
   expect(ratingStep(5)).toBe(1);
-  expect(ratingStep(7.4)).toBe(3);
-  expect(ratingStep(7.5)).toBe(4);
-  expect(ratingStep(8.9)).toBe(6);
+  expect(ratingStep(7.9)).toBe(3);
+  expect(ratingStep(8)).toBe(4);
+  expect(ratingStep(9.6)).toBe(5);
+  expect(ratingStep(9.7)).toBe(6);
   expect(ratingStep(10)).toBe(RATING_STEPS.length - 1);
   // Lowest first, rising.
   for (let i = 1; i < RATING_STEPS.length; i++) expect(RATING_STEPS[i].min).toBeGreaterThan(RATING_STEPS[i - 1].min);
@@ -114,4 +120,45 @@ test("keys move across the grid, passing over what doesn't open", () => {
   expect(moveInGrid(grid, 2, 0, "right")).toEqual([2, 2]);
   expect(moveInGrid(grid, 2, 2, "up")).toEqual([1, 1]);
   expect(moveInGrid(grid, 2, 0, "down")).toBeNull();
+});
+
+test("IMDb's ratings replace the catalog's by episode id; an episode IMDb leaves unrated is unrated", () => {
+  const videos = [ep(1, 1, "7.7"), ep(1, 2, "7.6"), ep(2, 1, "7.5")];
+  expect(showImdbId(videos)).toBe("tt0000000");
+  const merged = withImdbRatings(videos, [
+    { season: 1, episode: 1, rating: 9.1 },
+    { season: 2, episode: 1, rating: 8.64 },
+  ]);
+  expect(merged.map((v) => v.rating)).toEqual(["9.1", undefined, "8.6"]);
+});
+
+test("the catalog's ratings stay when IMDb has none, or none that match", () => {
+  const videos = [ep(1, 1, "7.7")];
+  expect(withImdbRatings(videos, undefined)).toBe(videos);
+  expect(withImdbRatings(videos, [])).toBe(videos);
+  expect(withImdbRatings(videos, [{ season: 5, episode: 9, rating: 9 }])).toBe(videos);
+  expect(showImdbId([{ ...videos[0], id: "kitsu:1:1" }])).toBeUndefined();
+});
+
+test("the timeline runs through every rated, released episode in order, each season's run marked", () => {
+  const grid = ratingGrid([ep(1, 1, "7.1"), ep(1, 2), ep(1, 3, "8.0"), ep(2, 1, "9.0"), ep(2, 2, "8.0", "2999-01-01T00:00:00Z")], out);
+  // ep(2, 2) counts as out here (`out`), so the far-future date doesn't drop it; unrated ones are left out.
+  const { points, seasons } = timeline(grid);
+  expect(points.map((p) => p.rating)).toEqual([7.1, 8, 9, 8]);
+  expect(points.map((p) => p.x)).toEqual([0, 1, 2, 3]);
+  expect(seasons).toEqual([
+    { season: 1, from: 0, to: 1 },
+    { season: 2, from: 2, to: 3 },
+  ]);
+});
+
+test("the trendline is a moving average, narrower at the ends", () => {
+  expect(trend([1, 2, 3, 4, 5], 1)).toEqual([1.5, 2, 3, 4, 4.5]);
+  expect(trend([])).toEqual([]);
+});
+
+test("IMDb's vote counts reach the grid's cells by episode id", () => {
+  const votes = imdbVotes([{ season: 1, episode: 2, rating: 8, votes: 1234 }]);
+  const grid = ratingGrid([ep(1, 1, "7"), ep(1, 2, "8")], out, votes);
+  expect(grid.rows[0].cells.map((c) => c.votes)).toEqual([undefined, 1234]);
 });

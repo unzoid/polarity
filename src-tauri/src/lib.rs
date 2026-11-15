@@ -9,6 +9,7 @@ mod dev_channel;
 mod discord;
 mod disk;
 mod downloads;
+mod episode_ratings;
 mod external_player;
 mod imdb;
 mod introdb;
@@ -306,6 +307,7 @@ pub fn run() {
             commands::mal_api,
             commands::mal_token,
             commands::ratings,
+            commands::episode_ratings,
             commands::addons_list,
             commands::addon_catalog,
             commands::addons_bundled,
@@ -313,7 +315,7 @@ pub fn run() {
             commands::addon_install,
             commands::addon_remove,
             commands::addon_set_enabled,
-            commands::addon_move,
+            commands::addon_reorder,
             commands::library_list,
             commands::library_toggle,
             commands::progress_for,

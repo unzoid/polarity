@@ -425,17 +425,13 @@ pub fn addon_set_enabled(state: State<'_, AppState>, id: String, enabled: bool) 
     })
 }
 
-/// Move an installed add-on one place up (`by` < 0) or down in the order: the order titles, subtitles and
-/// lists are asked in, and ties between sources are broken by.
+/// Put the installed add-ons in the order of `ids` (a drag on Settings → Add-ons): the order titles,
+/// subtitles and lists are asked in, and ties between sources are broken by. Add-ons `ids` leaves out
+/// keep their order after the listed ones; ids of add-ons not installed are ignored.
 #[tauri::command]
-pub fn addon_move(state: State<'_, AppState>, id: String, by: i32) -> Result<()> {
+pub fn addon_reorder(state: State<'_, AppState>, ids: Vec<String>) -> Result<()> {
     state.persist_now(|d| {
-        if let Some(at) = d.addons.iter().position(|a| a.manifest.id == id) {
-            let to = if by < 0 { at.checked_sub(1) } else { Some(at + 1).filter(|n| *n < d.addons.len()) };
-            if let Some(to) = to {
-                d.addons.swap(at, to);
-            }
-        }
+        d.addons.sort_by_key(|a| ids.iter().position(|id| *id == a.manifest.id).unwrap_or(usize::MAX));
     })
 }
 
@@ -771,6 +767,12 @@ pub async fn ratings(state: State<'_, AppState>, ty: String, id: String) -> Resu
         (key(&s.mdblist_key), key(&s.omdb_key))
     };
     Ok(state.ratings.get(&id, &ty, mdblist.as_deref(), omdb.as_deref()).await)
+}
+
+/// A show's IMDb rating for each episode (the Episode Ratings chart), or none known.
+#[tauri::command]
+pub async fn episode_ratings(imdb_id: String) -> Vec<crate::episode_ratings::EpisodeRating> {
+    crate::episode_ratings::get(&imdb_id).await
 }
 
 // --- External links ------------------------------------------------------

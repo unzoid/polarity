@@ -41,6 +41,16 @@ export interface Video {
   tag?: string;
 }
 
+/** One episode's IMDb rating (src-tauri/src/episode_ratings.rs), by IMDb's season and episode. */
+export interface EpisodeRating {
+  season: number;
+  episode: number;
+  /** Out of 10. */
+  rating: number;
+  /** How many people rated it, when IMDb says. */
+  votes?: number | null;
+}
+
 export interface Meta extends MetaPreview {
   runtime?: string;
   cast?: string[];

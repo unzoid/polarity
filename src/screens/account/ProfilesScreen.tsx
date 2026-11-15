@@ -10,15 +10,19 @@ import { AccountShell } from "./AccountShell";
 import { flyToNavbar } from "./profileHandoff";
 import { useGuard } from "../../components/profileLock/useGuard";
 import { ProfileLockRows } from "../../components/profileLock/ProfileLockRows";
+import { isTvMode } from "../../tv/tvMode";
 
 const MAX_PROFILES = 5;
 
 type View = { name: "pick" | "manage" } | { name: "edit"; profile: Profile | null };
 
-/** Left/right (and up/down) move between tiles, like a TV remote. */
+/**
+ * Left/right (and up/down) move between tiles, like a TV remote. In TV mode the arrows move around the
+ * whole screen instead (AccountShell), so up and down reach Sign Out and Manage Profiles.
+ */
 function moveFocus(e: KeyboardEvent<HTMLElement>) {
   const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-  if (!step) return;
+  if (!step || isTvMode()) return;
   const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[data-tile]:not(:disabled)")];
   const i = items.indexOf(document.activeElement as HTMLElement);
   const next = items[i === -1 ? 0 : (i + step + items.length) % items.length];
@@ -100,6 +104,7 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
                 onClick={() => void choose(p)}
                 disabled={!!entering}
                 autoFocus={p.id === highlighted}
+                data-nav-default={p.id === highlighted || undefined}
                 aria-label={managing ? `Edit ${p.name}` : p.name}
               >
                 <span className="profile-tile-art" ref={entering === p.id ? chosenArt : undefined}>

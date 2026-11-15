@@ -416,31 +416,18 @@
   }
 }
 
-/* Episode Ratings (components/title/EpisodeRatings.tsx): one blue from low to high, by RATING_STEPS
-   (lib/library/episodeRatings.ts), and the ink each step's number is written in. Dark: higher is lighter,
-   rising off the page; light: higher is darker. The numbers clear 5:1 on every step. */
+/* Episode Ratings (components/title/EpisodeRatings.tsx): a colour per RATING_STEPS step
+   (lib/library/episodeRatings.ts), from Garbage (purple) through Bad, Average, Good and Great to Awesome
+   (deep green) and Absolute Cinema (blue). The same in both schemes; Average and Good are written in dark
+   ink, the rest in white. */
 :root {
-  --rating-0: #0d366b;
-  --rating-1: #104281;
-  --rating-2: #184f95;
-  --rating-3: #1c5cab;
-  --rating-4: #256abf;
-  --rating-5: #3987e5;
-  --rating-6: #86b6ef;
-  --rating-7: #cde2fb;
-  /* Steps 0–4 and 5–7. */
-  --rating-ink-low: #fff;
-  --rating-ink-high: #0b0b0b;
-}
-:root[data-scheme="light"] {
-  --rating-0: #cde2fb;
-  --rating-1: #b7d3f6;
-  --rating-2: #9ec5f4;
-  --rating-3: #86b6ef;
-  --rating-4: #3987e5;
-  --rating-5: #256abf;
-  --rating-6: #184f95;
-  --rating-7: #0d366b;
-  --rating-ink-low: #0b0b0b;
-  --rating-ink-high: #fff;
+  --rating-0: #6c3fa3;
+  --rating-1: #d9443a;
+  --rating-2: #f0961c;
+  --rating-3: #f2cf3c;
+  --rating-4: #2bb05b;
+  --rating-5: #18703f;
+  --rating-6: #1e9bf0;
+  --rating-ink-light: #fff;
+  --rating-ink-dark: #161616;
 }

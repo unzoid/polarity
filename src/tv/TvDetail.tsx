@@ -192,6 +192,22 @@ function Actions({
 
   return (
     <div className="tv-actions" data-nav-memory>
+      {/* The lesser actions, side by side above Play (as Netflix puts its rating and list buttons): round icons,
+          the focused one opening into a pill with its name. */}
+      <div className="tv-quick-actions" role="group" aria-label="More for this title">
+        {item.type === "series" && ratings && <QuickAction icon={<Star size={26} />} label="Episode Ratings" onClick={() => push({ kind: "ratings" })} />}
+        <QuickAction
+          icon={inPlaylist ? <Check size={26} /> : <PlaylistIcon size={26} />}
+          label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
+          onClick={() => push({ kind: "playlists" })}
+        />
+        <QuickAction
+          icon={<Hidden size={26} />}
+          label={hidden ? "Unhide" : "Hide This Title"}
+          pressed={hidden}
+          onClick={() => (hidden ? unhideTitle(item.id) : hideTitle(item))}
+        />
+      </div>
       <ActionPill
         icon={resumeAt ? <Reset size={26} /> : <Play size={26} />}
         label={label}
@@ -200,7 +216,6 @@ function Actions({
         onClick={() => videoId && play(videoId, subtitle, { resumable: !!resumeAt })}
       />
       {item.type === "series" && <ActionPill icon={<Episodes size={26} />} label="Episodes" onClick={() => push({ kind: "episodes" })} />}
-      {item.type === "series" && ratings && <ActionPill icon={<Star size={26} />} label="Episode Ratings" onClick={() => push({ kind: "ratings" })} />}
       <ActionPill
         icon={<Sources size={26} />}
         label="Choose Source"
@@ -213,16 +228,6 @@ function Actions({
         icon={inLibrary ? <Check size={26} /> : <Plus size={26} />}
         label={inLibrary ? "In Library" : "Add to Library"}
         onClick={() => toggle.mutate(item)}
-      />
-      <ActionPill
-        icon={<PlaylistIcon size={26} />}
-        label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
-        onClick={() => push({ kind: "playlists" })}
-      />
-      <ActionPill
-        icon={<Hidden size={26} />}
-        label={hidden ? "Unhide" : "Hide This Title"}
-        onClick={() => (hidden ? unhideTitle(item.id) : hideTitle(item))}
       />
     </div>
   );
@@ -260,14 +265,14 @@ export function PlaylistsPanel({
               data-nav-default={i === 0 || undefined}
               onClick={() => toggle(row)}
             >
-              <span className="tv-playlist-check">{row.has && <Check size={22} />}</span>
+              <span className="tv-playlist-check">{row.has && <Check size={16} />}</span>
               <span className="tv-playlist-name">{row.name}</span>
               <span className="tv-playlist-count tabular">
                 {row.count} {row.count === 1 ? "title" : "titles"}
               </span>
             </button>
             <button className="tv-playlist-rename" aria-label={`Rename ${row.name}`} onClick={() => onRename(row.id)}>
-              <Edit size={30} />
+              <Edit size={22} />
             </button>
           </div>
         ))}
@@ -278,7 +283,7 @@ export function PlaylistsPanel({
             onClick={onNew}
           >
             <span className="tv-playlist-check">
-              <Plus size={22} />
+              <Plus size={16} />
             </span>
             <span className="tv-playlist-name">New Playlist</span>
           </button>
@@ -354,6 +359,18 @@ function ActionPill({
     <button className="tv-pill" onClick={onClick} disabled={disabled} data-nav-default={isDefault || undefined}>
       {icon}
       {label}
+    </button>
+  );
+}
+
+/** One of the round actions above Play: its name shows beside the icon while it has focus. */
+function QuickAction({ icon, label, onClick, pressed }: { icon: ReactNode; label: string; onClick: () => void; pressed?: boolean }) {
+  return (
+    <button className="tv-quick" onClick={onClick} aria-label={label} aria-pressed={pressed}>
+      {icon}
+      <span className="tv-quick-label" aria-hidden>
+        <span>{label}</span>
+      </span>
     </button>
   );
 }

@@ -116,7 +116,7 @@ export function TvDiscover({ type }: { type: ContentType }) {
   return <TvBrowse rows={rows} />;
 }
 
-/** Library: your downloads, what you've saved, what you've watched and your playlists, as rails under the stage. */
+/** Library: your downloads, what you've saved, what you've watched and your playlists, as shelves on black (TvBrowse). */
 export function TvLibrary() {
   const { data: saved } = useLibrary();
   const { data: history } = useWatchHistory();
@@ -200,7 +200,7 @@ export function TvLibrary() {
         ),
       })),
   ];
-  return <TvBrowse rows={rows} />;
+  return <TvBrowse rows={rows} layout="shelves" />;
 }
 
 function TvPlaylistCard({ item }: { item: PlaylistItem }) {

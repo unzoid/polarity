@@ -101,19 +101,18 @@ const commands: Record<string, (a: Args) => unknown> = {
     fx.WORST
       ? { rottenTomatoes: 100, audience: 0, metacritic: 100, letterboxd: 5, trakt: 100, tmdb: 0, imdb: 10 }
       : { rottenTomatoes: 91, audience: 87, metacritic: 78, letterboxd: 3.9, trakt: 84, tmdb: 81, imdb: 8.2 },
+  // None: the chart shows the fixtures' own episode ratings.
+  episode_ratings: () => [],
   trailer: () => null,
   addons_list: () => addons,
   // No TVs on the network and no other players installed here.
   cast_devices: () => [],
   external_players: () => [],
   addon_set_enabled: (a) => void (addons = addons.map((x) => (x.manifest.id === a.id ? { ...x, disabled: !a.enabled } : x))),
-  addon_move: (a) => {
-    const at = addons.findIndex((x) => x.manifest.id === a.id);
-    const to = at + (Number(a.by) < 0 ? -1 : 1);
-    if (at < 0 || to < 0 || to >= addons.length) return;
-    const next = [...addons];
-    [next[at], next[to]] = [next[to], next[at]];
-    addons = next;
+  addon_reorder: (a) => {
+    const ids = a.ids as string[];
+    const at = (x: (typeof addons)[number]) => (ids.includes(x.manifest.id) ? ids.indexOf(x.manifest.id) : ids.length);
+    addons = [...addons].sort((x, y) => at(x) - at(y));
   },
   // Install links (#163): any example.com add-on answers; an address with "broken" in it doesn't. Installs are counted.
   addon_preview: (a) =>

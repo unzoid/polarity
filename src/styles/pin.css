@@ -7,6 +7,14 @@
 .pin-dialog .party-dialog-icon {
   margin-bottom: 0.25rem;
 }
+/* Whose PIN: the profile's own picture, a little larger than the lock it stands in for. */
+.avatar.pin-dialog-avatar {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 0.25rem;
+  border-radius: var(--r-md);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+}
 .pin-dialog-text {
   margin-bottom: 0.25rem;
 }

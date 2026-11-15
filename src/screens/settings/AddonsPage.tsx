@@ -1,13 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Check, LinkIcon, Settings as Cog, Plus, Puzzle, Trash } from "../../components/icons";
+import { Reorder, useDragControls } from "motion/react";
+import { ArrowDown, ArrowUp, Check, Grip, LinkIcon, Settings as Cog, Plus, Puzzle, Trash } from "../../components/icons";
 import { SwapIcon } from "../../components/SwapIcon";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { api } from "../../lib/api";
 import { keys, useAddons } from "../../lib/net";
 import { errorMessage } from "../../lib/errors";
 import { Button, IconButton } from "../../components/ui/Button";
 import { Switch } from "../../components/ui/Switch";
-import { Card, ExpandRow, FormRow, useExpanded } from "../../components/settings/rows";
+import { Card, ExpandRow, FormRow, useExpanded, type Expandable } from "../../components/settings/rows";
 import { showWhereStored, useSecretsNote } from "../../components/settings/secretsNote";
 import { useKeyGate, useSecretsPlain } from "../../components/settings/KeyWarning";
 import { linkHasKey, useAccount, useSecretsLocked } from "../../lib/account";
@@ -15,6 +16,7 @@ import { addonHomeCatalogs, catalogKey, useAddonCatalogs, useHomeCatalogSetting,
 import { setStremioLinks, stremioLinksOs, type Os } from "../../lib/platform";
 import { setPrefs } from "../../lib/settings";
 import { SettingRow } from "../../components/settings/SettingRow";
+import type { InstalledAddon } from "../../lib/types";
 
 const hintsTried = new Set<string>();
 
@@ -43,13 +45,36 @@ export function AddonsPage() {
   });
   const remove = useMutation({ mutationFn: api.removeAddon, onSuccess: refresh });
   // Off or moved: what's asked, and in what order, changes for sources, subtitles and lists alike.
-  const changed = () => {
-    refresh();
-    qc.invalidateQueries({ queryKey: ["subtitles"] });
-    qc.invalidateQueries({ queryKey: keys.addonCatalogAll });
-  };
+  const changed = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: keys.addons }),
+      qc.invalidateQueries({ queryKey: keys.streamsAll }),
+      qc.invalidateQueries({ queryKey: ["subtitles"] }),
+      qc.invalidateQueries({ queryKey: keys.addonCatalogAll }),
+    ]);
   const toggle = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => api.setAddonEnabled(id, on), onSuccess: changed });
-  const move = useMutation({ mutationFn: ({ id, by }: { id: string; by: -1 | 1 }) => api.moveAddon(id, by), onSuccess: changed });
+  // The order being dragged, and kept until the saved one is read back, so the rows don't jump back between.
+  const [draft, setDraftState] = useState<string[] | null>(null);
+  // The latest order as soon as it's given, for the drop to save: a swap in the drag's last frame may not
+  // have rendered yet when the drag ends.
+  const draftRef = useRef<string[] | null>(null);
+  const setDraft = (next: string[] | null) => {
+    draftRef.current = next;
+    setDraftState(next);
+  };
+  const reorder = useMutation({
+    mutationFn: api.reorderAddons,
+    // Cleared only if no later drag has started a newer order meanwhile.
+    onSettled: (_r, _e, ids) => changed().finally(() => draftRef.current === ids && setDraft(null)),
+  });
+  const order = draft ?? addons?.map((a) => a.manifest.id) ?? [];
+  const byId = new Map(addons?.map((a) => [a.manifest.id, a]));
+  // Rows slide into their new places only while they're being reordered: animating layout at other times
+  // would also tween a row opening or closing, stretching the rows as it goes.
+  const [dragging, setDragging] = useState(false);
+  const moving = dragging || draft !== null;
+  // A dragged row stays inside the card.
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Manifests saved before behaviour hints were kept: refetch them once so
   // the Configure button can show.
@@ -76,62 +101,55 @@ export function AddonsPage() {
         </div>
       )}
       {!!addons?.length && (
-        <Card title="Installed" footer={addons.length > 1 ? <>Equally good sources, and subtitles in one language, are listed in this order. {note}</> : note}>
-          {addons.map((a, i) => (
-            <ExpandRow
-              key={a.manifest.id}
-              icon={Puzzle}
-              title={a.manifest.name}
-              caption={a.disabled ? "Off" : linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
-              accessory={<CopyLink url={a.manifestUrl} name={a.manifest.name} />}
-              {...expand(a.manifest.id)}
-            >
-              {a.manifest.description && <p className="settings-expand-text">{a.manifest.description}</p>}
-              <p className="settings-expand-text settings-url">{a.manifestUrl}</p>
-              {linkHasKey(a.manifestUrl) && <KeyedLinkNote plain={plain} />}
-              <label className="settings-expand-toggle">
-                <span>Use this add-on</span>
-                <Switch checked={!a.disabled} disabled={toggle.isPending} onChange={(on) => toggle.mutate({ id: a.manifest.id, on })} />
-              </label>
-              {!a.disabled && <HomeLists addon={a.manifest.id} />}
-              <div className="settings-expand-actions">
-                {a.manifest.behaviorHints?.configurable && (
-                  <Button
-                    onClick={() => void api.openExternal(a.manifestUrl.replace(/\/manifest\.json$/, "/configure"))}
-                    title="Opens the addon's settings page. Install the new link it gives you to apply them."
-                  >
-                    <Cog size={15} /> Configure
-                  </Button>
-                )}
-                {addons.length > 1 && (
-                  <>
-                    <IconButton
-                      variant="settings"
-                      label={`Move ${a.manifest.name} up`}
-                      title="Move Up: asked before the ones below it"
-                      disabled={i === 0 || move.isPending}
-                      onClick={() => move.mutate({ id: a.manifest.id, by: -1 })}
-                    >
-                      <ArrowUp size={16} />
-                    </IconButton>
-                    <IconButton
-                      variant="settings"
-                      label={`Move ${a.manifest.name} down`}
-                      title="Move Down"
-                      disabled={i === addons.length - 1 || move.isPending}
-                      onClick={() => move.mutate({ id: a.manifest.id, by: 1 })}
-                    >
-                      <ArrowDown size={16} />
-                    </IconButton>
-                  </>
-                )}
-                <Button variant="danger" onClick={() => remove.mutate(a.manifest.id)} disabled={remove.isPending}>
-                  <Trash size={15} /> Remove
-                </Button>
-              </div>
-            </ExpandRow>
-          ))}
-        </Card>
+        // The card's list is the drag's Reorder.Group, so the card is drawn here rather than by <Card>.
+        <section className="settings-group">
+          <h2 className="settings-group-title">Installed</h2>
+          <Reorder.Group as="div" axis="y" ref={listRef} className="settings-card addon-list" values={order} onReorder={setDraft}>
+            {order.map((id, i) => {
+              const a = byId.get(id);
+              if (!a) return null;
+              return (
+                <AddonItem
+                  key={id}
+                  addon={a}
+                  sortable={order.length > 1}
+                  moving={moving}
+                  bounds={listRef}
+                  onLift={() => setDragging(true)}
+                  onDrop={() => {
+                    setDragging(false);
+                    if (draftRef.current) reorder.mutate(draftRef.current);
+                  }}
+                  onStep={(by) => {
+                    const to = i + by;
+                    if (to < 0 || to >= order.length) return;
+                    const next = [...order];
+                    [next[i], next[to]] = [next[to], next[i]];
+                    setDraft(next);
+                    reorder.mutate(next);
+                  }}
+                  onEnable={(on) => toggle.mutate({ id, on })}
+                  enabling={toggle.isPending}
+                  {...expand(id)}
+                >
+                  {a.manifest.description && <p className="settings-expand-text">{a.manifest.description}</p>}
+                  <p className="settings-expand-text settings-url">{a.manifestUrl}</p>
+                  {linkHasKey(a.manifestUrl) && <KeyedLinkNote plain={plain} />}
+                  {!a.disabled && <HomeLists addon={id} />}
+                  <div className="settings-expand-actions">
+                    {a.manifest.behaviorHints?.configurable && <ConfigureButton manifestUrl={a.manifestUrl} />}
+                    <Button variant="danger" onClick={() => remove.mutate(id)} disabled={remove.isPending}>
+                      <Trash size={15} /> Remove
+                    </Button>
+                  </div>
+                </AddonItem>
+              );
+            })}
+          </Reorder.Group>
+          <p className="settings-footer">
+            {addons.length > 1 ? <>Drag to change the order: equally good sources, and subtitles in one language, are listed in it. {note}</> : note}
+          </p>
+        </section>
       )}
       {addons && !addons.length && (
         <Card title="Installed" footer={note}>
@@ -156,6 +174,175 @@ export function AddonsPage() {
         {gate.warning}
       </Card>
       <StremioLinksCard />
+    </>
+  );
+}
+
+/**
+ * One installed add-on: its row, moved by dragging it (or its handle, the only way on touch, where a
+ * press on the row has to scroll the page), and by the handle's arrow keys. A drag doesn't open the row.
+ */
+function AddonItem({
+  addon: a,
+  sortable,
+  moving,
+  bounds,
+  onLift,
+  onDrop,
+  onStep,
+  onEnable,
+  enabling,
+  children,
+  ...expand
+}: Expandable & {
+  addon: InstalledAddon;
+  sortable: boolean;
+  /** The list is being reordered: rows animate into their new places. */
+  moving: boolean;
+  /** The list a drag stays inside. */
+  bounds: RefObject<HTMLDivElement | null>;
+  onLift: () => void;
+  onDrop: () => void;
+  onStep: (by: -1 | 1) => void;
+  onEnable: (on: boolean) => void;
+  enabling: boolean;
+  children: ReactNode;
+}) {
+  const controls = useDragControls();
+  const dragged = useRef(false);
+  const [lifted, setLifted] = useState(false);
+  const name = a.manifest.name;
+  return (
+    <Reorder.Item
+      as="div"
+      value={a.manifest.id}
+      className="addon-item"
+      data-off={a.disabled || undefined}
+      data-lifted={lifted || undefined}
+      // The handle takes the keys; the row itself isn't a stop of its own (Reorder.Item makes it one).
+      tabIndex={-1}
+      // Layout is always measured (it keeps the drag's bounds current) but only animated while reordering:
+      // a row opening or closing moves the rows below at once.
+      layout="position"
+      transition={moving ? undefined : { layout: { duration: 0 } }}
+      drag={sortable ? "y" : false}
+      dragListener={false}
+      dragControls={controls}
+      dragConstraints={bounds}
+      dragElastic={0}
+      onDragStart={() => {
+        dragged.current = true;
+        setLifted(true);
+        onLift();
+      }}
+      onDragEnd={() => {
+        setLifted(false);
+        onDrop();
+      }}
+      onPointerDown={(e) => {
+        dragged.current = false;
+        if (sortable && e.pointerType === "mouse" && e.button === 0 && (e.target as Element).closest(".settings-row-button")) controls.start(e);
+      }}
+      onClickCapture={(e) => {
+        if (!dragged.current) return;
+        dragged.current = false;
+        e.stopPropagation();
+      }}
+    >
+      <ExpandRow
+        handle={
+          sortable && (
+            <button
+              type="button"
+              className="addon-grip"
+              aria-label={`Move ${name}: drag, or use the up and down arrow keys`}
+              title="Drag to Reorder"
+              onPointerDown={(e) => {
+                dragged.current = false;
+                controls.start(e);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                e.preventDefault();
+                e.stopPropagation(); // not also to Reorder.Item's own key handling
+                onStep(e.key === "ArrowUp" ? -1 : 1);
+              }}
+            >
+              <Grip size={14} />
+            </button>
+          )
+        }
+        lead={<AddonLogo key={`${a.manifestUrl} ${a.manifest.logo ?? ""}`} addon={a} />}
+        title={name}
+        caption={linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
+        accessory={
+          <>
+            <CopyLink url={a.manifestUrl} name={name} />
+            <button
+              type="button"
+              className="addon-power"
+              aria-pressed={!a.disabled}
+              aria-label={`Use ${name}`}
+              title={a.disabled ? "Off: asked for nothing. Click to turn it on." : "On. Click to turn it off; it stays installed."}
+              disabled={enabling}
+              onClick={() => onEnable(!!a.disabled)}
+            >
+              {a.disabled ? "Disabled" : "Enabled"}
+            </button>
+          </>
+        }
+        {...expand}
+      >
+        {children}
+      </ExpandRow>
+    </Reorder.Item>
+  );
+}
+
+/**
+ * An add-on's own logo (its manifest's `logo`), else its site's icon, else the puzzle piece. Each one that
+ * fails to load gives way to the next.
+ */
+function AddonLogo({ addon }: { addon: InstalledAddon }) {
+  const sources = [addon.manifest.logo, siteIcon(addon.manifestUrl)].filter((s): s is string => !!s);
+  const [failed, setFailed] = useState(0);
+  const src = sources[failed];
+  if (!src) return <Puzzle className="settings-row-icon" size={20} strokeWidth={1.9} />;
+  return <img className="settings-row-icon addon-logo" src={src} alt="" draggable={false} onError={() => setFailed((n) => n + 1)} />;
+}
+
+/** The add-on's site's icon: `/favicon.ico` on the host it's installed from (only the host: the path can hold a key). */
+function siteIcon(manifestUrl: string): string | undefined {
+  try {
+    const u = new URL(manifestUrl);
+    return u.protocol === "https:" || u.protocol === "http:" ? `${u.origin}/favicon.ico` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Opens the add-on's settings page (`<base>/configure`, next to its manifest) in the browser. The page gives a
+ * new link to install; a failure to open it is said under the button rather than lost.
+ */
+function ConfigureButton({ manifestUrl }: { manifestUrl: string }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <Button
+        onClick={() => {
+          setError(null);
+          api.openExternal(manifestUrl.replace(/\/manifest\.json$/, "/configure")).catch((e: unknown) => setError(`Couldn't open its settings page: ${errorMessage(e)}`));
+        }}
+        title="Opens the add-on's settings page. Install the new link it gives you to apply them."
+      >
+        <Cog size={15} /> Configure
+      </Button>
+      {error && (
+        <p className="settings-expand-text addon-error" role="alert">
+          {error}
+        </p>
+      )}
     </>
   );
 }

@@ -6,6 +6,7 @@ import type {
   CacheInfo,
   Imported,
   ContentType,
+  EpisodeRating,
   ExternalRatings,
   InstalledAddon,
   LibraryItem,
@@ -115,6 +116,8 @@ export const api = {
   seekrValidate: (key: string) => call<string | null>("seekr_validate", { key }),
   /** Rotten Tomatoes, Metacritic, Letterboxd… (empty without a ratings key in Settings → Services). */
   ratings: (type: ContentType, id: string) => call<ExternalRatings>("ratings", { ty: type, id }),
+  /** A show's IMDb rating for each episode (Episode Ratings); none known is an empty list. */
+  episodeRatings: (imdbId: string) => call<EpisodeRating[]>("episode_ratings", { imdbId }),
 
   addons: () => call<InstalledAddon[]>("addons_list"),
   /** The add-ons the app installs itself, by manifest URL. */
@@ -128,8 +131,8 @@ export const api = {
   removeAddon: (id: string) => call<void>("addon_remove", { id }).then(changed),
   /** Off: the add-on stays installed but is asked for nothing (this device only). */
   setAddonEnabled: (id: string, enabled: boolean) => call<void>("addon_set_enabled", { id, enabled }),
-  /** One place up (-1) or down (1) in the order add-ons are asked in. */
-  moveAddon: (id: string, by: -1 | 1) => call<void>("addon_move", { id, by }),
+  /** The order add-ons are asked in, as manifest ids. */
+  reorderAddons: (ids: string[]) => call<void>("addon_reorder", { ids }),
 
   library: () => call<LibraryItem[]>("library_list"),
   toggleLibrary: (item: MetaPreview) => call<boolean>("library_toggle", { item }),
