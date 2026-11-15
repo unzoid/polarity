@@ -92,14 +92,16 @@
 }
 /* On a phone a page change moves whole screens (lib/ui/pageMotion.ts), each with its own background, so it's the
    page that changes, not its contents over a still backdrop. Of the pair, the page drawn on top (`data-over`: the
-   page pushed, or the one going) moves; the one under it holds still. Another section, or a page replaced
-   (`data-fade`), is a quick crossfade in place, about Netflix's 150ms between tabs (measured from its app); a page
-   pushed comes in from the right fading up, and Back takes it out the same way, while the page under drifts a
-   little the other way (--page-dir: 1 forward, -1 back). pageMotion.ts SETTLE follows these clocks. */
+   page pushed, or the one going) moves. A page pushed comes in from the right fading up, and Back takes it out the
+   same way, while the page under drifts a little the other way (--page-dir: 1 forward, -1 back). Another section,
+   or a page replaced (`data-fade`), changes as Netflix's tabs do (measured from its app): the old page goes in
+   90ms while the new one, drawn already under it, comes up over 180ms from the same moment, so the change passes
+   through the dark and the new page brightens into place. pageMotion.ts SETTLE follows these clocks. */
 :root[data-form="phone"] {
   --page-shift: 32px;
   --page-in: 320ms;
-  --page-fade: 160ms;
+  --page-fade: 180ms;
+  --page-fade-out: 90ms;
 }
 :root[data-form="phone"] .page-pushed {
   animation: none;
@@ -112,6 +114,7 @@
   pointer-events: none;
 }
 :root[data-form="phone"] .page[data-over] {
+  z-index: 1;
   background: var(--bg);
   will-change: transform, opacity;
 }
@@ -122,10 +125,10 @@
   opacity: 0;
   pointer-events: none;
 }
-:root[data-form="phone"] .page[data-motion="enter"][data-over][data-go]:not([data-card]) {
+:root[data-form="phone"] .page[data-motion="enter"][data-over][data-go]:not([data-card], [data-fade]) {
   animation: page-enter var(--page-in) var(--ease-out) both;
 }
-:root[data-form="phone"] .page[data-motion="leave"][data-over][data-go]:not([data-card]) {
+:root[data-form="phone"] .page[data-motion="leave"][data-over][data-go]:not([data-card], [data-fade]) {
   animation: page-leave var(--page-in) var(--ease-out) forwards;
 }
 :root[data-form="phone"] .page[data-motion="enter"][data-go]:not([data-over], [data-card], [data-fade]) {
@@ -135,8 +138,21 @@
   animation: page-under-out var(--page-in) var(--ease-out) forwards;
 }
 :root[data-form="phone"] .page[data-fade][data-over][data-go] {
-  animation-duration: var(--page-fade);
-  animation-timing-function: var(--ease-std);
+  animation: page-fade-out var(--page-fade-out) linear forwards;
+}
+:root[data-form="phone"] .page[data-fade][data-motion="enter"][data-go]:not([data-over]) {
+  animation: page-fade-in var(--page-fade) cubic-bezier(0.2, 0.6, 0.35, 1) both;
+  will-change: opacity;
+}
+@keyframes page-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 @keyframes page-enter {
   from {
@@ -160,12 +176,21 @@
     transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.33));
   }
 }
-/* The top bar is no page's, so it changes with the crossfade on the same clock: the frosted bar, the shade over
-   the hero and the wordmark's size, each scrolled or not on the page coming in. */
+/* The top bar is no page's, but on Netflix it's each page's own, so it changes with the crossfade: its wordmark and
+   actions dip through the dark with the pages, and the frosted bar, the shade over the hero and the wordmark's
+   size change on the same clock, each scrolled or not as the page coming in is. */
 :root[data-form="phone"] .main:has(> .page[data-fade]) .navbar::before,
 :root[data-form="phone"] .main:has(> .page[data-fade]) .navbar-fade::before,
 :root[data-form="phone"] .main:has(> .page[data-fade]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
   transition-duration: var(--page-fade);
+}
+:root[data-form="phone"] .main:has(> .page[data-fade][data-go]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  animation: navbar-dip var(--page-fade) linear;
+}
+@keyframes navbar-dip {
+  40% {
+    opacity: 0.35;
+  }
 }
 /* A title opened from a card (pageMotion.ts `card`), and back into it: the motion itself is lib/ui/cardMotion.ts,
    Netflix's measured from its app, played from the commit with the Web Animations API. These are the pieces it

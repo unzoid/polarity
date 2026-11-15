@@ -18,6 +18,9 @@ import { type Detent, ease, mediumOffset, missMargin, prefersReducedMotion, proj
  *   the screen, its header pulls it up to nearly all of it or down to close, scrolling the list expands it, and
  *   the grabber toggles between the two.
  */
+/** Each time a full sheet has the pages step back: a close that lands after the next open leaves them be. */
+let stepsBack = 0;
+
 export function Sheet({
   open,
   onClose,
@@ -47,7 +50,8 @@ export function Sheet({
   const drag = useDragControls();
   const bottom = useFormFactor().form === "phone";
   const detents = bottom && os === "ios" && !full;
-  const spring = bottom ? springs.bottomSheet : springs.sheet;
+  const back = bottom && full;
+  const spring = back ? springs.profileSheet : bottom ? springs.bottomSheet : springs.sheet;
   const x = useMotionValue(0);
   // A sheet with detents starts below the screen, and a closed one ends there, so it never shows a frame at the top.
   const y = useMotionValue(detents ? window.innerHeight : 0);
@@ -59,6 +63,23 @@ export function Sheet({
   const fade = prefersReducedMotion() ? 0 : 1;
 
   useLayer(panel, open, onClose, { modal });
+
+  // A phone's full sheet (the profile sheet) has the pages and the top bar step back under it, smaller and rounded,
+  // as Netflix's does, on the sheet's own spring. They're left as they were once back: a scale left on them would
+  // hold anything fixed inside them in their box.
+  useLayoutEffect(() => {
+    const main = back && open && !prefersReducedMotion() ? document.querySelector<HTMLElement>(".main") : null;
+    if (!main) return;
+    const step = ++stepsBack;
+    void animate(main, { scale: 0.92, borderRadius: "18px" }, spring);
+    return () => {
+      void animate(main, { scale: 1, borderRadius: "0px" }, spring).then(() => {
+        if (step !== stepsBack) return; // opened again meanwhile
+        main.style.removeProperty("transform");
+        main.style.removeProperty("border-radius");
+      });
+    };
+  }, [back, open, spring]);
 
   /** The kind of pointer that pressed on the dim: a finger gets a wider margin than a mouse. */
   const pointer = useRef("mouse");
@@ -108,6 +129,7 @@ export function Sheet({
             <motion.div
               className="sheet-scrim"
               data-edge={bottom ? "bottom" : "right"}
+              data-full={back ? "" : undefined}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

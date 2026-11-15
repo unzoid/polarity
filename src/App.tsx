@@ -342,21 +342,28 @@ function startRoute(page: SettingsT["startPage"] | undefined): Route {
 }
 
 function DesktopApp() {
-  const { stack, current, back, tab } = useRouter();
+  const { stack, kept, current, back, tab } = useRouter();
   const { playing, player, leaving } = usePlayerLayer(current);
   // The page under the player stays mounted so leaving playback is instant.
   const pages = stack.filter((e) => e.route.name !== "player");
   const topPage = pages[pages.length - 1];
   const { data: settings } = useSettings();
   usePageFocus(playing || !topPage ? undefined : String(topPage.key));
+  const phone = useFormFactor().form === "phone";
   // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
-  const motion = usePageMotion(pages, useFormFactor().form === "phone" && !playing);
-  const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
-  // A title's page out of its card or back into it plays from the commit itself (lib/ui/cardMotion.ts): the tap is
-  // answered in the next frame, whatever the new page still has to render or load.
+  const motion = usePageMotion(pages, phone && !playing);
+  // On a phone each section's page stays mounted when another is opened (router `kept`), as a phone app's tabs do:
+  // switching back is that page as it was, drawn already, so the switch is only the crossfade. In key order, so a
+  // page never moves among the others (moving it would reset its scroll); which is drawn over which is shell.css's.
+  const all = new Map<number, Entry>();
+  for (const e of [...(phone ? kept : []), ...pages, ...(motion?.leaving ? [motion.leaving] : [])]) all.set(e.key, e);
+  const shown = [...all.values()].sort((a, b) => a.key - b.key);
+  // A title's page out of its card plays from the commit itself (lib/ui/cardMotion.ts): the tap is answered in the
+  // next frame, whatever the new page still has to render or load. Back waits for the pair's first frame (`go`): the
+  // page coming back is drawn then, under the title's, so painting it doesn't eat the motion's first frames.
   const main = useRef<HTMLElement>(null);
-  const cardKey = motion?.card ? (motion.dir === 1 ? motion.enter : motion.leave) : undefined;
-  const card = motion?.card;
+  const card = motion?.card && (motion.dir === 1 || motion.go) ? motion.card : undefined;
+  const cardKey = card && motion ? (motion.dir === 1 ? motion.enter : motion.leave) : undefined;
   useLayoutEffect(() => {
     if (cardKey === undefined || !card) return;
     const page = main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${cardKey}"]`);
@@ -477,6 +484,9 @@ function DesktopApp() {
           <UpdateToast hidden={!!playing} />
         </ErrorBoundary>
       </main>
+      {/* The profile sheet's place (ProfileMenu.tsx): beside the pages and the top bar, not in them, so they can step
+          back under it (Sheet.tsx) without taking it with them; in the top bar's layer, under the notices. */}
+      <div className="sheet-host" />
       <ErrorBoundary where="what's new" quiet>
         <WhatsNewSheet />
       </ErrorBoundary>
@@ -508,8 +518,8 @@ function CardGhost({ src }: { src: string }) {
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const { panel, soft, sharp } = cardGhostParts(src);
-    el.replaceChildren(panel, soft, sharp);
+    const { panel, soft, medium, sharp } = cardGhostParts(src);
+    el.replaceChildren(panel, soft, medium, sharp);
   }, [src]);
   return <div ref={box} className="card-ghost" aria-hidden />;
 }

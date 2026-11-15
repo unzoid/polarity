@@ -80,14 +80,10 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
     box.className = "card-ghost";
     box.dataset.dragGhost = "";
     box.setAttribute("aria-hidden", "true");
-    const { panel, soft, sharp } = cardGhostParts(src);
-    box.append(panel, soft, sharp);
+    const parts = cardGhostParts(src);
+    box.append(parts.panel, parts.soft, parts.medium, parts.sharp);
     const opts: KeyframeAnimationOptions = { duration: ms, fill: "forwards" };
-    running.push(
-      panel.animate(ghostCloseFades.panel, opts),
-      soft.animate(ghostCloseFades.soft, opts),
-      sharp.animate(ghostCloseFades.sharp, opts),
-    );
+    for (const name of ["panel", "soft", "medium", "sharp"] as const) running.push(parts[name].animate(ghostCloseFades[name], opts));
     top.append(box);
   };
 
@@ -99,6 +95,7 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
       const sx = card.w / p.width;
       const sy = card.h / p.height;
       const to = `translate(${card.x}px, ${card.y}px) scale(${sx}, ${sy})`;
+      // It ends exactly on the card, its picture sharp, so the card takes its place with nothing faded over it.
       running.push(
         p.top.animate(
           [
@@ -107,7 +104,6 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
           ],
           { duration: CARD_BACK_MS, easing: CARD_EASE, fill: "forwards" },
         ),
-        p.top.animate(ghostCloseFades.page, { duration: CARD_BACK_MS, fill: "forwards" }),
       );
       // The page under brightens the rest of the way (shell.css fades its dim while settling).
       p.under.dataset.dragSettle = "";

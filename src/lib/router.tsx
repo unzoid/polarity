@@ -42,6 +42,11 @@ export interface Entry {
 
 interface Router {
   stack: Entry[];
+  /**
+   * The page each section last showed at its root, the current one's included: a section switched back to opens
+   * that same page (its key), scrolled where it was, as a phone app's tabs do. App.tsx keeps them mounted on a phone.
+   */
+  kept: Entry[];
   current: Route;
   navigate: (route: Route) => void;
   /** Switch top-level tab: resets the stack. */
@@ -64,24 +69,28 @@ let nextKey = 100;
  * no refetch, no re-layout, no lost place in a long grid.
  */
 export function RouterProvider({ children, initial }: { children: ReactNode; initial?: Route[] }) {
-  const [stack, setStack] = useState<Entry[]>(() =>
-    (initial ?? [{ name: "home" }]).map((route, key) => ({ key, route })),
-  );
+  const [{ stack, kept }, setState] = useState<RouterState>(() => {
+    const stack = (initial ?? [{ name: "home" }]).map((route, key) => ({ key, route }));
+    return { stack, kept: [stack[0]] };
+  });
+  const setStack = useCallback((change: (stack: Entry[]) => Entry[]) => setState((s) => withStack(s, change(s.stack))), []);
 
   const navigate = useCallback((route: Route) => {
     setStack((s) => pushed(s, route, () => nextKey++));
-  }, []);
+  }, [setStack]);
   const tab = useCallback((route: TabRoute) => {
-    setStack((s) =>
-      s.length === 1 && sameRoute(s[0].route, route) ? s : [{ key: nextKey++, route }],
-    );
+    setState((s) => {
+      if (s.stack.length === 1 && sameRoute(s.stack[0].route, route)) return s;
+      // The section's own page again, where it was left (its pushed pages go); a section opened otherwise is new.
+      return withStack(s, [s.kept.find((e) => sameRoute(e.route, route)) ?? { key: nextKey++, route }]);
+    });
   }, []);
   const replace = useCallback((route: Route) => {
     setStack((s) => [...s.slice(0, -1), { key: nextKey++, route }]);
-  }, []);
+  }, [setStack]);
   const back = useCallback(() => {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
-  }, []);
+  }, [setStack]);
 
   // Mouse "back" button, like every native app.
   useEffect(() => {
@@ -96,8 +105,8 @@ export function RouterProvider({ children, initial }: { children: ReactNode; ini
   }, [back]);
 
   const value = useMemo(
-    () => ({ stack, current: stack[stack.length - 1].route, navigate, tab, replace, back }),
-    [stack, navigate, tab, replace, back],
+    () => ({ stack, kept, current: stack[stack.length - 1].route, navigate, tab, replace, back }),
+    [stack, kept, navigate, tab, replace, back],
   );
   const actions = useMemo(() => ({ navigate, tab, replace, back }), [navigate, tab, replace, back]);
   return (
@@ -138,6 +147,19 @@ export function pushed(stack: Entry[], route: Route, key: () => number): Entry[]
   add.push(route);
   const next = [...stack, ...add.map((r) => ({ key: key(), route: r }))];
   return next.length > MAX_DEPTH ? [next[0], ...next.slice(-(MAX_DEPTH - 1))] : next;
+}
+
+type RouterState = { stack: Entry[]; kept: Entry[] };
+
+/** Which section a root page is (navTabs.ts tabId, for any route): one page kept for each. */
+const sectionOf = (r: Route) => (r.name === "discover" ? `discover:${r.type}` : r.name);
+
+/** `state` with `stack`, its root kept as its section's page. */
+export function withStack(state: RouterState, stack: Entry[]): RouterState {
+  if (stack === state.stack) return state;
+  const root = stack[0];
+  if (state.kept.includes(root)) return { ...state, stack };
+  return { stack, kept: [...state.kept.filter((e) => sectionOf(e.route) !== sectionOf(root.route)), root] };
 }
 
 function sameRoute(a: Route, b: Route) {

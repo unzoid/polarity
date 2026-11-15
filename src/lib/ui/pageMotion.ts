@@ -5,10 +5,10 @@ import { prefersReducedMotion } from "./reducedMotion";
 
 /**
  * How long a change's pages keep their motion, and a couple of frames to spare: another section's crossfade
- * (shell.css --page-fade), a page pushed or taken off (--page-in), a title's page out of its card and back into it
- * (cardMotion.ts, which starts two frames before this clock does).
+ * (shell.css --page-fade), a page pushed or taken off (--page-in), a title's page out of its card (cardMotion.ts,
+ * which starts two frames before this clock does) and back into it (which starts with it).
  */
-const SETTLE = { fade: 200, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS };
+const SETTLE = { fade: 220, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS + 40 };
 
 function settleOf(m: PageMotion) {
   if (m.card) return m.dir === 1 ? SETTLE.cardOpen : SETTLE.cardClose;
