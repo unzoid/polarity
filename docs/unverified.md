@@ -1896,3 +1896,13 @@ refused) ran on Windows. Never run in the app or on a device:
   back). Without a card the row isn't shown.
 - iOS: no folder row. The downloads folder (`Library/Application Support/<app>/downloads`) holds the list,
   the files and their `.part` files, and is excluded from backups at every start (`ios/files.m`).
+## Export library and history
+
+The export's content and the import were checked by tests (`crates/library/src/export.rs`,
+`tests/polarityExport.test.ts`, `tests/dom/polarityExport.test.tsx`); `library_export` was only type-checked.
+Never run in the app: the save dialog, the file written where it points, the CSV opened in a spreadsheet
+(UTF-8 without a byte-order mark: some spreadsheets may want one for accented titles), and the import's
+file picker on a phone. Phones have no export: the share sheet takes only text and a link today.
+To check on a desktop: Settings → Account → Export library and history → Export… for each format, save,
+open both files; then in another profile Import a Polarity export with the JSON and compare Library,
+Watched and Playlists.

@@ -20,6 +20,7 @@ export * from "./libraryView";
 export * from "./playlistChecklist";
 export * from "./playlistCodec";
 export * from "./playlists";
+export * from "./polarityExport";
 export * from "./stremioImport";
 export * from "./titleActions";
 export * from "./titleFacts";

@@ -39,6 +39,7 @@ describe("settings schema", () => {
       "src/components/ShortcutSettings.tsx",
       "src/components/settings/StremioImport.tsx",
       "src/components/settings/LetterboxdImport.tsx",
+      "src/components/settings/PolarityExport.tsx",
       "src/components/settings/CopySetup.tsx",
       "src/components/settings/HiddenTitlesCard.tsx",
       "src/components/settings/ThemePicker.tsx",

@@ -13,6 +13,7 @@ mod external_player;
 mod imdb;
 mod introdb;
 mod keychain;
+mod library_export;
 mod local_files;
 mod locks;
 mod logging;
@@ -319,6 +320,8 @@ pub fn run() {
             commands::progress_save,
             commands::progress_save_many,
             commands::library_import,
+            library_export::library_export,
+            library_export::anime_links_import,
             commands::continue_watching,
             commands::watch_history,
             commands::link_anime,
