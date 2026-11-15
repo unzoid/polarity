@@ -152,6 +152,7 @@ fn field_names_match_contract() {
         release_info: None,
         imdb_rating: None,
         genres: vec![],
+        certification: None,
     };
     add(
         "PersonPage",
