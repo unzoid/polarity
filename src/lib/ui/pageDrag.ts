@@ -1,4 +1,5 @@
 import type { BackDrag } from "../platform/back";
+import { cardGhostParts } from "./cardGhost";
 import { skipNextPageMotion, type CardRect } from "./pageMotion";
 
 /** How far left the page under starts, as a share of the width, the way iOS's comes in. */
@@ -10,9 +11,9 @@ export const DRAG_SETTLE_MS = 280;
 const CARD_SHRINK = 0.3;
 const CARD_FOLLOW = 0.5;
 const CARD_CORNER = 28;
-/** Let go: back into the card, on the card motion's clock and curve (shell.css `--card-close`, `--card-ease`). */
-const CARD_BACK_MS = 540;
-const CARD_EASE = "cubic-bezier(0.3, 0.8, 0.2, 1)";
+/** Let go: back into the card, on Back's clock and curve (shell.css `--card-close`, `--card-ease-close`). */
+const CARD_BACK_MS = 300;
+const CARD_EASE = "cubic-bezier(0.25, 0.8, 0.25, 1)";
 
 /** `card`: the card the top page grew out of (pageMotion.ts cardOrigin): the swipe takes it back there. */
 export type DragPages = { top: HTMLElement; under: HTMLElement; card?: CardRect };
@@ -78,19 +79,13 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
     box.className = "card-ghost";
     box.dataset.dragGhost = "";
     box.setAttribute("aria-hidden", "true");
-    for (const kind of ["soft", "sharp"]) {
-      const img = document.createElement("img");
-      img.className = `card-ghost-${kind}`;
-      img.src = src;
-      img.alt = "";
-      box.append(img);
-      running.push(img.animate(
-        kind === "soft"
-          ? [{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 1 }]
-          : [{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1, offset: 0.75 }, { opacity: 1 }],
-        { duration: ms, fill: "forwards" },
-      ));
-    }
+    const { soft, sharp } = cardGhostParts(src);
+    box.append(soft, sharp);
+    // As shell.css's card-ghost-soft-close and card-ghost-sharp-close.
+    running.push(
+      soft.animate([{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1 }], { duration: ms, fill: "forwards" }),
+      sharp.animate([{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1, offset: 0.8 }, { opacity: 1 }], { duration: ms, fill: "forwards" }),
+    );
     top.append(box);
   };
 
@@ -110,7 +105,7 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
           ],
           { duration: CARD_BACK_MS, easing: CARD_EASE, fill: "forwards" },
         ),
-        p.top.animate([{ opacity: 1 }, { opacity: 1, offset: 0.78 }, { opacity: 0 }], { duration: CARD_BACK_MS, fill: "forwards" }),
+        p.top.animate([{ opacity: 1 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: CARD_BACK_MS, fill: "forwards" }),
       );
       // The page under brightens the rest of the way (shell.css fades its dim while settling).
       p.under.dataset.dragSettle = "";

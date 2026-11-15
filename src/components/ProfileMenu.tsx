@@ -1,4 +1,5 @@
-import { Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { api } from "../lib/api";
 import { appVersion } from "../lib/updater";
@@ -355,6 +356,12 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
     list(!!c.stay);
     c.run();
   };
+  // The sheet sits on the top bar itself, not among its actions: scrolled, the actions are scaled (shell.css), and a
+  // transformed box would hold the sheet's fixed layers inside it, a small square in the corner. The bar keeps it
+  // in the bar's layer, under the notices, as before.
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [bar, setBar] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => setBar(trigger.current?.closest<HTMLElement>(".navbar") ?? document.body), []);
   const title =
     view === "list" ? (
       "Profiles"
@@ -373,9 +380,10 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
     );
   return (
     <>
-      <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => list(true)}>
+      <button ref={trigger} type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => list(true)}>
         <Avatar id={avatar} />
       </button>
+      {bar && createPortal(
       <Sheet open={open} onClose={shut} title={title} full>
         <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
           {view === "friends" && <FriendsBody inDialog={false} />}
@@ -408,7 +416,9 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
             />
           )}
         </div>
-      </Sheet>
+      </Sheet>,
+      bar,
+      )}
     </>
   );
 }

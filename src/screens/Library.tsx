@@ -112,9 +112,8 @@ function Overview({ onOpen }: { onOpen: (o: Open) => void }) {
 
   return (
     <>
-      <header className="screen-header">
-        <h1 className="t-title1">Library</h1>
-      </header>
+      {/* The tab bar already says where this is: the heading is for screen readers only, as Discover's is. */}
+      <h1 className="library-title">Library</h1>
       <DownloadsPanel downloads={dl} onOpen={() => onOpen({ view: "downloads" })} />
 
       {nothing && <EmptyState>Titles you save, download, watch or put in a playlist gather here.</EmptyState>}
@@ -173,7 +172,7 @@ function DownloadsPanel({ downloads, onOpen }: { downloads: DownloadRecord[]; on
     <section className="library-panel">
       <button className="library-panel-head" onClick={onOpen}>
         <span className="library-panel-icon">
-          <Download size={20} />
+          <Download size={24} />
         </span>
         <span className="library-panel-text">
           <span className="library-panel-title">Downloads</span>

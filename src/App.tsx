@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { MotionConfig } from "motion/react";
 import { actionFor, getPrefs, isSettingsOpen, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
 import type { Settings as SettingsT } from "./lib/types";
@@ -31,6 +31,7 @@ import {
   usePageFocus,
   usePageMotion,
   usePresence,
+  cardGhostParts,
   cardMotionVars,
   cardOrigin,
   watchCardTaps,
@@ -397,8 +398,8 @@ function DesktopApp() {
   return (
     <div
       className="app"
-      data-card-titles={settings?.showCardTitles ?? true}
-      data-card-details={settings?.showCardDetails ?? true}
+      data-card-titles={settings?.showCardTitles ?? false}
+      data-card-details={settings?.showCardDetails ?? false}
       data-card-ratings={settings?.showCardRatings ?? false}
       data-rating-position={settings?.cardRatingPosition ?? "poster"}
       data-rating-colors={settings?.ratingColors ?? false}
@@ -420,6 +421,11 @@ function DesktopApp() {
             data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
             // The pair moves once the new page is laid out (pageMotion.ts `go`).
             data-go={motion?.go || undefined}
+            // Of the pair, the one drawn on top: the page pushed, or the one going (it comes last). It moves; the
+            // other holds still under it (shell.css).
+            data-over={(motion && entry.key === (motion.leaving ? motion.leave : motion.enter)) || undefined}
+            // Another section, or a page replaced: a quick crossfade in place.
+            data-fade={(motion && !motion.card && motion.dir === 0) || undefined}
             style={
               motion
                 ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
@@ -435,10 +441,7 @@ function DesktopApp() {
             {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
                 the same box, so they move as one piece (shell.css). */}
             {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
-              <div className="card-ghost" aria-hidden>
-                <img className="card-ghost-soft" src={motion.card.src} alt="" draggable={false} />
-                <img className="card-ghost-sharp" src={motion.card.src} alt="" draggable={false} />
-              </div>
+              <CardGhost src={motion.card.src} />
             )}
           </section>
         ))}
@@ -474,6 +477,18 @@ function DesktopApp() {
       </ErrorBoundary>
     </div>
   );
+}
+
+/** The card's picture on a title's page while it grows out of the card or goes back into it (lib/ui/cardGhost.ts). */
+function CardGhost({ src }: { src: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const { soft, sharp } = cardGhostParts(src);
+    el.replaceChildren(soft, sharp);
+  }, [src]);
+  return <div ref={box} className="card-ghost" aria-hidden />;
 }
 
 /** The Settings window, loaded the first time it opens, then kept (it animates its own closing). */

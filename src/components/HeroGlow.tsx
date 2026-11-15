@@ -1,9 +1,12 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { glowColor, type Rgb } from "../lib/ui";
+import { usePageOnTop } from "./BackdropTrailer";
 import { loadReadable, pixelsOf } from "./TitleLogo";
 
 /** Each picture's colour, measured once: null when it can't be read. */
 const colours = new Map<string, Promise<Rgb | null>>();
+/** Glows showing on the page on top (Home's and the Anime tab's can both be mounted). */
+let lighting = 0;
 
 /** Pixels across the part measured: plenty for a colour. */
 const SAMPLE_W = 24;
@@ -41,6 +44,18 @@ function measure(src: string, area: GlowArea): Promise<Rgb | null> {
  */
 export function HeroGlow({ src, next, area = "whole" }: { src?: string; next?: string; area?: GlowArea }) {
   const [colour, setColour] = useState<Rgb | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const onTop = usePageOnTop(ref);
+  // While it shows on the page on top, the top bar leaves its dark shade off (shell.css): it would dim the glow.
+  const lit = !!colour && onTop;
+  useEffect(() => {
+    if (!lit) return;
+    lighting++;
+    document.documentElement.dataset.heroGlow = "";
+    return () => {
+      if (--lighting === 0) delete document.documentElement.dataset.heroGlow;
+    };
+  }, [lit]);
   useEffect(() => {
     if (!src) return;
     let live = true;
@@ -50,5 +65,5 @@ export function HeroGlow({ src, next, area = "whole" }: { src?: string; next?: s
       live = false;
     };
   }, [src, next, area]);
-  return <div className="hero-glow" aria-hidden data-shown={!!colour} style={colour ? ({ "--glow": `rgb(${colour.join(" ")})` } as CSSProperties) : undefined} />;
+  return <div ref={ref} className="hero-glow" aria-hidden data-shown={!!colour} style={colour ? ({ "--glow": `rgb(${colour.join(" ")})` } as CSSProperties) : undefined} />;
 }

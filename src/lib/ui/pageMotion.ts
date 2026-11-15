@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import type { Entry, TabRoute } from "../router";
-import { tabId } from "../navTabs";
+import type { Entry } from "../router";
 import { prefersReducedMotion } from "./reducedMotion";
 
-/** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
-const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
+/**
+ * How long a change's pages keep their motion (shell.css's clocks), and a couple of frames to spare: another
+ * section's crossfade (--page-fade), a page pushed or taken off (--page-in), a title's page out of its card
+ * (--card-open) and back into it (--card-close).
+ */
+const SETTLE = { fade: 200, push: 340, cardOpen: 540, cardClose: 340 };
 
-/** How long a change's pages keep their motion: the entrance (shell.css), and a frame to spare. */
-const SETTLE = 460;
-/** The same for a title's page growing out of its card (shell.css: 620ms out, 540ms back), which takes longer. */
-const SETTLE_CARD = 660;
+function settleOf(m: PageMotion) {
+  if (m.card) return m.dir === 1 ? SETTLE.cardOpen : SETTLE.cardClose;
+  return m.dir === 0 ? SETTLE.fade : SETTLE.push;
+}
 
 /** A card's place on the screen, in CSS pixels, and the picture on it. */
 export type CardRect = { x: number; y: number; w: number; h: number; src?: string };
@@ -93,42 +96,46 @@ export function skipNextPageMotion() {
   skipNext = true;
 }
 
-type Seen = { top?: Entry; keys: number[]; root?: TabRoute; motion?: PageMotion };
+type Seen = { top?: Entry; keys: number[]; motion?: PageMotion };
 
 /**
- * Pages on a phone move as a pair, so a change reads as one gesture: the new page fades in from one side while the
- * old one fades out towards the other. Forward is from the right: a title opened, or a section further along the
- * tab bar; back is from the left. The pair moves together; nothing waits for the other.
+ * Pages on a phone change as whole screens, so a change reads as one gesture. Whichever page is on top (the new
+ * one pushed, or the old one going) is opaque and moves; the one under it holds still. A page pushed comes in from
+ * the right and goes back out to it; another section crossfades in place, quickly, as Netflix's tabs do.
  */
 export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | undefined {
   const top = pages[pages.length - 1];
-  const [seen, setSeen] = useState<Seen>(() => ({ top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined }));
+  const [seen, setSeen] = useState<Seen>(() => ({ top, keys: pages.map((e) => e.key) }));
   let now = seen;
   if (top?.key !== seen.top?.key) {
-    now = { top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined };
+    now = { top, keys: pages.map((e) => e.key) };
     const skip = skipNext;
     skipNext = false;
     if (enabled && top && seen.top && !skip) now.motion = motionOf(seen, seen.top, top, pages);
     setSeen(now); // during render: this render already draws the change with its motion
   }
 
-  // The pair moves on the next frame, once the new page is laid out: the change answers the tap at once. What the
-  // new page is still loading comes in together afterwards, behind its placeholders (together.ts, Detail.tsx).
+  // The pair moves once a frame with both pages in it has been drawn (the one coming back under the one going is
+  // drawn already, covered; shell.css): painting a whole page, Home's rows coming back from being skipped, is then
+  // done before the motion's clock starts, not in its first frame, where it read as a jump. Two frames, because a
+  // state change made in the first one's callback can land in that same frame. What the new page is still loading
+  // comes in together afterwards, behind its placeholders (together.ts, Detail.tsx).
   const [gone, setGone] = useState<Seen>();
   useEffect(() => {
     const motion = seen.motion;
     if (!motion) return;
     let live = true;
     let timer = 0;
+    let frame = 0;
     const start = () => {
       if (!live) return;
       setGone(seen);
-      timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), motion.card ? SETTLE_CARD : SETTLE);
+      timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), settleOf(motion));
     };
-    const frames = requestAnimationFrame(start);
+    frame = requestAnimationFrame(() => (frame = requestAnimationFrame(start)));
     return () => {
       live = false;
-      cancelAnimationFrame(frames);
+      cancelAnimationFrame(frame);
       window.clearTimeout(timer);
     };
   }, [seen]);
@@ -148,9 +155,6 @@ function motionOf(seen: Seen, prev: Entry, top: Entry, pages: Entry[]): PageMoti
   // Back: the page now on top was under the one that's gone.
   if (seen.keys.includes(top.key))
     return { ...base, dir: -1, leaving: prev, card: prefersReducedMotion() ? undefined : origins.get(prev.key) };
-  // Another section: towards it along the tab bar. Replaced in place: a crossfade.
-  const from = seen.root ? ORDER.indexOf(tabId(seen.root)) : -1;
-  const to = ORDER.indexOf(tabId(pages[0].route as TabRoute));
-  const dir = pages.length > 1 || from < 0 || to < 0 || from === to ? 0 : to > from ? 1 : -1;
-  return { ...base, dir, leaving: prev };
+  // Another section, or a page replaced in place: a crossfade.
+  return { ...base, dir: 0, leaving: prev };
 }

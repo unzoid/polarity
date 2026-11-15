@@ -911,7 +911,7 @@ export const SETTINGS: SettingDef[] = [
     bind: p("saveRecentSearches"),
     control: toggle,
   },
-  { id: "showCardTitles", page: "browsing", title: "Show titles", keywords: "cards names", bind: s("showCardTitles", true), control: toggle },
+  { id: "showCardTitles", page: "browsing", title: "Show titles", keywords: "cards names", bind: s("showCardTitles", false), control: toggle },
   { id: "showCardDetails", page: "browsing", title: "Show details", keywords: "cards year" },
   {
     id: "showCardRatings",

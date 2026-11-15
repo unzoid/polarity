@@ -120,6 +120,26 @@
 .hero-glow[data-shown="true"] {
   opacity: 1;
 }
+/* A phone, as Netflix's: the colour is lit from the top right corner, behind the header's actions, where it's
+   brightest (a touch lighter than the shade itself), and falls away across and down from there; a weaker even
+   shade under it keeps the top left in the same colour. */
+:root[data-form="phone"] .hero-glow {
+  background:
+    radial-gradient(
+      130% 75% at 100% 0%,
+      color-mix(in oklab, var(--glow), white 14%) 0%,
+      color-mix(in srgb, var(--glow) 70%, transparent) 30%,
+      color-mix(in srgb, var(--glow) 30%, transparent) 58%,
+      transparent 85%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--glow) 60%, transparent) 0%,
+      color-mix(in srgb, var(--glow) 28%, transparent) 30%,
+      color-mix(in srgb, var(--glow) 10%, transparent) 60%,
+      transparent 85%
+    );
+}
 /* Light: the dark shade made a pale pastel of the art's colour instead. */
 :root[data-scheme="light"] .hero-glow[data-shown="true"] {
   filter: saturate(1.7) brightness(2.6);
