@@ -22,7 +22,7 @@ function settleOf(m: PageMotion) {
 }
 
 /** A card's place on the screen, in CSS pixels, and the picture on it. */
-export type CardRect = { x: number; y: number; w: number; h: number; src?: string };
+export type CardRect = { x: number; y: number; w: number; h: number; src?: string; el?: Element };
 
 /**
  * A page change on a phone, for shell.css to play: `enter` is the page coming in, `leave` the one going, `dir`
@@ -66,7 +66,17 @@ export function cardAt(target: Element | null): CardRect | undefined {
   if (!r || r.width <= 0) return undefined;
   const img = banner ? banner.querySelector<HTMLImageElement>('.hero-backdrop[data-current="true"]') : frame?.querySelector("img");
   const src = img?.complete && img.naturalWidth > 0 ? img.currentSrc || img.src : undefined;
-  return { x: r.left, y: r.top, w: r.width, h: r.height, src };
+  return { x: r.left, y: r.top, w: r.width, h: r.height, src, el: frame ?? undefined };
+}
+
+/**
+ * Where `card` is now: the page under a title's can sit a few pixels from where it was when the card was tapped
+ * (its rows laid out again as it comes back), and Back landing on the old place left the card to jump to the new
+ * one at the end. Its place as it was when the card's no longer there.
+ */
+export function liveCard(card: CardRect): CardRect {
+  const r = card.el?.isConnected ? card.el.getBoundingClientRect() : undefined;
+  return r && r.width > 0 ? { ...card, x: r.left, y: r.top, w: r.width, h: r.height } : card;
 }
 
 /** Notes the card a click lands on (`cardAt`), for the page it opens to grow out of. */

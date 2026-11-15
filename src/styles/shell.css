@@ -118,12 +118,45 @@
 }
 /* Until the turn starts (`data-go`), the page coming in waits in place under the one going, covered, drawn already:
    then the strip moves, nothing left to paint. */
+/* And they crossfade as they cross, as Netflix's tabs do: the old page gone by half way, the new one in by two
+   thirds. The top bar turns with them: the real one comes in with the new page, and a copy of it as it was rides
+   out on the old one (App.tsx). */
+:root[data-form="phone"] {
+  --turn-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --turn-fade-out: 190ms;
+  --turn-fade-in: 250ms;
+}
 :root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
-  animation: page-turn-in var(--page-tab) cubic-bezier(0.32, 0.72, 0, 1) both;
-  will-change: transform;
+  animation:
+    page-turn-in var(--page-tab) var(--turn-ease) both,
+    page-fade-in var(--turn-fade-in) linear both;
+  will-change: transform, opacity;
 }
 :root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
-  animation: page-turn-out var(--page-tab) cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  animation:
+    page-turn-out var(--page-tab) var(--turn-ease) forwards,
+    page-fade-out var(--turn-fade-out) linear forwards;
+}
+:root[data-form="phone"] .main[data-turn] > .navbar :is(.navbar-fade, .navbar-back, .navbar-brand, .navbar-title, .navbar-actions) {
+  animation:
+    navbar-turn-in var(--page-tab) var(--turn-ease) both,
+    page-fade-in var(--turn-fade-in) linear both;
+}
+:root[data-form="phone"] .main[data-turn] > .navbar::before {
+  animation: page-fade-in var(--turn-fade-in) linear both;
+}
+/* `translate`, not `transform`: the wordmark and actions keep their own scale (scrolled) as they move. */
+@keyframes navbar-turn-in {
+  from {
+    translate: calc(var(--turn-dir) * 100vw) 0;
+  }
+}
+/* The copy of the top bar on the page going: drawn only, at that page's top. */
+.navbar-copy {
+  pointer-events: none;
+}
+.navbar-copy .navbar-links {
+  display: none;
 }
 @keyframes page-turn-in {
   from {
@@ -265,10 +298,13 @@
     --page-shift: 0px;
   }
   :root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
-    animation-name: page-fade-in;
+    animation-name: none, page-fade-in;
   }
   :root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
-    animation-name: page-fade-out;
+    animation-name: none, page-fade-out;
+  }
+  :root[data-form="phone"] .main[data-turn] > .navbar :is(.navbar-fade, .navbar-back, .navbar-brand, .navbar-title, .navbar-actions) {
+    animation-name: none, page-fade-in;
   }
 }
 

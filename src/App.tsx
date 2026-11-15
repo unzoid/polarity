@@ -34,6 +34,7 @@ import {
   cardGhostParts,
   cardMotionVars,
   playCardMotion,
+  liveCard,
   cardOrigin,
   watchCardTaps,
   useSystemBack,
@@ -371,8 +372,33 @@ function DesktopApp() {
     const page = main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${cardKey}"]`);
     if (!page) return;
     const scrim = main.current?.querySelector<HTMLElement>(":scope > .card-scrim") ?? null;
-    return playCardMotion({ page, scrim, card, open: page.dataset.card === "open", width: window.innerWidth, height: window.innerHeight });
+    const open = page.dataset.card === "open";
+    // Back lands where the card is now, not where it was tapped (pageMotion.ts liveCard).
+    return playCardMotion({ page, scrim, card: open ? card : liveCard(card), open, width: window.innerWidth, height: window.innerHeight });
   }, [cardKey, card]);
+  // A section's turn takes the top bar with the pages (shell.css): the real bar comes in with the new page, and a
+  // copy of it as it was rides out on the old one. Copied here, while this render's change hasn't reached the
+  // screen, so it's the old page's bar (its title, scrolled or not).
+  const turn = motion?.tab ? motion : undefined;
+  const barCopy = useRef<{ key: number; node: HTMLElement } | null>(null);
+  if (turn && barCopy.current?.key !== turn.leave) {
+    const node = main.current?.querySelector(":scope > .navbar")?.cloneNode(true);
+    barCopy.current = node instanceof HTMLElement ? { key: turn.leave, node } : null;
+  }
+  useLayoutEffect(() => {
+    const copy = barCopy.current;
+    const page = turn && copy?.key === turn.leave ? main.current?.querySelector(`:scope > .page[data-page-key="${turn.leave}"]`) : null;
+    if (!copy || !page) return;
+    copy.node.classList.add("navbar-copy");
+    copy.node.setAttribute("aria-hidden", "true");
+    copy.node.inert = true;
+    copy.node.querySelectorAll("[id]").forEach((e) => e.removeAttribute("id"));
+    page.append(copy.node);
+    return () => {
+      copy.node.remove();
+      barCopy.current = null;
+    };
+  }, [turn?.leave, turn?.enter]); // eslint-disable-line react-hooks/exhaustive-deps
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
   useEffect(watchCardTaps, []);
@@ -437,7 +463,13 @@ function DesktopApp() {
       data-rating-colors={settings?.ratingColors ?? false}
       data-player-leaving={leaving}
     >
-      <main className="main" ref={main}>
+      <main
+        className="main"
+        ref={main}
+        // A section's turn: the top bar comes in with the new page, from its side (shell.css).
+        data-turn={(turn?.go && turn.dir) || undefined}
+        style={turn ? ({ "--turn-dir": turn.dir } as CSSProperties) : undefined}
+      >
         <ErrorBoundary where="top bar">
           <NavBar />
         </ErrorBoundary>

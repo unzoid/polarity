@@ -90,7 +90,9 @@
   width: auto;
   max-height: calc(100dvh - var(--safe-top) - 2.5rem);
   border-radius: var(--r-panel) var(--r-panel) 0 0;
-  padding-bottom: var(--safe-bottom);
+  /* The screen's own bottom inset as it is, not the one held for the pages while a sheet covers them
+     (NativeTabs.tsx): that one still counts iOS's tab bar, hidden under the sheet, and cut its list short. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   touch-action: auto;
   /* Solid, like the phone's own sheets: the page behind is dimmed by the scrim, not seen through the sheet. */
   background: var(--surface-1);

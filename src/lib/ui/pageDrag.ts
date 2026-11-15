@@ -1,7 +1,7 @@
 import type { BackDrag } from "../platform/back";
 import { cardGhostParts } from "./cardGhost";
 import { CARD_CLOSE_EASE, CARD_CLOSE_MS, ghostCloseFades } from "./cardMotion";
-import { skipNextPageMotion, type CardRect } from "./pageMotion";
+import { liveCard, skipNextPageMotion, type CardRect } from "./pageMotion";
 
 /** How far left the page under starts, as a share of the width, the way iOS's comes in. */
 const UNDER_FROM = 0.3;
@@ -87,7 +87,9 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
     top.append(box);
   };
 
-  const settleCard = (p: DragPages & { width: number; height: number }, card: CardRect, goBack: boolean) => {
+  const settleCard = (p: DragPages & { width: number; height: number }, tapped: CardRect, goBack: boolean) => {
+    // Into the card where it is now (pageMotion.ts liveCard), the page under having been laid out again.
+    const card = liveCard(tapped);
     const from = p.top.style.transform;
     const fromRadius = p.top.style.borderRadius || "0px";
     if (typeof p.top.animate !== "function") return;
