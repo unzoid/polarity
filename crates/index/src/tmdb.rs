@@ -20,6 +20,8 @@ use tokio::sync::{Mutex, Semaphore};
 use crate::cache::TtlCache;
 use crate::{curate, IndexError, Result, PAGE_SIZE};
 
+pub(crate) mod orders;
+
 const API: &str = "https://api.themoviedb.org/3";
 const IMG: &str = "https://image.tmdb.org/t/p";
 /// Requests to TMDB in flight at once, across every shelf: Home opens about a

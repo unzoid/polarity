@@ -14,7 +14,10 @@
 mod cache;
 mod cinemeta;
 pub mod curate;
+mod episode_order;
 mod tmdb;
+
+pub use episode_order::{EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -90,6 +93,8 @@ pub struct Indexer {
     pools: TtlCache<String, Arc<OnceCell<Vec<MetaPreview>>>>,
     /// IMDb's episode numbering for TMDB series.
     numbering: cinemeta::Cinemeta,
+    /// Other episode orders (TMDB's episode groups), listed and mapped onto `metas`' episodes.
+    orders: episode_order::Cache,
 }
 
 impl Indexer {
@@ -104,6 +109,7 @@ impl Indexer {
             metas: TtlCache::new(Duration::from_secs(6 * 60 * 60), 2048),
             pools: TtlCache::new(Duration::from_secs(3 * 60 * 60), 64),
             numbering: cinemeta::Cinemeta::new(),
+            orders: episode_order::Cache::new(),
         }
     }
 

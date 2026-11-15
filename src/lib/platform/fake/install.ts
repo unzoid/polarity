@@ -76,6 +76,16 @@ const commands: Record<string, (a: Args) => unknown> = {
   },
   meta: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   // TMDB title N is the fixtures' Nth movie or show here (tt9100000 + N, tt9200000 + N); from 900000 on there's no IMDb id (#208).
+  // Every show has a made-up DVD order: discs of four, its specials left out (lib/library/episodeOrder.ts).
+  episode_orders: (a) => {
+    const n = fx.meta(String(a.id))?.videos.filter((v) => v.season > 0).length ?? 0;
+    return n ? [{ id: "aa01", name: "DVD Order", kind: "dvd", episodeCount: n, groupCount: Math.ceil(n / 4) }] : [];
+  },
+  episode_order: (a) => {
+    const ids = (fx.meta(String(a.id))?.videos ?? []).filter((v) => v.season > 0).map((v) => v.id);
+    const groups = Array.from({ length: Math.ceil(ids.length / 4) }, (_, i) => ({ name: `Disc ${i + 1}`, episodes: ids.slice(i * 4, i * 4 + 4) }));
+    return a.order === "aa01" ? { id: "aa01", name: "DVD Order", kind: "dvd", groups } : Promise.reject({ code: "not_found", message: "not found" });
+  },
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
   streams: () =>
     sourcesCase === "filtered" ? { streams: [], failed: [], hidden: 5 } : sourcesCase === "none" ? { streams: [], failed: [], asked: [] } : fx.streams(),

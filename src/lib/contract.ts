@@ -6,6 +6,7 @@
 import type { Download } from "./library/downloads";
 import type { CommandError } from "./errors";
 import type { AnimeLink } from "./library/identity";
+import type { EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo } from "./library/episodeOrder";
 import type {
   CacheInfo,
   CatalogExtra,
@@ -178,6 +179,9 @@ export const contract = {
   Imported: { library: true, progress: true } satisfies Keys<Imported>,
   CmdError: { code: true, message: true } satisfies Keys<CommandError>,
   Cue: { endMs: true, h: true, sheet: true, startMs: true, w: true, x: true, y: true } satisfies Keys<SeekCue>,
+  EpisodeOrder: { groups: true, id: true, kind: true, name: true } satisfies Keys<EpisodeOrder>,
+  EpisodeOrderGroup: { episodes: true, name: true } satisfies Keys<EpisodeOrderGroup>,
+  EpisodeOrderInfo: { description: true, episodeCount: true, groupCount: true, id: true, kind: true, name: true } satisfies Keys<EpisodeOrderInfo>,
   Download: {
     addedAt: true,
     background: true,

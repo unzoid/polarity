@@ -9,6 +9,7 @@ first (see `AGENTS.md`).
 | Source | Used for | Code | Key | Limits the app works within |
 |---|---|---|---|---|
 | TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos, age ratings (`release_dates`, `content_ratings` appended to the details requests already made; discover's `certification_country`/`certification.lte` for a profile's age limit) | `crates/index/src/tmdb.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
+| TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos, a show's other episode orders (episode groups: `/tv/{id}/episode_groups`, `/tv/episode_group/{id}`) | `crates/index/src/tmdb.rs`, `crates/index/src/tmdb/orders.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
 | Cinemeta | Catalog, search and metadata when there is no TMDB key; IMDb ids for anime ani.zip can't link | `crates/index/src/cinemeta.rs`, `src/lib/anime/search.ts` | None | None published |
 | metahub images | Posters, backgrounds, logos and episode stills for IMDb ids | `cinemeta.rs`, `src/lib/account/titleDisplay.ts`, `src/lib/anime/landscapeArt.ts` | None | None published |
 | IMDb GraphQL | Trailers as video files | `src-tauri/src/imdb.rs`, `trailers.rs` | None | Links expire after about a day |

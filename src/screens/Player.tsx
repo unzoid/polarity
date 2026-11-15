@@ -67,6 +67,7 @@ import {
   startPosition,
 } from "../lib/playback";
 import { downloadedStream, episodeState, isLocalFile, nextVideo, previousVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
+import { nextInOrder, previousInOrder, shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
 import { Scrubber } from "../components/player/Scrubber";
 import { useSource } from "../components/player/useSource";
@@ -118,10 +119,10 @@ import {
 import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
-import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds, seasonLabel } from "../lib/format";
+import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds } from "../lib/format";
 import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
 import { useRouter } from "../lib/router";
-import type { ContentType, Progress, RankedStream, Stream, Video } from "../lib/types";
+import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
 import { setTvMode, useTvMode } from "../tv/tvMode";
@@ -494,6 +495,9 @@ export function Player({
 
   // --- Current / next episode ---------------------------------------------
   const { animeSkipFiller } = usePrefs();
+  // The episode order chosen for the show on its page (lib/library/episodeOrder.ts): Up Next, autoplay and the
+  // Episodes panel follow it; undefined: as aired.
+  const order = useEpisodeOrders(local ? undefined : meta).view;
   // With "Skip filler" on, the next episode that isn't filler; `skipped` says how many were passed over.
   const { next, skipped } = useMemo(() => {
     // Shuffling: one not played yet in this run, picked once per episode so Up Next doesn't change under you.
@@ -501,14 +505,15 @@ export function Player({
       noteShuffled(metaId, videoId);
       return { next: shuffledNext(meta, videoId), skipped: [] as Video[] };
     }
-    let n = meta && type === "series" ? nextVideo(meta, videoId) : undefined;
+    const after = (m: Meta, id: string) => (order ? nextInOrder(order, id) : nextVideo(m, id));
+    let n = meta && type === "series" ? after(meta, videoId) : undefined;
     const skipped: Video[] = [];
     while (n && animeSkipFiller && playContext.isFiller(n.id) && meta) {
       skipped.push(n);
-      n = nextVideo(meta, n.id);
+      n = after(meta, n.id);
     }
     return { next: n, skipped };
-  }, [meta, type, videoId, animeSkipFiller, shuffling, metaId]);
+  }, [meta, type, videoId, animeSkipFiller, shuffling, metaId, order]);
   // A YouTube video is called by its own title once its player says it.
   const [ytTitle, setYtTitle] = useState<string | null>(null);
   // YouTube's player is up with its own controls (#384): the loading screen leaves them clear, even before it plays.
@@ -1009,8 +1014,12 @@ export function Player({
   const { data: progress } = useProgress(metaId);
   const progressById = useMemo(() => progressMap(progress), [progress]);
   const seasons = useMemo(() => (meta ? seasonsOf(meta) : []), [meta]);
+  // The seasons, or a chosen order's groups (ids: season numbers, or group ids).
+  const seasonGroups = useMemo(() => (meta ? shelfGroups(meta.videos, seasons, order) : []), [meta, seasons, order]);
   const [pickSeason, setPickSeason] = useState<number>();
-  const shownSeason = pickSeason ?? current?.season ?? seasons[0];
+  const shownSeason =
+    (seasonGroups.some((g) => g.id === pickSeason) ? pickSeason : undefined) ?? (current && shelfGroupOf(current, order)) ?? seasonGroups[0]?.id;
+  const shownEpisodes = seasonGroups.find((g) => g.id === shownSeason)?.videos ?? [];
   // Side by side or a list: the same choice as the title page's switch (#226).
   const [episodeLayout, setEpisodeLayout] = useEpisodeLayout();
   // Beside the layout switch: the show's episodes in random order from here (lib/playback/shuffle.ts).
@@ -1041,14 +1050,12 @@ export function Player({
 
   const episodeItems = useMemo<OptionItem[]>(
     () =>
-      (meta?.videos ?? [])
-        .filter((v) => v.season === shownSeason)
-        .map((v) => {
+      shownEpisodes.map((v) => {
           const p = progressById.get(v.id);
           const { released, openable, fraction, watched, inProgress } = episodeState(v, p, watchedFraction());
           return {
             id: v.id,
-            label: `${v.episode}. ${v.title}`,
+            label: `${order?.number.get(v.id) ?? v.episode}. ${v.title}`,
             detail: released && inProgress && p ? formatRemaining(p.position, p.duration) : airLabel(v),
             thumbnail: stillFor(v.id) ?? v.thumbnail ?? "",
             progress: watched ? undefined : fraction,
@@ -1056,7 +1063,7 @@ export function Player({
             disabled: !openable,
           };
         }),
-    [meta, shownSeason, progressById],
+    [shownEpisodes, order, progressById],
   );
   // A file on this device (#242): the other videos in its folder, in order, with how long each is and
   // where it stopped as Recent files has them. The paths stay on this device (lib/localFiles).
@@ -1283,7 +1290,8 @@ export function Player({
   // Media keys, headset buttons and the system's now-playing controls (Windows' media overlay, macOS's
   // Now Playing, the iPhone's Lock Screen). Previous goes back to the start, or within its first seconds
   // to the episode before, as music players do. Not for YouTube's player, which has its own.
-  const previous = meta && type === "series" && !local ? previousVideo(meta, videoId) : undefined;
+  const previous =
+    meta && type === "series" && !local ? (order ? previousInOrder(order, videoId) : previousVideo(meta, videoId)) : undefined;
   useMediaSession(
     started && !ytId && !castingAway ? media : null,
     meta || title
@@ -2247,7 +2255,7 @@ export function Player({
                 {
                   title: "Seasons",
                   value: String(shownSeason),
-                  options: seasons.map((n) => ({ id: String(n), label: seasonLabel(n) })),
+                  options: seasonGroups.map((g) => ({ id: String(g.id), label: g.label })),
                   onSelect: (id) => setPickSeason(Number(id)), // browse; playback continues
                 },
                 {
@@ -2277,7 +2285,7 @@ export function Player({
                         size="large"
                         value={String(shownSeason)}
                         onChange={(id) => setPickSeason(Number(id))} // browse; playback continues
-                        options={seasons.map((n) => ({ value: String(n), label: seasonLabel(n) }))}
+                        options={seasonGroups.map((g) => ({ value: String(g.id), label: g.label }))}
                       />
                       {layoutSwitch}
                       {shuffleButton}
@@ -2288,7 +2296,8 @@ export function Player({
                   content: (
                     <EpisodeRail
                       meta={meta}
-                      episodes={meta.videos.filter((v) => v.season === shownSeason)}
+                      episodes={shownEpisodes}
+                      numbers={order?.number}
                       playing={videoId}
                       progress={progressById}
                       still={(v) => stillFor(v.id) ?? v.thumbnail}

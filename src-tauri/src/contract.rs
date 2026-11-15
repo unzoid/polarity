@@ -118,6 +118,28 @@ fn field_names_match_contract() {
     add("Segments", keys(&crate::introdb::Segments::default()));
     add("Ratings", keys(&crate::ratings::Ratings::default()));
     add("CmdError", keys(&CmdError::Other("x".into())));
+    add(
+        "EpisodeOrderInfo",
+        keys(&polar_index::EpisodeOrderInfo {
+            id: "aa01".into(),
+            name: "DVD".into(),
+            kind: "dvd".into(),
+            description: s("d"),
+            episode_count: 1,
+            group_count: 1,
+        }),
+    );
+    let group = polar_index::EpisodeOrderGroup { name: "Disc 1".into(), episodes: vec!["tt1:1:1".into()] };
+    add("EpisodeOrderGroup", keys(&group));
+    add(
+        "EpisodeOrder",
+        keys(&polar_index::EpisodeOrder {
+            id: "aa01".into(),
+            name: "DVD".into(),
+            kind: "dvd".into(),
+            groups: vec![group],
+        }),
+    );
 
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../contract/app.json");
     let actual = Value::Object(types);

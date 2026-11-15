@@ -26,8 +26,11 @@ export function EpisodeCard({
   onSources,
   menu,
   item,
+  number = v.episode,
 }: {
   item?: MetaPreview;
+  /** The number shown: the episode's place in an episode order when one is chosen; its own number otherwise. */
+  number?: number;
   layout: EpisodeLayout;
   video: Video;
   progress?: Progress;
@@ -92,19 +95,19 @@ export function EpisodeCard({
           {/* Filler / Recap: on the art, so it's the first thing you see when deciding to skip. */}
           {v.tag && <span className="episode-tag t-micro">{v.tag}</span>}
         </div>
-        {layout === "list" && <span className="episode-number tabular">{v.episode}</span>}
+        {layout === "list" && <span className="episode-number tabular">{number}</span>}
         <div className="episode-card-text">
           {layout === "list" ? (
             // The number column already says which episode it is.
             upNext && released ? <span className="t-micro episode-kicker">Up Next</span> : null
           ) : (
             <span className="t-micro episode-kicker">
-              {upNext && released ? `Up Next · Episode ${v.episode}` : `Episode ${v.episode}`}
+              {upNext && released ? `Up Next · Episode ${number}` : `Episode ${number}`}
             </span>
           )}
           <span className="t-headline episode-card-title">
             {/* A phone's list has no number column: the number leads the title instead (detail.css). */}
-            {layout === "list" && <span className="episode-title-num tabular">{v.episode}. </span>}
+            {layout === "list" && <span className="episode-title-num tabular">{number}. </span>}
             {v.title}
           </span>
           {v.overview && <p className="t-callout episode-card-overview">{v.overview}</p>}
@@ -119,7 +122,7 @@ export function EpisodeCard({
           variant="glass"
           className="episode-sources pressable"
           onClick={() => onSources(v)}
-          label={`Sources for episode ${v.episode}`}
+          label={`Sources for episode ${number}`}
           title="Choose source"
         >
           <Sources size={15} />
