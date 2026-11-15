@@ -197,7 +197,9 @@ mod tests {
         assert_eq!((listed[0].episode_count, listed[0].group_count, listed[0].description.clone()), (3, 2, None));
 
         let order = tmdb.episode_group("aa01").await.unwrap();
-        let shape: Vec<(&str, Vec<(u32, u32, Option<&str>)>)> = order
+        // Each group's name and its episodes as (season, episode, released).
+        type Episodes<'a> = Vec<(u32, u32, Option<&'a str>)>;
+        let shape: Vec<(&str, Episodes)> = order
             .groups
             .iter()
             .map(|(name, e)| (name.as_str(), e.iter().map(|e| (e.season, e.episode, e.released.as_deref())).collect()))
