@@ -749,9 +749,11 @@ test("each page starts right under the top bar, which sits right under the statu
       await (tab === "Series" ? app.locator(".navbar") : tabs).getByRole("button", { name: tab, exact: true }).tap();
       const content = app.locator(first).first();
       await expect(content).toBeVisible();
+      // Measured once the sections have finished turning (the old page carries a copy of the bar while they do).
+      await expect(app.locator(".page[data-motion]")).toHaveCount(0);
       const [bar, logo, page] = await Promise.all([
-        app.locator(".navbar").boundingBox(),
-        app.locator(".brand-logo").boundingBox(),
+        app.locator(".main > .navbar").boundingBox(),
+        app.locator(".main > .navbar .brand-logo").boundingBox(),
         content.boundingBox(),
       ]);
       // The bar's row begins where the status bar ends, the logo centred in it.
@@ -766,7 +768,8 @@ test("each page starts right under the top bar, which sits right under the statu
   await tabs.getByRole("button", { name: "Anime", exact: true }).tap();
   const note = app.locator(".anime-unreachable");
   await expect(note).toBeVisible({ timeout: 15_000 });
-  const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
+  await expect(app.locator(".page[data-motion]")).toHaveCount(0);
+  const barBottom = await app.locator(".main > .navbar").evaluate((e) => e.getBoundingClientRect().bottom);
   // The text's own top, once the page has slid in.
   await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
 });
