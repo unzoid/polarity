@@ -854,7 +854,8 @@ test("a Stremio export is read, previewed and imported; its add-ons are only lis
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   // Signed out (as here), it's under Advanced; signed in, under Account.
   await settings.getByRole("button", { name: "Advanced", exact: true }).click();
-  await settings.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
+  // By its name: Advanced also has the Polarity export's file picker.
+  await settings.getByLabel("Stremio export file").setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
   await expect(settings.getByText("1 title Polarity can show")).toBeVisible();
   await expect(settings.getByRole("switch", { name: /^Where you left off/ })).toBeChecked();
   const addon = settings.getByRole("switch", { name: /^Example One/ });
