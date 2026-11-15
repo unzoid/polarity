@@ -741,7 +741,7 @@ test("each page starts right under the top bar, which sits right under the statu
     for (const [tab, first] of [
       ["Home", ".hero-card"],
       ["Series", ".discover-controls"],
-      ["Library", ".screen-header h1"],
+      ["Library", ".library-panel"],
     ] as const) {
       await (tab === "Series" ? app.locator(".navbar") : tabs).getByRole("button", { name: tab, exact: true }).tap();
       const content = app.locator(first).first();
