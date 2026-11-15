@@ -15,6 +15,10 @@ let pl: typeof import("../src/lib/library/playlists");
 beforeAll(async () => {
   ex = await import("../src/lib/library/polarityExport");
   pl = await import("../src/lib/library/playlists");
+  // Another test file may have loaded playlists.ts first, over its own storage: load the device's space again
+  // from this file's.
+  pl.setPlaylistSpace("reset");
+  pl.setPlaylistSpace(null);
 });
 
 /** What crates/library/src/export.rs writes. */

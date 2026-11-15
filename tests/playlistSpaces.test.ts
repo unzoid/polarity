@@ -12,6 +12,10 @@ const store = new Map<string, string>();
 let pl: typeof import("../src/lib/library/playlists");
 beforeAll(async () => {
   pl = await import("../src/lib/library/playlists");
+  // Another test file may have loaded playlists.ts first, over its own storage: load the device's space again
+  // from this file's.
+  pl.setPlaylistSpace("reset");
+  pl.setPlaylistSpace(null);
 });
 
 const title = (id: string) => ({ id, type: "movie", name: id }) as MetaPreview;
