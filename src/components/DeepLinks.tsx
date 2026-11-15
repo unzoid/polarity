@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useAccount } from "../lib/account";
+import { hasTvCode, offerTvCode, takeTvCode, useAccount } from "../lib/account";
 import { anilistForMal } from "../lib/anime";
 import { api } from "../lib/api";
 import { offerAddon, openStremioLink, parseDeepLink, showLinkNote, titleRoute } from "../lib/deepLink";
 import { joinFromLink, offerTogether } from "../lib/party";
 import { onDeepLinks, setStremioLinks } from "../lib/platform";
-import { getPrefs } from "../lib/settings";
+import { getPrefs, openSettings } from "../lib/settings";
 import { useRouter } from "../lib/router";
 import { useLayer } from "../lib/ui";
 import { Button } from "./ui/Button";
@@ -24,6 +24,9 @@ let registrationChecked = false;
  * stremio:// links (#163), when Settings → Add-ons → Open Stremio links in Polarity is on: an
  * add-on's install link asks first (StremioLinks), a title link opens the title or the episode,
  * anything else opens Home with a note.
+ *
+ * A TV's QR code (#133) opens Settings → Account → Sign in a TV with its code filled in, which asks
+ * "Sign in on <device>?"; a guest signs in first and lands there after (lib/account/tvSignInLink.ts).
  */
 export function DeepLinks({ tv }: { tv: boolean }) {
   const { navigate, tab } = useRouter();
@@ -33,6 +36,18 @@ export function DeepLinks({ tv }: { tv: boolean }) {
   const profile = account.enabled && account.status !== "guest" ? account.profile : null;
   const me = profile ? { name: profile.name, avatar: profile.avatar } : null;
   const meKey = me ? `${me.name}\n${me.avatar}` : "";
+  // What a link handled later sees: the account and layout as they are then.
+  const now = useRef({ account, tv });
+  now.current = { account, tv };
+  const showTvSignIn = () => (now.current.tv ? tab({ name: "settings", page: "account" }) : openSettings("account"));
+  // A code waiting from before: signed in since (a guest asked to first), so on to the question; still a
+  // guest (the sign-in was cancelled), so it's dropped.
+  useEffect(() => {
+    if (!hasTvCode()) return;
+    if (account.status === "ready") showTvSignIn();
+    else if (account.status === "guest") takeTvCode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.status]);
   useEffect(() => {
     let stop: (() => void) | null = null;
     let gone = false;
@@ -53,6 +68,13 @@ export function DeepLinks({ tv }: { tv: boolean }) {
       if (!link) return;
       if (link.kind === "party") return joinFromLink(link.token, me);
       if (link.kind === "together") return offerTogether(link, me);
+      if (link.kind === "tv-sign-in") {
+        const { account: acc } = now.current;
+        // Without an account server there's nothing to sign a TV in to.
+        if (!acc.enabled) return;
+        offerTvCode(link.code);
+        return acc.status === "guest" ? acc.showSignIn() : showTvSignIn();
+      }
       const n = ++latest;
       void titleRoute(link, lookups).then((to) => {
         if (gone || n !== latest) return;

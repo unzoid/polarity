@@ -53,6 +53,14 @@ export function TvNav({ onMenu }: { onMenu: () => void }) {
   const active = rootTab(stack);
   const { profile } = useAccount();
   const tabs = useTvTabs();
+  // A section switched from elsewhere (the shoulder buttons) while you're on the tabs: the highlight goes with it.
+  const tabsRef = useRef<HTMLElement>(null);
+  const activeKey = JSON.stringify(active);
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav?.contains(document.activeElement)) return;
+    nav.querySelector<HTMLElement>('[aria-current="page"]')?.focus({ preventScroll: true });
+  }, [activeKey]);
 
   return (
     <header className="tv-nav" data-nav-memory data-nav-prefer-entry data-nav-lock-x>
@@ -62,7 +70,7 @@ export function TvNav({ onMenu }: { onMenu: () => void }) {
       {/* The app's name beside the profile, as the desktop navbar has it (#476); not a stop for the remote. */}
       <img className="tv-nav-brand wordmark" src={logo} alt="Polarity" draggable={false} />
       {/* Switching sections keeps focus on the tabs; the menu's choices (Settings) land in the page. */}
-      <nav className="tv-nav-tabs" aria-label="Sections" data-nav-keep>
+      <nav ref={tabsRef} className="tv-nav-tabs" aria-label="Sections" data-nav-keep>
         {tabs.map((t) => {
           const current = sameTab(t.route, active);
           return (

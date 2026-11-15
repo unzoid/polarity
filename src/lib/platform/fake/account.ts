@@ -1,6 +1,7 @@
 import { AccountError, type AccountBackend, type AccountUser, type FriendEntry, type FriendPresence, type FriendSettings, type FriendsHandlers, type PartyHandlers, type PartyPresence, type Profile } from "../../account/backend";
 import { normalizeAvatar } from "../../account/avatars";
 import { normalizeTvCode, type TvClaim } from "../../account/tvSignIn";
+import { NO_LOCK, type ProfileLock } from "../../account/profileLock";
 
 /**
  * A stand-in account for fake.html (`fake.html?account=1`): signed in, with one profile, and watch
@@ -89,10 +90,49 @@ const setState = (id: string, patch: Partial<FriendEntry> | null) => {
 
 const profile: Profile = { id: "fake-profile", name: "Robin", avatar: normalizeAvatar(""), position: 0 };
 const user: AccountUser = { id: "fake-user", email: "robin@example.com" };
+/** The profile's PIN and viewing limit (profileLock.ts), kept while the page is open. */
+let profileLock: ProfileLock = { ...NO_LOCK };
 
 let signedIn = true;
 /** `fake.html?account=signed-out`. */
 export const startSignedOut = () => void (signedIn = false);
+
+/**
+ * Two-step sign-in and email changes (twoStep.ts): `FAKE_TWO_STEP_CODE` is every authenticator's code
+ * and `FAKE_EMAIL_CODE` every email's; an email change asks both addresses, as with secure email
+ * change on. `taken@example.com` belongs to another account.
+ */
+export const FAKE_TWO_STEP_CODE = "123456";
+export const FAKE_EMAIL_CODE = "654321";
+const FAKE_QR = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M0 0h3v3H0zM5 0h3v3H5zM0 5h3v3H0zM4 4h1v1H4zM6 6h2v2H6z"/></svg>')}`;
+type FakeFactor = { id: string; name: string; verified: boolean };
+let factors: FakeFactor[] = [];
+/** The session has given an authenticator code (or the account has none). */
+let secondStepDone = true;
+let emailChange: { to: string; newDone: boolean; currentDone: boolean } | null = null;
+let nextFactor = 1;
+/** Back to the start: one signed-in user, no authenticators, no email change. */
+export function resetFakeSecurity() {
+  factors = [];
+  secondStepDone = true;
+  emailChange = null;
+  nextFactor = 1;
+  user.email = "robin@example.com";
+  delete user.newEmail;
+}
+const confirmed = () => factors.filter((f) => f.verified).map(({ id, name }) => ({ id, name }));
+const wrongCode = () => new AccountError("invalid_code", "That code is wrong. Check your authenticator app and try again.");
+const checkCode = (id: string, code: string) => {
+  if (!factors.some((f) => f.id === id)) throw new AccountError("unknown", "That authenticator isn't on the account any more.");
+  if (code !== FAKE_TWO_STEP_CODE) throw wrongCode();
+  secondStepDone = true;
+};
+/** Signing in again: the new session hasn't given an authenticator code yet. */
+const newSession = () => {
+  signedIn = true;
+  secondStepDone = !confirmed().length;
+  return { ...user };
+};
 
 type TvRequest = { code: string; poll: string; device: string; answer: TvClaim["state"] };
 const tvRequests: TvRequest[] = [];
@@ -199,9 +239,53 @@ export const fakeAccount: AccountBackend = {
     current: async () => (signedIn ? user : null),
     onChange: () => () => {},
     sendCode: async () => {},
-    verifyCode: async () => ((signedIn = true), user),
+    verifyCode: async () => newSession(),
     signOut: async () => void (signedIn = false),
     deleteAccount: async () => void (signedIn = false),
+    changeEmail: async (email) => {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AccountError("invalid_email", "Enter a valid email address.");
+      if (email === "taken@example.com") throw new AccountError("email_taken", "That email address is already used by another account.");
+      emailChange = { to: email, newDone: false, currentDone: false };
+      user.newEmail = email;
+    },
+    confirmEmailChange: async (address, code) => {
+      if (!emailChange || code !== FAKE_EMAIL_CODE) throw new AccountError("invalid_code", "That code is wrong or has expired.");
+      if (address === emailChange.to) emailChange.newDone = true;
+      else if (address === user.email) emailChange.currentDone = true;
+      else throw new AccountError("invalid_code", "That code is wrong or has expired.");
+      if (emailChange.newDone && emailChange.currentDone) {
+        user.email = emailChange.to;
+        delete user.newEmail;
+        emailChange = null;
+      }
+      return { ...user };
+    },
+    refreshUser: async () => (signedIn ? { ...user } : null),
+  },
+  twoStep: {
+    list: async () => confirmed(),
+    pending: async () => (signedIn && !secondStepDone ? confirmed() : []),
+    add: async () => {
+      if (confirmed().length && !secondStepDone) throw new AccountError("unknown", "Enter a code from your authenticator app first.");
+      factors = factors.filter((f) => f.verified);
+      const f = { id: `fake-factor-${nextFactor}`, name: `Authenticator ${confirmed().length + 1}`, verified: false };
+      nextFactor++;
+      factors.push(f);
+      return { id: f.id, qr: FAKE_QR, secret: "FAKESECRETXXXXXX" };
+    },
+    confirmAdd: async (id, code) => {
+      checkCode(id, code);
+      factors = factors.map((f) => (f.id === id ? { ...f, verified: true } : f));
+    },
+    cancelAdd: async (id) => void (factors = factors.filter((f) => f.id !== id || f.verified)),
+    verify: async (id, code) => {
+      checkCode(id, code);
+      return { ...user };
+    },
+    remove: async (ids, proof) => {
+      checkCode(proof.id, proof.code);
+      factors = factors.filter((f) => !ids.includes(f.id));
+    },
   },
   tvSignIn: {
     start: async (device) => {
@@ -216,7 +300,8 @@ export const fakeAccount: AccountBackend = {
       if (state !== "pending") r.answer = "expired";
       return state === "approved" ? { state, tokenHash: "TOKEN" } : { state };
     },
-    finish: async () => ((signedIn = true), user),
+    // Like the real server: the TV's new session hasn't given a code either (the app doesn't ask it for one).
+    finish: async () => newSession(),
     look: async (code) => liveTvRequest(code)?.device ?? Promise.reject(noTvCode()),
     answer: async (code, approve) => {
       const r = liveTvRequest(code);
@@ -225,10 +310,21 @@ export const fakeAccount: AccountBackend = {
     },
   },
   profiles: {
-    list: async () => [profile],
-    create: async (input) => ({ ...profile, ...input }),
-    update: async (_id, patch) => ({ ...profile, ...patch }),
+    list: async () => [{ ...profile, lock: { ...profileLock } }],
+    create: async (input) => ({ ...profile, ...input, lock: { ...NO_LOCK } }),
+    update: async (_id, patch) => ({ ...profile, ...patch, lock: { ...profileLock } }),
     remove: async () => {},
+    setLock: async (_id, patch) => {
+      profileLock = { ...profileLock, ...patch };
+      return { ...profile, lock: { ...profileLock } };
+    },
+  },
+  // Any code goes, as at sign-in.
+  reauth: {
+    start: async () => {},
+    verify: async (code) => {
+      if (!code.trim()) throw new AccountError("invalid_code", "That code is wrong or has expired.");
+    },
   },
   sync: {
     pull: async () => ({ library: [], progress: [], links: [], cursor: null }),

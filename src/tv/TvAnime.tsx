@@ -37,6 +37,7 @@ import { cachedLookup } from "../lib/net";
 import { usePrefs } from "../lib/settings";
 import { useRouter } from "../lib/router";
 import type { Shape } from "../lib/catalog";
+import { useMatureContent } from "../lib/catalog";
 import { playSound } from "./sounds";
 import { TvBrowse, TvCard, TvRail, TvSkeletonRail, type RailRow } from "./TvRails";
 import { useStage } from "./TvStage";
@@ -145,7 +146,7 @@ export function TvAnimeRail({
   /** The featured row: the stage shows each franchise's base title's art and logo, and names the trending part (#325). */
   franchise?: boolean;
 }) {
-  const { matureContent } = usePrefs();
+  const matureContent = useMatureContent();
   // Waiting its turn behind AniList's limit: said beside the title (#109).
   const busy = useAniListBusy();
   if (!items) return <TvSkeletonRail title={title} shape={shape} note={busy ? "AniList is busy, loading…" : undefined} />;

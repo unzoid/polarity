@@ -10,17 +10,44 @@ import { usePrefs } from "../settings/prefs";
 import { keys } from "./queryKeys";
 import { searchMinLength } from "../catalog/searchQuery";
 import { queryClient } from "./queryClient";
-import type { ContentType, MetaPreview, Progress, Settings, StreamsResult } from "../types";
+import { catalogBound, keepWithinLimit, useViewingLimit } from "../catalog/viewingLimit";
+import type { ContentType, MetaPreview, Progress, SearchResults, Settings, StreamsResult } from "../types";
 
 export { keys };
 export { queryClient };
 
 /** `enabled` lets off-screen shelves wait until they're about to be seen. */
 export const useCatalog = (type: ContentType, id: string, genre?: string, enabled = true) =>
-  useQuery({ queryKey: keys.catalog(type, id, genre), queryFn: () => api.catalog(type, id, 0, genre), enabled });
+  useQuery({
+    queryKey: keys.catalog(type, id, genre),
+    queryFn: () => api.catalog(type, id, 0, genre, catalogBound(type)),
+    enabled,
+    select: useWithinLimit((list: MetaPreview[], keep) => keep(list)),
+  });
 
 export const useRecommend = (type: ContentType, id: string, enabled = true) =>
-  useQuery({ queryKey: keys.recommend(type, id), queryFn: () => api.recommend(type, id), enabled, staleTime: 60 * 60_000 });
+  useQuery({
+    queryKey: keys.recommend(type, id),
+    queryFn: () => api.recommend(type, id),
+    enabled,
+    staleTime: 60 * 60_000,
+    select: useWithinLimit((list: MetaPreview[], keep) => keep(list)),
+  });
+
+/**
+ * A query's `select` leaving out titles over the profile's viewing limit (lib/catalog/viewingLimit.ts); what's
+ * cached stays whole, so paging and other readers are unaffected.
+ */
+function useWithinLimit<T>(pick: (data: T, keep: <M extends MetaPreview>(list: M[]) => M[]) => T) {
+  const viewing = useViewingLimit();
+  // `pick` is written inline by each caller: the limit alone decides when the selection changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useCallback((data: T) => (viewing.limit === null ? data : pick(data, (list) => keepWithinLimit(list, viewing))), [viewing]);
+}
+
+/** A person's page (TMDB): who they are and their titles. */
+export const usePerson = (id: number) =>
+  useQuery({ queryKey: keys.person(id), queryFn: () => api.person(id), staleTime: 6 * 60 * 60_000, retry: 1 });
 
 export const useMeta = (type: ContentType, id: string, enabled = true) => useQuery({ ...metaQuery(type, id), enabled });
 
@@ -126,6 +153,15 @@ export function useRatings(type: ContentType, id: string) {
   });
 }
 
+/** A show's IMDb episode ratings (the Episode Ratings chart); none until the id is known. */
+export const useImdbEpisodeRatings = (imdbId: string | undefined) =>
+  useQuery({
+    queryKey: keys.episodeRatings(imdbId ?? ""),
+    queryFn: () => api.episodeRatings(imdbId!),
+    enabled: !!imdbId,
+    staleTime: 12 * 60 * 60_000,
+  });
+
 export const useProgress = (metaId: string) =>
   useQuery({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 });
 
@@ -151,13 +187,16 @@ export const useAddons = () => useQuery({ queryKey: keys.addons, queryFn: api.ad
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: api.settings, staleTime: Infinity });
 
-export const useSearch = (query: string) =>
-  useQuery({
+export const useSearch = (query: string) => {
+  const select = useWithinLimit((r: SearchResults, keep) => ({ ...r, movies: keep(r.movies), series: keep(r.series) }));
+  return useQuery({
     queryKey: keys.search(query),
     queryFn: () => api.search(query),
     enabled: query.trim().length >= searchMinLength(query.trim()),
     placeholderData: (prev) => prev, // keep old results on screen while typing
+    select,
   });
+};
 
 export function useToggleLibrary() {
   const qc = useQueryClient();

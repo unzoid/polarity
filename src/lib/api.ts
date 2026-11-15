@@ -6,12 +6,14 @@ import type {
   CacheInfo,
   Imported,
   ContentType,
+  EpisodeRating,
   ExternalRatings,
   InstalledAddon,
   LibraryItem,
   Manifest,
   Meta,
   MetaPreview,
+  PersonPage,
   Playable,
   Readiness,
   Progress,
@@ -33,6 +35,8 @@ import type {
 } from "./types";
 import { settingsChanged } from "./settings/changes";
 import type { AnimeLink } from "./library/identity";
+import type { EpisodeOrder, EpisodeOrderInfo } from "./library/episodeOrder";
+import type { ExportPlaylist } from "./library/polarityExport";
 import type { DiscordActivity } from "./playback/discordPresence";
 import type { TorrentLimits } from "./playback/torrent";
 import type { LookaheadState } from "./playback/lookahead";
@@ -57,8 +61,9 @@ export const api = {
   /** The anime cache folder (fillers.json, anime-list-mini.json) and their size. */
   animeCache: () => call<CacheInfo>("anime_cache"),
   animeCacheClear: () => call<void>("anime_cache_clear"),
-  catalog: (type: ContentType, id: string, skip = 0, genre?: string) =>
-    call<MetaPreview[]>("catalog", { ty: type, id, skip, genre }),
+  /** `bound`: an age limit's highest film rating, which TMDB's discover lists apply (lib/catalog/viewingLimit.ts catalogBound). */
+  catalog: (type: ContentType, id: string, skip = 0, genre?: string, bound?: { certCountry: string; certMax: string }) =>
+    call<MetaPreview[]>("catalog", { ty: type, id, skip, genre, ...bound }),
   /** Titles like `id`, for "Because you watched …". */
   recommend: (type: ContentType, id: string) => call<MetaPreview[]>("recommend", { ty: type, id }),
   search: (query: string) => call<SearchResults>("search", { query }),
@@ -68,6 +73,12 @@ export const api = {
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
+  /** The orders a show can be watched in besides as aired (TMDB's episode groups); empty without a TMDB key. */
+  episodeOrders: (id: string) => call<EpisodeOrderInfo[]>("episode_orders", { id }),
+  /** One of those orders, its episodes as the show's own episode ids. */
+  episodeOrder: (id: string, order: string) => call<EpisodeOrder>("episode_order", { id, order }),
+  /** A person's page by TMDB id: who they are and their titles; fails as not found without a TMDB key. */
+  person: (id: number) => call<PersonPage>("person", { id }),
   /**
    * Also asked by the episode's other ids; files are checked against its absolute number and a later season's titles too (anime).
    * `onPartial` gets the ranking so far each time an add-on answers before the last.
@@ -105,6 +116,8 @@ export const api = {
   seekrValidate: (key: string) => call<string | null>("seekr_validate", { key }),
   /** Rotten Tomatoes, Metacritic, Letterboxd… (empty without a ratings key in Settings → Services). */
   ratings: (type: ContentType, id: string) => call<ExternalRatings>("ratings", { ty: type, id }),
+  /** A show's IMDb rating for each episode (Episode Ratings); none known is an empty list. */
+  episodeRatings: (imdbId: string) => call<EpisodeRating[]>("episode_ratings", { imdbId }),
 
   addons: () => call<InstalledAddon[]>("addons_list"),
   /** The add-ons the app installs itself, by manifest URL. */
@@ -118,8 +131,8 @@ export const api = {
   removeAddon: (id: string) => call<void>("addon_remove", { id }).then(changed),
   /** Off: the add-on stays installed but is asked for nothing (this device only). */
   setAddonEnabled: (id: string, enabled: boolean) => call<void>("addon_set_enabled", { id, enabled }),
-  /** One place up (-1) or down (1) in the order add-ons are asked in. */
-  moveAddon: (id: string, by: -1 | 1) => call<void>("addon_move", { id, by }),
+  /** The order add-ons are asked in, as manifest ids. */
+  reorderAddons: (ids: string[]) => call<void>("addon_reorder", { ids }),
 
   library: () => call<LibraryItem[]>("library_list"),
   toggleLibrary: (item: MetaPreview) => call<boolean>("library_toggle", { item }),
@@ -129,6 +142,13 @@ export const api = {
   saveProgressMany: (progress: Progress[]) => call<void>("progress_save_many", { progress }),
   /** Library items and progress from another app, keeping their times; newer entries here win. */
   importLibrary: (library: LibraryItem[], progress: Progress[]) => call<Imported>("library_import", { library, progress }),
+  /**
+   * Writes the profile's library and history where the user picks (desktop save dialog): "json" to
+   * import again, "csv" for a spreadsheet. Resolves to the file's name, or null when cancelled.
+   */
+  exportLibrary: (format: "json" | "csv", playlists: ExportPlaylist[]) => call<string | null>("library_export", { format, playlists }),
+  /** A Polarity export's anime links, keeping their times; newer ones here win. Resolves to how many were added. */
+  importAnimeLinks: (links: AnimeLink[]) => call<number>("anime_links_import", { links }),
   continueWatching: () => call<Progress[]>("continue_watching"),
   /** The latest video per title you've watched (finished or under way), newest first. */
   watchHistory: () => call<Progress[]>("watch_history"),

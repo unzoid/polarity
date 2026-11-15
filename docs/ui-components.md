@@ -66,6 +66,8 @@ relative to `src/`; each primitive's CSS is `styles/ui/<name>.css`, the title pa
 | `useSourcePicker(onOpen?)` + `SourcePicker` | `picker` | Play-or-choose with the sources sheet, once per page |
 | `SeasonPicker` | `value`, `options` {id, label}, `onChange` | Season tabs (up to 6) or a large dropdown |
 | `EpisodeCard`, `EpisodeShelf` | see the files | Desktop episodes; state from `episodeState` (`lib/library/episodeState.ts`) |
+| `EpisodeRatings`, `RatingsTable` | `videos`, `onOpen`, `tv` | A show's ratings per season as a table (`lib/library/episodeRatings.ts`); TV draws `RatingsTable` in a panel (`tv/TvMore.tsx`) |
+| `OverviewMore` | `video` | "More" under an episode card's cut-off synopsis (`useClamped`, `lib/ui/clamped.ts`), the whole text in a `Sheet` |
 | `usePlaylistChecklist(item)` + `PlaylistChecklist` | `look` menu/popover | Add to playlists (TV draws its rows from the hook) |
 | `TitleDetails`, `DetailsSection`, `DetailsColumns`, `FactList`, `DetailsLinks` | | The Details tab and its parts |
 

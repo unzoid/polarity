@@ -9,10 +9,12 @@ mod dev_channel;
 mod discord;
 mod disk;
 mod downloads;
+mod episode_ratings;
 mod external_player;
 mod imdb;
 mod introdb;
 mod keychain;
+mod library_export;
 mod local_files;
 mod locks;
 mod logging;
@@ -289,6 +291,9 @@ pub fn run() {
             commands::search_movies,
             commands::meta,
             commands::imdb_for_tmdb,
+            commands::episode_orders,
+            commands::episode_order,
+            commands::person,
             commands::streams,
             commands::resolve_stream,
             torrent::torrent_open,
@@ -302,6 +307,7 @@ pub fn run() {
             commands::mal_api,
             commands::mal_token,
             commands::ratings,
+            commands::episode_ratings,
             commands::addons_list,
             commands::addon_catalog,
             commands::addons_bundled,
@@ -309,13 +315,15 @@ pub fn run() {
             commands::addon_install,
             commands::addon_remove,
             commands::addon_set_enabled,
-            commands::addon_move,
+            commands::addon_reorder,
             commands::library_list,
             commands::library_toggle,
             commands::progress_for,
             commands::progress_save,
             commands::progress_save_many,
             commands::library_import,
+            library_export::library_export,
+            library_export::anime_links_import,
             commands::continue_watching,
             commands::watch_history,
             commands::link_anime,
@@ -344,6 +352,9 @@ pub fn run() {
             downloads::download_remove,
             downloads::download_reveal,
             downloads::downloads_storage,
+            downloads::downloads_volumes,
+            downloads::downloads_set_folder,
+            downloads::downloads_pick_folder,
             controllers::controllers_list,
             sync::space_activate,
             sync::space_import_local,
@@ -386,6 +397,8 @@ pub fn run() {
             cast::cast_stop,
             player::player_system_bars,
             player::player_keep_awake,
+            player::player_brightness,
+            player::player_set_brightness,
             native_tabs::native_tabs,
             native_back::native_back,
             art_focus::art_focus,

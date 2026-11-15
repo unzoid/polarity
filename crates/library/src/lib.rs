@@ -7,6 +7,7 @@
 //! - [`space`]: library, progress, Continue Watching, history, re-keying.
 //! - [`sync`]: changes since the last push, and merging pulled ones.
 //! - [`display`]: names and pictures filled in for pulled titles.
+//! - [`export`]: the profile's data as a file to keep (JSON to import again, history as CSV).
 //! - [`opened`]: what to make of a data file read at start-up (missing, unreadable, corrupt).
 //! - [`saver`]: writing a data file in the background, all or nothing.
 //! - [`logfile`]: the app's log file, kept to a size.
@@ -16,6 +17,7 @@
 #[cfg(test)]
 mod contract;
 pub mod display;
+pub mod export;
 pub mod filenames;
 pub mod identity;
 pub mod keychain;

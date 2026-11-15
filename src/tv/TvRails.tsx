@@ -1,21 +1,27 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { CardRating } from "../components/ImdbBadge";
 import { Img } from "../components/Img";
 import { LogoOrName, ProgressBar, useCardArt } from "../components/title/Card";
-import { useEntryShown, type EntryAt } from "../lib/anime";
+import { isAnimePreview, useEntryShown, type EntryAt } from "../lib/anime";
 import { episodeCode, formatRemaining } from "../lib/format";
 import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
 import { useRouter } from "../lib/router";
 import { useArtGate, useCardIntent } from "../lib/ui";
-import { useListable, type Shape, type Shelf } from "../lib/catalog";
+import { useBrowseShelf, useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
-import { StageProvider, TvStage, useStage, useStageSeed } from "./TvStage";
+import { Facts, StageProvider, TvStage, titleFacts, useStage, useStageSeed, useStagedTitle, type StageEntry } from "./TvStage";
 import { isMenuKey, openCardMenu } from "./TvCardMenu";
 import { refocusNear } from "./spatial";
 import { Skeleton } from "../components/ui/Skeleton";
 
 /** Resting on a card this long means interest: fetch its page ahead. Longer than desktop — a held D-pad passes every card. */
 const INTENT_MS = 450;
+
+/**
+ * How a browse screen lays its rails out (TvBrowse's `layout`). "shelves" (the Library): no stage, every
+ * card a poster, the focused one opening out to the title's backdrop, its details under its own row.
+ */
+const ShelvesLayout = createContext(false);
 
 /**
  * A title on a rail. Focus is the selection, as on any TV: the card lifts,
@@ -65,6 +71,11 @@ export function TvCard({
   const onStage = staged ?? item;
   const stage = useStage();
   const seedStage = useStageSeed();
+  const shelves = useContext(ShelvesLayout);
+  // On the shelves every card is a poster, whatever the rail asked for; focus opens it out (`wide`).
+  const look: Shape = shelves ? "poster" : shape;
+  // The backdrop is only fetched once the card has had focus: a library can be hundreds of titles.
+  const [woke, setWoke] = useState(false);
   const el = useRef<HTMLButtonElement>(null);
   const intent = useCardIntent(() => {
     if (!localOnly) prefetchMeta(item.type, item.id);
@@ -76,7 +87,7 @@ export function TvCard({
     // Again once a placeholder title (a playlist entry still loading) fills in, or better art arrives.
   }, [item.id, onStage.name, onStage.background, onStage.logo, stagePending]);
   // Art that won't load falls back to the title, not an empty frame; better art arriving gets a fresh try.
-  const preferred = shape === "poster" ? (item.poster ?? item.background) : (item.background ?? item.poster);
+  const preferred = look === "poster" ? (item.poster ?? item.background) : (item.background ?? item.poster);
   const { shown: art, onError: onArtError } = useCardArt(preferred);
   // The logo and name wait for the art (#173).
   const gate = useArtGate(art, artFallbacks);
@@ -87,10 +98,11 @@ export function TvCard({
     <button
       ref={el}
       className="tv-card"
-      data-shape={shape}
+      data-shape={look}
       aria-label={item.name}
       onClick={open}
       onFocus={() => {
+        if (shelves) setWoke(true);
         stage({ item: onStage, kicker, pending: stagePending });
         onFocusChange?.(true);
         intent.onFocus();
@@ -118,25 +130,47 @@ export function TvCard({
         ) : (
           <span className="tv-card-fallback">{item.name}</span>
         )}
-        {shape === "landscape" && art && (
+        {look === "landscape" && art && (
           <>
             <span className="tv-card-scrim art-after" />
             <LogoOrName logo={item.logo} logos={item.logos} pending={logoPending} alt="" logoClass="tv-card-logo" name={<span className="tv-card-name art-after">{item.name}</span>} />
           </>
         )}
+        {shelves && <WideArt item={item} awake={woke} localOnly={localOnly} />}
         {chip && <span className="tv-card-chip">{chip}</span>}
         {progress != null && <ProgressBar fraction={progress} />}
-        {shape === "poster" && <CardRating rating={item.imdbRating} placement="poster" />}
+        {look === "poster" && <CardRating rating={item.imdbRating} placement="poster" />}
       </span>
-      {shape === "poster" && <CardRating rating={item.imdbRating} />}
+      {look === "poster" && <CardRating rating={item.imdbRating} />}
     </button>
+  );
+}
+
+/**
+ * A shelves card opened out (focused): the title's backdrop and logo across the wider frame, over its poster.
+ * Its logo comes from the title's page where the card doesn't carry one (the history only knows the art).
+ */
+function WideArt({ item, awake, localOnly }: { item: MetaPreview; awake: boolean; localOnly?: boolean }) {
+  const meta = useMeta(item.type, item.id, awake && !item.logo && !localOnly && !isAnimePreview(item.id));
+  const logo = item.logo ?? meta.data?.logo ?? undefined;
+  const logos = item.logos ?? meta.data?.logos;
+  const art = item.background ?? item.poster;
+  return (
+    <span className="tv-card-wide" aria-hidden>
+      {awake && art && <Img src={art} alt="" className="tv-card-img" />}
+      <span className="tv-card-scrim" />
+      {awake && (
+        <LogoOrName logo={logo} logos={logos} pending={meta.isLoading} alt="" logoClass="tv-card-logo" name={<span className="tv-card-name">{item.name}</span>} />
+      )}
+    </span>
   );
 }
 
 /** One horizontal shelf. Its focused card stays pinned to the left edge as it scrolls. */
 export function TvRail({ title, note, children }: { title?: string; note?: string; children: ReactNode }) {
-  return (
-    <section className="tv-rail" data-nav-row data-nav-memory>
+  const shelves = useContext(ShelvesLayout);
+  const body = (
+    <>
       {title && (
         <h2 className="tv-rail-title">
           {title}
@@ -146,7 +180,32 @@ export function TvRail({ title, note, children }: { title?: string; note?: strin
       <div className="tv-rail-track" data-nav-rail>
         {children}
       </div>
+    </>
+  );
+  return (
+    <section className="tv-rail" data-nav-row data-nav-memory>
+      {/* On the shelves each row is its own stage: its focused title's details sit under it. */}
+      {shelves ? <StageProvider render={(entry) => <TvShelfInfo entry={entry} />}>{body}</StageProvider> : body}
     </section>
+  );
+}
+
+/**
+ * Under a shelves row (placed after the cards by CSS): the focused title's facts and synopsis, which a
+ * stage shows above the rails elsewhere. Only the row you're on shows it (tv.css).
+ */
+function TvShelfInfo({ entry }: { entry: StageEntry | null }) {
+  const { shown } = useStagedTitle(entry);
+  return (
+    <div className="tv-shelf-info" aria-live="polite">
+      {shown && (
+        <div key={shown.id} className="tv-shelf-info-body">
+          {entry?.kicker && <p className="tv-stage-kicker">{entry.kicker}</p>}
+          <Facts facts={titleFacts(shown)} />
+          {shown.description && <p className="tv-shelf-description">{shown.description}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -216,7 +275,9 @@ export function TvShelfRail({ shelf, enabled, exclude }: { shelf: Shelf; enabled
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
-  const { data, isError } = isCatalog ? catalog : recommended;
+  const { data: found, isError } = isCatalog ? catalog : recommended;
+  // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
+  const data = useBrowseShelf(found, isCatalog ? { type: shelf.type, id: shelf.id, genre: shelf.genre } : undefined);
   const items = useMemo(() => {
     if (!data) return undefined;
     const fresh = data.filter((m) => !exclude.has(m.id));
@@ -310,24 +371,32 @@ const BrowseRow = memo(function BrowseRow({ row, near }: { row: RailRow; near: b
  * A browse screen: the stage on top, rails below. The focused rail always
  * sits at the same height just under the stage — moving down slides the
  * rails up rather than moving your eye down the screen.
+ *
+ * `layout="shelves"` (the Library): no stage and no colour from the art, just rows on black under the
+ * navbar; the focused row sits at the top with its focused title's details under it (ShelvesLayout).
  */
-export function TvBrowse({ rows }: { rows: RailRow[] }) {
+export function TvBrowse({ rows, layout = "stage" }: { rows: RailRow[]; layout?: "stage" | "shelves" }) {
   const [focusRow, setFocusRow] = useState(0);
   const onFocus = (e: FocusEvent<HTMLDivElement>) => {
     const row = (e.target as HTMLElement).closest<HTMLElement>("[data-row]");
     if (row) setFocusRow(Number(row.dataset.row));
   };
-  return (
-    <div className="tv-browse">
-      <StageProvider render={(entry) => <TvStage entry={entry} />}>
-        <div className="tv-rails" data-nav-scroll="start" onFocus={onFocus}>
-          {rows.map((r, i) => (
-            <div key={r.key} data-row={i}>
-              <BrowseRow row={r} near={i <= focusRow + LOOKAHEAD} />
-            </div>
-          ))}
+  const rails = (
+    <div className="tv-rails" data-nav-scroll="start" onFocus={onFocus}>
+      {rows.map((r, i) => (
+        <div key={r.key} data-row={i}>
+          <BrowseRow row={r} near={i <= focusRow + LOOKAHEAD} />
         </div>
-      </StageProvider>
+      ))}
+    </div>
+  );
+  return (
+    <div className="tv-browse" data-layout={layout}>
+      {layout === "shelves" ? (
+        <ShelvesLayout.Provider value>{rails}</ShelvesLayout.Provider>
+      ) : (
+        <StageProvider render={(entry) => <TvStage entry={entry} />}>{rails}</StageProvider>
+      )}
     </div>
   );
 }

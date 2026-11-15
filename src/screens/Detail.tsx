@@ -1,6 +1,8 @@
-import { LayoutList, LayoutRow, Shuffle, Volume, VolumeMuted } from "../components/icons";
+import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
+import { ExtrasShelf } from "../components/title/ExtrasShelf";
+import { personIds } from "../lib/catalog";
 import { useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
@@ -8,10 +10,12 @@ import { useEpisodeLayout } from "../lib/settings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
-import { FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
+import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
-import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, upNext } from "../lib/library";
+import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, shelfGroupOf, shelfGroups, upNext, useEpisodeOrders } from "../lib/library";
+import { EpisodeOrderPicker } from "../components/title/EpisodeOrderPicker";
 import { EpisodeShelf } from "../components/title/EpisodeShelf";
+import { SeasonActions } from "../components/title/SeasonActions";
 import { EdgeBlur } from "../components/EdgeBlur";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 import { Img } from "../components/Img";
@@ -19,17 +23,18 @@ import { TitleHeading, useHeadingReady } from "../components/title/TitleHeading"
 import { RatingRing } from "../components/RatingRing";
 import { Segmented } from "../components/Segmented";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
-import { episodeCode, formatRuntime, joinFacts, seasonLabel } from "../lib/format";
+import { episodeCode, formatRuntime, joinFacts } from "../lib/format";
 import { type PlayRequest, trailerFor, useFileTrailer, usePlayTarget } from "../lib/playback";
 import { prefetchStreams, useMeta, useProgress, useRatings, useStreams } from "../lib/net";
 import type { ContentType, Meta, MetaPreview, Video } from "../lib/types";
 import { IconButton } from "../components/ui/Button";
 import { SimklPanel } from "../components/title/SimklPanel";
+import { HiddenTitleNote, HideTitleButton } from "../components/title/HiddenTitleControls";
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
-import { BatchDownload } from "../components/BatchDownload";
 import { DetailArt } from "../components/DetailArt";
 import { errorMessage } from "../lib/errors";
+import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 
 /**
  * Title page in the Apple TV layout: the art fills the window, the title
@@ -39,8 +44,10 @@ import { errorMessage } from "../lib/errors";
  */
 export function Detail({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: meta, isError, error } = useMeta(type, id);
+  // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
+  const verdict = useTitleVerdict(meta ?? preview, !!meta || isError);
   // Render instantly from the catalog preview; fill in when full meta arrives.
-  const shown: MetaPreview | undefined = meta ?? preview;
+  const shown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
 
   // The trailer behind the page: only while it's the page on top, and paused
   // once you've scrolled down to read or a sheet or the big trailer is open.
@@ -51,7 +58,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   const onSheet = useCallback((open: boolean) => setSheets((n) => Math.max(0, n + (open ? 1 : -1))), []);
   const bigTrailer = !!useTrailerOpen();
   const trailer = useBackdropTrailer(id, {
-    active: onTop,
+    active: onTop && verdict === "show",
     paused: scrolledAway || sheets > 0 || bigTrailer,
   });
 
@@ -64,6 +71,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   // logo are all there, then everything at once (detail.css).
   const together = usePageTogether(!!meta || isError);
 
+  if (verdict === "hide") return <EmptyState>{LIMIT_NOTICE}</EmptyState>;
   if (isError && !shown) return <EmptyState>Couldn't load this title: {errorMessage(error)}</EmptyState>;
   if (!shown) return phone ? <div className="detail" ref={together.ref} data-ready={together.state}><DetailSkeleton /></div> : <DetailPending />;
 
@@ -98,6 +106,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
         {phone && art}
         <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
+        {meta && <ExtrasShelf meta={meta} />}
         {type === "movie" && meta && (
           <section className="about">
             <h2 className="t-title2">About</h2>
@@ -174,6 +183,7 @@ function DetailHero({
           {/* The score row carries IMDb's when a ratings key found it. */}
           {item.imdbRating && ratings?.imdb == null && <RatingRing value={item.imdbRating} imdbId={item.id} />}
           {facts && <span>{facts}</span>}
+          <AgeRatingBadge certification={meta?.certification ?? item.certification} />
           <FormatBadges type={item.type} videoId={videoId} />
         </p>
         <ScoreRow ratings={ratings} />
@@ -188,6 +198,7 @@ function DetailHero({
           item={item}
           playlist
           download={item.type === "movie"}
+          more={<HideTitleButton item={item} />}
         >
           {trailer.visible && (
             <IconButton
@@ -201,6 +212,7 @@ function DetailHero({
             </IconButton>
           )}
         </TitleActions>
+        <HiddenTitleNote item={item} />
         <SimklPanel item={item} />
       </div>
 
@@ -208,12 +220,12 @@ function DetailHero({
         <dl className="detail-credits t-callout">
           {meta.cast?.length ? (
             <div>
-              <dt>Starring</dt> <dd><NameList names={meta.cast.slice(0, 3)} /></dd>
+              <dt>Starring</dt> <dd><NameList names={meta.cast.slice(0, 3)} ids={personIds(meta)} /></dd>
             </div>
           ) : null}
           {meta.director?.length ? (
             <div>
-              <dt>{isSeries ? "Created by" : "Director"}</dt> <dd><NameList names={meta.director.slice(0, 2)} /></dd>
+              <dt>{isSeries ? "Created by" : "Director"}</dt> <dd><NameList names={meta.director.slice(0, 2)} ids={personIds(meta)} /></dd>
             </div>
           ) : null}
         </dl>
@@ -239,21 +251,32 @@ function SeriesBody({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: bo
 
 function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boolean) => void; episode?: string }) {
   const { data: progress } = useProgress(meta.id);
+  const orders = useEpisodeOrders(meta);
+  const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
-  const next = useMemo(() => upNext(meta, progress ?? []), [meta, progress]);
+  const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
+  const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
   // A link to one episode (#163) opens on its season, with its sources listed (nothing plays by itself).
   const linked = episode ? meta.videos.find((v) => v.id === episode) : undefined;
-  const [season, setSeason] = useState<number | undefined>(linked?.season);
+  const [season, setSeason] = useState<number | undefined>(linked && shelfGroupOf(linked, view));
   const picker = useSourcePicker(onSheet);
+
+  // Another episode order lists other groups: open on the one up next is in.
+  const shownOrder = useRef(view?.id);
+  useEffect(() => {
+    if (shownOrder.current === view?.id) return;
+    shownOrder.current = view?.id;
+    setSeason(undefined);
+  }, [view]);
 
   // Open on the season you're actually in, not always season 1 — so wait
   // for watch progress before choosing.
   useEffect(() => {
-    if (season === undefined && progress !== undefined && next.video) setSeason(next.video.season);
-  }, [next.video, season, progress]);
+    if (season === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
+  }, [next.video, season, progress, view]);
 
-  const current = season ?? seasons[0];
-  const episodes = meta.videos.filter((v) => v.season === current);
+  const current = groups.some((g) => g.id === season) ? season! : (groups[0]?.id ?? seasons[0]);
+  const episodes = groups.find((g) => g.id === current)?.videos ?? [];
   const map = useMemo(() => progressMap(progress), [progress]);
 
   const [layout, setLayout] = useEpisodeLayout();
@@ -277,23 +300,29 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
     <section className="seasons">
       <div className="seasons-bar">
         <div className="seasons-picker">
-          <SeasonPicker value={current} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: seasonLabel(s) }))} />
+          <SeasonPicker value={current} onChange={setSeason} options={groups.map((g) => ({ id: g.id, label: g.label }))} />
         </div>
-        <BatchDownload item={meta} videos={downloadableEpisodes(episodes)} season={current} />
-        {/* The show in random order, from any season; progress stays where it is (lib/playback/shuffle.ts). */}
-        <IconButton
-          variant="glass"
-          label="Shuffle Episodes"
-          title="Shuffle: episodes in random order, your progress left as it is"
-          onClick={() => {
+        <EpisodeOrderPicker orders={orders} />
+        {/* Download Season, Shuffle and Episode Ratings, in one menu. An order's group downloads as its own
+            batch, apart from the seasons'. Shuffle plays the show in random order, from any season, progress left
+            where it is (lib/playback/shuffle.ts). A ratings cell opens its episode as a link to it does (#163):
+            its season, its sources listed. */}
+        <SeasonActions
+          meta={meta}
+          episodes={downloadableEpisodes(episodes)}
+          season={view ? undefined : current}
+          part={view ? current : undefined}
+          onShuffle={() => {
             const v = randomEpisode(meta);
             if (!v) return;
             startShuffle(meta.id, v.id);
             picker.play({ ...request(v), resumable: false, shuffle: true });
           }}
-        >
-          <Shuffle size={20} />
-        </IconButton>
+          onOpenEpisode={(v) => {
+            setSeason(v.season);
+            picker.choose(request(v));
+          }}
+        />
         <Segmented
           label="Episode layout"
           value={layout}
@@ -308,6 +337,7 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
         item={meta}
         layout={layout}
         episodes={episodes}
+        numbers={view?.number}
         progress={map}
         runtime={meta.runtime}
         upNextId={next.kind !== "start" ? next.video?.id : undefined}

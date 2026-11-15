@@ -13,6 +13,7 @@ import { appUpdates, buildChannel, isDesktop, os } from "../../lib/platform";
 import { databaseHost, devDatabase, removeDevDatabase, saveDevDatabase, useAccount } from "../../lib/account";
 import { LetterboxdImport } from "../../components/settings/LetterboxdImport";
 import { StremioImport } from "../../components/settings/StremioImport";
+import { PolarityExport } from "../../components/settings/PolarityExport";
 
 export function AdvancedPage() {
   const expand = useExpanded();
@@ -54,6 +55,7 @@ export function AdvancedPage() {
       {/* Signed in, it's under Account. */}
       {!account.profile && <StremioImport />}
       {!account.profile && <LetterboxdImport />}
+      {!account.profile && <PolarityExport />}
       <Card title="Reset">
         <ResetRow {...expand("reset")} />
       </Card>

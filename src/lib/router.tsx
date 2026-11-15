@@ -30,6 +30,8 @@ export type Route =
   /** One of Library's collections in full; `fresh`: a playlist just made, its name selected to type over. */
   | { name: "library-collection"; view: "saved" | "watched" | "playlists" | "downloads" }
   | { name: "playlist"; id: string; fresh?: boolean }
+  /** A person's page, by TMDB id; `title`: their name, shown until the page loads. */
+  | { name: "person"; id: number; title?: string }
   /** `shuffle`: the show's episodes in random order (lib/playback/shuffle.ts), progress left as it was. */
   | { name: "player"; type: ContentType; metaId: string; videoId: string; stream?: Stream; shuffle?: boolean };
 

@@ -3,6 +3,11 @@
  * Each takes a `size` in px and draws the cut Heroicons made for that size:
  * micro (16px grid) up to 16, mini (20px grid) up to 20, the 24px set above.
  * The few Heroicons lack are drawn below in their style.
+ *
+ * A number is px at the 16px root and is set in rem (`iconLength`), so an icon
+ * grows with the type wherever the root is larger, as TV mode's is: the same
+ * size on the desktop, in step with its label on a TV. A string is any CSS
+ * length, used as given (an icon in a box that is itself sized in px).
  */
 import * as S16 from "@heroicons/react/16/solid";
 import * as S20 from "@heroicons/react/20/solid";
@@ -13,13 +18,17 @@ type HeroIcon = ComponentType<SVGProps<SVGSVGElement>>;
 export type IconProps = Omit<SVGProps<SVGSVGElement>, "ref"> & { size?: number | string };
 export type Icon = ComponentType<IconProps>;
 
+/** An icon's `size` as the length its svg is drawn at: px at the 16px root, in rem; a string as given. */
+export const iconLength = (size: number | string) => (typeof size === "number" ? `${size / 16}rem` : size);
+
 function icon(large: HeroIcon, mini: HeroIcon, micro: HeroIcon): Icon {
   // `fill` and `strokeWidth` are accepted for call-site compatibility; solid
   // icons are filled shapes, so neither applies.
   function AppIcon({ size = 24, fill: _fill, strokeWidth: _stroke, ...rest }: IconProps) {
     const px = typeof size === "number" ? size : 24;
     const Cut = px <= 16 ? micro : px <= 20 ? mini : large;
-    return <Cut width={size} height={size} aria-hidden {...rest} />;
+    const length = iconLength(size);
+    return <Cut width={length} height={length} aria-hidden {...rest} />;
   }
   return AppIcon;
 }
@@ -32,6 +41,8 @@ export const ArrowLeft =icon(S24.ArrowLeftIcon, S20.ArrowLeftIcon, S16.ArrowLeft
 export const Backspace = icon(S24.BackspaceIcon, S20.BackspaceIcon, S16.BackspaceIcon);
 export const Captions = icon(S24.ChatBubbleBottomCenterTextIcon, S20.ChatBubbleBottomCenterTextIcon, S16.ChatBubbleBottomCenterTextIcon);
 export const Check = icon(S24.CheckIcon, S20.CheckIcon, S16.CheckIcon);
+/** Select every item in a list (Continue Watching's selection). */
+export const CheckAll = icon(S24.CheckCircleIcon, S20.CheckCircleIcon, S16.CheckCircleIcon);
 export const ChevronDown = icon(S24.ChevronDownIcon, S20.ChevronDownIcon, S16.ChevronDownIcon);
 export const ChevronLeft = icon(S24.ChevronLeftIcon, S20.ChevronLeftIcon, S16.ChevronLeftIcon);
 export const ChevronRight = icon(S24.ChevronRightIcon, S20.ChevronRightIcon, S16.ChevronRightIcon);
@@ -48,6 +59,8 @@ export const Episodes = icon(S24.RectangleStackIcon, S20.RectangleStackIcon, S16
 export const ExitFullscreen = icon(S24.ArrowsPointingInIcon, S20.ArrowsPointingInIcon, S16.ArrowsPointingInIcon);
 export const Fullscreen = icon(S24.ArrowsPointingOutIcon, S20.ArrowsPointingOutIcon, S16.ArrowsPointingOutIcon);
 export const Grid = icon(S24.Squares2X2Icon, S20.Squares2X2Icon, S16.Squares2X2Icon);
+/** A handle to drag a row by (the order of installed add-ons). */
+export const Grip = icon(S24.Bars2Icon, S20.Bars2Icon, S16.Bars2Icon);
 export const Hidden = icon(S24.EyeSlashIcon, S20.EyeSlashIcon, S16.EyeSlashIcon);
 export const Info = icon(S24.InformationCircleIcon, S20.InformationCircleIcon, S16.InformationCircleIcon);
 export const Download = icon(S24.ArrowDownTrayIcon, S20.ArrowDownTrayIcon, S16.ArrowDownTrayIcon);
@@ -97,11 +110,14 @@ export const Users = icon(S24.UsersIcon, S20.UsersIcon, S16.UsersIcon);
 export const WatchParty = icon(S24.UserGroupIcon, S20.UserGroupIcon, S16.UserGroupIcon);
 export const Volume = icon(S24.SpeakerWaveIcon, S20.SpeakerWaveIcon, S16.SpeakerWaveIcon);
 export const VolumeMuted = icon(S24.SpeakerXMarkIcon, S20.SpeakerXMarkIcon, S16.SpeakerXMarkIcon);
+// The screen's brightness (the player's swipe on the left half).
+export const Brightness = icon(S24.SunIcon, S20.SunIcon, S16.SunIcon);
+export const Unlock = icon(S24.LockOpenIcon, S20.LockOpenIcon, S16.LockOpenIcon);
 
 /** A game controller, drawn solid to sit with the Heroicons (which have none). */
 export function Gamepad({ size = 24, fill: _fill, strokeWidth: _stroke, ...rest }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden {...rest}>
+    <svg viewBox="0 0 24 24" width={iconLength(size)} height={iconLength(size)} fill="currentColor" aria-hidden {...rest}>
       <path
         fillRule="evenodd"
         d="M7.6 5.5h8.8a4.9 4.9 0 0 1 4.8 3.95l1.05 5.35a3.05 3.05 0 0 1-5.35 2.5L15.2 15.2H8.8l-1.7 2.1a3.05 3.05 0 0 1-5.35-2.5L2.8 9.45A4.9 4.9 0 0 1 7.6 5.5ZM7.75 8.5a.75.75 0 0 0-.75.75V10.5H5.75a.75.75 0 0 0 0 1.5H7v1.25a.75.75 0 0 0 1.5 0V12h1.25a.75.75 0 0 0 0-1.5H8.5V9.25a.75.75 0 0 0-.75-.75Zm8.5.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm-1.75 2.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm3.5 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"
@@ -119,7 +135,7 @@ function drawn(large: Cut, mini: Cut, micro: Cut): Icon {
     const px = typeof size === "number" ? size : 24;
     const cut = px <= 16 ? micro : px <= 20 ? mini : large;
     return (
-      <svg viewBox={`0 0 ${cut.grid} ${cut.grid}`} width={size} height={size} fill="currentColor" aria-hidden {...rest}>
+      <svg viewBox={`0 0 ${cut.grid} ${cut.grid}`} width={iconLength(size)} height={iconLength(size)} fill="currentColor" aria-hidden {...rest}>
         {cut.shape}
       </svg>
     );

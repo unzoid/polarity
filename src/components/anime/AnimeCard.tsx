@@ -21,6 +21,7 @@ import {
   useLinkedImdb,
 } from "../../lib/anime";
 import { usePrefs } from "../../lib/settings";
+import { useMatureContent } from "../../lib/catalog";
 import { useRouter } from "../../lib/router";
 import { menuPoint, openCardMenu } from "../CardMenu";
 import { api } from "../../lib/api";
@@ -104,6 +105,7 @@ export function AnimeCard({
   const title = useAnimeTitle()(item.title);
   const open = useOpenAnime(item);
   const prefs = usePrefs();
+  const matureContent = useMatureContent();
   const next = prefs.animeCardCountdown ? item.nextAiringEpisode : undefined;
   const score = useAnimeScore()(prefs.animeCardScores ? item.averageScore : undefined);
   // A manga or novel in a franchise has no page here: it opens on the chosen site (AniList when MyAnimeList
@@ -116,7 +118,7 @@ export function AnimeCard({
   const cover = item.coverImage.extraLarge ?? item.coverImage.large;
   const separate = prefs.animeSeparateEntries;
   const [art, ...artFallbacks] = !isAnime ? (cover ? [cover] : []) : imdb === undefined ? [] : posterArt({ imdb, cover, separate });
-  if (prefs.matureContent === "hide" && isMature(item)) return null;
+  if (matureContent === "hide" && isMature(item)) return null;
   const click =
     action.kind === "site"
       ? { onClick: () => void api.openExternal(action.url), hint: `Open on ${action.site}` }
@@ -142,7 +144,7 @@ export function AnimeCard({
       {...click}
       style={{ "--cover": item.coverImage.color ?? undefined } as React.CSSProperties}
     >
-      {prefs.matureContent === "blur" && isMature(item) && <MatureCover />}
+      {matureContent === "blur" && isMature(item) && <MatureCover />}
       {action.kind !== "page" && <span className="card-kind-badge">{action.badge}</span>}
       {score && (
         <span className="card-score card-score-art anime-card-score tabular" title="AniList score">
@@ -161,7 +163,8 @@ export function AnimeCard({
 export function AnimeLandscapeCard({ item, label }: { item: Media; label?: string }) {
   const title = useAnimeTitle()(item.title);
   const open = useOpenAnime(item);
-  const { matureContent, animeSeparateEntries: separate } = usePrefs();
+  const { animeSeparateEntries: separate } = usePrefs();
+  const matureContent = useMatureContent();
   // Worked out once the card comes near the screen (a page's worth of AniList requests per card), the ones on
   // screen first; nothing until it's known, so the picture doesn't change once drawn.
   const [ref, near, place] = useViewportPlace<HTMLElement>(reprioritiseAniList);

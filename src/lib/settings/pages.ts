@@ -73,6 +73,12 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
       settings: ["resumePlayback", "resumeRewind", "watchedThreshold"],
     },
     {
+      id: "downloads",
+      label: "Downloads",
+      caption: "Keeping the next episodes downloaded",
+      settings: ["autoDownloadNext", "autoDownloadRemoveWatched"],
+    },
+    {
       id: "player",
       label: "Player",
       caption: "Fullscreen, minimizing, playback speed and Discord",
@@ -89,6 +95,7 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
         "seekStep",
         "controlsHideSecs",
         "pauseShowsControls",
+        "pauseDetails",
         "holdSpeed",
         "clickAction",
         "wheelAction",
@@ -130,13 +137,13 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
       id: "general",
       label: "General",
       caption: "Start page, language, family and search",
-      settings: ["startPage", "language", "matureContent", "searchSuggestions", "saveRecentSearches"],
+      settings: ["startPage", "language", "viewingLimit", "viewingHideUnrated", "matureContent", "searchSuggestions", "saveRecentSearches"],
     },
     {
       id: "pages",
       label: "Home & Title Pages",
-      caption: "The carousel, Continue Watching, trailers and the calendar",
-      settings: ["heroAutoplay", "showContinueWatching", "trailerAutoplay", "trailerSound", "showCalendar"],
+      caption: "The carousel, Continue Watching, hidden titles, trailers and the calendar",
+      settings: ["heroAutoplay", "showContinueWatching", "hideWatched", "hiddenTitles", "trailerAutoplay", "trailerSound", "showCalendar"],
     },
     {
       id: "cards",

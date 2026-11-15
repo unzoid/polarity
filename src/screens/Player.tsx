@@ -67,6 +67,7 @@ import {
   startPosition,
 } from "../lib/playback";
 import { downloadedStream, episodeState, isLocalFile, nextVideo, previousVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
+import { nextInOrder, previousInOrder, shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
 import { Scrubber } from "../components/player/Scrubber";
 import { useSource } from "../components/player/useSource";
@@ -98,6 +99,11 @@ import { createMiniWindow } from "../components/player/miniWindow";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
+import { useSwipeLevels } from "../components/player/useSwipeLevels";
+import { useScreenBrightness } from "../components/player/useScreenBrightness";
+import { BrightnessHud } from "../components/player/BrightnessHud";
+import { TouchLockLayer, useTouchLock } from "../components/player/TouchLock";
+import { Lock } from "../components/icons";
 import { usePlayingFormat } from "../components/player/usePlayingFormat";
 import { useMediaSession } from "../components/player/useMediaSession";
 import { useChromecast } from "../components/player/useChromecast";
@@ -118,10 +124,10 @@ import {
 import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
-import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds, seasonLabel } from "../lib/format";
+import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds } from "../lib/format";
 import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
 import { useRouter } from "../lib/router";
-import type { ContentType, Progress, RankedStream, Stream, Video } from "../lib/types";
+import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
 import { setTvMode, useTvMode } from "../tv/tvMode";
@@ -171,6 +177,8 @@ import { noteShuffled, shuffledNext, startShuffle } from "../lib/playback/shuffl
 import { useSimklScrobble } from "../components/player/useSimklScrobble";
 import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
+import { PlayerPauseScreen } from "../components/player/PauseScreen";
+import { PlayerRatingPrompt } from "../components/player/RatingPrompt";
 
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
@@ -480,7 +488,9 @@ export function Player({
   // The top bar's "More" menu (#396) keeps the controls up while it's open.
   const [moreOpen, setMoreOpen] = useState(false);
   // Playing on a TV, nobody watches this screen: the controls that drive the TV stay up.
-  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting;
+  // Phones and tablets: locked against touches (TouchLock.tsx), the controls stay hidden.
+  const touchLock = useTouchLock(touch && !tv);
+  const chromeVisible = !touchLock.locked && (chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting);
   // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
   const [ytPlayed, setYtPlayed] = useState(false);
   useEffect(() => {
@@ -494,6 +504,9 @@ export function Player({
 
   // --- Current / next episode ---------------------------------------------
   const { animeSkipFiller } = usePrefs();
+  // The episode order chosen for the show on its page (lib/library/episodeOrder.ts): Up Next, autoplay and the
+  // Episodes panel follow it; undefined: as aired.
+  const order = useEpisodeOrders(local ? undefined : meta).view;
   // With "Skip filler" on, the next episode that isn't filler; `skipped` says how many were passed over.
   const { next, skipped } = useMemo(() => {
     // Shuffling: one not played yet in this run, picked once per episode so Up Next doesn't change under you.
@@ -501,14 +514,15 @@ export function Player({
       noteShuffled(metaId, videoId);
       return { next: shuffledNext(meta, videoId), skipped: [] as Video[] };
     }
-    let n = meta && type === "series" ? nextVideo(meta, videoId) : undefined;
+    const after = (m: Meta, id: string) => (order ? nextInOrder(order, id) : nextVideo(m, id));
+    let n = meta && type === "series" ? after(meta, videoId) : undefined;
     const skipped: Video[] = [];
     while (n && animeSkipFiller && playContext.isFiller(n.id) && meta) {
       skipped.push(n);
-      n = nextVideo(meta, n.id);
+      n = after(meta, n.id);
     }
     return { next: n, skipped };
-  }, [meta, type, videoId, animeSkipFiller, shuffling, metaId]);
+  }, [meta, type, videoId, animeSkipFiller, shuffling, metaId, order]);
   // A YouTube video is called by its own title once its player says it.
   const [ytTitle, setYtTitle] = useState<string | null>(null);
   // YouTube's player is up with its own controls (#384): the loading screen leaves them clear, even before it plays.
@@ -652,6 +666,26 @@ export function Player({
   // Press and hold on the picture: faster until let go (Settings → Playback). Not in a party, nor on YouTube's own player.
   const hold = useHoldSpeed(holdSpeed > 0 && !inParty && !ytFramed && started, started && !paused);
   const playRate = hold.held ? holdSpeed : rate;
+  // Phones and tablets: a finger up or down the right half sets the volume, the left the screen's brightness
+  // (useSwipeLevels; Settings → Controls & TV turns it off). Not in TV mode, while locked or held, nor on YouTube's player.
+  const { swipeGestures } = usePrefs();
+  const brightness = useScreenBrightness(touch && !tv);
+  const swipe = useSwipeLevels({
+    enabled: touch && !tv && swipeGestures && !touchLock.locked && started && !ytFramed,
+    begin: (side) => {
+      if (hold.held) return null;
+      if (side === "left") return brightness.level == null ? null : { level: brightness.level, max: 1 };
+      return { level: muted ? 0 : Math.min(volume, volumeTop), max: volumeTop };
+    },
+    change: (side, level) => {
+      if (side === "left") return brightness.set(level);
+      const before = muted ? 0 : Math.min(volume, volumeTop);
+      if (level === before) return;
+      setMuted(false);
+      setVolume(level);
+      setVolumePing((p) => ({ n: p.n + 1, dir: level > before ? "up" : "down" }));
+    },
+  });
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
   }, [playRate, source.state, media, inParty]);
@@ -1009,8 +1043,12 @@ export function Player({
   const { data: progress } = useProgress(metaId);
   const progressById = useMemo(() => progressMap(progress), [progress]);
   const seasons = useMemo(() => (meta ? seasonsOf(meta) : []), [meta]);
+  // The seasons, or a chosen order's groups (ids: season numbers, or group ids).
+  const seasonGroups = useMemo(() => (meta ? shelfGroups(meta.videos, seasons, order) : []), [meta, seasons, order]);
   const [pickSeason, setPickSeason] = useState<number>();
-  const shownSeason = pickSeason ?? current?.season ?? seasons[0];
+  const shownSeason =
+    (seasonGroups.some((g) => g.id === pickSeason) ? pickSeason : undefined) ?? (current && shelfGroupOf(current, order)) ?? seasonGroups[0]?.id;
+  const shownEpisodes = seasonGroups.find((g) => g.id === shownSeason)?.videos ?? [];
   // Side by side or a list: the same choice as the title page's switch (#226).
   const [episodeLayout, setEpisodeLayout] = useEpisodeLayout();
   // Beside the layout switch: the show's episodes in random order from here (lib/playback/shuffle.ts).
@@ -1041,14 +1079,12 @@ export function Player({
 
   const episodeItems = useMemo<OptionItem[]>(
     () =>
-      (meta?.videos ?? [])
-        .filter((v) => v.season === shownSeason)
-        .map((v) => {
+      shownEpisodes.map((v) => {
           const p = progressById.get(v.id);
           const { released, openable, fraction, watched, inProgress } = episodeState(v, p, watchedFraction());
           return {
             id: v.id,
-            label: `${v.episode}. ${v.title}`,
+            label: `${order?.number.get(v.id) ?? v.episode}. ${v.title}`,
             detail: released && inProgress && p ? formatRemaining(p.position, p.duration) : airLabel(v),
             thumbnail: stillFor(v.id) ?? v.thumbnail ?? "",
             progress: watched ? undefined : fraction,
@@ -1056,7 +1092,7 @@ export function Player({
             disabled: !openable,
           };
         }),
-    [meta, shownSeason, progressById],
+    [shownEpisodes, order, progressById],
   );
   // A file on this device (#242): the other videos in its folder, in order, with how long each is and
   // where it stopped as Recent files has them. The paths stay on this device (lib/localFiles).
@@ -1283,7 +1319,8 @@ export function Player({
   // Media keys, headset buttons and the system's now-playing controls (Windows' media overlay, macOS's
   // Now Playing, the iPhone's Lock Screen). Previous goes back to the start, or within its first seconds
   // to the episode before, as music players do. Not for YouTube's player, which has its own.
-  const previous = meta && type === "series" && !local ? previousVideo(meta, videoId) : undefined;
+  const previous =
+    meta && type === "series" && !local ? (order ? previousInOrder(order, videoId) : previousVideo(meta, videoId)) : undefined;
   useMediaSession(
     started && !ytId && !castingAway ? media : null,
     meta || title
@@ -1598,6 +1635,7 @@ export function Player({
       className="player"
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
+      data-fullscreen={fullscreen || tv || undefined}
       data-mini={mini || undefined}
       data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
@@ -1620,28 +1658,33 @@ export function Player({
         // can make a click only show/hide the controls instead; a tap always
         // does, as on every phone player (Play/Pause is in the controls).
         // A pinch out fills the screen and a pinch in fits the picture, as phone players do (#176).
-        // Held down, it plays faster until let go (useHoldSpeed).
+        // Held down, it plays faster until let go (useHoldSpeed). A finger up or down sets volume or brightness (useSwipeLevels).
         onPointerDown={(e) => {
           chromeAtPress.current = chrome.visible;
           pinch.onPointerDown(e);
           hold.handlers.onPointerDown(e);
+          swipe.handlers.onPointerDown(e);
         }}
         onPointerMove={(e) => {
           pinch.onPointerMove(e);
           hold.handlers.onPointerMove(e);
+          swipe.handlers.onPointerMove(e);
         }}
         onPointerUp={(e) => {
           pinch.onPointerUp(e);
           hold.handlers.onPointerUp();
+          swipe.handlers.onPointerUp(e);
         }}
         onPointerCancel={(e) => {
           pinch.onPointerCancel(e);
           hold.handlers.onPointerCancel();
+          swipe.handlers.onPointerCancel(e);
         }}
         onPointerLeave={hold.handlers.onPointerLeave}
         onClick={() => {
-          // The release of a hold that sped up: play/pause and the controls stay as they were.
-          if (hold.swallowClick()) return;
+          // The release of a hold that sped up, or of a swipe: play/pause and the controls stay as they were.
+          const held = hold.swallowClick();
+          if (swipe.swallowClick() || held) return;
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
@@ -1904,6 +1947,11 @@ export function Player({
                 {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
               </IconButton>
             )}
+            {touchLock.available && (
+              <IconButton variant="player" onClick={touchLock.lock} label="Lock screen" title="Lock screen">
+                <Lock size={22} />
+              </IconButton>
+            )}
             {!tv && !isDesktop && (
               <IconButton
                 variant="player"
@@ -1932,12 +1980,13 @@ export function Player({
             title={withShortcut(`Back ${seekStep}s`, "seekBack")}
           />
           <IconButton variant="transport" className="player-transport-main" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut("Play/Pause", "playPause")}>
+            {/* In px like the circle (player.css), not the rem a number gives. */}
             {frameSteps.spinner ? (
-              <Spinner className="player-spinner" size={52} label="Buffering" />
+              <Spinner className="player-spinner" size="52px" label="Buffering" />
             ) : paused ? (
-              <Play size={64} fill="currentColor" strokeWidth={0} />
+              <Play size="64px" fill="currentColor" strokeWidth={0} />
             ) : (
-              <Pause size={64} fill="currentColor" strokeWidth={0} />
+              <Pause size="64px" fill="currentColor" strokeWidth={0} />
             )}
           </IconButton>
           <SkipTransport
@@ -2157,6 +2206,11 @@ export function Player({
       />
 
       {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
+      {/* Phones and tablets: the swipes' levels, each at the edge of its half. */}
+      {touch && !tv && (
+        <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} side="right" held={swipe.active === "right"} />
+      )}
+      {brightness.available && <BrightnessHud level={brightness.level ?? 0} held={swipe.active === "left"} media={media} />}
 
       <SkipButton
         active={started ? skip.active : null}
@@ -2214,6 +2268,31 @@ export function Player({
         )}
       </AnimatePresence>
 
+      <PlayerPauseScreen
+        meta={meta}
+        videoId={videoId}
+        state={{
+          engine,
+          playing: ready && started,
+          paused,
+          ended,
+          buffering,
+          controls: chromeVisible,
+          layer: !!options || moreOpen || nativeMenu || !!sourceMenu || torrentNotice || sleep.warning || sleep.asleep,
+          nextUp: showNextUp,
+          notice: !!notice || (!!party && (party.notes.length > 0 || party.knockers.length > 0 || !!partyHoldText(party, videoId))),
+          casting: castingAway,
+          stepping: frameSteps.stepping,
+        }}
+      />
+      <PlayerRatingPrompt
+        meta={meta}
+        type={type}
+        metaId={metaId}
+        videoId={videoId}
+        state={{ ended, nextUp: showNextUp, follower: !!party && party.hostId !== party.me, local, link: isLinkId(metaId), shuffle: shuffled || shuffling }}
+      />
+
       {canParty && (
         <OptionsOverlay
           open={options === "party"}
@@ -2247,7 +2326,7 @@ export function Player({
                 {
                   title: "Seasons",
                   value: String(shownSeason),
-                  options: seasons.map((n) => ({ id: String(n), label: seasonLabel(n) })),
+                  options: seasonGroups.map((g) => ({ id: String(g.id), label: g.label })),
                   onSelect: (id) => setPickSeason(Number(id)), // browse; playback continues
                 },
                 {
@@ -2277,7 +2356,7 @@ export function Player({
                         size="large"
                         value={String(shownSeason)}
                         onChange={(id) => setPickSeason(Number(id))} // browse; playback continues
-                        options={seasons.map((n) => ({ value: String(n), label: seasonLabel(n) }))}
+                        options={seasonGroups.map((g) => ({ value: String(g.id), label: g.label }))}
                       />
                       {layoutSwitch}
                       {shuffleButton}
@@ -2288,7 +2367,8 @@ export function Player({
                   content: (
                     <EpisodeRail
                       meta={meta}
-                      episodes={meta.videos.filter((v) => v.season === shownSeason)}
+                      episodes={shownEpisodes}
+                      numbers={order?.number}
                       playing={videoId}
                       progress={progressById}
                       still={(v) => stillFor(v.id) ?? v.thumbnail}
@@ -2357,6 +2437,15 @@ export function Player({
         />
       )}
       {sourceInfo.panel}
+      {/* Over everything while locked: touches go nowhere but its Unlock chip; playback carries on. */}
+      {touchLock.locked && (
+        <TouchLockLayer
+          onUnlock={() => {
+            touchLock.unlock();
+            poke(false, "unlocked");
+          }}
+        />
+      )}
     </div>
   );
 }

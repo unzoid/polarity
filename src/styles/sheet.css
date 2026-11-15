@@ -5,6 +5,13 @@
   z-index: var(--z-sheet);
   background: rgb(0 0 0 / 0.45);
 }
+/* A phone's sheet rises over the page softened as well as dimmed, as the system's and Netflix's do: the page
+   stays a backdrop instead of competing with the sheet. The blur is fixed; the scrim's fade carries it. */
+.sheet-scrim[data-edge="bottom"] {
+  background: rgb(0 0 0 / 0.5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
 .sheet {
   position: fixed;
   top: 8px;
@@ -109,7 +116,13 @@
 /* On an iPhone the sheet is laid out at its large detent, nearly the screen's
    height, and Sheet.tsx moves it down to rest at half (lib/ui/detents.ts). */
 .sheet[data-detent] {
-  height: calc(100dvh - var(--safe-top) - 0.625rem);
+  height: calc(100dvh - var(--safe-top) - var(--sheet-gap));
+  max-height: none;
+}
+/* A sheet that is a place of its own (the profile sheet, with Settings inside it): the full height from the
+   start, just under the status bar, as Netflix's account sheet is, whatever its view holds. */
+.sheet[data-edge="bottom"][data-full] {
+  height: calc(100dvh - var(--safe-top) - var(--sheet-gap));
   max-height: none;
 }
 .sheet[data-detent] .sheet-grabber {

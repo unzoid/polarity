@@ -14,9 +14,12 @@ import { Button } from "../../components/ui/Button";
 import { ActionRow, Card, ExpandRow, FormRow, LinkRow, RowText, useExpanded, type Expandable } from "../../components/settings/rows";
 import { LetterboxdImport } from "../../components/settings/LetterboxdImport";
 import { StremioImport } from "../../components/settings/StremioImport";
+import { PolarityExport } from "../../components/settings/PolarityExport";
 import { CopySetup } from "../../components/settings/CopySetup";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { FriendsSettings } from "../../components/friends/FriendsSettings";
+import { useLinkedTvCode } from "../../lib/account";
+import { AccountSecurityCard } from "../../components/settings/AccountSecurity";
 
 export function AccountPage() {
   const account = useAccount();
@@ -44,6 +47,8 @@ export function AccountPage() {
       <Card footer="Your library, where you are in each title, playlists, settings, shortcuts, API keys and add-ons sync automatically. Volume and TV mode stay on this device.">
         <ActionRow title="Email" caption={account.user?.email} label="Sign Out" onClick={() => void account.signOut()} />
       </Card>
+
+      <AccountSecurityCard expand={expand} />
 
       <Card footer="The TV gets its own sign-in: signing out there leaves this device signed in, and the other way round.">
         <TvSignInRow {...expand("tv")} />
@@ -79,6 +84,8 @@ export function AccountPage() {
       <StremioImport />
 
       <LetterboxdImport />
+
+      <PolarityExport />
 
       <Card title="Danger Zone">
         <DeleteAccountRow {...expand("delete")} />
@@ -272,6 +279,14 @@ function TvSignInRow(props: Expandable) {
       setAsking(null);
       setCode("");
     },
+  });
+  // A code from the TV's QR code: filled in and looked up, so the question comes up; the person still answers it.
+  useLinkedTvCode((linked) => {
+    if (!props.open) props.onToggle();
+    setAsking(null);
+    setDone(null);
+    setCode(formatTvCode(linked));
+    look.mutate(linked);
   });
   const typedWrong = code.replace(/[^A-Za-z0-9]/g, "").length >= 8 && !isTvCode(code);
   return (

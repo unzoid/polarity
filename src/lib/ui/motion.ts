@@ -20,8 +20,15 @@ export const springs = {
   ui: { type: "spring", bounce: 0, duration: 0.4 },
   /** Sheets opened by a button press — no momentum, so no bounce. */
   sheet: { type: "spring", bounce: 0, duration: 0.35 },
+  /**
+   * A phone's bottom sheet: it travels the screen's height, not a side panel's width, and a hand watches it come
+   * up, so it takes longer to settle (Netflix's and iOS's own take about half a second).
+   */
+  bottomSheet: { type: "spring", bounce: 0, duration: 0.5 },
   /** A step settling into place (sign-in): a hint of overshoot, nothing more. */
   settle: { type: "spring", bounce: 0.15, duration: 0.45 },
+  /** One panel of tabs giving way to the next (Episode Ratings' views): quick, no overshoot. */
+  tabs: { type: "spring", bounce: 0, duration: 0.3 },
 } satisfies Record<string, Transition>;
 
 /**

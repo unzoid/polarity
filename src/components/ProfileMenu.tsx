@@ -24,6 +24,7 @@ import { lazyNamed, useFormFactor } from "../lib/ui";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { ProfileEditSheet } from "./ProfileEditSheet";
+import { useGuard } from "./profileLock/useGuard";
 import { Avatar } from "./Avatar";
 import { Sheet } from "./Sheet";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./ui/Popover";
@@ -322,14 +323,16 @@ function ProfilePopList({ name, avatar, me, email, status, profiles, manage, gro
 /**
  * On a phone: a sheet from the bottom edge. Who's watching first (the profile, then the others to switch to, a
  * tap each), then the rest as rows in cards. Friends, Join Watch Party and Settings (Account too, a page of it) open
- * as views inside it, with a Back to the list; the sheet's height follows the view, up to nearly the screen's for
- * Settings. Any other choice closes it as it runs.
+ * as views inside it, with a Back to the list; the sheet is the screen's full height throughout, as Netflix's account
+ * sheet is, so a view comes in without the sheet changing size under it. Any other choice closes it as it runs.
  */
 function ProfileSheet({ name, avatar, me, email, status, profiles, manage, groups }: MenuProps) {
   const settingsOpen = useSettingsOverlay().open;
   // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
   const [managing, setManaging] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // From a restricted profile, Manage asks first (lib/account/profileRules.ts).
+  const guard = useGuard();
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me, settingsOpen ? "settings" : editing ? "edit" : undefined);
   // What Settings says its view is (its name, and where its Back goes), for the sheet's header.
   const [settingsHead, setSettingsHead] = useState<SettingsHead>();
@@ -373,40 +376,38 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
       <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => list(true)}>
         <Avatar id={avatar} />
       </button>
-      <Sheet open={open} onClose={shut} title={title} fit>
-        <FitHeight>
-          <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
-            {view === "friends" && <FriendsBody inDialog={false} />}
-            {view === "join" && me && <JoinView me={me} done={done} />}
-            {view === "settings" && (
-              <Suspense
-                fallback={
-                  <div className="profile-sheet-loading">
-                    <Spinner size={22} />
-                  </div>
-                }
-              >
-                <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
-              </Suspense>
-            )}
-            {view === "edit" && editing && <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />}
-            {view === "list" && (
-              <ProfileList
-                name={name}
-                avatar={avatar}
-                email={email ?? status}
-                profiles={profiles}
-                manage={manage}
-                groups={groups}
-                pick={pick}
-                managing={managing}
-                onManage={() => setManaging((m) => !m)}
-                onEdit={(id) => setEditing(id)}
-                meId={me?.id}
-              />
-            )}
-          </div>
-        </FitHeight>
+      <Sheet open={open} onClose={shut} title={title} full>
+        <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
+          {view === "friends" && <FriendsBody inDialog={false} />}
+          {view === "join" && me && <JoinView me={me} done={done} />}
+          {view === "settings" && (
+            <Suspense
+              fallback={
+                <div className="profile-sheet-loading">
+                  <Spinner size={22} />
+                </div>
+              }
+            >
+              <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
+            </Suspense>
+          )}
+          {view === "edit" && editing && <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />}
+          {view === "list" && (
+            <ProfileList
+              name={name}
+              avatar={avatar}
+              email={email ?? status}
+              profiles={profiles}
+              manage={manage}
+              groups={groups}
+              pick={pick}
+              managing={managing}
+              onManage={() => (managing ? setManaging(false) : void guard.manage().then((ok) => ok && setManaging(true)))}
+              onEdit={(id) => setEditing(id)}
+              meId={me?.id}
+            />
+          )}
+        </div>
       </Sheet>
     </>
   );

@@ -1,4 +1,5 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
+import { LIMIT_STEPS } from "../catalog/ageRating";
 import { isMac } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
 import { MAX_VOLUMES } from "../playback/volume";
@@ -169,6 +170,8 @@ export const SETTINGS: SettingDef[] = [
     title: "Import from Letterboxd",
     keywords: "import letterboxd watchlist watched diary films movies export zip csv file",
   },
+  { id: "polarityExport", page: "account", title: "Export library and history", keywords: "export backup save download library history watched progress playlists json csv spreadsheet file" },
+  { id: "polarityImport", page: "account", title: "Import a Polarity export", keywords: "import restore backup move device profile library history playlists json file" },
   // Friends (#135): kept on the account server per profile, drawn by the page (components/friends/FriendsSettings.tsx).
   { id: "friendsEnabled", page: "account", title: "Friends", keywords: "friends friend code list online invite watch party join social" },
   { id: "friendsOnline", page: "account", title: "Who sees you're online", keywords: "friends privacy online status presence hide invisible" },
@@ -294,6 +297,31 @@ export const SETTINGS: SettingDef[] = [
     control: { kind: "number", min: 50, max: 100, unit: "%" },
     invalidates: [["continue"], ["history"]],
   },
+  {
+    id: "autoDownloadNext",
+    page: "playback",
+    title: "Keep the next episodes downloaded",
+    caption:
+      "When you finish a downloaded episode, this many episodes after it are downloaded with the first source that can be. Only while Polarity is open; waits for Wi-Fi and stops when space runs low.",
+    keywords: "download next episodes automatically rolling offline queue",
+    bind: p("autoDownloadNext"),
+    control: choice([
+      { value: 0, label: "Off" },
+      { value: 1, label: "1" },
+      { value: 2, label: "2" },
+      { value: 3, label: "3" },
+      { value: 5, label: "5" },
+    ]),
+  },
+  {
+    id: "autoDownloadRemoveWatched",
+    page: "playback",
+    title: "Remove downloaded episodes once watched",
+    caption: "Deletes a downloaded episode's file after you finish it and close the player.",
+    keywords: "delete downloads watched episodes free space automatically",
+    bind: p("autoDownloadRemoveWatched"),
+    control: toggle,
+  },
   { id: "startFullscreen", page: "playback", title: "Start in fullscreen", keywords: "full screen", bind: s("startFullscreen", false), control: toggle },
   {
     id: "pauseOnMinimize",
@@ -365,6 +393,16 @@ export const SETTINGS: SettingDef[] = [
     bind: p("pauseShowsControls"),
     control: toggle,
     tv: "Show Controls When Paused",
+  },
+  {
+    id: "pauseDetails",
+    page: "playback",
+    title: "Show details while paused",
+    caption: "Paused for a few seconds, the picture dims and shows the title, its overview and cast. Any key or touch brings the picture back",
+    keywords: "pause screen details cast actors overview synopsis description dim idle",
+    bind: p("pauseDetails"),
+    control: toggle,
+    tv: "Show Details While Paused",
   },
   {
     id: "loadingDetails",
@@ -793,6 +831,17 @@ export const SETTINGS: SettingDef[] = [
     tv: "Continue Watching",
   },
   {
+    id: "hideWatched",
+    page: "browsing",
+    title: "Hide watched titles",
+    caption: "Movies and shows you've finished leave Home, Movies, Series and recommendations. Continue Watching, the Library and Search still show them",
+    keywords: "watched seen finished hide filter home discover shelves recommendations",
+    bind: p("hideWatched"),
+    control: toggle,
+    tv: "Hide Watched Titles",
+  },
+  { id: "hiddenTitles", page: "browsing", title: "Hidden titles", keywords: "hidden hide unhide never show again blocked titles home discover" },
+  {
     id: "hideEpisodeThumbs",
     page: "browsing",
     title: "Blur unwatched episode pictures",
@@ -822,6 +871,28 @@ export const SETTINGS: SettingDef[] = [
       { value: "hide", label: "Hide" },
     ]),
     tv: "Mature Anime",
+  },
+  {
+    id: "viewingLimit",
+    page: "browsing",
+    title: "Hide titles rated above",
+    caption: "Age ratings come from TMDB. Titles above the limit leave Home, Movies, Shows and Search, and don't open or play",
+    keywords: "age rating certification parental kids family children limit pg",
+    bind: p("viewingLimit"),
+    control: choice([{ value: 0, label: "No limit" }, ...LIMIT_STEPS.map((age) => ({ value: age, label: String(age) }))]),
+    // Film lists are asked for within the limit, so pages come back full.
+    invalidates: [["catalog"], ["discover"], ["featured"]],
+    tv: "Age Limit",
+  },
+  {
+    id: "viewingHideUnrated",
+    page: "browsing",
+    title: "Also hide titles without a rating",
+    caption: "With a limit set. Titles from add-ons and without a TMDB key have none",
+    keywords: "age rating unrated certification parental kids",
+    bind: p("viewingHideUnrated"),
+    control: toggle,
+    tv: "Hide Unrated Titles",
   },
   {
     id: "searchSuggestions",
@@ -1111,6 +1182,15 @@ export const SETTINGS: SettingDef[] = [
     control: { kind: "number", min: 5, max: 100, step: 5, unit: "%", scale: 100, tvStep: 10 },
     tv: "Sound Volume",
   },
+  {
+    id: "swipeGestures",
+    page: "controls",
+    title: "Swipe gestures in the player",
+    caption: "Swipe up or down on the right of the video for volume, on the left for brightness. Double-tap to skip works either way",
+    keywords: "touch swipe gesture volume brightness phone tablet drag",
+    bind: p("swipeGestures"),
+    control: toggle,
+  },
   { id: "shortcuts", page: "controls", title: "Keyboard Shortcuts", keywords: "keybinds hotkeys keys" },
 
   // Controller
@@ -1237,6 +1317,15 @@ export const SETTINGS: SettingDef[] = [
   { id: "mal", page: "services", title: "MyAnimeList", keywords: "mal anime list account link sign in import tracking" },
   { id: "trakt", page: "services", title: "Trakt", keywords: "trakt scrobble history watchlist ratings account link sign in import tracking" },
   { id: "simkl", page: "services", title: "Simkl", keywords: "simkl scrobble history watchlist ratings anime list account link sign in import tracking" },
+  {
+    id: "askRating",
+    page: "services",
+    title: "Ask for a rating after finishing",
+    caption: "When a film or the last episode out of a show ends, a small card lets you rate it on your linked Trakt or Simkl",
+    keywords: "rate rating stars score prompt ask finish ended trakt simkl",
+    bind: p("askRating"),
+    control: toggle,
+  },
 
   // Advanced
   {

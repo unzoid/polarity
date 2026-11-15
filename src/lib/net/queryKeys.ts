@@ -36,6 +36,8 @@ export const keys = {
   settings: ["settings"] as const,
   search: (q: string) => ["search", q] as const,
   recommend: (type: ContentType, id: string) => ["recommend", type, id] as const,
+  /** A person's page, by TMDB id. */
+  person: (id: number) => ["person", id] as const,
   featured: ["featured"] as const,
 
   /** Discover's paged grid (infinite query: `{ pages, pageParams }`). */
@@ -50,6 +52,7 @@ export const keys = {
   seekrAll: ["seekr"] as const,
   skipSegments: (videoId: string) => ["skip-segments", videoId] as const,
   trailer: (imdbId: string | undefined) => ["trailer", imdbId] as const,
+  episodeRatings: (imdbId: string) => ["episodeRatings", imdbId] as const,
   personPhoto: (name: string) => ["person-photo", name] as const,
   mpv: ["mpv"] as const,
   mpvLookahead: ["mpv", "lookahead"] as const,

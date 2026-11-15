@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { api } from "../../lib/api";
 import { sync } from "../../lib/account";
-import { isLocalFile, isWatched } from "../../lib/library";
+import { isLocalFile, isWatched, keepNextDownloaded, watchedEpisodeClosed } from "../../lib/library";
 import { noteWatched } from "../../lib/lists";
 import { isFileId, noteFile } from "../../lib/localFiles";
 import { keys, queryClient } from "../../lib/net";
@@ -68,6 +68,8 @@ export function useProgressSaver({
     if (told.current !== videoId && isWatched(v.currentTime, v.duration)) {
       told.current = videoId;
       void noteWatched([videoId]);
+      // Keep the next episodes downloaded (lib/library/autoDownloads.ts): only acts on a downloaded episode.
+      if (type === "series") keepNextDownloaded({ id: metaId, type, name: meta.name, poster: meta.poster, background: meta.background, logo: meta.logo }, meta.videos, videoId);
     }
   }, [media, meta, metaId, videoId, type, current, state, local, keep]);
 
@@ -92,5 +94,7 @@ export function useProgressSaver({
     },
     [metaId],
   );
+  // Closed or moved on: a watched download marked for removal goes now (after the final save above).
+  useEffect(() => () => watchedEpisodeClosed(videoId), [videoId]);
   return { save, saveIfDue };
 }

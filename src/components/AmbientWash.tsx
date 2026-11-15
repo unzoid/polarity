@@ -24,11 +24,8 @@ export function bakedFilter(filter: string, shownWidth: number, width: number): 
  * browser can filter a canvas (#36): as a CSS filter, a full-screen blur is
  * redone on every frame anything moves over it, and a held direction on TV
  * dropped to a few frames a second. Elsewhere the CSS filter applies as before.
- *
- * `flat` shrinks it one step further, to a single pixel: the art's main colour
- * as one even tint, for a page that only takes on the art's colour.
  */
-export function AmbientWash({ src, current, flat = false }: { src?: string; current: boolean; flat?: boolean }) {
+export function AmbientWash({ src, current }: { src?: string; current: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const [baked, setBaked] = useState(false);
@@ -55,15 +52,7 @@ export function AmbientWash({ src, current, flat = false }: { src?: string; curr
       m.drawImage(img, 0, 0, mid.width, mid.height);
       t.imageSmoothingQuality = "high";
       t.drawImage(mid, 0, 0, tiny.width, tiny.height);
-      let wash = tiny;
-      if (flat) {
-        wash = document.createElement("canvas");
-        wash.width = wash.height = 1;
-        const w = wash.getContext("2d");
-        if (!w) return;
-        w.imageSmoothingQuality = "high";
-        w.drawImage(tiny, 0, 0, 1, 1);
-      }
+      const wash = tiny;
       const filter = "filter" in ctx ? bakedFilter(getComputedStyle(cv).getPropertyValue("--wash"), cv.clientWidth, BAKED_WIDTH) : null;
       // Resizing resets the context, so the filter is set after.
       cv.width = filter ? BAKED_WIDTH : wash.width;
@@ -78,7 +67,7 @@ export function AmbientWash({ src, current, flat = false }: { src?: string; curr
     return () => {
       img.onload = null;
     };
-  }, [src, flat]);
+  }, [src]);
 
   return <canvas ref={canvas} width={4} height={3} data-current={current && ready} data-baked={baked || undefined} />;
 }

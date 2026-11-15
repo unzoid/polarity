@@ -24,6 +24,8 @@ export interface MetaPreview {
   releaseInfo?: string;
   imdbRating?: string;
   genres?: string[];
+  /** The age rating ("PG-13", "TV-14", "12") for the metadata language's region, else the US one; TMDB only. */
+  certification?: string;
 }
 
 export interface Video {
@@ -39,6 +41,16 @@ export interface Video {
   tag?: string;
 }
 
+/** One episode's IMDb rating (src-tauri/src/episode_ratings.rs), by IMDb's season and episode. */
+export interface EpisodeRating {
+  season: number;
+  episode: number;
+  /** Out of 10. */
+  rating: number;
+  /** How many people rated it, when IMDb says. */
+  votes?: number | null;
+}
+
 export interface Meta extends MetaPreview {
   runtime?: string;
   cast?: string[];
@@ -50,12 +62,43 @@ export interface Meta extends MetaPreview {
   /** The cast with roles and photos, where the source has them. */
   people?: Person[];
   details?: MetaDetails;
+  /** Directors, creators and writers named by TMDB id, `character` holding the job. */
+  crew?: Person[];
+  /** The title's other videos (featurettes, clips, further trailers), official ones first. */
+  extras?: Extra[];
 }
 
 export interface Person {
   name: string;
   character?: string;
   photo?: string;
+  /** TMDB's id: the person's page opens from it. */
+  tmdbId?: number;
+}
+
+/** One of a title's other videos, played in the trailer player. */
+export interface Extra {
+  name: string;
+  /** TMDB's kind: "Featurette", "Behind the Scenes", "Clip", "Bloopers", "Teaser", "Trailer"… */
+  kind: string;
+  /** The YouTube video id. */
+  key: string;
+}
+
+/** A person's page (`person`): who they are and their titles, most notable first. */
+export interface PersonPage {
+  id: number;
+  name: string;
+  photo?: string;
+  biography?: string;
+  /** YYYY-MM-DD */
+  born?: string;
+  /** YYYY-MM-DD */
+  died?: string;
+  birthplace?: string;
+  knownFor?: string;
+  acting?: MetaPreview[];
+  directing?: MetaPreview[];
 }
 
 export interface MetaDetails {

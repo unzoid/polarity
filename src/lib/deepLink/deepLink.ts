@@ -13,11 +13,16 @@
  * - a video to watch together: `polarity://together?u=<video link>&t=<seconds in>&n=<page title>`, from
  *   the /party page's fragment, for a YouTube video or a direct video link (Watch a Link, #201).
  *
+ * And the QR code a TV shows while it waits to be signed in (#133): `polarity://tv-sign-in/ABCDEFGH`,
+ * the TV's code and nothing else, opens Settings → Account → Sign in a TV with it filled in.
+ *
  * Anything can open a polarity:// link, so it's parsed strictly here, and a link only ever opens
- * a title's page, asks a party to join (lib/party/discordJoin.ts) or asks whether to watch a video
- * together (lib/party/together.ts): it plays nothing, installs nothing and changes no setting by
- * itself. No link carries an add-on or anything about the person who shared it.
+ * a title's page, asks a party to join (lib/party/discordJoin.ts), asks whether to watch a video
+ * together (lib/party/together.ts) or asks whether to sign in a TV: it plays nothing, installs
+ * nothing, approves nothing and changes no setting by itself. No link carries an add-on or anything
+ * about the person who shared it.
  */
+import { isTvCode, normalizeTvCode } from "../account/tvSignIn";
 import { isJoinToken } from "../party/discordJoin";
 import { checkLink } from "../party/links";
 import { linkScheme } from "../platform/build";
@@ -34,7 +39,8 @@ export type DeepLink =
   | { kind: "tmdb"; type: ContentType; id: number }
   | { kind: "anime"; source: "anilist" | "mal"; id: number }
   | { kind: "party"; token: string }
-  | { kind: "together"; url: string; at: number; name?: string };
+  | { kind: "together"; url: string; at: number; name?: string }
+  | { kind: "tv-sign-in"; code: string };
 
 /** Ids others' Polarity can open on their own: IMDb's and Kitsu's (docs/anime-identity.md). */
 const SHARED_ID = /^(tt\d{1,10}|kitsu:\d{1,9})$/;
@@ -50,7 +56,7 @@ export function parseDeepLink(link: string, scheme: string = linkScheme): DeepLi
   if (!text.startsWith(`${scheme}://`)) return null;
   const rest = text.slice(scheme.length + 3);
   if (rest.startsWith("together?")) return parseTogether(rest.slice("together?".length));
-  const m = /^(title|anime|party)\/([^?#]*)$/.exec(rest);
+  const m = /^(title|anime|party|tv-sign-in)\/([^?#]*)$/.exec(rest);
   if (!m) return null;
   const parts = m[2].split("/").map((p) => {
     try {
@@ -69,8 +75,16 @@ export function parseDeepLink(link: string, scheme: string = linkScheme): DeepLi
     const [source, id = "", ...rest] = parts;
     return (source === "anilist" || source === "mal") && NUMBER.test(id) && !rest.length ? { kind: "anime", source, id: Number(id) } : null;
   }
+  if (m[1] === "tv-sign-in") {
+    // Exactly as `tvSignInLink` writes it: the code's eight letters, nothing around them.
+    const code = m[2];
+    return code === normalizeTvCode(code) && isTvCode(code) ? { kind: "tv-sign-in", code } : null;
+  }
   return parts.length === 1 && isJoinToken(parts[0]) ? { kind: "party", token: parts[0] } : null;
 }
+
+/** What the TV's QR code holds: the link that opens "Sign in a TV" on a phone with `code` filled in. */
+export const tvSignInLink = (code: string, scheme: string = linkScheme) => `${scheme}://tv-sign-in/${normalizeTvCode(code)}`;
 
 /** `u` a web link the room can share (checkLink), `t` whole seconds in, `n` the page's title as plain text. */
 function parseTogether(query: string): DeepLink | null {

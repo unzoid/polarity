@@ -18,45 +18,35 @@ import { Button, IconButton } from "./ui/Button";
  * one button to start, then the batch's progress with Pause / Resume and Cancel. On a phone the start is a glyph beside
  * the season picker (a stack, set apart from one episode's Download), its words in its label.
  */
-export function BatchDownload({ item, videos, season, part }: { item: MetaPreview; videos: Video[]; season?: number; part?: number }) {
+export function BatchDownload(props: BatchProps) {
+  const d = useBatchDownload(props);
+  const phone = useFormFactor().form === "phone";
+  if (d.running) return <BatchProgress download={d} />;
+  if (phone)
+    return (
+      <IconButton variant="glass" className="batch-download-start" disabled={d.disabled} onClick={d.start} label={d.label} title={d.title}>
+        <DownloadAll size={20} />
+      </IconButton>
+    );
+  return (
+    <Button variant="glass" size={d.what === "Show" ? undefined : "sm"} className="batch-download-start" disabled={d.disabled} onClick={d.start} title={d.title}>
+      <Download size={16} />
+      {d.label}
+    </Button>
+  );
+}
+
+type BatchProps = { item: MetaPreview; videos: Video[]; season?: number; part?: number };
+export type BatchDownloadState = ReturnType<typeof useBatchDownload>;
+
+/** A season's (or show's) batch: whether it's under way, and the words and action to start it. */
+export function useBatchDownload({ item, videos, season, part }: BatchProps) {
   // An anime season tab (#352) is a season of its own, though its episodes may share a season number with another tab's.
   const key = batchKey(item.id, part === undefined ? season : `anilist-${part}`);
   const batch = useBatch(key);
   const { data: downloads } = useDownloads();
   const what = season === undefined && part === undefined ? "Show" : "Season";
   const have = videos.filter((v) => downloads?.some((d) => d.id === v.id && d.state === "done")).length;
-  const phone = useFormFactor().form === "phone";
-
-  if (batch && (batch.state === "running" || batch.state === "paused")) {
-    const percent = Math.round(batchFraction(batch) * 100);
-    const status =
-      batch.state === "paused"
-        ? `Paused · ${batch.done} of ${batch.total}`
-        : `Downloading ${Math.min(batch.done + batch.failed + 1, batch.total)} of ${batch.total} · ${percent}%`;
-    return (
-      <div className="batch-download" data-state={batch.state} role="group" aria-label={`${what} download`}>
-        <span className="batch-download-status t-caption" aria-live="polite">
-          {status}
-        </span>
-        <span className="batch-download-bar" aria-hidden>
-          <span style={{ transform: `scaleX(${percent / 100})` }} />
-        </span>
-        {batch.state === "paused" ? (
-          <IconButton variant="glass" label={`Resume ${what} Download`} title="Resume" onClick={() => resumeBatch(key)}>
-            <Play size={16} fill="currentColor" />
-          </IconButton>
-        ) : (
-          <IconButton variant="glass" label={`Pause ${what} Download`} title="Pause" onClick={() => pauseBatch(key)}>
-            <Pause size={16} />
-          </IconButton>
-        )}
-        <IconButton variant="glass" label={`Cancel ${what} Download`} title="Cancel: the episode coming down is removed, finished ones stay" onClick={() => cancelBatch(key)}>
-          <Close size={16} />
-        </IconButton>
-      </div>
-    );
-  }
-
   const all = videos.length > 0 && have === videos.length;
   const failed = batch?.state === "finished" && batch.failed > 0 ? batch.failed : 0;
   const label = all ? `${what} Downloaded` : failed ? `Download ${what} (${failed} left)` : `Download ${what}`;
@@ -65,24 +55,46 @@ export function BatchDownload({ item, videos, season, part }: { item: MetaPrevie
     : all
       ? `Every episode of this ${what.toLowerCase()} is downloaded`
       : `Download every episode of this ${what.toLowerCase()}${have ? ` (${have} already here)` : ""}`;
-  const start = () => void downloadBatch(key, item, videos);
-  if (phone)
-    return (
-      <IconButton variant="glass" className="batch-download-start" disabled={all || !videos.length} onClick={start} label={label} title={title}>
-        <DownloadAll size={20} />
-      </IconButton>
-    );
+  return {
+    key,
+    batch,
+    what,
+    label,
+    title,
+    running: !!batch && (batch.state === "running" || batch.state === "paused"),
+    disabled: all || !videos.length,
+    start: () => void downloadBatch(key, item, videos),
+  };
+}
+
+/** A batch under way: its progress, with Pause / Resume and Cancel. Nothing when none is. */
+export function BatchProgress({ download: { batch, key, what, running } }: { download: BatchDownloadState }) {
+  if (!running || !batch) return null;
+  const percent = Math.round(batchFraction(batch) * 100);
+  const status =
+    batch.state === "paused"
+      ? `Paused · ${batch.done} of ${batch.total}`
+      : `Downloading ${Math.min(batch.done + batch.failed + 1, batch.total)} of ${batch.total} · ${percent}%`;
   return (
-    <Button
-      variant="glass"
-      size={what === "Show" ? undefined : "sm"}
-      className="batch-download-start"
-      disabled={all || !videos.length}
-      onClick={start}
-      title={title}
-    >
-      <Download size={16} />
-      {label}
-    </Button>
+    <div className="batch-download" data-state={batch.state} role="group" aria-label={`${what} download`}>
+      <span className="batch-download-status t-caption" aria-live="polite">
+        {status}
+      </span>
+      <span className="batch-download-bar" aria-hidden>
+        <span style={{ transform: `scaleX(${percent / 100})` }} />
+      </span>
+      {batch.state === "paused" ? (
+        <IconButton variant="glass" label={`Resume ${what} Download`} title="Resume" onClick={() => resumeBatch(key)}>
+          <Play size={16} fill="currentColor" />
+        </IconButton>
+      ) : (
+        <IconButton variant="glass" label={`Pause ${what} Download`} title="Pause" onClick={() => pauseBatch(key)}>
+          <Pause size={16} />
+        </IconButton>
+      )}
+      <IconButton variant="glass" label={`Cancel ${what} Download`} title="Cancel: the episode coming down is removed, finished ones stay" onClick={() => cancelBatch(key)}>
+        <Close size={16} />
+      </IconButton>
+    </div>
   );
 }

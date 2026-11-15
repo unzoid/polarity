@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimeCard } from "../components/anime/AnimeCard";
 import { PosterCard } from "../components/PosterCard";
 import { Shelf } from "../components/title/Shelf";
@@ -22,6 +22,9 @@ import {
   useRecentSearches,
   useListable,
   useSearchText,
+  catalogBound,
+  keepWithinLimit,
+  useViewingLimit,
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
 import { useRouter } from "../lib/router";
@@ -219,11 +222,13 @@ function GenreTile({ genre, image, pending }: { genre: string; image?: string; p
 }
 
 function useGenreRow(type: ContentType, genre: string, enabled = true) {
+  const viewing = useViewingLimit();
   return useQuery({
     queryKey: keys.genreRow(type, genre),
-    queryFn: () => api.catalog(type, "popular", 0, genre),
+    queryFn: () => api.catalog(type, "popular", 0, genre, catalogBound(type)),
     staleTime: 30 * 60_000,
     enabled,
+    select: useCallback((list: MetaPreview[]) => keepWithinLimit(list, viewing), [viewing]),
   });
 }
 
@@ -231,6 +236,7 @@ function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const deferred = useDeferredValue(query);
   const { animeEnabled } = usePrefs();
+  const { navigate } = useRouter();
 
   // Keystrokes update the field instantly; the network waits for a pause.
   useEffect(() => {
@@ -245,6 +251,7 @@ function Results({ text }: { text: string }) {
   const anime = useAnimeResults(animeEnabled && hasQuery ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
   const aliases = useAnimeAliases();
   const fromAddons = useAddonSearches(hasQuery ? deferred : "");
+  const viewing = useViewingLimit();
 
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
@@ -259,7 +266,16 @@ function Results({ text }: { text: string }) {
     movies: <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
     series: <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
     anime: animeEnabled && (
-      <AnimeRow key="anime" title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />
+      <AnimeRow
+        key="anime"
+        title={anime.title}
+        items={anime.items}
+        loading={anime.loading}
+        failed={anime.failed}
+        retry={anime.retry}
+        // A genre or kind of show: the heading opens it in Anime → Browse.
+        onOpen={anime.browse && (() => navigate({ name: "anime-browse", ...anime.browse }))}
+      />
     ),
   };
   const nothing = !waiting && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
@@ -270,7 +286,9 @@ function Results({ text }: { text: string }) {
       <div className="rows search-rows" onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}>
         {searchRows(genre, !!anime.genre).map((row) => rows[row])}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
-        {fromAddons.map((r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} />)}
+        {fromAddons.map(
+          (r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items && keepWithinLimit(r.items, viewing)} />,
+        )}
       </div>
       {nothing && <EmptyState>Nothing found for “{deferred}”.</EmptyState>}
     </>
@@ -279,17 +297,39 @@ function Results({ text }: { text: string }) {
 
 function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   const { data } = useGenreRow(type, genre);
-  return <ResultRow title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`} items={data} />;
+  const { navigate } = useRouter();
+  // The heading opens the genre's whole list in Movies or Series.
+  return (
+    <ResultRow
+      title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`}
+      items={data}
+      onOpen={() => navigate({ name: "discover", type, genre })}
+    />
+  );
 }
 
 /** Leaves out what can't play and has nothing to show (#337): a stub whose poster and backdrop don't load. */
-function ResultRow({ title, items: found }: { title: string; items?: MetaPreview[] }) {
+function ResultRow({ title, items: found, onOpen }: { title: string; items?: MetaPreview[]; onOpen?: () => void }) {
   const items = useListable(found);
   if (items && !items.length) return null;
-  return <Shelf title={title} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
+  return <Shelf title={title} onOpen={onOpen} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
 }
 
-function AnimeRow({ title, items, loading, failed, retry }: { title: string; items?: Card[]; loading: boolean; failed: boolean; retry: () => void }) {
+function AnimeRow({
+  title,
+  items,
+  loading,
+  failed,
+  retry,
+  onOpen,
+}: {
+  title: string;
+  items?: Card[];
+  loading: boolean;
+  failed: boolean;
+  retry: () => void;
+  onOpen?: () => void;
+}) {
   // A failed search isn't "no anime": it says so, with a way to try again (test report 1, item 28).
   if (failed && !items?.length)
     return (
@@ -301,5 +341,5 @@ function AnimeRow({ title, items, loading, failed, retry }: { title: string; ite
       </section>
     );
   if (!loading && !items?.length) return null;
-  return <Shelf title={title} items={items} card={(a) => <AnimeCard key={a.id} item={a} />} />;
+  return <Shelf title={title} onOpen={onOpen} items={items} card={(a) => <AnimeCard key={a.id} item={a} />} />;
 }

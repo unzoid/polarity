@@ -89,8 +89,12 @@ pub async fn catalog(
     id: String,
     skip: Option<u32>,
     genre: Option<String>,
+    // An age limit's bound for TMDB's film lists: the country and its highest certification allowed.
+    cert_country: Option<String>,
+    cert_max: Option<String>,
 ) -> Result<Vec<MetaPreview>> {
-    Ok(state.indexer().catalog(&ty, &id, skip.unwrap_or(0), genre.as_deref()).await?)
+    let bound = cert_country.as_deref().zip(cert_max.as_deref());
+    Ok(state.indexer().catalog_within(&ty, &id, skip.unwrap_or(0), genre.as_deref(), bound).await?)
 }
 
 /// One page of an installed addon's catalog (#206), its extra arguments
@@ -161,6 +165,24 @@ pub async fn meta(state: State<'_, AppState>, ty: String, id: String) -> Result<
 #[tauri::command]
 pub async fn imdb_for_tmdb(state: State<'_, AppState>, ty: String, id: u64) -> Result<Option<String>> {
     Ok(state.indexer().imdb_for_tmdb(&ty, id).await?)
+}
+
+/// The orders a show can be watched in besides as aired (TMDB's episode groups); empty without a TMDB key.
+#[tauri::command]
+pub async fn episode_orders(state: State<'_, AppState>, id: String) -> Result<Vec<polar_index::EpisodeOrderInfo>> {
+    Ok(state.indexer().episode_orders(&id).await?)
+}
+
+/// One of those orders, its episodes as ids of the show's episode list.
+#[tauri::command]
+pub async fn episode_order(state: State<'_, AppState>, id: String, order: String) -> Result<polar_index::EpisodeOrder> {
+    Ok(state.indexer().episode_order(&id, &order).await?)
+}
+
+/// A person's page by TMDB id: who they are and their titles; not found without a TMDB key.
+#[tauri::command]
+pub async fn person(state: State<'_, AppState>, id: u64) -> Result<polar_index::PersonPage> {
+    Ok(state.indexer().person(id).await?)
 }
 
 // --- Streams -------------------------------------------------------------
@@ -403,17 +425,13 @@ pub fn addon_set_enabled(state: State<'_, AppState>, id: String, enabled: bool) 
     })
 }
 
-/// Move an installed add-on one place up (`by` < 0) or down in the order: the order titles, subtitles and
-/// lists are asked in, and ties between sources are broken by.
+/// Put the installed add-ons in the order of `ids` (a drag on Settings → Add-ons): the order titles,
+/// subtitles and lists are asked in, and ties between sources are broken by. Add-ons `ids` leaves out
+/// keep their order after the listed ones; ids of add-ons not installed are ignored.
 #[tauri::command]
-pub fn addon_move(state: State<'_, AppState>, id: String, by: i32) -> Result<()> {
+pub fn addon_reorder(state: State<'_, AppState>, ids: Vec<String>) -> Result<()> {
     state.persist_now(|d| {
-        if let Some(at) = d.addons.iter().position(|a| a.manifest.id == id) {
-            let to = if by < 0 { at.checked_sub(1) } else { Some(at + 1).filter(|n| *n < d.addons.len()) };
-            if let Some(to) = to {
-                d.addons.swap(at, to);
-            }
-        }
+        d.addons.sort_by_key(|a| ids.iter().position(|id| *id == a.manifest.id).unwrap_or(usize::MAX));
     })
 }
 
@@ -749,6 +767,12 @@ pub async fn ratings(state: State<'_, AppState>, ty: String, id: String) -> Resu
         (key(&s.mdblist_key), key(&s.omdb_key))
     };
     Ok(state.ratings.get(&id, &ty, mdblist.as_deref(), omdb.as_deref()).await)
+}
+
+/// A show's IMDb rating for each episode (the Episode Ratings chart), or none known.
+#[tauri::command]
+pub async fn episode_ratings(imdb_id: String) -> Vec<crate::episode_ratings::EpisodeRating> {
+    crate::episode_ratings::get(&imdb_id).await
 }
 
 // --- External links ------------------------------------------------------

@@ -22,15 +22,25 @@ struct Data<T> {
 
 /// `query` takes `$id: ID!` and asks for `title(id: $id) { … }`; `T` is that title.
 pub async fn title<T: DeserializeOwned>(query: &str, imdb_id: &str) -> Option<T> {
+    title_with(query, imdb_id, serde_json::Map::new()).await
+}
+
+/// [`title`] with more variables beside `$id` (a page's cursor).
+pub async fn title_with<T: DeserializeOwned>(
+    query: &str,
+    imdb_id: &str,
+    mut vars: serde_json::Map<String, serde_json::Value>,
+) -> Option<T> {
     let valid = imdb_id.len() > 2 && imdb_id.starts_with("tt") && imdb_id[2..].bytes().all(|b| b.is_ascii_digit());
     if !valid {
         return None;
     }
     let http = client()?;
+    vars.insert("id".into(), json!(imdb_id));
     let answer = async {
         http.post(API)
             .header("x-imdb-client-name", "imdb-web-next-localized")
-            .json(&json!({ "query": query, "variables": { "id": imdb_id } }))
+            .json(&json!({ "query": query, "variables": vars }))
             .send()
             .await?
             .error_for_status()?

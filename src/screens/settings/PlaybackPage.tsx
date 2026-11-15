@@ -51,6 +51,13 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
           <SettingRow id="watchedThreshold" />
         </Card>
       );
+    case "downloads":
+      return (
+        <Card>
+          <SettingRow id="autoDownloadNext" />
+          <SettingRow id="autoDownloadRemoveWatched" />
+        </Card>
+      );
     case "player":
       return (
         <Card>
@@ -88,6 +95,7 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
           <SettingRow id="seekStep" />
           <SettingRow id="controlsHideSecs" />
           <SettingRow id="pauseShowsControls" />
+          <SettingRow id="pauseDetails" />
           <SettingRow id="holdSpeed" />
           <SettingRow id="clickAction" />
           <SettingRow id="wheelAction" />

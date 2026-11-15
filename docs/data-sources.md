@@ -8,10 +8,12 @@ first (see `AGENTS.md`).
 
 | Source | Used for | Code | Key | Limits the app works within |
 |---|---|---|---|---|
-| TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos | `crates/index/src/tmdb.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
+| TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos, age ratings (`release_dates`, `content_ratings` appended to the details requests already made; discover's `certification_country`/`certification.lte` for a profile's age limit) | `crates/index/src/tmdb.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
+| TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos, a show's other episode orders (episode groups: `/tv/{id}/episode_groups`, `/tv/episode_group/{id}`) | `crates/index/src/tmdb.rs`, `crates/index/src/tmdb/orders.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
+| TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers and a title's other videos (YouTube ids), logos, people's pages (`/person/{id}` with `combined_credits`) | `crates/index/src/tmdb.rs`, `crates/index/src/tmdb/people.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
 | Cinemeta | Catalog, search and metadata when there is no TMDB key; IMDb ids for anime ani.zip can't link | `crates/index/src/cinemeta.rs`, `src/lib/anime/search.ts` | None | None published |
 | metahub images | Posters, backgrounds, logos and episode stills for IMDb ids | `cinemeta.rs`, `src/lib/account/titleDisplay.ts`, `src/lib/anime/landscapeArt.ts` | None | None published |
-| IMDb GraphQL | Trailers as video files | `src-tauri/src/imdb.rs`, `trailers.rs` | None | Links expire after about a day |
+| IMDb GraphQL | Trailers as video files; each episode's IMDb rating for Episode Ratings (the owner's decision, 15/11/2026: TMDB's per-episode scores were too few and ran low), TMDB's kept for a show IMDb rates none of | `src-tauri/src/imdb.rs`, `trailers.rs`, `episode_ratings.rs` | None | Trailer links expire after about a day; episode ratings are cached 12 h per show, at most 5 pages of 250 episodes |
 | IMDb suggestion | Cast photo when the catalog has none | `src/lib/catalog/personPhoto.ts` | None | None published |
 | MDBList | Scores from several sites, certification | `src-tauri/src/ratings.rs` | The user's own | 1,000 a day on the free tier, cached 6 h |
 | OMDb | Scores, awards, rating | `ratings.rs` | The user's own | 1,000 a day on the free tier |
@@ -42,7 +44,12 @@ Every host the web view fetches from is listed in its `connect-src` policy
 
 - **Catalog:** TMDB when the user enters a key, Cinemeta otherwise. Keys are the user's own; the app ships none.
 - **Trailers:** TMDB's first with a key, then IMDb's video file, then an add-on's or AniList's YouTube trailer. The
-  backdrop behind a title's page plays video files only, never a YouTube embed.
+  backdrop behind a title's page plays video files only, never a YouTube embed. A title's other TMDB videos (YouTube
+  only) are its Extras, played in the same trailer player; their tiles show YouTube's still (`i.ytimg.com`, already
+  allowed by `img-src`), or the name and kind when it doesn't load.
+- **People:** only with a TMDB key, which names cast and crew by id. A person's page is one `/person/{id}` request with
+  `combined_credits`; at most 45 of their titles are kept and looked up for IMDb ids through the same day-long cache as
+  list results, six at a time. Cinemeta's names have no ids and stay plain text.
 - **Fillers:** Jikan first, animefillerlist.com when Jikan knows none, answers cached 24 h on disk.
 - **Anime ids:** ani.zip first; Fribb/anime-lists, downloaded when first needed and refreshed weekly, when it can't be
   reached. The list is fetched at runtime, not shipped with the app.

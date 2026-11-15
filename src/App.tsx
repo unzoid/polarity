@@ -14,6 +14,7 @@ import { Library, LibraryCollection, LibraryPlaylist } from "./screens/Library";
 import { Calendar } from "./screens/Calendar";
 import { Search } from "./screens/Search";
 import { Detail } from "./screens/Detail";
+import { Person } from "./screens/Person";
 import { Anime, AnimeBrowse, AnimeSchedule } from "./screens/Anime";
 import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
@@ -48,11 +49,13 @@ import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { SignOutDialog } from "./components/SignOutDialog";
+import { PinHost } from "./components/profileLock/PinHost";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
 import { LockedKeysToast } from "./components/LockedKeysToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
+import { HiddenTitleToast } from "./components/HiddenTitleToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
@@ -101,6 +104,8 @@ function Screen({ route }: { route: Route }) {
       return <AnimeSchedule />;
     case "anime-browse":
       return <AnimeBrowse />;
+    case "person":
+      return <Person id={route.id} name={route.title} />;
     case "player":
       return null; // rendered as a full-window layer below
   }
@@ -151,6 +156,7 @@ export function App() {
     <MotionConfig reducedMotion={reduce === "on" ? "always" : reduce === "off" ? "never" : "user"}>
       <Gate />
       <SignOutDialog />
+      <PinHost />
     </MotionConfig>
   );
 }
@@ -441,6 +447,7 @@ function DesktopApp() {
         <ErrorBoundary where="toasts" quiet>
           <ControllerToast tv={false} />
           <SeriesPickToast />
+          <HiddenTitleToast tv={false} />
           <UpdateToast hidden={!!playing} />
         </ErrorBoundary>
       </main>

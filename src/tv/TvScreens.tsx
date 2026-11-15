@@ -14,6 +14,7 @@ import {
   trendingPicks,
   useAddonCatalogRow,
   useAddonSearches,
+  useBrowseVisible,
   useHomeCatalogs,
   useSeeds,
   useShownAbove,
@@ -27,6 +28,8 @@ import { useBack, usePageActive } from "./shell";
 import { focusWhenReady } from "./spatial";
 import { usePlaylistItem } from "../components/Playlists";
 import { localStream, type PlaylistItem, useDownloads, usePlaylists } from "../lib/library";
+import { arrangeLibrary, needsFacts, useSavedEntries, useWatchedEntries } from "../lib/library";
+import { TvArrangeRail, useTvLibraryView } from "./TvLibraryArrange";
 import { episodeCode } from "../lib/format";
 import { useRouter } from "../lib/router";
 import { TvBrowse, TvCard, TvContinueRail, TvItemsRail, TvRail, TvShelfRail, type RailRow } from "./TvRails";
@@ -43,10 +46,12 @@ export function TvHome() {
   const seeds = useSeeds();
   const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
   const trending = useTrending();
-  const picks = useMemo(
+  const allPicks = useMemo(
     () => (trending.series && trending.movies ? trendingPicks(trending.series, trending.movies, [], 20) : undefined),
     [trending.series, trending.movies],
   );
+  // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
+  const picks = useBrowseVisible(allPicks);
   const shownAbove = useShownAbove(shelves, picks ?? NO_TITLES);
   const { data: watching } = useContinueWatching();
   const watched = useMemo(() => new Set((watching ?? []).map((p) => p.metaId)), [watching]);
@@ -73,7 +78,8 @@ export function TvHome() {
 
 /** An add-on's catalog as a rail; a failing, slow or empty one leaves itself out. */
 function TvAddonRail({ catalog, enabled }: { catalog: AddonCatalog; enabled: boolean }) {
-  const { data, isError } = useAddonCatalogRow(catalog, enabled);
+  const { data: found, isError } = useAddonCatalogRow(catalog, enabled);
+  const data = useBrowseVisible(found);
   if (isError) return null;
   return <TvItemsRail title={catalogTitle(catalog)} items={data} shape="poster" />;
 }
@@ -110,7 +116,7 @@ export function TvDiscover({ type }: { type: ContentType }) {
   return <TvBrowse rows={rows} />;
 }
 
-/** Library: your downloads, what you've saved, what you've watched and your playlists, as rails under the stage. */
+/** Library: your downloads, what you've saved, what you've watched and your playlists, as shelves on black (TvBrowse). */
 export function TvLibrary() {
   const { data: saved } = useLibrary();
   const { data: history } = useWatchHistory();
@@ -120,6 +126,14 @@ export function TvLibrary() {
   const { navigate } = useRouter();
   // Only what's here to watch: a download still coming down can't play yet.
   const ready = (downloads ?? []).filter((d) => d.state === "done");
+  // Type, status and sort for Saved and Watched; titles are looked up only when the view needs it.
+  const [view, setView] = useTvLibraryView();
+  const lookUp = needsFacts(view);
+  const savedEntries = useSavedEntries(lookUp);
+  const watchedEntries = useWatchedEntries(lookUp);
+  const filters = useMemo(() => ({ ...view, query: "" }), [view]);
+  const shownSaved = useMemo(() => savedEntries && arrangeLibrary(savedEntries, filters).items, [savedEntries, filters]);
+  const shownHistory = useMemo(() => watchedEntries && arrangeLibrary(watchedEntries, filters).items, [watchedEntries, filters]);
 
   if (saved?.length === 0 && history?.length === 0 && playlists.length === 0 && !downloads?.length) {
     return (
@@ -154,13 +168,20 @@ export function TvLibrary() {
           </TvRail>
         ) : null,
     },
-    { key: "saved", render: () => <TvItemsRail title="Saved" items={saved} shape="poster" watching={watching} saved /> },
+    {
+      key: "arrange",
+      render: () =>
+        saved?.length || history?.length ? (
+          <TvArrangeRail view={view} onChange={setView} nothing={shownSaved?.length === 0 && shownHistory?.length === 0} />
+        ) : null,
+    },
+    { key: "saved", render: () => <TvItemsRail title="Saved" items={shownSaved} shape="poster" watching={watching} saved /> },
     {
       key: "watched",
       render: () =>
-        history?.length ? (
+        shownHistory?.length ? (
           <TvRail title="Watched">
-            {history.map((p) => (
+            {shownHistory.map((p) => (
               <TvCard key={p.metaId} item={progressItem(p)} shape="landscape" progress={progressFraction(p)} entry={p} />
             ))}
           </TvRail>
@@ -179,7 +200,7 @@ export function TvLibrary() {
         ),
       })),
   ];
-  return <TvBrowse rows={rows} />;
+  return <TvBrowse rows={rows} layout="shelves" />;
 }
 
 function TvPlaylistCard({ item }: { item: PlaylistItem }) {

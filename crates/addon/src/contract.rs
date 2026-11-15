@@ -42,6 +42,7 @@ fn preview() -> MetaPreview {
         release_info: s("2024"),
         imdb_rating: s("7.5"),
         genres: vec!["Drama".into()],
+        certification: s("TV-14"),
     }
 }
 
@@ -110,8 +111,10 @@ fn field_names_match_contract() {
         tmdb_id: Some(1),
     };
     add("MetaDetails", keys(&details));
-    let person = Person { name: "P".into(), character: s("C"), photo: s("p") };
+    let person = Person { name: "P".into(), character: s("C"), photo: s("p"), tmdb_id: Some(1) };
     add("Person", keys(&person));
+    let extra = Extra { name: "Making Of".into(), kind: "Featurette".into(), key: "xxx".into() };
+    add("Extra", keys(&extra));
     let video = Video {
         id: "tt1:1:1".into(),
         title: "Pilot".into(),
@@ -133,8 +136,10 @@ fn field_names_match_contract() {
             trailer_yt_id: s("y"),
             trailer_source: s("tmdb"),
             videos: vec![video],
-            people: vec![person],
+            people: vec![person.clone()],
             details,
+            crew: vec![person],
+            extras: vec![extra],
         }),
     );
     add("Stream", keys(&stream()));
