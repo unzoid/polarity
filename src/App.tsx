@@ -454,8 +454,9 @@ function DesktopApp() {
             // Of the pair, the one drawn on top: the page pushed, or the one going (it comes last). It moves; the
             // other holds still under it (shell.css).
             data-over={(motion && entry.key === (motion.leaving ? motion.leave : motion.enter)) || undefined}
-            // Another section, or a page replaced: a quick crossfade in place.
-            data-fade={(motion && !motion.card && motion.dir === 0) || undefined}
+            // Another section: the pair slides across as a pager's pages do. A page replaced: a crossfade in place.
+            data-tab={motion?.tab || undefined}
+            data-fade={(motion && !motion.card && !motion.tab && motion.dir === 0) || undefined}
             style={
               motion
                 ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)

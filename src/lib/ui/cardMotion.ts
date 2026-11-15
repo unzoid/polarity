@@ -7,16 +7,16 @@ import type { CardRect } from "./pageMotion";
  * Open: the card lifts at once and grows to the screen on a critically damped spring (ω 13.4/s: half way at 125ms,
  * 80% at 225ms, 92% at 315ms). Its picture goes out of focus in the first 90ms, turns into a plain panel by 190ms,
  * and the title's page fades in over the panel from 300 to 480ms. What's behind goes dark in the first 200ms.
- * Back: on the open's pace (half way in about 105ms, 90% by 345ms), from a fast start as a dismissal has: the page
+ * Back: from a fast start, as a dismissal has (half way in about 85ms, 90% by 275ms, landed by 460ms): the page
  * shrinks into the card, dimming under the panel, and the card's picture comes back into focus as it lands (very
- * soft, a little soft, sharp), ending exactly on the card, so the card simply takes its place. What's behind is lit
- * again in the first 150ms.
+ * soft, a little soft, sharp by 300ms), ending exactly on the card, so the card simply takes its place. What's
+ * behind is lit again in the first 150ms.
  *
  * Played with the Web Animations API from keyframes sampled off those curves, so the curves are exact and the
  * compositor plays them.
  */
 export const CARD_OPEN_MS = 520;
-export const CARD_CLOSE_MS = 540;
+export const CARD_CLOSE_MS = 460;
 
 /** Critically damped spring from 0 to 1, ω in 1/s, t in ms. */
 const spring = (omega: number) => (t: number) => {
@@ -27,7 +27,7 @@ const spring = (omega: number) => (t: number) => {
 const decay = (tau: number) => (t: number) => 1 - Math.exp(-t / tau);
 
 const OPEN = spring(13.4);
-const CLOSE = decay(150);
+const CLOSE = decay(120);
 
 /** `n` samples of `curve` over `ms`, the last one exactly 1. */
 function samples(curve: (t: number) => number, ms: number, n = 30) {
@@ -44,14 +44,14 @@ const fade = (from: number, to: number, t0: number, t1: number, ms: number): Key
 ];
 
 /** The CSS easing of the swipe back's release (pageDrag.ts), close to `CLOSE` over `CARD_CLOSE_MS`. */
-export const CARD_CLOSE_EASE = "cubic-bezier(0.16, 0.56, 0.3, 1)";
+export const CARD_CLOSE_EASE = "cubic-bezier(0.15, 0.58, 0.3, 1)";
 
 /** Back's ghost, also the swipe back's (pageDrag.ts) from the moment the finger lets go. */
 export const ghostCloseFades = {
-  panel: fade(0, 0.7, 30, 150, CARD_CLOSE_MS),
-  soft: fade(0, 1, 120, 210, CARD_CLOSE_MS),
-  medium: fade(0, 1, 210, 310, CARD_CLOSE_MS),
-  sharp: fade(0, 1, 300, 440, CARD_CLOSE_MS),
+  panel: fade(0, 0.7, 25, 120, CARD_CLOSE_MS),
+  soft: fade(0, 1, 95, 160, CARD_CLOSE_MS),
+  medium: fade(0, 1, 160, 225, CARD_CLOSE_MS),
+  sharp: fade(0, 1, 215, 300, CARD_CLOSE_MS),
 };
 
 type Parts = { page: HTMLElement; scrim: HTMLElement | null; card: CardRect; open: boolean; width: number; height: number };

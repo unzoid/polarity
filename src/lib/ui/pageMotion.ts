@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
-import type { Entry } from "../router";
+import type { Entry, TabRoute } from "../router";
+import { tabId } from "../navTabs";
 import { CARD_CLOSE_MS, CARD_OPEN_MS } from "./cardMotion";
 import { prefersReducedMotion } from "./reducedMotion";
 
+/** The sections in the order the tab bars show them (NavBar's links), then the top bar's Calendar and Search. */
+const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
+
 /**
- * How long a change's pages keep their motion, and a couple of frames to spare: another section's crossfade
- * (shell.css --page-fade), a page pushed or taken off (--page-in), a title's page out of its card (cardMotion.ts,
- * which starts two frames before this clock does) and back into it (which starts with it).
+ * How long a change's pages keep their motion, and a couple of frames to spare: another section's slide
+ * (shell.css --page-tab), a page replaced in place (--page-fade), a page pushed or taken off (--page-in), a title's
+ * page out of its card (cardMotion.ts, which starts two frames before this clock does) and back into it (which
+ * starts with it).
  */
-const SETTLE = { fade: 220, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS + 40 };
+const SETTLE = { tab: 420, fade: 220, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS + 40 };
 
 function settleOf(m: PageMotion) {
   if (m.card) return m.dir === 1 ? SETTLE.cardOpen : SETTLE.cardClose;
+  if (m.tab) return SETTLE.tab;
   return m.dir === 0 ? SETTLE.fade : SETTLE.push;
 }
 
@@ -30,6 +36,8 @@ export type PageMotion = {
   dir: -1 | 0 | 1;
   leaving?: Entry;
   card?: CardRect;
+  /** Another section: the two pages slide across together, the whole width, as a pager's do. */
+  tab?: boolean;
   /** The new page is laid out: the pair moves. Until then (a frame) the old page stays as it is. */
   go?: boolean;
 };
@@ -88,7 +96,7 @@ export function skipNextPageMotion() {
   skipNext = true;
 }
 
-type Seen = { top?: Entry; keys: number[]; motion?: PageMotion };
+type Seen = { top?: Entry; keys: number[]; root?: TabRoute; motion?: PageMotion };
 
 /**
  * Pages on a phone change as whole screens, so a change reads as one gesture. Whichever page is on top (the new
@@ -97,10 +105,10 @@ type Seen = { top?: Entry; keys: number[]; motion?: PageMotion };
  */
 export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | undefined {
   const top = pages[pages.length - 1];
-  const [seen, setSeen] = useState<Seen>(() => ({ top, keys: pages.map((e) => e.key) }));
+  const [seen, setSeen] = useState<Seen>(() => ({ top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined }));
   let now = seen;
   if (top?.key !== seen.top?.key) {
-    now = { top, keys: pages.map((e) => e.key) };
+    now = { top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined };
     const skip = skipNext;
     skipNext = false;
     if (enabled && top && seen.top && !skip) now.motion = motionOf(seen, seen.top, top, pages);
@@ -147,6 +155,10 @@ function motionOf(seen: Seen, prev: Entry, top: Entry, pages: Entry[]): PageMoti
   // Back: the page now on top was under the one that's gone.
   if (seen.keys.includes(top.key))
     return { ...base, dir: -1, leaving: prev, card: prefersReducedMotion() ? undefined : origins.get(prev.key) };
-  // Another section, or a page replaced in place: a crossfade.
+  // Another section: the pages slide across as one strip, towards it along the tab bar. A page replaced in place
+  // (or a section with no place on the bar): a crossfade.
+  const from = seen.root ? ORDER.indexOf(tabId(seen.root)) : -1;
+  const to = ORDER.indexOf(tabId(pages[0].route as TabRoute));
+  if (pages.length === 1 && from >= 0 && to >= 0 && from !== to) return { ...base, dir: to > from ? 1 : -1, leaving: prev, tab: true };
   return { ...base, dir: 0, leaving: prev };
 }

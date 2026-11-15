@@ -17,6 +17,11 @@
   inset: 0;
   overflow: hidden;
 }
+/* Stepped back under the profile sheet (Sheet.tsx): its own layer for the move, its corners rounded. */
+.main[data-step-back] {
+  border-radius: 18px;
+  will-change: transform;
+}
 .page {
   position: absolute;
   inset: 0;
@@ -93,15 +98,42 @@
 /* On a phone a page change moves whole screens (lib/ui/pageMotion.ts), each with its own background, so it's the
    page that changes, not its contents over a still backdrop. Of the pair, the page drawn on top (`data-over`: the
    page pushed, or the one going) moves. A page pushed comes in from the right fading up, and Back takes it out the
-   same way, while the page under drifts a little the other way (--page-dir: 1 forward, -1 back). Another section,
-   or a page replaced (`data-fade`), changes as Netflix's tabs do (measured from its app): the old page goes in
-   90ms while the new one, drawn already under it, comes up over 180ms from the same moment, so the change passes
-   through the dark and the new page brightens into place. pageMotion.ts SETTLE follows these clocks. */
+   same way, while the page under drifts a little the other way (--page-dir: 1 forward, -1 back). Another section
+   (`data-tab`) is a pager's turn: the two pages slide across the whole width as one strip, the new one in from
+   the side its tab is on, the old one out the other, backgrounds and all; the top bar stays. A page replaced in
+   place (`data-fade`) crossfades: the old page goes in 90ms while the new one comes up over 180ms. pageMotion.ts
+   SETTLE follows these clocks. */
 :root[data-form="phone"] {
   --page-shift: 32px;
   --page-in: 320ms;
+  --page-tab: 380ms;
   --page-fade: 180ms;
   --page-fade-out: 90ms;
+}
+/* Both pages of a turn are whole pages, their own background with them; each its own stacking context, so what a
+   page puts behind its content (Home's glow) stays over that background. */
+:root[data-form="phone"] .page[data-tab] {
+  background: var(--bg);
+  isolation: isolate;
+}
+/* Until the turn starts (`data-go`), the page coming in waits in place under the one going, covered, drawn already:
+   then the strip moves, nothing left to paint. */
+:root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
+  animation: page-turn-in var(--page-tab) cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform;
+}
+:root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
+  animation: page-turn-out var(--page-tab) cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+@keyframes page-turn-in {
+  from {
+    transform: translateX(calc(var(--page-dir) * 100%));
+  }
+}
+@keyframes page-turn-out {
+  to {
+    transform: translateX(calc(var(--page-dir) * -100%));
+  }
 }
 :root[data-form="phone"] .page-pushed {
   animation: none;
@@ -125,16 +157,16 @@
   opacity: 0;
   pointer-events: none;
 }
-:root[data-form="phone"] .page[data-motion="enter"][data-over][data-go]:not([data-card], [data-fade]) {
+:root[data-form="phone"] .page[data-motion="enter"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
   animation: page-enter var(--page-in) var(--ease-out) both;
 }
-:root[data-form="phone"] .page[data-motion="leave"][data-over][data-go]:not([data-card], [data-fade]) {
+:root[data-form="phone"] .page[data-motion="leave"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
   animation: page-leave var(--page-in) var(--ease-out) forwards;
 }
-:root[data-form="phone"] .page[data-motion="enter"][data-go]:not([data-over], [data-card], [data-fade]) {
+:root[data-form="phone"] .page[data-motion="enter"][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
   animation: page-under-in var(--page-in) var(--ease-out) both;
 }
-:root[data-form="phone"] .page[data-motion="leave"][data-go]:not([data-over], [data-card], [data-fade]) {
+:root[data-form="phone"] .page[data-motion="leave"][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
   animation: page-under-out var(--page-in) var(--ease-out) forwards;
 }
 :root[data-form="phone"] .page[data-fade][data-over][data-go] {
@@ -176,21 +208,12 @@
     transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.33));
   }
 }
-/* The top bar is no page's, but on Netflix it's each page's own, so it changes with the crossfade: its wordmark and
-   actions dip through the dark with the pages, and the frosted bar, the shade over the hero and the wordmark's
-   size change on the same clock, each scrolled or not as the page coming in is. */
-:root[data-form="phone"] .main:has(> .page[data-fade]) .navbar::before,
-:root[data-form="phone"] .main:has(> .page[data-fade]) .navbar-fade::before,
-:root[data-form="phone"] .main:has(> .page[data-fade]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
-  transition-duration: var(--page-fade);
-}
-:root[data-form="phone"] .main:has(> .page[data-fade][data-go]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
-  animation: navbar-dip var(--page-fade) linear;
-}
-@keyframes navbar-dip {
-  40% {
-    opacity: 0.35;
-  }
+/* The top bar stays as the pages turn under it, but takes on the page coming in on the turn's clock: the frosted
+   bar, the shade over the hero and the wordmark's size, each scrolled or not as that page is. */
+:root[data-form="phone"] .main:has(> .page[data-tab]) .navbar::before,
+:root[data-form="phone"] .main:has(> .page[data-tab]) .navbar-fade::before,
+:root[data-form="phone"] .main:has(> .page[data-tab]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  transition-duration: var(--page-tab);
 }
 /* A title opened from a card (pageMotion.ts `card`), and back into it: the motion itself is lib/ui/cardMotion.ts,
    Netflix's measured from its app, played from the commit with the Web Animations API. These are the pieces it
@@ -240,6 +263,12 @@
 @media (prefers-reduced-motion: reduce) {
   :root[data-form="phone"] .page {
     --page-shift: 0px;
+  }
+  :root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
+    animation-name: page-fade-in;
+  }
+  :root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
+    animation-name: page-fade-out;
   }
 }
 
