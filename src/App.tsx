@@ -196,6 +196,8 @@ function Gate() {
 function GateScreen() {
   const { status, profile } = useAccount();
   const { data: settings, isFetched } = useSettings();
+  // A phone's sections keep their pages, as a phone app's tabs do (router `kept`); elsewhere each opens afresh.
+  const phone = useFormFactor().form === "phone";
   const shell = <div className="account-shell" />;
   switch (status) {
     case "loading":
@@ -220,7 +222,7 @@ function GateScreen() {
       // for settings (a local read) so it doesn't open on Home and then jump.
       if (!isFetched) return shell;
       return (
-        <RouterProvider key={profile?.id ?? "guest"} initial={[startRoute(settings?.startPage)]}>
+        <RouterProvider key={profile?.id ?? "guest"} initial={[startRoute(settings?.startPage)]} keepSections={phone}>
           <MainApp />
         </RouterProvider>
       );

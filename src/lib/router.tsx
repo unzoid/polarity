@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AnimeCard, BrowseFilters } from "./anime/anilist";
 import type { ContentType, MetaPreview, Stream } from "./types";
 import { isLinkId } from "./party/links";
@@ -68,7 +68,9 @@ let nextKey = 100;
  * `content-visibility`), so going back is instant and keeps scroll position —
  * no refetch, no re-layout, no lost place in a long grid.
  */
-export function RouterProvider({ children, initial }: { children: ReactNode; initial?: Route[] }) {
+export function RouterProvider({ children, initial, keepSections = false }: { children: ReactNode; initial?: Route[]; keepSections?: boolean }) {
+  const keep = useRef(keepSections);
+  keep.current = keepSections;
   const [{ stack, kept }, setState] = useState<RouterState>(() => {
     const stack = (initial ?? [{ name: "home" }]).map((route, key) => ({ key, route }));
     return { stack, kept: [stack[0]] };
@@ -81,8 +83,10 @@ export function RouterProvider({ children, initial }: { children: ReactNode; ini
   const tab = useCallback((route: TabRoute) => {
     setState((s) => {
       if (s.stack.length === 1 && sameRoute(s.stack[0].route, route)) return s;
-      // The section's own page again, where it was left (its pushed pages go); a section opened otherwise is new.
-      return withStack(s, [s.kept.find((e) => sameRoute(e.route, route)) ?? { key: nextKey++, route }]);
+      // On a phone (`keepSections`), the section's own page again, where it was left (its pushed pages go);
+      // otherwise, or a section opened otherwise, a new page.
+      const own = keep.current ? s.kept.find((e) => sameRoute(e.route, route)) : undefined;
+      return withStack(s, [own ?? { key: nextKey++, route }]);
     });
   }, []);
   const replace = useCallback((route: Route) => {
