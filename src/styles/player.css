@@ -2998,6 +2998,8 @@ img.load-mark-base[data-logo-look^="halo"] {
   .rating-prompt {
     animation: none;
   }
+}
+
 /* --- Phones and tablets: the swipes' HUDs (useSwipeLevels) sit at the edge of their half, clear of the
    rounded corners and the notch; the volume's on the right. */
 .volume-hud[data-side] {
