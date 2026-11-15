@@ -115,6 +115,13 @@ export function SettingsOverlay({
   const { form, touch } = useFormFactor();
   const phone = form === "phone";
   const [view, setView] = useState<"list" | "page">("list");
+  // Which way the phone last went between the list and a page, for the one coming in to push in from that side
+  // (settings-overlay.css `data-push`); null when Settings opens, which its sheet's own entrance covers.
+  const [push, setPush] = useState<"in" | "out" | null>(null);
+  const showView = (next: "list" | "page") => {
+    if (next !== view) setPush(next === "page" ? "in" : "out");
+    setView(next);
+  };
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
@@ -126,7 +133,7 @@ export function SettingsOverlay({
     if (open) setBelow(dismissDepth());
   }, [open]);
   // Back from a section goes to its page's list of sections, then (on a phone) to the list of pages.
-  const back = () => (section ? closeSection() : setView("list"));
+  const back = () => (section ? closeSection() : showView("list"));
   const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], back);
   // Back on a phone's page goes to the list; on the list it closes Settings (#455). The system's Back (iOS's swipe,
   // Android's button and gesture) arrives as Escape (lib/ui/systemBack.ts), so Escape is taken here, before the
@@ -157,6 +164,7 @@ export function SettingsOverlay({
     if (asked) setPage(requested);
     else if (page === "account") setPage(fallback);
     setView(asked ? "page" : "list");
+    setPush(null);
     setSection(null);
     setMove(null);
     setQuery("");
@@ -212,7 +220,7 @@ export function SettingsOverlay({
     setPage(id);
     setSection(inSection);
     setMove(null);
-    setView("page");
+    showView("page");
     setQuery("");
   };
 
@@ -412,7 +420,7 @@ export function SettingsOverlay({
   if (embedded)
     return (
       // Named as the window is: by the section open, else Settings.
-      <div className="t3s" data-embedded="" data-view={view} role="region" aria-label={view === "page" ? (section?.label ?? current.label) : "Settings"}>
+      <div className="t3s" data-embedded="" data-view={view} data-push={push ?? undefined} role="region" aria-label={view === "page" ? (section?.label ?? current.label) : "Settings"}>
         {body}
       </div>
     );
@@ -431,6 +439,7 @@ export function SettingsOverlay({
         <Dialog.Popup
           className="t3s"
           data-view={phone ? view : undefined}
+          data-push={phone ? (push ?? undefined) : undefined}
           aria-label="Settings"
           {...(phone ? dragDown : {})}
           onKeyDown={(e) => {

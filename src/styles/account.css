@@ -1358,12 +1358,13 @@ button.profile-sheet-me:active {
   white-space: nowrap;
 }
 /* The same cards as Settings in this sheet (settings-overlay.css `.t3s[data-embedded]`): filled, no outline. */
+/* Filled, with no outline: the same cards as Settings shows in this sheet (settings-overlay.css, embedded), so going
+   from one to the other is one look. */
 .profile-sheet-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-md);
-  background: rgb(var(--ink) / 0.025);
+  border-radius: 14px;
+  background: rgb(var(--ink) / 0.05);
   overflow: hidden;
 }
 .profile-sheet-card > * + * {

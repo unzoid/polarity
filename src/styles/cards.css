@@ -387,6 +387,41 @@
 .home .card-caption .t-caption {
   font-size: var(--fs-md);
 }
+/* A phone's shelves sit close, as Netflix's do: a modest heading just above its cards, the cards a few pixels
+   apart, and the next shelf a short step below. Home's lean-back sizes above are for a screen across a room;
+   in a hand they spread three posters over the width of four. The scroller's own padding (lift room, below)
+   adds 10px above the cards and 6px under them. */
+:root[data-form="phone"] .home-rows {
+  margin-top: 1.25rem;
+  gap: 1.375rem;
+}
+:root[data-form="phone"] .rows {
+  gap: 1.375rem;
+}
+:root[data-form="phone"] .row-header {
+  margin-bottom: 0;
+}
+:root[data-form="phone"] :is(.row-header h2, .home .row-header h2) {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+:root[data-form="phone"] .row-title-chevron {
+  width: 18px;
+  height: 18px;
+}
+:root[data-form="phone"] :is(.row-scroller, .home .row-scroller, .row[data-shape="episode"] .row-scroller) {
+  gap: 0.5rem;
+}
+:root[data-form="phone"] .card {
+  gap: 0.375rem;
+}
+:root[data-form="phone"] .home .card-caption .t-callout {
+  font-size: var(--fs-sm);
+}
+:root[data-form="phone"] .home .card-caption .t-caption {
+  font-size: var(--fs-xs);
+}
 
 /* ==========================================================================
    Shelves
@@ -654,6 +689,14 @@
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px var(--hairline);
   pointer-events: none;
+}
+/* A phone's cards are the art alone, as Netflix's are: tighter corners (the 8px the card-to-page motion draws,
+   pageMotion.ts cardMotionVars) and no ring. On a small screen the ring outlined every poster in a row. */
+:root[data-form="phone"] .card-frame {
+  border-radius: 8px;
+}
+:root[data-form="phone"] .card-frame::after {
+  content: none;
 }
 /* Out of flow: a cover that isn't 2:3 (manga, novels) would otherwise stretch
    its frame once it loads, shoving the rows below down. */
@@ -969,7 +1012,7 @@
 :root[data-form="phone"] .hero-card {
   border-radius: 16px;
   /* Netflix's: a fine light edge, no shadow under it. */
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.22);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
 }
 :root[data-form="phone"] .hero-scrim {
   background: linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 30%, transparent 55%);

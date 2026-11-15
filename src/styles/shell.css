@@ -93,8 +93,14 @@
 /* On a phone every page change moves as a pair (lib/ui/pageMotion.ts): the new page fades in from the side
    it comes from (--page-dir: 1 the right, -1 the left, 0 in place) while the old one fades out the other
    way, travelling half as far and leaving sooner. Both start together: nothing waits for the other. */
+/* A hand's pace, not a desktop's: long enough that the two pages are seen crossing (about half a second all told,
+   as Netflix's tabs take), on curves that ease in softly instead of doing most of the move in the first frames.
+   The old page lingers a little under the new one rather than vanishing first. pageMotion.ts SETTLE follows
+   --page-in. */
 :root[data-form="phone"] .page {
-  --page-shift: 28px;
+  --page-shift: 24px;
+  --page-in: 440ms;
+  --page-out: 340ms;
 }
 :root[data-form="phone"] .page-pushed {
   animation: none;
@@ -106,7 +112,7 @@
   pointer-events: none;
 }
 :root[data-form="phone"] .page[data-motion="enter"][data-go] {
-  animation: page-enter 300ms var(--ease-out) both;
+  animation: page-enter var(--page-in) var(--ease-reveal) both;
   will-change: transform, opacity;
 }
 :root[data-form="phone"] .page[data-motion="leave"] {
@@ -115,7 +121,7 @@
   pointer-events: none;
 }
 :root[data-form="phone"] .page[data-motion="leave"][data-go] {
-  animation: page-leave 200ms var(--ease-out) forwards;
+  animation: page-leave var(--page-out) cubic-bezier(0.4, 0, 0.2, 1) forwards;
   will-change: transform, opacity;
 }
 @keyframes page-enter {
@@ -373,10 +379,39 @@
 :root[data-form="phone"] .edge-blur.navbar-fade i {
   display: none;
 }
+/* Light, as Netflix's is: mostly the page itself, blurred and a little more vivid, under a thin grey veil
+   (about rgb(48 48 48 / 0.37) in dark mode), rather than a near-black bar. */
 :root[data-form="phone"] .edge-blur.navbar-fade::before {
-  background: rgb(18 18 18 / 0.8);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  backdrop-filter: blur(20px) saturate(150%);
+  background: color-mix(in srgb, var(--tone-sunk) 30%, rgb(var(--ink) / 0.1));
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+/* The dark shade over the hero's art gives way to the frosted bar, which would otherwise blur it in. */
+:root[data-form="phone"] .navbar::before {
+  transition: opacity var(--dur-slow) var(--ease-std);
+}
+:root[data-form="phone"] .navbar[data-scrolled="true"]::before {
+  opacity: 0;
+}
+/* Past the top the bar's contents settle a size smaller, each towards its own edge, as Netflix's header does
+   when the page leaves its hero: the content gets the attention, the chrome steps back.
+   Back keeps its size: it has its own press and slide (below). */
+:root[data-form="phone"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  transition: transform 420ms var(--ease-out);
+}
+:root[data-form="phone"] :is(.navbar-brand, .navbar-title) {
+  transform-origin: left center;
+}
+:root[data-form="phone"] .navbar-actions {
+  transform-origin: right center;
+}
+:root[data-form="phone"] .navbar[data-scrolled="true"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  transform: scale(0.9);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-form="phone"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+    transition: none;
+  }
 }
 .navbar-brand {
   flex: none;

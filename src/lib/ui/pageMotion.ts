@@ -7,7 +7,7 @@ import { prefersReducedMotion } from "./reducedMotion";
 const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
 
 /** How long a change's pages keep their motion: the entrance (shell.css), and a frame to spare. */
-const SETTLE = 300;
+const SETTLE = 460;
 /** The same for a title's page growing out of its card (shell.css: 620ms out, 540ms back), which takes longer. */
 const SETTLE_CARD = 660;
 

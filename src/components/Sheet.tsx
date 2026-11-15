@@ -26,7 +26,7 @@ export function Sheet({
   children,
   modal = true,
   forgiveMisses = false,
-  fit = false,
+  full = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -38,15 +38,16 @@ export function Sheet({
   /** A click on the dim just left of a side sheet does nothing; only one clearly away from it closes it (#320). */
   forgiveMisses?: boolean;
   /**
-   * Sized to what it holds (a menu), on an iPhone too: no detents, so it opens showing all of it rather than at half
-   * the screen with the rest cut off. It grows and shrinks with its content, up to nearly the screen's height.
+   * On a phone, a place of its own (the profile sheet, with Settings inside): it opens at the screen's full height,
+   * on an iPhone too, rather than resting at half with detents, and stays that height whatever its view holds.
    */
-  fit?: boolean;
+  full?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const drag = useDragControls();
   const bottom = useFormFactor().form === "phone";
-  const detents = bottom && os === "ios" && !fit;
+  const detents = bottom && os === "ios" && !full;
+  const spring = bottom ? springs.bottomSheet : springs.sheet;
   const x = useMotionValue(0);
   // A sheet with detents starts below the screen, and a closed one ends there, so it never shows a frame at the top.
   const y = useMotionValue(detents ? window.innerHeight : 0);
@@ -72,7 +73,7 @@ export function Sheet({
     if (to !== detent) return setDetent(to);
     const target = to === "large" ? 0 : stops.medium;
     if (prefersReducedMotion()) y.set(target);
-    else animate(y, target, { ...springs.sheet, velocity });
+    else animate(y, target, { ...spring, velocity });
   };
 
   useLayoutEffect(() => {
@@ -106,10 +107,12 @@ export function Sheet({
           {modal && (
             <motion.div
               className="sheet-scrim"
+              data-edge={bottom ? "bottom" : "right"}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: ease.out }}
+              // On a phone the dim comes up with the sheet rather than ahead of it.
+              transition={{ duration: bottom ? 0.4 : 0.2, ease: ease.out }}
               onPointerDown={(e) => (pointer.current = e.pointerType)}
               onClick={onScrimClick}
             />
@@ -123,11 +126,12 @@ export function Sheet({
             data-layer=""
             data-edge={bottom ? "bottom" : "right"}
             data-detent={detents ? detent : undefined}
+            data-full={bottom && full ? "" : undefined}
             style={bottom ? { y } : { x }}
             // With detents the sheet starts below the screen (`y`) and rises to its detent once measured.
             initial={detents ? { opacity: fade } : away}
-            animate={{ ...(detents ? (stops.measured ? { y: detent === "large" ? 0 : stops.medium } : {}) : bottom ? { y: 0 } : { x: 0 }), opacity: 1, transition: springs.sheet }}
-            exit={{ ...away, transition: springs.sheet }} // velocity carries over from a flick; no bounce needed off-screen
+            animate={{ ...(detents ? (stops.measured ? { y: detent === "large" ? 0 : stops.medium } : {}) : bottom ? { y: 0 } : { x: 0 }), opacity: 1, transition: spring }}
+            exit={{ ...away, transition: spring }} // velocity carries over from a flick; no bounce needed off-screen
             drag={bottom ? "y" : "x"}
             // A bottom sheet is pulled by its header only: the list below scrolls up and down.
             dragControls={bottom ? drag : undefined}
