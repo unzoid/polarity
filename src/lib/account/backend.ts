@@ -14,6 +14,21 @@ export type { ProfileLock } from "./profileLock";
 export interface AccountUser {
   id: string;
   email: string;
+  /** An email change waiting to be confirmed: the address it goes to (`auth.changeEmail`). */
+  newEmail?: string;
+}
+
+/** An authenticator app that gives this account's two-step sign-in codes. */
+export interface Authenticator {
+  id: string;
+  name: string;
+}
+
+/** An authenticator being added: the QR code to scan (an image's address) and the same key as text. */
+export interface AuthenticatorSetup {
+  id: string;
+  qr: string;
+  secret: string;
 }
 
 export interface Profile {
@@ -38,6 +53,7 @@ export function readProfile(v: unknown): Profile | undefined {
 export type AccountErrorCode =
   | "invalid_email"
   | "invalid_code"
+  | "email_taken"
   | "rate_limited"
   | "captcha_needed"
   | "profile_limit"
@@ -253,6 +269,32 @@ export interface AccountBackend {
     signOut(): Promise<void>;
     /** Deletes the account and everything synced with it. */
     deleteAccount(): Promise<void>;
+    /**
+     * Asks for the account's email to become `email`. The server emails a code to the new address
+     * (and to the current one too when it asks both to confirm); nothing changes until confirmed.
+     */
+    changeEmail(email: string): Promise<void>;
+    /** A code from the email change, sent to `address`: the user afterwards (its `email` changes once every code asked for is in). */
+    confirmEmailChange(address: string, code: string): Promise<AccountUser>;
+    /** The signed-in user as the server has it now; `null` when signed out. */
+    refreshUser(): Promise<AccountUser | null>;
+  };
+
+  /** Two-step sign-in: a code from an authenticator app after the email code. */
+  twoStep: {
+    /** The account's authenticators (confirmed ones only). */
+    list(): Promise<Authenticator[]>;
+    /** The authenticators to ask a code from when the account has one and this session hasn't given a code yet; `[]` otherwise. */
+    pending(): Promise<Authenticator[]>;
+    /** A new authenticator, not in use until `confirmAdd`; one left unconfirmed before is dropped. */
+    add(): Promise<AuthenticatorSetup>;
+    /** The first code from the new authenticator: from now on sign-in asks for a code. */
+    confirmAdd(id: string, code: string): Promise<void>;
+    cancelAdd(id: string): Promise<void>;
+    /** The second step of signing in, or proof before a change: a code from authenticator `id`. */
+    verify(id: string, code: string): Promise<AccountUser>;
+    /** Removes authenticators, after a code from `proof.id` (one of them or another). */
+    remove(ids: string[], proof: { id: string; code: string }): Promise<void>;
   };
 
   /** Signing in on a TV from a device that's already signed in (#133, lib/account/tvSignIn.ts). */

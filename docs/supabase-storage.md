@@ -454,3 +454,18 @@ travels.
   in `localStorage` per profile.
 - Tests: `tests/sql/profilePinLimit.test.ts` (PGlite), `tests/pin.test.ts`, `tests/pinTries.test.ts`,
   `tests/profileRules.test.ts`, `tests/profileGuard.test.ts`, `tests/dom/profileLock.test.tsx`.
+## 10. Changing the email and two-step sign-in
+
+Both are Supabase Auth features; nothing in the database or the Edge Functions changes. Settings → Account →
+Sign-in in the app (`src/lib/account/twoStep.ts`). What the owner switches on in the dashboard:
+
+1. **Email change template:** Authentication → Emails → "Change Email Address": paste
+   `supabase/email-templates/email-change.html`. The app confirms the change with the six-digit code, like
+   sign-in, so the template must contain `{{ .Token }}` (a template with only a link leaves the app waiting).
+2. **Secure email change:** Authentication → Providers → Email → "Secure email change". On, a code goes to both
+   the current and the new address and the app asks for both; off, only the new address gets one. The app works
+   either way; on is the one to choose.
+3. **Two-step sign-in:** Authentication → Multi-Factor (MFA): TOTP (App Authenticator) "Enabled" for both enroll
+   and verify. Phone and WebAuthn stay off: the app only uses authenticator apps. Off, the app says two-step
+   sign-in isn't turned on on the server.
+4. **Rate limits** (§8.2) cover the email change's emails and the code checks too; nothing of its own.

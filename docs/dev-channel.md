@@ -150,7 +150,8 @@ Run by whoever owns the dev Supabase project, with the Supabase CLI:
    that wasn't invited is told so.
 2. **Invite accounts:** Authentication → Users → Add user → Send invitation, one per teammate.
 3. **Sign-in email:** Authentication → Emails → "Magic Link" and "Confirm signup": paste `supabase/email-templates/code.html`
-   (the app signs in with the six-digit code, not a link).
+   (the app signs in with the six-digit code, not a link), and "Change Email Address":
+   `supabase/email-templates/email-change.html` (docs/supabase-storage.md §10, with the MFA setting).
 4. **Migrations and the Edge Function** are applied by CI once the `supabase-dev` environment is set
    up (below, "Database changes"). To bring a new project up to date at once, run the workflow by hand
    (Actions → Database → Run workflow on `dev`): it applies every migration and deploys every function,

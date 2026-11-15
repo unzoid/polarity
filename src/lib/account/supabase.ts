@@ -2,7 +2,7 @@
  * Supabase implementation of `AccountBackend`. The only file that imports
  * supabase-js; schema lives in supabase/migrations.
  */
-import { createClient, type AuthError, type PostgrestError, type RealtimeChannel, type User } from "@supabase/supabase-js";
+import { createClient, type AuthError, type Factor, type PostgrestError, type RealtimeChannel, type User } from "@supabase/supabase-js";
 import type { AnimeLink } from "../library/identity";
 import type { Progress, SyncLibraryItem } from "../types";
 import { count, isRecord, listOf, str } from "../parse";
@@ -11,6 +11,7 @@ import {
   isLimit,
   type AccountBackend,
   type AccountUser,
+  type Authenticator,
   type FriendEntry,
   type FriendPresence,
   type FriendSettings,
@@ -28,6 +29,7 @@ import { fromHex, toHex } from "../library/playlistCodec";
 import { decodeEntries, encodeEntries, newestAt, type EntryToPack } from "./progressCodec";
 import { keychainStorage } from "../platform/keychain";
 import { normalizeTvCode, type TvClaim, type TvSignInRequest } from "./tvSignIn";
+import { qrImage } from "./twoStep";
 import { warnFailed } from "../errors";
 
 const PAGE = 1000;
@@ -54,7 +56,25 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
     },
   });
 
-  const toUser = (u: User): AccountUser => ({ id: u.id, email: u.email ?? "" });
+  const toUser = (u: User): AccountUser => ({ id: u.id, email: u.email ?? "", ...(u.new_email ? { newEmail: u.new_email } : {}) });
+  /** One authenticator code, on a challenge made for it (a fresh one each time, so none goes stale in between). */
+  const totp = async (factorId: string, code: string) => {
+    const { error } = await db.auth.mfa.challengeAndVerify({ factorId, code });
+    if (error) throw authError(error);
+  };
+  const signedInUser = async () => {
+    const { data } = await db.auth.getSession();
+    if (!data.session) throw new AccountError("unknown", "Your sign-in expired. Sign in again.");
+    return toUser(data.session.user);
+  };
+  /** The user from the server, not the session's copy: an email change shows here first. */
+  const refreshUser = async () => {
+    const { data: s } = await db.auth.getSession();
+    if (!s.session) return null;
+    const { data, error } = await db.auth.getUser();
+    if (error) throw authError(error);
+    return toUser(data.user);
+  };
   /** One step of the tv-sign-in Edge Function; its `{ error }` answers become `AccountError`s. */
   const tvFunction = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
     const { data, error } = await db.functions.invoke("tv-sign-in", { body });
@@ -279,6 +299,68 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
         const { error } = await db.rpc("delete_own_account");
         if (error) throw dbError(error);
         await db.auth.signOut({ scope: "local" });
+      },
+      // The "Change Email Address" template must contain {{ .Token }}: the app confirms with the code, not a link.
+      async changeEmail(email) {
+        const { error } = await db.auth.updateUser({ email });
+        if (error) throw authError(error);
+      },
+      async confirmEmailChange(address, code) {
+        const { error } = await db.auth.verifyOtp({ email: address, token: code, type: "email_change" });
+        if (error) throw authError(error);
+        // With both addresses asked, the first code answers without a user: read it again either way.
+        const u = await refreshUser();
+        if (!u) throw new AccountError("unknown", "Your sign-in expired. Sign in again.");
+        return u;
+      },
+      refreshUser,
+    },
+
+    // Supabase MFA, TOTP factors only. Turned on in the dashboard (docs/supabase-storage.md).
+    twoStep: {
+      async list() {
+        const { data, error } = await db.auth.mfa.listFactors();
+        if (error) throw authError(error);
+        return authenticators(data.all);
+      },
+      async pending() {
+        // Read from the session itself: no request, so an offline launch still answers.
+        const { data, error } = await db.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (error) throw authError(error);
+        if (data.currentLevel !== "aal1" || data.nextLevel !== "aal2") return [];
+        const { data: s } = await db.auth.getSession();
+        return authenticators(s.session?.user.factors ?? []);
+      },
+      async add() {
+        const { data: listed, error: listError } = await db.auth.mfa.listFactors();
+        if (listError) throw authError(listError);
+        for (const f of listed.all) {
+          if (f.factor_type === "totp" && f.status !== "verified") await db.auth.mfa.unenroll({ factorId: f.id });
+        }
+        const taken = new Set(listed.all.map((f) => f.friendly_name));
+        let n = authenticators(listed.all).length + 1;
+        while (taken.has(`Authenticator ${n}`)) n++;
+        const { data, error } = await db.auth.mfa.enroll({ factorType: "totp", friendlyName: `Authenticator ${n}` });
+        if (error) throw authError(error);
+        return { id: data.id, qr: qrImage(data.totp.qr_code), secret: data.totp.secret };
+      },
+      confirmAdd: totp,
+      async cancelAdd(id) {
+        const { error } = await db.auth.mfa.unenroll({ factorId: id });
+        if (error) throw authError(error);
+      },
+      async verify(id, code) {
+        await totp(id, code);
+        return signedInUser();
+      },
+      async remove(ids, proof) {
+        await totp(proof.id, proof.code);
+        for (const factorId of ids) {
+          const { error } = await db.auth.mfa.unenroll({ factorId });
+          if (error) throw authError(error);
+        }
+        // The session's level is in its token: a new one says what's left.
+        await db.auth.refreshSession().catch(warnFailed("Refreshing the session"));
       },
     },
 
@@ -705,8 +787,30 @@ export function serverKeepsEveryEpisode(
   };
 }
 
-function authError(e: AuthError): AccountError {
+/** The account's confirmed authenticator apps, numbered in the order they were added when unnamed. */
+export function authenticators(factors: readonly Factor[]): Authenticator[] {
+  return factors
+    .filter((f) => f.factor_type === "totp" && f.status === "verified")
+    .map((f, i) => ({ id: f.id, name: f.friendly_name || `Authenticator ${i + 1}` }));
+}
+
+export function authError(e: AuthError): AccountError {
   switch (e.code) {
+    case "email_exists":
+      return new AccountError("email_taken", "That email address is already used by another account.");
+    case "mfa_verification_failed":
+      return new AccountError("invalid_code", "That code is wrong. Check your authenticator app and try again.");
+    case "mfa_challenge_expired":
+      return new AccountError("invalid_code", "That took too long. Enter the newest code from your authenticator app.");
+    case "mfa_totp_enroll_not_enabled":
+    case "mfa_totp_verify_not_enabled":
+      return new AccountError("not_set_up", "Two-step sign-in isn't turned on on this account server.");
+    case "too_many_enrolled_mfa_factors":
+      return new AccountError("unknown", "This account has as many authenticators as it can. Remove one first.");
+    case "insufficient_aal":
+      return new AccountError("unknown", "Enter a code from your authenticator app first.");
+    case "mfa_factor_not_found":
+      return new AccountError("unknown", "That authenticator isn't on the account any more. Close this and open it again.");
     case "email_address_invalid":
     case "validation_failed":
       return new AccountError("invalid_email", "Enter a valid email address.");

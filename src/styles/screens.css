@@ -995,6 +995,21 @@
   margin: 0;
   color: var(--text-2);
 }
+/* Two-step sign-in: the QR code to scan (dark on white in either theme, as scanners expect) and its key as text. */
+.settings-qr {
+  display: block;
+  width: 168px;
+  height: 168px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fff;
+}
+.settings-secret {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
 .settings-link {
   color: var(--text-2);
   text-decoration: underline;

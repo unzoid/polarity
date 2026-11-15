@@ -19,6 +19,7 @@ import { CopySetup } from "../../components/settings/CopySetup";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { FriendsSettings } from "../../components/friends/FriendsSettings";
 import { useLinkedTvCode } from "../../lib/account";
+import { AccountSecurityCard } from "../../components/settings/AccountSecurity";
 
 export function AccountPage() {
   const account = useAccount();
@@ -46,6 +47,8 @@ export function AccountPage() {
       <Card footer="Your library, where you are in each title, playlists, settings, shortcuts, API keys and add-ons sync automatically. Volume and TV mode stay on this device.">
         <ActionRow title="Email" caption={account.user?.email} label="Sign Out" onClick={() => void account.signOut()} />
       </Card>
+
+      <AccountSecurityCard expand={expand} />
 
       <Card footer="The TV gets its own sign-in: signing out there leaves this device signed in, and the other way round.">
         <TvSignInRow {...expand("tv")} />
