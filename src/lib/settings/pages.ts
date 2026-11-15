@@ -89,6 +89,7 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
         "seekStep",
         "controlsHideSecs",
         "pauseShowsControls",
+        "pauseDetails",
         "holdSpeed",
         "clickAction",
         "wheelAction",

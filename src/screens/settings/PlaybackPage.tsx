@@ -88,6 +88,7 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
           <SettingRow id="seekStep" />
           <SettingRow id="controlsHideSecs" />
           <SettingRow id="pauseShowsControls" />
+          <SettingRow id="pauseDetails" />
           <SettingRow id="holdSpeed" />
           <SettingRow id="clickAction" />
           <SettingRow id="wheelAction" />

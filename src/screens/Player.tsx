@@ -172,6 +172,8 @@ import { noteShuffled, shuffledNext, startShuffle } from "../lib/playback/shuffl
 import { useSimklScrobble } from "../components/player/useSimklScrobble";
 import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
+import { PlayerPauseScreen } from "../components/player/PauseScreen";
+import { PlayerRatingPrompt } from "../components/player/RatingPrompt";
 
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
@@ -2221,6 +2223,31 @@ export function Player({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <PlayerPauseScreen
+        meta={meta}
+        videoId={videoId}
+        state={{
+          engine,
+          playing: ready && started,
+          paused,
+          ended,
+          buffering,
+          controls: chromeVisible,
+          layer: !!options || moreOpen || nativeMenu || !!sourceMenu || torrentNotice || sleep.warning || sleep.asleep,
+          nextUp: showNextUp,
+          notice: !!notice || (!!party && (party.notes.length > 0 || party.knockers.length > 0 || !!partyHoldText(party, videoId))),
+          casting: castingAway,
+          stepping: frameSteps.stepping,
+        }}
+      />
+      <PlayerRatingPrompt
+        meta={meta}
+        type={type}
+        metaId={metaId}
+        videoId={videoId}
+        state={{ ended, nextUp: showNextUp, follower: !!party && party.hostId !== party.me, local, link: isLinkId(metaId), shuffle: shuffled || shuffling }}
+      />
 
       {canParty && (
         <OptionsOverlay
