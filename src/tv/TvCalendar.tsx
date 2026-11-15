@@ -4,7 +4,7 @@ import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { byDay, dayLabel, monthWeeks, useCalendar, weekDays, weekStart, type CalendarEntry } from "../lib/catalog";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { ownEpisodeName } from "../lib/format";
 import { useBack, useFocusTrap } from "./shell";
 import { focusWhenReady } from "./spatial";
@@ -44,7 +44,7 @@ export function TvCalendar() {
   const [picking, setPicking] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
   const chooser = useRef<HTMLButtonElement>(null);
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
 
   if (!loading && !entries.length) {
     return (

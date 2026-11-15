@@ -6,7 +6,7 @@ import { offerAddon, openStremioLink, parseDeepLink, showLinkNote, titleRoute } 
 import { joinFromLink, offerTogether } from "../lib/party";
 import { onDeepLinks, setStremioLinks } from "../lib/platform";
 import { getPrefs, openSettings } from "../lib/settings";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { useLayer } from "../lib/ui";
 import { Button } from "./ui/Button";
 import { StremioLinks } from "./StremioLinks";
@@ -29,7 +29,7 @@ let registrationChecked = false;
  * "Sign in on <device>?"; a guest signs in first and lands there after (lib/account/tvSignInLink.ts).
  */
 export function DeepLinks({ tv }: { tv: boolean }) {
-  const { navigate, tab } = useRouter();
+  const { navigate, tab } = useNavigation();
   const account = useAccount();
   const [problem, setProblem] = useState<string | null>(null);
   // Watch parties need an account (as the profile menu's Join Watch Party).

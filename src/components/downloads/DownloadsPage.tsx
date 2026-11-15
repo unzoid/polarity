@@ -42,7 +42,7 @@ import {
 } from "../../lib/library";
 import { episodeCode, formatBytes } from "../../lib/format";
 import { useProgressOf } from "../../lib/net";
-import { useRouter } from "../../lib/router";
+import { useNavigation } from "../../lib/router";
 import { useFormFactor } from "../../lib/ui";
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -457,7 +457,7 @@ export function downloadLine(d: DownloadRecord) {
 }
 
 function usePlayDownload() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (d: DownloadRecord) => navigate({ name: "player", type: d.type, metaId: d.metaId, videoId: d.id, stream: localStream(d) });
 }
 

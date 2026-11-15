@@ -15,7 +15,7 @@ function reportProblem() {
 import { canOpenFiles, setOpenFilesOpen } from "../lib/localFiles";
 import { closePartySurface, getParty, leaveParty, partyAvailable, setJoinPartyOpen, usePartySurface } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
-import { useRouter } from "../lib/router";
+import { useRouter, useNavigation } from "../lib/router";
 import { useAccount } from "../lib/account";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { FriendsBody } from "./friends/FriendsPanel";
@@ -71,7 +71,7 @@ export function ProfileMenu() {
   const others = me ? account.profiles.filter((p) => p.id !== me.id) : [];
   const name = me?.name ?? "Guest";
   const avatar = me?.avatar ?? GUEST_AVATAR;
-  const { tab } = useRouter();
+  const { tab } = useNavigation();
   // While Settings → Browsing → Show the Calendar makes it a navbar tab, it isn't listed here too (#92).
   const { data: settings } = useSettings();
   // Requests waiting for an answer show on the Friends item (#135).

@@ -1,6 +1,6 @@
 import { downloadedStream, useDownloads } from "../library/downloads";
 import { useSettings } from "../net/queries";
-import { useRouter } from "../router";
+import { useNavigation } from "../router";
 import { needsPick, type PlayRequest } from "./titlePlayback";
 import type { RankedStream } from "../types";
 
@@ -10,7 +10,7 @@ import type { RankedStream } from "../types";
  * picked. `beforePlay` runs just before the player opens.
  */
 export function useTitlePlayback(onPick: (req: PlayRequest) => void, beforePlay?: () => void) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const { data: settings } = useSettings();
   const { data: downloads } = useDownloads();
   const autoPick = settings?.autoPickSource ?? true;

@@ -27,7 +27,7 @@ import {
   useViewingLimit,
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
-import { useRouter } from "../lib/router";
+import { useRouter, useNavigation } from "../lib/router";
 import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
 import type { ContentType, MetaPreview } from "../lib/types";
@@ -236,7 +236,7 @@ function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const deferred = useDeferredValue(query);
   const { animeEnabled } = usePrefs();
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
 
   // Keystrokes update the field instantly; the network waits for a pause.
   useEffect(() => {
@@ -297,7 +297,7 @@ function Results({ text }: { text: string }) {
 
 function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   const { data } = useGenreRow(type, genre);
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   // The heading opens the genre's whole list in Movies or Series.
   return (
     <ResultRow

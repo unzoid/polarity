@@ -126,7 +126,7 @@ import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
 import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds } from "../lib/format";
 import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
@@ -214,7 +214,7 @@ export function Player({
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
-  const { back, replace, tab } = useRouter();
+  const { back, replace, tab } = useNavigation();
   // TV mode keeps the window fullscreen: no fullscreen toggle, and Esc simply goes back.
   const tv = useTvMode();
   // With a controller in TV mode, controls show the button that triggers them.

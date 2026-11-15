@@ -22,7 +22,7 @@ import {
 } from "../../lib/anime";
 import { usePrefs } from "../../lib/settings";
 import { useMatureContent } from "../../lib/catalog";
-import { useRouter } from "../../lib/router";
+import { useNavigation } from "../../lib/router";
 import { menuPoint, openCardMenu } from "../CardMenu";
 import { api } from "../../lib/api";
 import { useCardIntent, useViewportPlace } from "../../lib/ui";
@@ -49,7 +49,7 @@ const INTENT_DELAY = 150;
 
 /** Click and right-click for an anime: its page, and the shared title menu. */
 export function useAnimeHandlers() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const qc = useQueryClient();
   return (item: Media) => ({
     onClick: () => navigate({ name: "anime-detail", id: item.id, preview: item }),

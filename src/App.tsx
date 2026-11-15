@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { memo, startTransition, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { MotionConfig } from "motion/react";
 import { actionFor, getPrefs, isSettingsOpen, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
 import type { Settings as SettingsT } from "./lib/types";
@@ -33,6 +33,7 @@ import {
   usePresence,
   cardGhostParts,
   cardMotionVars,
+  playCardMotion,
   cardOrigin,
   watchCardTaps,
   useSystemBack,
@@ -73,7 +74,8 @@ const ProfilesScreen = lazyNamed(() => import("./screens/account/ProfilesScreen"
 const TvApp = lazyNamed(() => import("./tv/TvApp"), "TvApp");
 const SettingsOverlay = lazyNamed(() => import("./components/SettingsOverlay"), "SettingsOverlay");
 
-function Screen({ route }: { route: Route }) {
+/** A page. Its route never changes for its entry, so a change of motion or player around it doesn't render it again. */
+const Screen = memo(function Screen({ route }: { route: Route }) {
   switch (route.name) {
     case "home":
       return <Home />;
@@ -110,7 +112,7 @@ function Screen({ route }: { route: Route }) {
     case "player":
       return null; // rendered as a full-window layer below
   }
-}
+});
 
 /**
  * A title's one page (test report 1, item 1): an anime reached by any of its ids opens on its anime
@@ -119,8 +121,18 @@ function Screen({ route }: { route: Route }) {
  */
 function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: page } = useQuery(titlePageQuery(type, id, preview));
+  // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it for its first 300ms:
+  // the tap renders only the skeleton, so the motion starts in the next frame, and the page itself renders after,
+  // in a transition that gives way to every frame.
+  const phone = useFormFactor().form === "phone";
+  const [ready, setReady] = useState(!phone);
+  useEffect(() => {
+    if (ready) return;
+    const frame = requestAnimationFrame(() => startTransition(() => setReady(true)));
+    return () => cancelAnimationFrame(frame);
+  }, [ready]);
   const loading = <DetailPending />;
-  if (!page) return loading;
+  if (!page || !ready) return loading;
   if (page.kind === "anime")
     return (
       <Suspense fallback={loading}>
@@ -340,6 +352,18 @@ function DesktopApp() {
   // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
   const motion = usePageMotion(pages, useFormFactor().form === "phone" && !playing);
   const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
+  // A title's page out of its card or back into it plays from the commit itself (lib/ui/cardMotion.ts): the tap is
+  // answered in the next frame, whatever the new page still has to render or load.
+  const main = useRef<HTMLElement>(null);
+  const cardKey = motion?.card ? (motion.dir === 1 ? motion.enter : motion.leave) : undefined;
+  const card = motion?.card;
+  useLayoutEffect(() => {
+    if (cardKey === undefined || !card) return;
+    const page = main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${cardKey}"]`);
+    if (!page) return;
+    const scrim = main.current?.querySelector<HTMLElement>(":scope > .card-scrim") ?? null;
+    return playCardMotion({ page, scrim, card, open: page.dataset.card === "open", width: window.innerWidth, height: window.innerHeight });
+  }, [cardKey, card]);
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
   useEffect(watchCardTaps, []);
@@ -362,7 +386,6 @@ function DesktopApp() {
   // Android's back button and gesture: Escape's Back, then Home, then the app goes to the background.
   // iOS's swipe in from the left edge: Escape's Back only.
   // iOS's swipe (#451) and Android 14's back gesture (#483), on a pushed page with nothing over it, move the page with the finger.
-  const main = useRef<HTMLElement>(null);
   const now = useRef({ pages, back });
   now.current = { pages, back };
   const drag = useMemo(
@@ -485,8 +508,8 @@ function CardGhost({ src }: { src: string }) {
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const { soft, sharp } = cardGhostParts(src);
-    el.replaceChildren(soft, sharp);
+    const { panel, soft, sharp } = cardGhostParts(src);
+    el.replaceChildren(panel, soft, sharp);
   }, [src]);
   return <div ref={box} className="card-ghost" aria-hidden />;
 }

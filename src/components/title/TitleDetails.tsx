@@ -12,7 +12,7 @@ import { ArrowUpRight } from "../icons";
 import { Img } from "../Img";
 import { imdbUrl } from "../RatingRing";
 import { Chip } from "../ui/Chip";
-import { useRouter } from "../../lib/router";
+import { useNavigation } from "../../lib/router";
 
 /**
  * Everything about a title below the fold: who's in it (with faces where the source has them), the facts,
@@ -157,7 +157,7 @@ export function DetailsLinks({ label, children }: { label: string; children: Rea
 function Cast({ person: p }: { person: { name: string; character?: string; photo?: string; tmdbId?: number } }) {
   // No photo from the metadata source: look the name up on IMDb. Initials until it answers (or if it can't).
   const { data: found } = usePersonPhoto(p.name, !p.photo);
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const photo = p.photo ?? found ?? undefined;
   const face = (
     <>

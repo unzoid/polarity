@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import type { Entry } from "../router";
+import { CARD_CLOSE_MS, CARD_OPEN_MS } from "./cardMotion";
 import { prefersReducedMotion } from "./reducedMotion";
 
 /**
- * How long a change's pages keep their motion (shell.css's clocks), and a couple of frames to spare: another
- * section's crossfade (--page-fade), a page pushed or taken off (--page-in), a title's page out of its card
- * (--card-open) and back into it (--card-close).
+ * How long a change's pages keep their motion, and a couple of frames to spare: another section's crossfade
+ * (shell.css --page-fade), a page pushed or taken off (--page-in), a title's page out of its card and back into it
+ * (cardMotion.ts, which starts two frames before this clock does).
  */
-const SETTLE = { fade: 200, push: 340, cardOpen: 540, cardClose: 340 };
+const SETTLE = { fade: 200, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS };
 
 function settleOf(m: PageMotion) {
   if (m.card) return m.dir === 1 ? SETTLE.cardOpen : SETTLE.cardClose;
@@ -73,20 +74,11 @@ export function watchCardTaps() {
 const isTitlePage = (e: Entry) => e.route.name === "detail" || e.route.name === "anime-detail";
 
 /**
- * What shell.css needs to play a card's motion on a page `width` × `height`: where the page's top left corner is
- * at the card, how much smaller the page is there across and down (exactly the card's box), and the corner radius
- * that looks like the card's at that size.
+ * What shell.css needs for a card's motion on a page `width` × `height` (cardMotion.ts moves it): the corner
+ * radius that looks like the card's when the page is scaled down to the card's box.
  */
 export function cardMotionVars(card: CardRect, width: number, height: number): Record<string, string> {
-  const sx = card.w / width;
-  const sy = card.h / height;
-  return {
-    "--card-x": `${card.x}px`,
-    "--card-y": `${card.y}px`,
-    "--card-sx": String(sx),
-    "--card-sy": String(sy),
-    "--card-r": `${8 / sx}px / ${8 / sy}px`,
-  };
+  return { "--card-r": `${(8 * width) / card.w}px / ${(8 * height) / card.h}px` };
 }
 
 let skipNext = false;

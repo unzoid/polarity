@@ -27,7 +27,7 @@ import {
   type PlaylistItem,
 } from "../lib/library";
 import { useLibrary, useWatchHistory } from "../lib/net";
-import { useRouter, type Route } from "../lib/router";
+import { useRouter, type Route, useNavigation } from "../lib/router";
 import { progressFraction, progressItem } from "../lib/catalog";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PosterGrid } from "../components/title/PosterGrid";
@@ -52,13 +52,13 @@ export function Library() {
 
 /** Library's sub-pages go on the navigation stack, like Anime's. */
 function useOpen() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (o: Open) => navigate(o.view === "playlist" ? { name: "playlist", id: o.id, fresh: o.fresh } : { name: "library-collection", view: o.view });
 }
 
 /** One collection in full. */
 export function LibraryCollection({ view }: { view: Collection }) {
-  const { back } = useRouter();
+  const { back } = useNavigation();
   const open = useOpen();
   return (
     <div className="scroll">
@@ -237,7 +237,7 @@ function DownloadCard({ d, onOpen }: { d: DownloadRecord; onOpen: () => void }) 
  * with its folder's other videos as episodes. One that's gone says so; × takes it off the list.
  */
 function RecentFileCard({ file }: { file: RecentFile }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const [gone, setGone] = useState<string | null>(null);
   const fraction = file.duration > 0 ? file.position / file.duration : 0;
   const watched = fraction >= watchedFraction();
@@ -281,7 +281,7 @@ function RecentFileCard({ file }: { file: RecentFile }) {
 }
 
 function usePlayDownload() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (d: DownloadRecord) => navigate({ name: "player", type: d.type, metaId: d.metaId, videoId: d.id, stream: localStream(d) });
 }
 

@@ -6,7 +6,7 @@ import { isLinkId } from "../lib/party";
 import type { ContentType } from "../lib/types";
 import { EmptyState } from "./ui/EmptyState";
 import { appWindow } from "../lib/platform";
-import { useRouter, type Route } from "../lib/router";
+import { type Route, useNavigation } from "../lib/router";
 import { forgetPlayerSourceChoices } from "../lib/playback";
 import { lazyNamed, whenIdle } from "../lib/ui";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
@@ -89,7 +89,7 @@ export function PlayerLayer({ player, leaving }: { player: PlayerRoute | null; l
     void appWindow.setSystemBarsHidden(true);
     return () => void appWindow.setSystemBarsHidden(false);
   }, [watching]);
-  const { back } = useRouter();
+  const { back } = useNavigation();
   if (!player) return null;
   const key = `${player.videoId}|${pickOf(player)}`;
   return (

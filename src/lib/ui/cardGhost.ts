@@ -36,8 +36,13 @@ export function paintSoftGhost(canvas: HTMLCanvasElement, img: HTMLImageElement)
   else img.addEventListener("load", paint, { once: true });
 }
 
-/** The card's picture for a title page's motion: a soft copy under a sharp one, each faded by its motion. */
+/**
+ * The card's picture for a title page's motion (cardMotion.ts): a plain panel in the page's grey, a soft copy over
+ * it and a sharp one over that, each faded by its motion.
+ */
 export function cardGhostParts(src: string) {
+  const panel = document.createElement("div");
+  panel.className = "card-ghost-panel";
   const sharp = document.createElement("img");
   sharp.className = "card-ghost-sharp";
   sharp.src = src;
@@ -48,5 +53,5 @@ export function cardGhostParts(src: string) {
   const soft = document.createElement("canvas");
   soft.className = "card-ghost-soft";
   paintSoftGhost(soft, sharp);
-  return { soft, sharp };
+  return { panel, soft, sharp };
 }

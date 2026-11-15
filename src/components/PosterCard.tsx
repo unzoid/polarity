@@ -1,7 +1,7 @@
 import { useCardIntent } from "../lib/ui";
 import { prefetchMeta, preloadImage } from "../lib/net";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import type { MetaPreview, Progress } from "../lib/types";
 import { cardMenu } from "./CardMenu";
 import { CardRating } from "./ImdbBadge";
@@ -19,7 +19,7 @@ export function useIntent(item: MetaPreview) {
 }
 
 function useOpen(item: MetaPreview, id = item.id) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return () => navigate({ name: "detail", type: item.type, id, preview: id === item.id ? item : undefined });
 }
 

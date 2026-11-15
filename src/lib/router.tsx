@@ -50,7 +50,11 @@ interface Router {
   back: () => void;
 }
 
+/** What changes the stack, without the stack: these never change, so what only navigates never renders again. */
+type RouterActions = Pick<Router, "navigate" | "tab" | "replace" | "back">;
+
 const RouterContext = createContext<Router | null>(null);
+const ActionsContext = createContext<RouterActions | null>(null);
 const MAX_DEPTH = 8;
 let nextKey = 100;
 
@@ -95,7 +99,22 @@ export function RouterProvider({ children, initial }: { children: ReactNode; ini
     () => ({ stack, current: stack[stack.length - 1].route, navigate, tab, replace, back }),
     [stack, navigate, tab, replace, back],
   );
-  return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
+  const actions = useMemo(() => ({ navigate, tab, replace, back }), [navigate, tab, replace, back]);
+  return (
+    <ActionsContext.Provider value={actions}>
+      <RouterContext.Provider value={value}>{children}</RouterContext.Provider>
+    </ActionsContext.Provider>
+  );
+}
+
+/**
+ * Navigation only, for what opens or leaves pages but doesn't show where it is (every card): unlike `useRouter`,
+ * a page change doesn't render it again. A tap on a card then renders the new page, not every card on the old one.
+ */
+export function useNavigation() {
+  const ctx = useContext(ActionsContext);
+  if (!ctx) throw new Error("useNavigation outside RouterProvider");
+  return ctx;
 }
 
 export function useRouter() {

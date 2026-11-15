@@ -5,7 +5,7 @@ import { Calendar, Close, Desktop, Power, Profile, Search, Settings, Tv, Users, 
 import { partyAvailable, setJoinPartyOpen, setPartyMenuOpen, useParty } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
 import { useAccount } from "../lib/account";
-import { rootTab, useRouter, type TabRoute } from "../lib/router";
+import { rootTab, useRouter, type TabRoute, useNavigation } from "../lib/router";
 import { shortcutText, usePrefs } from "../lib/settings";
 import { useSettings } from "../lib/net";
 import { buttonFor, usePadBindings, type NavAction, type PadButton, type PlayerPadAction } from "./padBindings";
@@ -111,7 +111,7 @@ function Clock() {
 /** The side menu: profiles, back to desktop mode, quit. */
 export function TvMenu({ onClose }: { onClose: () => void }) {
   const account = useAccount();
-  const { tab } = useRouter();
+  const { tab } = useNavigation();
   const ref = useRef<HTMLDivElement>(null);
   useFocusTrap(ref);
   useBack(true, onClose);

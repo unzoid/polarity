@@ -5,7 +5,7 @@ import { LogoOrName, ProgressBar, useCardArt } from "../components/title/Card";
 import { isAnimePreview, useEntryShown, type EntryAt } from "../lib/anime";
 import { episodeCode, formatRemaining } from "../lib/format";
 import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { useArtGate, useCardIntent } from "../lib/ui";
 import { useBrowseShelf, useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
@@ -66,7 +66,7 @@ export function TvCard({
   /** The card's logo isn't known yet: the name waits a moment for it (#343). */
   logoPending?: boolean;
 }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const { item, entry: shownEntry } = useEntryShown(stored, watching ?? entry?.videoId);
   const onStage = staged ?? item;
   const stage = useStage();
@@ -308,7 +308,7 @@ export function TvContinueRail() {
  * the title loads (#343), the name where there's none. An entry of a show goes by its own name.
  */
 function TvContinueCard({ p }: { p: Progress }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const plain = useMemo(() => continueItem(p), [p]);
   const { entry } = useEntryShown(plain, p.videoId);
   const meta = useMeta(p.type, p.metaId, !entry);

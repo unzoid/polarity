@@ -167,64 +167,17 @@
 :root[data-form="phone"] .main:has(> .page[data-fade]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
   transition-duration: var(--page-fade);
 }
-/* A title opened from a card (pageMotion.ts `card`), as Netflix's (measured from its app). The title's page starts
-   as exactly the card's box (--card-x/y, --card-sx/sy) and grows to the screen, most of the way in the first half.
-   Riding on it, the card's own picture (.card-ghost, App.tsx) covers it: sharp at first, at once soft and dark,
-   and only once the page is all but full size does it give way and the page show, so the page is never seen
-   squeezed. What's behind goes dark under it (.card-scrim). Back is quicker, as a close is: the page itself
-   shrinks into the card, the picture comes up over it soft, then sharp, and what's behind is lit again. Only
-   transforms and opacity move, and nothing is blurred per frame (the soft picture is a still one, cardGhost.ts),
-   so the compositor plays every frame. pageMotion.ts SETTLE and pageDrag.ts's swipe follow these clocks. */
-:root[data-form="phone"] :is(.page[data-card], .card-scrim) {
-  --card-open: 500ms;
-  --card-close: 300ms;
-  --card-ease-open: cubic-bezier(0.2, 0.9, 0.1, 1);
-  --card-ease-close: cubic-bezier(0.25, 0.8, 0.25, 1);
-  --card-at: translate(var(--card-x), var(--card-y)) scale(var(--card-sx), var(--card-sy));
-}
+/* A title opened from a card (pageMotion.ts `card`), and back into it: the motion itself is lib/ui/cardMotion.ts,
+   Netflix's measured from its app, played from the commit with the Web Animations API. These are the pieces it
+   moves. The title's page is the card's box at first (transformed from its top left corner, its corners the card's
+   at that size). On it, the card's picture (.card-ghost, App.tsx): a plain panel in the page's grey, a soft copy
+   and a sharp one. Between it and the page behind, a shade of the page's own colour (.card-scrim). */
 :root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
 :root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
   z-index: 2;
   transform-origin: 0 0;
   border-radius: var(--card-r);
   overflow: hidden;
-}
-/* Before it moves, the title's page already sits at the card under the card's own picture, so it looks as it was
-   while the page is drawn. Without a picture it waits unseen. */
-:root[data-form="phone"] .page[data-card="open"][data-motion="enter"]:not([data-go]) {
-  transform: var(--card-at);
-}
-:root[data-form="phone"] .page[data-card="open"][data-motion="enter"]:not([data-go], :has(> .card-ghost)) {
-  opacity: 0;
-}
-:root[data-form="phone"] .page[data-card="open"][data-motion="enter"]:not([data-go]) > .card-ghost .card-ghost-sharp {
-  opacity: 1;
-}
-:root[data-form="phone"] .page[data-card="open"][data-motion="enter"][data-go] {
-  animation: card-page var(--card-open) var(--card-ease-open) both;
-}
-:root[data-form="phone"] .page[data-card="close"][data-motion="leave"][data-go] {
-  animation: card-page-back var(--card-close) var(--card-ease-close) forwards;
-}
-@keyframes card-page {
-  from {
-    transform: var(--card-at);
-  }
-  to {
-    transform: none;
-  }
-}
-/* Back: the last stretch fades the page (the card's picture by then) out over the card itself, so the card comes
-   back as it is, its corners, rim and rating with it, instead of the copy being swapped for it at the end. */
-@keyframes card-page-back {
-  0%,
-  80% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-    transform: var(--card-at);
-  }
 }
 
 .card-ghost {
@@ -243,69 +196,9 @@
   object-fit: fill;
   opacity: 0;
 }
-[data-card="open"][data-go] > .card-ghost .card-ghost-sharp {
-  animation: card-ghost-sharp-open var(--card-open) linear both;
-}
-[data-card="open"][data-go] > .card-ghost .card-ghost-soft {
-  animation: card-ghost-soft-open var(--card-open) linear both;
-}
-[data-card="close"][data-go] > .card-ghost .card-ghost-sharp {
-  animation: card-ghost-sharp-close var(--card-close) linear both;
-}
-[data-card="close"][data-go] > .card-ghost .card-ghost-soft {
-  animation: card-ghost-soft-close var(--card-close) linear both;
-}
-@keyframes card-ghost-sharp-open {
-  from {
-    opacity: 1;
-  }
-  22% {
-    opacity: 0;
-  }
-  to {
-    opacity: 0;
-  }
-}
-@keyframes card-ghost-soft-open {
-  from {
-    opacity: 1;
-  }
-  42% {
-    opacity: 1;
-  }
-  82% {
-    opacity: 0;
-  }
-  to {
-    opacity: 0;
-  }
-}
-/* Back: the page is covered before it has shrunk enough to look squeezed, then the card's picture sharpens in.
-   pageDrag.ts plays the same for the swipe. */
-@keyframes card-ghost-soft-close {
-  from {
-    opacity: 0;
-  }
-  30% {
-    opacity: 1;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes card-ghost-sharp-close {
-  from {
-    opacity: 0;
-  }
-  40% {
-    opacity: 0;
-  }
-  80% {
-    opacity: 1;
-  }
-  to {
-    opacity: 1;
-  }
+/* Netflix's panel is a step lighter than the page around it. */
+.card-ghost-panel {
+  background: color-mix(in srgb, var(--bg), rgb(var(--ink)) 9%);
 }
 
 /* What's behind fades towards the page's own colour (Netflix's goes black), without a blur: a blur over the whole
@@ -317,34 +210,6 @@
   background: var(--bg);
   pointer-events: none;
   opacity: 0;
-  will-change: opacity;
-}
-.card-scrim[data-card="open"][data-go] {
-  animation: card-scrim var(--card-open) var(--ease-out) both;
-}
-/* Back: a little dim over the page coming back until it moves, then clearing with the card's return. */
-.card-scrim[data-card="close"] {
-  opacity: 0.45;
-}
-.card-scrim[data-card="close"][data-go] {
-  animation: card-scrim-out var(--card-close) var(--card-ease-close) both;
-}
-@keyframes card-scrim {
-  from {
-    opacity: 0;
-  }
-  55%,
-  to {
-    opacity: 0.88;
-  }
-}
-@keyframes card-scrim-out {
-  from {
-    opacity: 0.45;
-  }
-  to {
-    opacity: 0;
-  }
 }
 /* Less motion: the pair crossfades in place. */
 @media (prefers-reduced-motion: reduce) {
