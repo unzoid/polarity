@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DownloadButton } from "../DownloadButton";
+import { AutoDownloadsNote, DownloadFolder } from "./DownloadFolder";
 import { TrashLid, useConfirmDelete } from "../ConfirmDeleteButton";
 import { Dropdown } from "../Dropdown";
 import { Segmented } from "../Segmented";
@@ -27,6 +28,7 @@ import {
   saveDownloadsView,
   sortTitles,
   useAllLeaving,
+  useAutoDownloads,
   useDownloads,
   useDownloadsStorage,
   useLeaving,
@@ -41,7 +43,6 @@ import {
 import { episodeCode, formatBytes } from "../../lib/format";
 import { useProgressOf } from "../../lib/net";
 import { useRouter } from "../../lib/router";
-import { os } from "../../lib/platform";
 import { useFormFactor } from "../../lib/ui";
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -212,12 +213,10 @@ function StorageSummary({ list }: { list: DownloadRecord[] }) {
   return (
     <div className="downloads-summary">
       <p className="t-headline tabular">{parts.filter(Boolean).join(" · ")}</p>
-      {/* A phone's app keeps its files in its own container: a path there is nothing anyone can go to. */}
-      {storage?.dir && os !== "ios" && os !== "android" && (
-        <p className="t-caption faint downloads-folder" title={storage.dir}>
-          Saved in {storage.dir}
-        </p>
-      )}
+      {/* A phone's app keeps its files in its own container: a path there is nothing anyone can go to (Android
+          offers an SD card instead, iOS nothing). */}
+      <DownloadFolder storage={storage} />
+      <AutoDownloadsNote />
     </div>
   );
 }
@@ -484,6 +483,7 @@ function DownloadRow({
   showTitle?: boolean;
 }) {
   const leaving = useLeaving(d.id);
+  const auto = useAutoDownloads().ids.has(d.id);
   const play = usePlayDownload();
   const name = series && d.episode != null ? `${d.episode}. ${d.episodeTitle ?? `Episode ${d.episode}`}` : d.name;
   const art = poster ? d.poster : (d.thumbnail ?? d.background);
@@ -515,6 +515,7 @@ function DownloadRow({
                     <Watched size={14} aria-hidden /> Watched ·{" "}
                   </span>
                 )}
+                {auto && <span className="download-row-auto">Downloaded automatically · </span>}
                 {poster ? ["Movie", downloadLine(d)].join(" · ") : downloadLine(d)}
               </span>
               {d.state === "failed" && d.error && <span className="t-caption download-row-error">{d.error}</span>}

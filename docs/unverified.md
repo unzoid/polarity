@@ -1874,3 +1874,25 @@ and were not looked at. Not run against TMDB itself, nor in the app. To check wi
    player, then the panel. The cast in Details and the credit names open the person's page; its rails move with
    the remote.
 4. A popular actor's page (many titles) loads without TMDB answering 429 for long.
+## Downloads: next episodes and the download folder
+
+Unit tests (`tests/autoDownloads.test.ts`, `tests/batchDownloads.test.ts`) and the Rust tests in
+`downloads.rs` (a new folder takes new downloads, old records keep their paths, an unwritable folder is
+refused) ran on Windows. Never run in the app or on a device:
+
+- Keep the next episodes downloaded: set it to 2, play a downloaded episode past the watched threshold: the
+  next two released episodes start one at a time, Library → Downloads lists them ("Keeping … downloaded:
+  S1 E2, S1 E3") and marks their rows "Downloaded automatically". With Remove downloaded episodes once
+  watched on, the finished episode's file is gone about five seconds after the player closes (on Windows,
+  check mpv has let go of the file by then; if not, the record goes and the file stays).
+- Android on mobile data: the run shows "Waiting for Wi-Fi" and starts once on Wi-Fi. With under 2 GB free
+  it shows "Stopped: not enough free space".
+- Desktop: Change… opens the system's folder dialog; a picked folder shows in "Saved in", the next download
+  lands there, older ones still play and Show in Folder still finds them; Use Default goes back. A folder
+  that can't be written (a read-only drive) shows why under the row.
+- Android with an SD card: "Save new downloads to" offers Internal storage and SD card
+  (`/storage/<volume>/Android/data/<app>/files`, made by `getExternalFilesDirs` at start); the next download
+  goes to the card. With the card out, finished downloads on it stay listed (they fail to play until it's
+  back). Without a card the row isn't shown.
+- iOS: no folder row. The downloads folder (`Library/Application Support/<app>/downloads`) holds the list,
+  the files and their `.part` files, and is excluded from backups at every start (`ios/files.m`).

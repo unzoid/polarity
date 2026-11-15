@@ -73,6 +73,12 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
       settings: ["resumePlayback", "resumeRewind", "watchedThreshold"],
     },
     {
+      id: "downloads",
+      label: "Downloads",
+      caption: "Keeping the next episodes downloaded",
+      settings: ["autoDownloadNext", "autoDownloadRemoveWatched"],
+    },
+    {
       id: "player",
       label: "Player",
       caption: "Fullscreen, minimizing, playback speed and Discord",

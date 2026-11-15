@@ -1594,6 +1594,28 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The download folder and its buttons (DownloadFolder.tsx); the path gives way first. */
+.downloads-folder-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+  min-width: 0;
+}
+.downloads-folder-row .downloads-folder {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-top: 0 !important;
+}
+.downloads-folder-row .download-row-error {
+  flex-basis: 100%;
+}
+.downloads-auto {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
 .downloads-toolbar {
   display: flex;
   flex-wrap: wrap;

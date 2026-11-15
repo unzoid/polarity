@@ -106,6 +106,8 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
         <li>Watchlist, history and your own playlists</li>
         <li>Search, filter and sort your saved and watched titles by type, status, genre, year and rating</li>
         <li>Downloads to watch later, a single episode or a whole season</li>
+        <li>Downloads to watch later, a single episode or a whole season, in the folder you choose</li>
+        <li>Keep the next episodes of a show downloaded as you watch (while the app is open)</li>
         <li>A right-click menu on any card for quick actions</li>
       </ul>
     </td>

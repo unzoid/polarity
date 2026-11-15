@@ -24,7 +24,12 @@ export interface Batch {
   /** The episode coming down now, and how far it is (0–1, when known). */
   current?: string;
   fraction?: number;
+  /** Why it isn't starting the next episode (`BatchDeps.hold`): waiting, or stopped for good. */
+  held?: Hold;
 }
+
+/** `wait`: asked again in a while; `stop`: the batch ends there. */
+export type Hold = { kind: "wait" | "stop"; reason: string };
 
 /** What the runner needs from the app; tests pass their own. */
 export interface BatchDeps {
@@ -38,7 +43,12 @@ export interface BatchDeps {
   resume(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   sleep(ms: number): Promise<void>;
+  /** Asked before an episode is started: null to go ahead (left out: always). */
+  hold?(): Promise<Hold | null>;
 }
+
+/** Episodes some run is finding a source for and starting right now: another run waits, then follows that download. */
+const claimed = new Set<string>();
 
 const batches = new Map<string, Batch>();
 const listeners = new Set<() => void>();
@@ -73,6 +83,8 @@ export function cancelBatch(key: string) {
 }
 
 const POLL_MS = 1000;
+/** How often a held batch asks again. */
+const HOLD_MS = 15_000;
 
 /**
  * Downloads `videos` of `item` as the batch `key`. Starting a batch that's running or paused does
@@ -94,21 +106,54 @@ export async function runBatch(key: string, item: MetaPreview, videos: Video[], 
     return true;
   };
 
+  /** Waits while `deps.hold` says so; true when the batch ends here (stopped by it, or cancelled). */
+  const holdOff = async () => {
+    for (;;) {
+      if (!(await go())) return true;
+      const held = (await deps.hold?.()) ?? null;
+      if (!held) {
+        if (now().held) update({ held: undefined });
+        return false;
+      }
+      update({ held });
+      if (held.kind === "stop") return true;
+      await deps.sleep(HOLD_MS);
+    }
+  };
+
   for (const video of videos) {
     if (!(await go())) break;
-    const before = await deps.status(video.id);
+    let before = await deps.status(video.id);
     if (before?.state === "done") {
       update({ done: now().done + 1 });
       continue;
     }
     if (!before || before.state === "failed") {
-      const pick = (await deps.sources(video).catch(() => [])).find((s) => !!s.stream.url && !s.otherEpisode);
-      const why = pick ? await deps.start(item, video, pick) : "no source";
+      if (await holdOff()) break;
+      // One run at a time finds an episode its source; another waits, then follows the download it started.
+      while (claimed.has(video.id)) await deps.sleep(POLL_MS);
+      claimed.add(video.id);
+      let why: string | null = null;
+      try {
+        before = await deps.status(video.id);
+        if (!before || before.state === "failed") {
+          const pick = (await deps.sources(video).catch(() => [])).find((s) => !!s.stream.url && !s.otherEpisode);
+          why = pick ? await deps.start(item, video, pick) : "no source";
+          before = undefined;
+        }
+      } finally {
+        claimed.delete(video.id);
+      }
       if (why) {
         update({ failed: now().failed + 1 });
         continue;
       }
-    } else if (before.state === "paused") {
+      if (before?.state === "done") {
+        update({ done: now().done + 1 });
+        continue;
+      }
+    }
+    if (before?.state === "paused") {
       await deps.resume(video.id);
     }
     update({ current: video.id, fraction: undefined });

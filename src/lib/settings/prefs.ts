@@ -132,6 +132,10 @@ export interface Prefs {
   notifySeasons: boolean;
   /** A download finished or failed. */
   notifyDownloads: boolean;
+  /** On this device: how many episodes after a finished downloaded one stay downloaded (0: off; lib/library/autoDownloads.ts). */
+  autoDownloadNext: number;
+  /** On this device: a downloaded episode's file goes once it's watched and the player is closed. */
+  autoDownloadRemoveWatched: boolean;
   /** Which series count as followed: the library and what's been started, or only what's been started. */
   notifyScope: "library" | "started";
 
@@ -250,6 +254,8 @@ const DEFAULTS: Prefs = {
   notifyEpisodes: false,
   notifySeasons: false,
   notifyDownloads: false,
+  autoDownloadNext: 0,
+  autoDownloadRemoveWatched: false,
   notifyScope: "library",
   matureContent: "show",
   viewingLimit: 0,
