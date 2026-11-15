@@ -25,6 +25,11 @@ export const springs = {
    * up, so it takes longer to settle (Netflix's and iOS's own take about half a second).
    */
   bottomSheet: { type: "spring", bounce: 0, duration: 0.5 },
+  /**
+   * The profile sheet and the page stepping back under it, as Netflix's (measured from its app: 48% of the way in
+   * 68ms, 78% in 137ms, 93% in 204ms): a critically damped spring, ω 20/s.
+   */
+  profileSheet: { type: "spring", stiffness: 400, damping: 40, mass: 1 },
   /** A step settling into place (sign-in): a hint of overshoot, nothing more. */
   settle: { type: "spring", bounce: 0.15, duration: 0.45 },
   /** One panel of tabs giving way to the next (Episode Ratings' views): quick, no overshoot. */

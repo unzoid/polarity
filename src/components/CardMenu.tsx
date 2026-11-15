@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { api } from "../lib/api";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
 import type { MetaPreview, Progress } from "../lib/types";
 import { Check, Close, Hidden, Info, Minus, Play, PlaylistIcon, Plus, Reset, Trailer, Watched } from "./icons";
@@ -103,7 +103,7 @@ type Choice = {
 /** The choices in groups, a separator between groups. */
 type Choices = { detail?: string; groups: Choice[][]; settled: boolean };
 
-const goTo = (target: Target, navigate: ReturnType<typeof useRouter>["navigate"], series: boolean): Choice => ({
+const goTo = (target: Target, navigate: ReturnType<typeof useNavigation>["navigate"], series: boolean): Choice => ({
   id: "open",
   label: series ? "Go to Show" : "Go to Movie",
   icon: <Info />,
@@ -113,13 +113,13 @@ const goTo = (target: Target, navigate: ReturnType<typeof useRouter>["navigate"]
 
 /** The menu of a title nothing else can be done with yet: its page. */
 function useUnlinkedChoices(target: Target): Choices {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return { groups: [[goTo(target, navigate, target.item.type === "series")]], settled: true };
 }
 
 function useLinkedChoices(target: Target): Choices {
   const { item, entry, episode } = target;
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const a = useTitleActions(item, entry);
   const imdb = imdbUrl(item.id);
   const play: Choice[] = [];

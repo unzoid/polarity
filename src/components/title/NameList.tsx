@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { useRouter } from "../../lib/router";
+import { useNavigation } from "../../lib/router";
 
 /**
  * People's names joined by commas, each isolated (`<bdi>`), so an Arabic or Hebrew name among Latin ones keeps its
@@ -7,7 +7,7 @@ import { useRouter } from "../../lib/router";
  * that has one opens that person's page; the rest stay plain text.
  */
 export function NameList({ names, ids }: { names: readonly string[]; ids?: ReadonlyMap<string, number> }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (
     <>
       {names.map((name, i) => {

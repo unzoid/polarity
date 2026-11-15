@@ -1,4 +1,5 @@
-import { Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { api } from "../lib/api";
 import { appVersion } from "../lib/updater";
@@ -14,7 +15,7 @@ function reportProblem() {
 import { canOpenFiles, setOpenFilesOpen } from "../lib/localFiles";
 import { closePartySurface, getParty, leaveParty, partyAvailable, setJoinPartyOpen, usePartySurface } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
-import { useRouter } from "../lib/router";
+import { useRouter, useNavigation } from "../lib/router";
 import { useAccount } from "../lib/account";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { FriendsBody } from "./friends/FriendsPanel";
@@ -70,7 +71,7 @@ export function ProfileMenu() {
   const others = me ? account.profiles.filter((p) => p.id !== me.id) : [];
   const name = me?.name ?? "Guest";
   const avatar = me?.avatar ?? GUEST_AVATAR;
-  const { tab } = useRouter();
+  const { tab } = useNavigation();
   // While Settings → Browsing → Show the Calendar makes it a navbar tab, it isn't listed here too (#92).
   const { data: settings } = useSettings();
   // Requests waiting for an answer show on the Friends item (#135).
@@ -355,6 +356,11 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
     list(!!c.stay);
     c.run();
   };
+  // The sheet sits in its own place beside the pages and the top bar (App.tsx `.sheet-host`), not among the bar's
+  // actions: anything that scales them or the pages under it (the actions once scrolled, the pages stepping back as
+  // it opens) would otherwise hold the sheet's fixed layers inside its box.
+  const [bar, setBar] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => setBar(document.querySelector<HTMLElement>(".sheet-host") ?? document.body), []);
   const title =
     view === "list" ? (
       "Profiles"
@@ -376,6 +382,7 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
       <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => list(true)}>
         <Avatar id={avatar} />
       </button>
+      {bar && createPortal(
       <Sheet open={open} onClose={shut} title={title} full>
         <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
           {view === "friends" && <FriendsBody inDialog={false} />}
@@ -408,7 +415,9 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
             />
           )}
         </div>
-      </Sheet>
+      </Sheet>,
+      bar,
+      )}
     </>
   );
 }

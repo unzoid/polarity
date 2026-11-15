@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { AlertCircle, Check, Filters, Info, Instant, Puzzle } from "./icons";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, usePartialStreams, useStreams } from "../lib/net";
 import { runtimeSeconds } from "../lib/format";
@@ -32,7 +32,7 @@ export function StreamList({
   /** TV mode: filters as chip rows a remote can reach. */
   tv?: boolean;
 }) {
-  const { tab } = useRouter();
+  const { tab } = useNavigation();
   // Desktop settings are the overlay over this page; TV has its own settings screen.
   const showSettings = (page: PageId) => (tv ? tab({ name: "settings", page }) : openSettings(page));
   const whole = useStreams(type, videoId);

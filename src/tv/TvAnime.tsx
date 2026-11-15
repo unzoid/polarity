@@ -35,7 +35,7 @@ import {
 } from "../lib/anime";
 import { cachedLookup } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import type { Shape } from "../lib/catalog";
 import { useMatureContent } from "../lib/catalog";
 import { playSound } from "./sounds";
@@ -180,7 +180,7 @@ function TvAnimeCard({
   near: boolean;
   franchise: boolean;
 }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const qc = useQueryClient();
   const stage = useStage();
   const prefs = usePrefs();
@@ -277,7 +277,7 @@ function TvAnimeCard({
 
 /** An anime link in TV mode (arriving from desktop mode, say): on to the show's title page. */
 export function TvAnimeDetail({ id }: { id: number }) {
-  const { replace } = useRouter();
+  const { replace } = useNavigation();
   const qc = useQueryClient();
   const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const [missing, setMissing] = useState(false);

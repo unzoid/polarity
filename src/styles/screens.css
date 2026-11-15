@@ -1319,7 +1319,8 @@
    Continuous (squircle) corners where the webview draws them, round ones
    otherwise, like the volume HUD. */
 .library-panel {
-  margin: 0 var(--gutter) 2.5rem var(--content-start);
+  /* First on the page (Library has no visible heading): it starts under the top bar. */
+  margin: calc(var(--nav-h) + 1.75rem) var(--gutter) 2.5rem var(--content-start);
   overflow: hidden;
   border-radius: var(--r-panel);
   corner-shape: squircle;
@@ -1338,9 +1339,9 @@
 .library-panel-head {
   display: flex;
   align-items: center;
-  gap: 0.875rem;
+  gap: 1rem;
   width: 100%;
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.25rem;
   text-align: left;
   transition: background-color var(--dur-fast) var(--ease-std);
 }
@@ -1352,8 +1353,8 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 3rem;
+  height: 3rem;
   border-radius: var(--r-md);
   corner-shape: squircle;
   background: var(--fill-3);
@@ -1367,7 +1368,7 @@
   gap: 0.125rem;
 }
 .library-panel-title {
-  font-size: var(--fs-xl);
+  font-size: 1.25rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -1375,7 +1376,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   color: var(--text-2);
 }
 .library-panel-chevron {
@@ -1403,6 +1404,7 @@
   }
 }
 :root[data-form="phone"] .library-panel {
+  margin-top: calc(var(--nav-h) + 0.5rem);
   margin-bottom: 1.75rem;
 }
 :root[data-form="phone"] .library-panel > * {
@@ -1410,10 +1412,10 @@
   --content-start: 1rem;
 }
 :root[data-form="phone"] .library-panel-head {
-  padding: 0.875rem 1rem;
+  padding: 1.125rem 1rem;
 }
 :root[data-form="phone"] .library-panel-title {
-  font-size: var(--fs-lg);
+  font-size: 1.1875rem;
 }
 .library-rows {
   padding-bottom: 3rem;

@@ -20,7 +20,7 @@ import {
   useSettings,
 } from "../lib/net";
 import { prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import {
   catalogKey,
   catalogTitle,
@@ -119,7 +119,7 @@ export function HeroCarousel({
   /** What clicking and right-clicking the art does; by default the title's page and its options menu. */
   handlers?: (item: MetaPreview) => { onClick: () => void; onContextMenu: (e: React.MouseEvent<HTMLElement>) => void };
 }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const phone = useFormFactor().form === "phone";
   const [paused, setPaused] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
@@ -302,7 +302,7 @@ function HeroPeek({ item, side, onClick }: { item: MetaPreview; side: "prev" | "
 }
 
 function HeroContent({ item }: { item: MetaPreview }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const intent = useIntent(item);
   const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
@@ -337,7 +337,7 @@ function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: bo
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
   const { data, isLoading, isError } = isCatalog ? catalog : recommended;
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const to = shelfRoute(shelf);
   // Nothing to play and nothing to show (#337) stays out.
   // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
@@ -380,7 +380,7 @@ function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   const [ref, near] = useNearViewport<HTMLDivElement>();
   const { data: found, isError } = useAddonCatalogRow(catalog, near);
   const data = useBrowseVisible(useListable(found));
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (
     <div ref={ref} data-addon-row={catalog.id}>
       {!isError && !(data && !data.length) && (
@@ -409,7 +409,7 @@ function ContinueRow() {
  * an anime shows the entry the episode is part of and opens its page (#22).
  */
 function ContinueCard({ progress: p }: { progress: Progress }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const stored = useMemo(() => progressItem(p), [p]);
   const { item, entry, opens } = useEntryShown(stored, p.videoId);
   const openDetail = () => navigate({ name: "detail", type: p.type, id: opens });

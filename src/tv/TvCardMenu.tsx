@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Check, Close, Hidden, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
 import { episodeCode } from "../lib/format";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
 import type { MetaPreview, Progress } from "../lib/types";
 import { useBack, useFocusTrap } from "./shell";
@@ -124,7 +124,7 @@ const GAP = 28; // between the lifted card and the menu
 
 function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => void }) {
   const { item, entry, anchor } = target;
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const a = useTitleActions(item, entry);
 
   const act = (fn: () => void) => () => {

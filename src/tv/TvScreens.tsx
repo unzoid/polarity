@@ -31,7 +31,7 @@ import { localStream, type PlaylistItem, useDownloads, usePlaylists } from "../l
 import { arrangeLibrary, needsFacts, useSavedEntries, useWatchedEntries } from "../lib/library";
 import { TvArrangeRail, useTvLibraryView } from "./TvLibraryArrange";
 import { episodeCode } from "../lib/format";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { TvBrowse, TvCard, TvContinueRail, TvItemsRail, TvRail, TvShelfRail, type RailRow } from "./TvRails";
 import { TvKeyboard } from "./TvKeyboard";
 import { TvAnimeRail } from "./TvAnime";
@@ -123,7 +123,7 @@ export function TvLibrary() {
   const watching = useMemo(() => new Map((history ?? []).map((p) => [p.metaId, p.videoId])), [history]);
   const { data: downloads } = useDownloads();
   const playlists = usePlaylists();
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   // Only what's here to watch: a download still coming down can't play yet.
   const ready = (downloads ?? []).filter((d) => d.state === "done");
   // Type, status and sort for Saved and Watched; titles are looked up only when the view needs it.

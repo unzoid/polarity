@@ -1,5 +1,7 @@
 import type { BackDrag } from "../platform/back";
-import { skipNextPageMotion, type CardRect } from "./pageMotion";
+import { cardGhostParts } from "./cardGhost";
+import { CARD_CLOSE_EASE, CARD_CLOSE_MS, ghostCloseFades } from "./cardMotion";
+import { liveCard, skipNextPageMotion, type CardRect } from "./pageMotion";
 
 /** How far left the page under starts, as a share of the width, the way iOS's comes in. */
 const UNDER_FROM = 0.3;
@@ -10,9 +12,9 @@ export const DRAG_SETTLE_MS = 280;
 const CARD_SHRINK = 0.3;
 const CARD_FOLLOW = 0.5;
 const CARD_CORNER = 28;
-/** Let go: back into the card, on the card motion's clock and curve (shell.css `--card-close`, `--card-ease`). */
-const CARD_BACK_MS = 540;
-const CARD_EASE = "cubic-bezier(0.3, 0.8, 0.2, 1)";
+/** Let go: back into the card, on Back's clock and curve (cardMotion.ts). */
+const CARD_BACK_MS = CARD_CLOSE_MS;
+const CARD_EASE = CARD_CLOSE_EASE;
 
 /** `card`: the card the top page grew out of (pageMotion.ts cardOrigin): the swipe takes it back there. */
 export type DragPages = { top: HTMLElement; under: HTMLElement; card?: CardRect };
@@ -72,29 +74,22 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
     p.top.querySelector(":scope > .card-ghost[data-drag-ghost]")?.remove();
   };
 
-  /** The card's picture on the page as it goes back (shell.css `.card-ghost`): soft and dark first, then sharp. */
+  /** The card's picture on the page as it goes back (shell.css `.card-ghost`), as Back plays it (cardMotion.ts). */
   const ghost = (top: HTMLElement, src: string, ms: number) => {
     const box = document.createElement("div");
     box.className = "card-ghost";
     box.dataset.dragGhost = "";
     box.setAttribute("aria-hidden", "true");
-    for (const kind of ["soft", "sharp"]) {
-      const img = document.createElement("img");
-      img.className = `card-ghost-${kind}`;
-      img.src = src;
-      img.alt = "";
-      box.append(img);
-      running.push(img.animate(
-        kind === "soft"
-          ? [{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 1 }]
-          : [{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1, offset: 0.75 }, { opacity: 1 }],
-        { duration: ms, fill: "forwards" },
-      ));
-    }
+    const parts = cardGhostParts(src);
+    box.append(parts.panel, parts.soft, parts.medium, parts.sharp);
+    const opts: KeyframeAnimationOptions = { duration: ms, fill: "forwards" };
+    for (const name of ["panel", "soft", "medium", "sharp"] as const) running.push(parts[name].animate(ghostCloseFades[name], opts));
     top.append(box);
   };
 
-  const settleCard = (p: DragPages & { width: number; height: number }, card: CardRect, goBack: boolean) => {
+  const settleCard = (p: DragPages & { width: number; height: number }, tapped: CardRect, goBack: boolean) => {
+    // Into the card where it is now (pageMotion.ts liveCard), the page under having been laid out again.
+    const card = liveCard(tapped);
     const from = p.top.style.transform;
     const fromRadius = p.top.style.borderRadius || "0px";
     if (typeof p.top.animate !== "function") return;
@@ -102,6 +97,7 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
       const sx = card.w / p.width;
       const sy = card.h / p.height;
       const to = `translate(${card.x}px, ${card.y}px) scale(${sx}, ${sy})`;
+      // It ends exactly on the card, its picture sharp, so the card takes its place with nothing faded over it.
       running.push(
         p.top.animate(
           [
@@ -110,7 +106,6 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
           ],
           { duration: CARD_BACK_MS, easing: CARD_EASE, fill: "forwards" },
         ),
-        p.top.animate([{ opacity: 1 }, { opacity: 1, offset: 0.78 }, { opacity: 0 }], { duration: CARD_BACK_MS, fill: "forwards" }),
       );
       // The page under brightens the rest of the way (shell.css fades its dim while settling).
       p.under.dataset.dragSettle = "";

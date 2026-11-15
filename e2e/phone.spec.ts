@@ -651,7 +651,8 @@ test.describe("on an iPhone, Back by swiping", () => {
     const title = app.getByRole("heading", { level: 1, name: "The Glass Orchard" });
     await expect(title).toBeVisible();
     const top = app.locator(".page[data-active='true']");
-    const under = app.locator(".page[data-active='false']");
+    // The page under the title's (Home's own page is kept under them both: each section keeps its page).
+    const under = app.locator(".page[data-active='false']").last();
     const matrix = (l: typeof top) => l.evaluate((el) => { const m = new DOMMatrix(getComputedStyle(el).transform); return { x: m.m41, scale: m.a }; });
 
     // Moving: a title page opened from a card goes back the way it came (pageDrag.ts): it shrinks and follows the
@@ -674,9 +675,11 @@ test.describe("on an iPhone, Back by swiping", () => {
     await swipe("begin", 4);
     await swipe("move", width * 0.6);
     await swipe("end", width * 0.6);
-    await expect(app.locator(".page")).toHaveCount(1);
-    await expect(app.locator(".page").first()).not.toHaveAttribute("data-motion", /./);
-    expect((await matrix(app.locator(".page").first())).x).toBe(0);
+    // The title's page is gone, and no page change plays (the other pages are the sections' own, kept).
+    await expect(app.locator(".page[data-page-key]")).not.toHaveCount(0);
+    await expect(app.locator(".page[data-motion]")).toHaveCount(0);
+    await expect(app.locator(".page", { has: title })).toHaveCount(0);
+    expect((await matrix(top)).x).toBe(0);
     await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
   });
 
@@ -741,14 +744,16 @@ test("each page starts right under the top bar, which sits right under the statu
     for (const [tab, first] of [
       ["Home", ".hero-card"],
       ["Series", ".discover-controls"],
-      ["Library", ".screen-header h1"],
+      ["Library", ".library-panel"],
     ] as const) {
       await (tab === "Series" ? app.locator(".navbar") : tabs).getByRole("button", { name: tab, exact: true }).tap();
       const content = app.locator(first).first();
       await expect(content).toBeVisible();
+      // Measured once the sections have finished turning (the old page carries a copy of the bar while they do).
+      await expect(app.locator(".page[data-motion]")).toHaveCount(0);
       const [bar, logo, page] = await Promise.all([
-        app.locator(".navbar").boundingBox(),
-        app.locator(".brand-logo").boundingBox(),
+        app.locator(".main > .navbar").boundingBox(),
+        app.locator(".main > .navbar .brand-logo").boundingBox(),
         content.boundingBox(),
       ]);
       // The bar's row begins where the status bar ends, the logo centred in it.
@@ -763,7 +768,8 @@ test("each page starts right under the top bar, which sits right under the statu
   await tabs.getByRole("button", { name: "Anime", exact: true }).tap();
   const note = app.locator(".anime-unreachable");
   await expect(note).toBeVisible({ timeout: 15_000 });
-  const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
+  await expect(app.locator(".page[data-motion]")).toHaveCount(0);
+  const barBottom = await app.locator(".main > .navbar").evaluate((e) => e.getBoundingClientRect().bottom);
   // The text's own top, once the page has slid in.
   await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
 });
