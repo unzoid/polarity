@@ -31,6 +31,8 @@ import "./styles/ui/menu.css";
 import "./styles/ui/layer.css";
 import "./styles/title/poster-grid.css";
 import "./styles/title/playlist-checklist.css";
+import "./styles/title/episode-ratings.css";
+import "./styles/title/more-text.css";
 import "./styles/shell.css";
 import "./styles/cards.css";
 import "./styles/detail.css";

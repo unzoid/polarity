@@ -9,6 +9,7 @@ import { Check, Play, Sources } from "../icons";
 import { StillPlaceholder } from "../StillPlaceholder";
 import { IconButton, buttonClass } from "../ui/Button";
 import { CardArt, ProgressBar } from "./Card";
+import { OverviewMore } from "./OverviewMore";
 
 /**
  * One episode of a season (docs/ui-components.md U8): the still with its runtime or time left, watched mark,
@@ -117,6 +118,7 @@ export function EpisodeCard({
           </span>
         </div>
       </button>
+      {v.overview && <OverviewMore video={v} />}
       {openable && (
         <IconButton
           variant="glass"

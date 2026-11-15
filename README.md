@@ -74,6 +74,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
         <li>IMDb ratings on cards and title pages, and trailers on the title backdrop</li>
         <li>Age ratings on title pages, and a limit that hides titles rated above an age</li>
         <li>Pages for the cast and directors with their other titles, and a title's extras such as featurettes and clips (with a TMDB key)</li>
+        <li>A show's episode ratings season by season, in one table</li>
         <li>A calendar built from the shows in your library and the ones you're watching</li>
         <li>Notifications when a show you follow has a new episode or season, or a download finishes (off until you turn them on)</li>
       </ul>

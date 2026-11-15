@@ -415,3 +415,32 @@
     --glass-edge: rgb(var(--ink) / 0.45);
   }
 }
+
+/* Episode Ratings (components/title/EpisodeRatings.tsx): one blue from low to high, by RATING_STEPS
+   (lib/library/episodeRatings.ts), and the ink each step's number is written in. Dark: higher is lighter,
+   rising off the page; light: higher is darker. The numbers clear 5:1 on every step. */
+:root {
+  --rating-0: #0d366b;
+  --rating-1: #104281;
+  --rating-2: #184f95;
+  --rating-3: #1c5cab;
+  --rating-4: #256abf;
+  --rating-5: #3987e5;
+  --rating-6: #86b6ef;
+  --rating-7: #cde2fb;
+  /* Steps 0–4 and 5–7. */
+  --rating-ink-low: #fff;
+  --rating-ink-high: #0b0b0b;
+}
+:root[data-scheme="light"] {
+  --rating-0: #cde2fb;
+  --rating-1: #b7d3f6;
+  --rating-2: #9ec5f4;
+  --rating-3: #86b6ef;
+  --rating-4: #3987e5;
+  --rating-5: #256abf;
+  --rating-6: #184f95;
+  --rating-7: #0d366b;
+  --rating-ink-low: #0b0b0b;
+  --rating-ink-high: #fff;
+}

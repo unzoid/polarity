@@ -1483,6 +1483,28 @@ looked at in the app, on a phone or on a TV. To check:
    state), Space picks it; Select All, Remove (n) takes them out and their history stays in Library → Watched;
    Done or Escape leaves Edit. On a phone the row's buttons wrap under the heading without overlapping it.
 4. iOS: the native card menu shows Hide This Title with its eye symbol.
+## Episode ratings and "More" for cut-off synopses
+
+The Episode Ratings table on a series' page (and TV's Episode Ratings panel), and "More" under a synopsis the
+page cuts off (TV: the title's and an episode's; desktop and phone: an episode card's). Checked by unit tests
+(`tests/episodeRatings.test.ts`: the grid, the scale, the threshold, keys) and component tests
+(`tests/dom/episodeRatings.test.tsx`) only; never looked at in a window, on a phone or on a TV. To check, with a
+show whose episodes have ratings (a long one too, 20+ seasons):
+
+1. Below the episodes, Episode Ratings shows a season per row, a rating per cell, tinted lighter (dark mode) or
+   darker (light mode) for higher ratings, and each season's average at the end. Unrated episodes show "–", ones
+   not out yet "·". A show with fewer than 6 rated episodes, or fewer than half of those out, shows none.
+2. The table scrolls sideways (and down, for many seasons) inside its box; the season column, the average column
+   and the episode numbers stay put. On a phone the page itself doesn't scroll sideways.
+3. Tab reaches one cell; the arrows, Home and End move; Enter opens the episode's season with its sources listed.
+   A screen reader reads the season and episode headers with each cell.
+4. TV: Episode Ratings sits in the action column (series with enough ratings); the arrows move cell to cell and the
+   focused cell scrolls into view clear of the sticky headers; a cell opens Choose a Source; Back closes it.
+5. TV: "More" under the title's description appears only when it's cut off at four lines, and beside an episode
+   only when its synopsis is cut off (not while Settings → Browsing hides it); it opens the whole text, which the
+   arrows scroll, and Back closes it.
+6. Desktop and phone: "More" under an episode card's cut-off synopsis, in Row and List layouts, lines up with the
+   text and opens the whole synopsis in a sheet.
 
 ## Screens in headless Chromium (T-051)
 

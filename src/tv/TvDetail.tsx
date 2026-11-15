@@ -3,7 +3,7 @@ import { NameList } from "../components/title/NameList";
 import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { AgeRatingBadge, TitleDetails } from "../components/title/TitleDetails";
-import { Hidden, Info, Trailer } from "../components/icons";
+import { Hidden, Info, Star, Trailer } from "../components/icons";
 import { episodeState, hideTitle, progressMap, renamePlaylist, seasonsOf, unhideTitle, upNext, useIsHidden, usePlaylists, watchedFraction } from "../lib/library";
 import { shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { TvEpisodeOrders } from "./TvEpisodeOrders";
@@ -29,6 +29,7 @@ import { TvKeyboard } from "./TvKeyboard";
 import { Facts, TvBackdrop, titleFacts } from "./TvStage";
 import { Skeleton } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
+import { TvDescription, TvOverviewMore, TvRatingsPanel, TvTextPanel, useHasEpisodeRatings } from "./TvMore";
 
 type Panel =
   | { kind: "episodes" }
@@ -36,6 +37,9 @@ type Panel =
   | { kind: "extras" }
   | { kind: "sources"; videoId: string; subtitle: string }
   | { kind: "playlists" }
+  /** A description in full (TvMore.tsx). */
+  | { kind: "text"; heading: string; sub?: string; text: string }
+  | { kind: "ratings" }
   /** Name a playlist: rename `playlistId`, or create one holding the title. */
   | { kind: "name"; playlistId?: string };
 
@@ -106,7 +110,9 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
             ...(shown.certification ? [<AgeRatingBadge key="rated" certification={shown.certification} />] : []),
           ]}
         />
-        {shown.description && <p className="tv-detail-description">{shown.description}</p>}
+        {shown.description && (
+          <TvDescription text={shown.description} onMore={() => push({ kind: "text", heading: shown.name, text: shown.description ?? "" })} />
+        )}
         <Credits meta={meta} />
         {hidden && <p className="tv-detail-hidden">Hidden from Home, Movies, Series and recommendations.</p>}
         {/* A series' Play depends on watch history: wait for it, or focus would land on the wrong button. */}
@@ -126,7 +132,12 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
             meta={meta}
             onPlay={(v, resumable) => play(v.id, episodeLine(v), { resumable })}
             onSources={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })}
+            onMore={(v) => push({ kind: "text", heading: v.title || `Episode ${v.episode}`, sub: `${meta.name} · ${episodeCode(v.season, v.episode)}`, text: v.overview ?? "" })}
           />
+        ) : p.kind === "text" ? (
+          <TvTextPanel key={i} heading={p.heading} sub={p.sub} text={p.text} />
+        ) : p.kind === "ratings" && meta ? (
+          <TvRatingsPanel key={i} videos={meta.videos} onOpen={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })} />
         ) : p.kind === "details" && meta ? (
           <DetailsPanel key={i} meta={meta} />
         ) : p.kind === "extras" && meta ? (
@@ -154,6 +165,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   );
 }
 
+const NO_VIDEOS: Video[] = [];
 const episodeLine = (v: Video) => `${episodeCode(v.season, v.episode)} · ${v.title}`;
 
 function Actions({
@@ -176,6 +188,7 @@ function Actions({
   const subtitle = item.type === "series" && next?.video ? episodeLine(next.video) : item.name;
   // Warm the sources for Play while the page is read.
   useStreams(item.type, videoId);
+  const ratings = useHasEpisodeRatings(meta?.videos ?? NO_VIDEOS);
 
   return (
     <div className="tv-actions" data-nav-memory>
@@ -187,6 +200,7 @@ function Actions({
         onClick={() => videoId && play(videoId, subtitle, { resumable: !!resumeAt })}
       />
       {item.type === "series" && <ActionPill icon={<Episodes size={26} />} label="Episodes" onClick={() => push({ kind: "episodes" })} />}
+      {item.type === "series" && ratings && <ActionPill icon={<Star size={26} />} label="Episode Ratings" onClick={() => push({ kind: "ratings" })} />}
       <ActionPill
         icon={<Sources size={26} />}
         label="Choose Source"
@@ -372,10 +386,13 @@ function EpisodesPanel({
   meta,
   onPlay,
   onSources,
+  onMore,
 }: {
   meta: Meta;
   onPlay: (v: Video, resumable: boolean) => void;
   onSources: (v: Video) => void;
+  /** The episode's synopsis in full, when the row cuts it off. */
+  onMore: (v: Video) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -481,6 +498,7 @@ function EpisodesPanel({
                   <span className="tv-episode-status">{status}</span>
                 </span>
               </button>
+              <TvOverviewMore episode={v.episode} text={v.overview} onMore={() => onMore(v)} />
               {openable && (
                 <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${view?.number.get(v.id) ?? v.episode}`}>
                   <Sources size={26} />

@@ -4,6 +4,7 @@
 export * from "./batchDownloads";
 export * from "./downloads";
 export * from "./downloadsView";
+export * from "./episodeRatings";
 export * from "./episodeState";
 export * from "./episodes";
 export * from "./hiddenTitles";

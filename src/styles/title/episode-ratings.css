@@ -1,0 +1,176 @@
+/* Episode Ratings (components/title/EpisodeRatings.tsx): a season per row, an episode per cell, tinted by
+   its rating (--rating-* in tokens.css). The table scrolls inside its own box both ways; the season column,
+   the average column and the episode numbers stay put. */
+.episode-ratings {
+  padding: 2rem var(--gutter) 0 var(--content-start);
+}
+.episode-ratings h2 {
+  margin: 0 0 1rem;
+}
+.episode-ratings-box {
+  max-width: 100%;
+  max-height: min(70vh, 40rem);
+  width: fit-content;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  /* A focused cell scrolls clear of the sticky headers. */
+  scroll-padding: 2rem 4rem 0 3.5rem;
+}
+.episode-ratings-table {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-size: var(--fs-sm);
+}
+.episode-ratings-table th {
+  font-weight: 600;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  padding: 0.25rem;
+  white-space: nowrap;
+}
+.episode-ratings-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-1);
+}
+.episode-ratings-table .episode-ratings-season,
+.episode-ratings-table .episode-ratings-corner {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 2.75rem;
+  padding: 0 0.5rem;
+  text-align: left;
+  color: var(--text-2);
+  background: var(--surface-1);
+}
+.episode-ratings-table .episode-ratings-corner {
+  z-index: 2;
+}
+.episode-ratings-table .episode-ratings-average {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  padding-left: 0.5rem;
+  background: var(--surface-1);
+  box-shadow: inset 1px 0 0 var(--hairline);
+}
+.episode-ratings-table thead .episode-ratings-average {
+  z-index: 2;
+}
+.episode-ratings-table td {
+  padding: 0;
+}
+.episode-ratings-cell {
+  display: grid;
+  place-items: center;
+  min-width: 2.5rem;
+  height: 2rem;
+  padding: 0 0.25rem;
+  border-radius: var(--r-xs);
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--fill-2);
+}
+button.episode-ratings-cell {
+  width: 100%;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-std);
+}
+button.episode-ratings-cell:hover {
+  transform: scale(1.08);
+}
+button.episode-ratings-cell:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.episode-ratings-cell[data-upcoming] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.episode-ratings-average .episode-ratings-cell {
+  font-weight: 750;
+}
+
+/* The tint: steps 0–4 take the low ink, 5–7 the high (tokens.css). */
+.episode-ratings [data-step] > .episode-ratings-cell,
+.episode-ratings-legend [data-step] > .episode-ratings-swatch {
+  color: var(--rating-ink-low);
+  background: var(--step-fill);
+}
+.episode-ratings :is([data-step="5"], [data-step="6"], [data-step="7"]) > .episode-ratings-cell {
+  color: var(--rating-ink-high);
+}
+.episode-ratings [data-step="0"] { --step-fill: var(--rating-0); }
+.episode-ratings [data-step="1"] { --step-fill: var(--rating-1); }
+.episode-ratings [data-step="2"] { --step-fill: var(--rating-2); }
+.episode-ratings [data-step="3"] { --step-fill: var(--rating-3); }
+.episode-ratings [data-step="4"] { --step-fill: var(--rating-4); }
+.episode-ratings [data-step="5"] { --step-fill: var(--rating-5); }
+.episode-ratings [data-step="6"] { --step-fill: var(--rating-6); }
+.episode-ratings [data-step="7"] { --step-fill: var(--rating-7); }
+
+.episode-ratings-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.episode-ratings-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.episode-ratings-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--r-round);
+}
+.episode-ratings-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* TV: in its panel (TvDetail), bigger for across the room, the focus a white ring. */
+.episode-ratings[data-variant="tv"] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 4.5rem var(--tv-gutter) 2rem;
+}
+.episode-ratings[data-variant="tv"] .episode-ratings-box {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none;
+  scroll-padding: 2.5rem 5rem 0 4.5rem;
+}
+.episode-ratings[data-variant="tv"] .episode-ratings-table {
+  font-size: var(--fs-lg);
+}
+.episode-ratings[data-variant="tv"] .episode-ratings-table th {
+  font-size: var(--fs-md);
+}
+.episode-ratings[data-variant="tv"] .episode-ratings-cell {
+  min-width: 3.5rem;
+  height: 2.75rem;
+}
+.episode-ratings[data-variant="tv"] button.episode-ratings-cell:focus {
+  outline: var(--tv-ring) solid var(--text);
+  outline-offset: var(--tv-ring-gap);
+  transform: scale(1.08);
+}
+.episode-ratings[data-variant="tv"] .episode-ratings-legend {
+  font-size: var(--fs-md);
+}
