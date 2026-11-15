@@ -277,9 +277,9 @@ test("Downloads opens from the Library's rail and its titles open and close with
   await app.getByRole("button", { name: "Library", exact: true }).click();
   await app.getByRole("button", { name: "All Downloads" }).click();
   await expect(app.getByRole("heading", { level: 1, name: "Downloads" })).toBeVisible();
-  // Down past Select, the downloads still coming down (their menus stay shut) and The Glass Orchard (a movie: its
-  // Delete is what's below the failed download's button) to the first show.
-  await press(app, "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown");
+  // Down past the toolbar, the downloads still coming down (their menus stay shut) and the movies above it to the
+  // first show. How many presses that takes depends on where the focus starts, so it goes until it's there.
+  for (let i = 0; i < 8 && !/^Low Water Station/.test((await focused(app).textContent()) ?? ""); i++) await press(app, "ArrowDown");
   await expect(focused(app)).toHaveAccessibleName(/^Low Water Station/);
   await expect(app.getByRole("menu")).toHaveCount(0);
   await press(app, "Enter");
