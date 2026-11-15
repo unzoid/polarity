@@ -1155,6 +1155,15 @@ export const SETTINGS: SettingDef[] = [
     control: { kind: "number", min: 5, max: 100, step: 5, unit: "%", scale: 100, tvStep: 10 },
     tv: "Sound Volume",
   },
+  {
+    id: "swipeGestures",
+    page: "controls",
+    title: "Swipe gestures in the player",
+    caption: "Swipe up or down on the right of the video for volume, on the left for brightness. Double-tap to skip works either way",
+    keywords: "touch swipe gesture volume brightness phone tablet drag",
+    bind: p("swipeGestures"),
+    control: toggle,
+  },
   { id: "shortcuts", page: "controls", title: "Keyboard Shortcuts", keywords: "keybinds hotkeys keys" },
 
   // Controller

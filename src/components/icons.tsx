@@ -97,6 +97,9 @@ export const Users = icon(S24.UsersIcon, S20.UsersIcon, S16.UsersIcon);
 export const WatchParty = icon(S24.UserGroupIcon, S20.UserGroupIcon, S16.UserGroupIcon);
 export const Volume = icon(S24.SpeakerWaveIcon, S20.SpeakerWaveIcon, S16.SpeakerWaveIcon);
 export const VolumeMuted = icon(S24.SpeakerXMarkIcon, S20.SpeakerXMarkIcon, S16.SpeakerXMarkIcon);
+// The screen's brightness (the player's swipe on the left half).
+export const Brightness = icon(S24.SunIcon, S20.SunIcon, S16.SunIcon);
+export const Unlock = icon(S24.LockOpenIcon, S20.LockOpenIcon, S16.LockOpenIcon);
 
 /** A game controller, drawn solid to sit with the Heroicons (which have none). */
 export function Gamepad({ size = 24, fill: _fill, strokeWidth: _stroke, ...rest }: IconProps) {

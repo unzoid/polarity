@@ -196,6 +196,9 @@ const commands: Record<string, (a: Args) => unknown> = {
   downloads_storage: () => ({ dir: "~/Videos/Polarity", free: null }),
   controllers_list: () => [],
   mpv_available: () => false,
+  // The screen's brightness (the player's swipe, iOS): what the screen was told is kept for browser tests to read.
+  player_brightness: () => (window as { __brightness?: number }).__brightness ?? 0.5,
+  player_set_brightness: (a) => void ((window as { __brightness?: number | null }).__brightness = a.level as number | null),
   // Discord: what the player sends is kept for browser tests to read.
   discord_available: () => true,
   discord_presence: (a) => void ((window as { __discord?: unknown[] }).__discord ??= []).push(a.activity),

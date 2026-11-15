@@ -79,6 +79,40 @@ pub fn player_keep_awake(on: bool) {
     let _ = on;
 }
 
+/// The screen's brightness from 0 to 1, for the player's swipe on the left half: on iPhones and iPads
+/// (ios/brightness.m). Android's comes through the page's bridge (src/lib/platform/brightness.ts);
+/// elsewhere there is none to read.
+#[tauri::command]
+pub fn player_brightness() -> Option<f64> {
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn polar_screen_brightness() -> f64;
+        }
+        let level = unsafe { polar_screen_brightness() };
+        return level.is_finite().then(|| level.clamp(0.0, 1.0));
+    }
+    #[cfg(not(target_os = "ios"))]
+    None
+}
+
+/// Set the screen's brightness while the player is open (`level` from 0 to 1), or give back the
+/// one it had (`None`). iOS puts the old level back by itself while the app is in the background
+/// (ios/brightness.m). Elsewhere nothing changes.
+#[tauri::command]
+pub fn player_set_brightness(level: Option<f64>) {
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn polar_set_screen_brightness(level: f64);
+        }
+        let level = level.filter(|l| l.is_finite()).map_or(-1.0, |l| l.clamp(0.0, 1.0));
+        unsafe { polar_set_screen_brightness(level) }
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = level;
+}
+
 /// Load `url` (optionally starting at `start` seconds) and play. With `probe_id`,
 /// the link check reports its steps as `player://probe` events. `headers` are
 /// the stream's `behaviorHints.proxyHeaders.request`; only those

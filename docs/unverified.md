@@ -1270,6 +1270,31 @@ speed up, shuffle, the next episode's warm-up, `CastMedia`). Nothing was run in 
   mDNS (UDP 5353): Windows may ask once to allow Polarity on private networks. No button for torrents, downloads, files
   or sources that need request headers (phase 2 of #443), in a watch party, or while AirPlay casts.
 
+## Touch gestures in the player (swipe for volume and brightness, touch lock)
+
+Checked here (Windows): `tsc`, the unit tests of the swipe maths and the brightness bridge (`tests/swipeLevels.test.ts`),
+the DOM tests of the lock and the swipe handlers (`tests/dom/touchLock.test.tsx`), and `cargo check`/`clippy` of
+`src-tauri` on Windows, where the brightness commands do nothing. `ios/brightness.m` and the Kotlin in
+`MainActivity.kt` were never compiled, and none of this ran on a phone or tablet. Needs a device:
+
+- **Swipes**: in the player, one finger up or down the right half sets the volume (a pill at the right edge), the left
+  half the screen's brightness (a pill with a sun at the left edge); the pill stays while the finger is down and goes
+  a moment after. Sideways drags, presses within about 24 px of the sides or 40 px of the top and bottom (iOS's Back
+  swipe, Android's back gesture, the status bar, the home bar) and the scrubber or the bars do nothing new. A pinch
+  still fills or fits; double-tap on a side still skips; press and hold still speeds up, and a drag before it starts
+  cancels it; letting go after a swipe doesn't pause or toggle the controls.
+- **Brightness**: iOS changes the screen's brightness and puts back the old one when the player closes, when the app
+  goes to the Home Screen or the app switcher, and while Control Centre is pulled down; back in the app the player's
+  level returns. Android changes only the app's window (no permission asked) and the system's level is back when the
+  player closes or the app is in the background. Where the bridge is missing the left half does nothing.
+- **Volume** on phones (where the system sets the volume and the player has no slider): the swipe lowers the player's
+  own level under the system's; it starts at full each time the player opens.
+- **Touch lock**: the lock button in the top bar hides the controls; taps do nothing but show an Unlock chip for
+  3 s, and pressing it unlocks. Android's Back button and gesture, and iOS's edge swipe, show the chip instead of
+  leaving. Playback, Up Next's autoplay and the sleep timer carry on while locked.
+- **Settings → Controls & TV → Touch → Swipe gestures in the player**: shows on phones and tablets only (also in the
+  settings search); off, swipes do nothing and double-tap still skips.
+
 ## Subtitles and add-ons batch (every add-on subtitle, track kinds, second subtitle, matching a line, a subtitle file, HDR subtitle brightness, add-ons off and in order, sources as they come)
 
 Checked here (Windows): `clippy -D warnings`, the tests of `polar-player` (the `sub-step` and `secondary-sid`
