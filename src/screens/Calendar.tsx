@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { cardMenu } from "../components/CardMenu";
 import { Img } from "../components/Img";
 import { byDay, dayLabel, useCalendar, type CalendarEntry } from "../lib/catalog";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { episodeEntry } from "../lib/library";
 import { ownEpisodeName } from "../lib/format";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -69,7 +69,7 @@ export function Calendar() {
 const aired = (v: { released?: string }) => !!v.released && Date.parse(v.released) <= Date.now();
 
 function CalendarItem({ entry: { show, video } }: { entry: CalendarEntry }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (
     <button
       className="calendar-item"

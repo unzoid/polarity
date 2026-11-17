@@ -26,6 +26,8 @@ import { ControllerToast, TvHints, TvMenu, TvNav, sameTab, useTvTabs } from "./T
 import { TvCardMenuHost, useCardMenuOpen } from "./TvCardMenu";
 import { TvAnime, TvAnimeDetail } from "./TvAnime";
 import { TvDetail } from "./TvDetail";
+import { TvPerson } from "./TvPerson";
+import { TrailerHost } from "../components/Trailer";
 import { TvDiscover, TvHome, TvLibrary, TvSearch } from "./TvScreens";
 import { TvCalendar } from "./TvCalendar";
 import { TvDownloads } from "./TvDownloads";
@@ -40,6 +42,7 @@ import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { SecretsSyncToast } from "../components/SecretsSyncToast";
 import { LockedKeysToast } from "../components/LockedKeysToast";
+import { HiddenTitleToast } from "../components/HiddenTitleToast";
 
 function TvScreen({ route }: { route: Route }) {
   switch (route.name) {
@@ -70,6 +73,8 @@ function TvScreen({ route }: { route: Route }) {
       return <TvAnime />;
     case "anime-detail":
       return <TvAnimeDetail id={route.id} />;
+    case "person":
+      return <TvPerson id={route.id} name={route.title} />;
   }
 }
 
@@ -263,6 +268,12 @@ export function TvApp() {
         {joinPartyOpen && !playing && <TvJoinParty />}
         {partyMenuOpen && !playing && <TvPartyMenu />}
         {friendsOpen && !playing && <TvFriendsPanel />}
+        {/* A title's extras play here, over the page (TvExtras.tsx). */}
+        {!playing && (
+          <ErrorBoundary where="trailer" variant="tv">
+            <TrailerHost />
+          </ErrorBoundary>
+        )}
         <TvHints />
         {!playing && (
           <button className="tv-exit" tabIndex={-1} onClick={() => setTvMode(false)}>
@@ -276,6 +287,7 @@ export function TvApp() {
         <AccountFullToast tv />
         <SecretsSyncToast tv />
         <LockedKeysToast tv />
+        <HiddenTitleToast tv />
       </main>
       <PlayerLayer player={player} leaving={leaving} />
     </div>

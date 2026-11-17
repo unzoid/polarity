@@ -5,10 +5,12 @@ import { PosterGrid } from "../components/title/PosterGrid";
 import { Segmented } from "../components/Segmented";
 import { Dropdown } from "../components/Dropdown";
 import { api } from "../lib/api";
-import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catalogTitle, useAddonCatalogs, useListable } from "../lib/catalog";
+import { BROWSE_GENRES, browsable, catalogExtra, catalogItems, catalogKey, catalogTitle, useAddonCatalogs, useBrowseVisible, useListable } from "../lib/catalog";
+import { catalogBound, keepWithinLimit, useViewingLimit } from "../lib/catalog";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { keys } from "../lib/net";
+import { useFormFactor } from "../lib/ui";
 
 const CATALOGS = [
   { id: "trending", label: "Trending" },
@@ -35,6 +37,8 @@ export function Discover({
   genre?: string;
   addon?: string;
 }) {
+  const phone = useFormFactor().form === "phone";
+  const viewing = useViewingLimit();
   const [catalog, setCatalog] = useState(() => (CATALOGS.some((c) => c.id === initialCatalog) ? initialCatalog! : "trending"));
   const [picked, setGenre] = useState(initialGenre);
   const lists = useAddonCatalogs().filter((c) => c.type === type && browsable(c));
@@ -47,7 +51,7 @@ export function Discover({
   const query = useInfiniteQuery({
     queryKey: own ? keys.addonCatalogPages(own.addon, type, own.id, genre) : keys.discover(type, catalog, genre),
     queryFn: ({ pageParam }) =>
-      own ? api.addonCatalog(own.addon, type, own.id, catalogExtra(own, { genre, skip: pageParam })) : api.catalog(type, catalog, pageParam, genre),
+      own ? api.addonCatalog(own.addon, type, own.id, catalogExtra(own, { genre, skip: pageParam })) : api.catalog(type, catalog, pageParam, genre, catalogBound(type)),
     initialPageParam: 0,
     // An add-on without `skip` answers with its whole list; one that ignores `skip` would repeat its page forever.
     getNextPageParam: (last: MetaPreview[], pages) => {
@@ -62,9 +66,11 @@ export function Discover({
 
   // Dedupe across pages — upstream catalogs occasionally repeat items.
   const seen = new Set<string>();
-  const all = query.data?.pages.flat() ?? [];
+  // Titles over the profile's viewing limit stay out; pages are still counted whole for `skip`.
+  const all = keepWithinLimit(query.data?.pages.flat() ?? [], viewing);
   // Nothing to play and nothing to show (#337) stays out.
-  const items = useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id))) ?? [];
+  // Hidden titles too, and watched ones when asked (lib/catalog/browseFilter.ts); the grid's pager fills a short page.
+  const items = useBrowseVisible(useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id)))) ?? [];
 
   return (
     <div className="scroll">
@@ -88,12 +94,13 @@ export function Discover({
               options={[...(own?.genreRequired ? [] : [{ value: "", label: "All Genres" }]), ...genres.map((g) => ({ value: g, label: g }))]}
             />
           )}
-          {!own && (
-            // Its own row on a phone, scrolling from one screen edge to the other (shell.css).
-            <div className="discover-catalogs">
+          {!own &&
+            // Six of them are wider than a phone: there it's a dropdown sharing the row with Genre's (#457, shell.css).
+            (phone ? (
+              <Dropdown label="Catalog" value={catalog} onChange={setCatalog} options={CATALOGS.map((c) => ({ value: c.id, label: c.label }))} />
+            ) : (
               <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />
-            </div>
-          )}
+            ))}
         </div>
       </header>
       <PosterGrid pager={query} stale={query.isPlaceholderData}>

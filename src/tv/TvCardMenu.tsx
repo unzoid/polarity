@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Check, Close, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
+import { Check, Close, Hidden, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
 import { episodeCode } from "../lib/format";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
 import type { MetaPreview, Progress } from "../lib/types";
 import { useBack, useFocusTrap } from "./shell";
@@ -124,7 +124,7 @@ const GAP = 28; // between the lifted card and the menu
 
 function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => void }) {
   const { item, entry, anchor } = target;
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const a = useTitleActions(item, entry);
 
   const act = (fn: () => void) => () => {
@@ -171,6 +171,8 @@ function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => 
         icon: a.inPlaylist ? <Check size={24} /> : <PlaylistIcon size={24} />,
         onPick: () => onLayer({ kind: "playlists" }),
       },
+      // Out of Home, Discover and recommendations; its page offers Unhide (lib/library/hiddenTitles.ts).
+      { label: a.hidden ? "Unhide This Title" : "Hide This Title", icon: <Hidden size={24} />, onPick: act(a.toggleHidden) },
     ],
   ];
 
@@ -184,7 +186,8 @@ function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => 
     if (!menu || !layer) return;
     const measure = () => {
       const box = layer.getBoundingClientRect();
-      const card = anchor.getBoundingClientRect();
+      // The frame, not the card: on the Library's shelves a focused card's frame opens out past its slot.
+      const card = (anchor.querySelector(".tv-card-frame") ?? anchor).getBoundingClientRect();
       const w = menu.offsetWidth;
       const h = menu.offsetHeight;
       const right = card.right - box.left + GAP;

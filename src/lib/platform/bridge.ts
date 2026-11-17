@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 /**
@@ -13,6 +13,18 @@ export const inShell = typeof window !== "undefined" && "__TAURI_INTERNALS__" in
 
 /** Run a native command and get its answer; failures reject with the command's `{ code, message }` (lib/errors.ts). */
 export const call = <T = unknown>(command: string, args?: Record<string, unknown>) => invoke<T>(command, args);
+
+/**
+ * What a command sends while it runs, before its answer (Tauri's Channel): pass it as one of the command's
+ * arguments. Null where there's no native side to send anything (a browser tab, tests): the command still answers.
+ */
+export function channel<T>(onMessage: (message: T) => void): Channel<T> | null {
+  try {
+    return new Channel<T>(onMessage);
+  } catch {
+    return null;
+  }
+}
 
 export type Unlisten = () => void;
 

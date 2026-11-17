@@ -67,16 +67,30 @@ jobs:
   # The web build in real browsers against the fake shell (playwright.config.ts):
   # desktop in Chromium and WebKit, TV and phone sizes in Chromium. In two halves side by side (#481): the whole
   # suite on one runner took 20 minutes and a slow runner nearly twice that, past the time limit with every test
-  # passing. Each half takes about half, which leaves a slow runner room under the same limit.
+  # passing. Each half takes about half, and the limit leaves a slow runner room on top. The timing tests
+  # (e2e/performance.spec.ts, the `timing` project) run in a third job with one worker, so no other test
+  # shares the CPU while they measure.
   e2e-web:
-    name: End to end (web build, ${{ matrix.shard }}/2)
+    name: ${{ matrix.name }}
     if: github.ref != 'refs/heads/ui/mobile-polish'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        include:
+          - name: End to end (web build, 1/2)
+            args: --project=desktop --project=phone --project=tv --project=desktop-webkit --shard=1/2
+            browsers: chromium webkit
+            report: e2e-report-1
+          - name: End to end (web build, 2/2)
+            args: --project=desktop --project=phone --project=tv --project=desktop-webkit --shard=2/2
+            browsers: chromium webkit
+            report: e2e-report-2
+          - name: Timing (web build)
+            args: --project=timing --workers=1
+            browsers: chromium
+            report: e2e-report-timing
     # Playwright's own image for the version in bun.lock (1.64.1), pinned by digest: the browsers'
     # system packages are already installed, so no run depends on Ubuntu's package mirror. Running
     # as the runner's user (1001) follows Playwright's guide for GitHub Actions. When @playwright/test
@@ -102,17 +116,17 @@ jobs:
       - name: Install the browsers
         run: |
           for attempt in 1 2 3; do
-            timeout 300 bunx playwright install chromium webkit && exit 0
+            timeout 300 bunx playwright install ${{ matrix.browsers }} && exit 0
             echo "::warning::Installing the browsers failed or stalled (attempt $attempt of 3)"
           done
           exit 1
-      - run: bun run e2e --shard=${{ matrix.shard }}/2
+      - run: bun run e2e ${{ matrix.args }}
       # Also when the time limit stops the job, so what failed before then can be read.
       - name: Keep the report, traces and screenshots
         if: failure() || cancelled()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-report-${{ matrix.shard }}
+          name: ${{ matrix.report }}
           path: |
             e2e/.report
             e2e/.results
@@ -431,6 +445,58 @@ jobs:
           name: ios-simulator-mpv-sources
           path: ${{ runner.temp }}/ios-libmpv/out/polarity-ios-mpv-sources.tar.xz
           compression-level: 0
+          retention-days: 14
+
+  # The Apple TV app (apple-tv/, #504): the core for tvOS and its simulator, then the app for the
+  # simulator, unsigned. Installing on an Apple TV needs the owner's signing, in Xcode.
+  apple-tv:
+    name: Apple TV build (simulator, unsigned)
+    if: github.ref != 'refs/heads/ui/mobile-polish'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use Xcode 26 or later
+        run: |
+          xcode=$(ls -d /Applications/Xcode_[0-9]*.app | grep -iv beta | sort -V | tail -1)
+          case "$(basename "$xcode")" in Xcode_2[6-9]*|Xcode_[3-9][0-9]*) ;; *) echo "::error::no Xcode 26 or later here"; ls -d /Applications/Xcode*.app; exit 1 ;; esac
+          sudo xcode-select -s "$xcode"
+          echo "$xcode: tvOS Simulator SDK $(xcrun --sdk appletvsimulator --show-sdk-version)"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch
+        with:
+          toolchain: stable
+          targets: aarch64-apple-tvos,aarch64-apple-tvos-sim
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: apple-tv
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Install build tools
+        run: brew install xcodegen
+      - name: Build the core
+        run: scripts/apple-tv-core.sh
+      - name: Generate the Xcode project
+        working-directory: apple-tv
+        run: xcodegen generate
+      - name: Build the app for the simulator
+        working-directory: apple-tv
+        run: |
+          xcodebuild -project PolarityTV.xcodeproj -target PolarityTV -configuration Debug \
+            -sdk appletvsimulator ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      - name: Check the app is a tvOS simulator build
+        working-directory: apple-tv
+        run: |
+          set -euo pipefail
+          app=build/Debug-appletvsimulator/Polarity.app
+          test -f "$app/Polarity"
+          xcrun vtool -show-build "$app/Polarity" | grep -q 'platform TVOSSIMULATOR'
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/Polarity-tvOS-simulator-arm64.app.zip"
+      - name: Keep the simulator app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apple-tv-simulator-app
+          path: ${{ runner.temp }}/Polarity-tvOS-simulator-arm64.app.zip
           retention-days: 14
 
 

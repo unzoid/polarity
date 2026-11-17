@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Dropdown } from "../components/Dropdown";
+import { FilteredCollection } from "../components/library/CollectionFilters";
 import { ConfirmDeleteButton } from "../components/ConfirmDeleteButton";
 import { DownloadGlyph } from "../components/DownloadButton";
 import { ChevronLeft, ChevronRight, Close, Download, Play, Plus, Trailer } from "../components/icons";
@@ -22,30 +22,18 @@ import {
   removeFromPlaylist,
   renamePlaylist,
   usePlaylists,
+  useSavedEntries,
+  useWatchedEntries,
   type PlaylistItem,
 } from "../lib/library";
 import { useLibrary, useWatchHistory } from "../lib/net";
-import { useRouter, type Route } from "../lib/router";
+import { useRouter, type Route, useNavigation } from "../lib/router";
 import { progressFraction, progressItem } from "../lib/catalog";
-import type { ContentType } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PosterGrid } from "../components/title/PosterGrid";
 
 type Collection = Extract<Route, { name: "library-collection" }>["view"];
 type Open = { view: Collection } | { view: "playlist"; id: string; fresh: boolean };
-type Kind = "all" | ContentType;
-type Sort = "recent" | "title";
-
-const KINDS: { value: Kind; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "movie", label: "Movies" },
-  { value: "series", label: "Shows" },
-];
-
-const SORTS: { value: Sort; label: string }[] = [
-  { value: "recent", label: "Recent" },
-  { value: "title", label: "Title" },
-];
 
 /**
  * Your titles, nothing suggested. Laid out like Netflix's My Netflix: Downloads
@@ -64,34 +52,34 @@ export function Library() {
 
 /** Library's sub-pages go on the navigation stack, like Anime's. */
 function useOpen() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (o: Open) => navigate(o.view === "playlist" ? { name: "playlist", id: o.id, fresh: o.fresh } : { name: "library-collection", view: o.view });
 }
 
 /** One collection in full. */
 export function LibraryCollection({ view }: { view: Collection }) {
-  const { back } = useRouter();
+  const { back } = useNavigation();
   const open = useOpen();
   return (
     <div className="scroll">
       {view === "saved" && (
-        <CollectionPage title="Saved" onBack={back} filters>
-          {(kind, sort) => <Saved kind={kind} sort={sort} />}
+        <CollectionPage title="Saved" onBack={back}>
+          <Saved />
         </CollectionPage>
       )}
       {view === "watched" && (
-        <CollectionPage title="Watched" onBack={back} filters>
-          {(kind, sort) => <WatchedGrid kind={kind} sort={sort} />}
+        <CollectionPage title="Watched" onBack={back}>
+          <WatchedGrid />
         </CollectionPage>
       )}
       {view === "playlists" && (
         <CollectionPage title="Playlists" onBack={back}>
-          {() => <Playlists onOpen={(id, fresh = false) => open({ view: "playlist", id, fresh })} />}
+          <Playlists onOpen={(id, fresh = false) => open({ view: "playlist", id, fresh })} />
         </CollectionPage>
       )}
       {view === "downloads" && (
         <CollectionPage title="Downloads" onBack={back}>
-          {() => <DownloadsPage />}
+          <DownloadsPage />
         </CollectionPage>
       )}
     </div>
@@ -124,9 +112,8 @@ function Overview({ onOpen }: { onOpen: (o: Open) => void }) {
 
   return (
     <>
-      <header className="screen-header">
-        <h1 className="t-title1">Library</h1>
-      </header>
+      {/* The tab bar already says where this is: the heading is for screen readers only, as Discover's is. */}
+      <h1 className="library-title">Library</h1>
       <DownloadsPanel downloads={dl} onOpen={() => onOpen({ view: "downloads" })} />
 
       {nothing && <EmptyState>Titles you save, download, watch or put in a playlist gather here.</EmptyState>}
@@ -185,7 +172,7 @@ function DownloadsPanel({ downloads, onOpen }: { downloads: DownloadRecord[]; on
     <section className="library-panel">
       <button className="library-panel-head" onClick={onOpen}>
         <span className="library-panel-icon">
-          <Download size={20} />
+          <Download size={24} />
         </span>
         <span className="library-panel-text">
           <span className="library-panel-title">Downloads</span>
@@ -250,7 +237,7 @@ function DownloadCard({ d, onOpen }: { d: DownloadRecord; onOpen: () => void }) 
  * with its folder's other videos as episodes. One that's gone says so; × takes it off the list.
  */
 function RecentFileCard({ file }: { file: RecentFile }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const [gone, setGone] = useState<string | null>(null);
   const fraction = file.duration > 0 ? file.position / file.duration : 0;
   const watched = fraction >= watchedFraction();
@@ -294,7 +281,7 @@ function RecentFileCard({ file }: { file: RecentFile }) {
 }
 
 function usePlayDownload() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (d: DownloadRecord) => navigate({ name: "player", type: d.type, metaId: d.metaId, videoId: d.id, stream: localStream(d) });
 }
 
@@ -303,16 +290,12 @@ function usePlayDownload() {
 function CollectionPage({
   title,
   onBack,
-  filters = false,
   children,
 }: {
   title: string;
   onBack: () => void;
-  filters?: boolean;
-  children: (kind: Kind, sort: Sort) => ReactNode;
+  children: ReactNode;
 }) {
-  const [kind, setKind] = useState<Kind>("all");
-  const [sort, setSort] = useState<Sort>("recent");
   return (
     <>
       <header className="screen-header library-page-header">
@@ -323,22 +306,10 @@ function CollectionPage({
           </button>
           <h1 className="t-title1">{title}</h1>
         </div>
-        {filters && (
-          <div className="library-toolbar">
-            <Dropdown label="Show" value={kind} onChange={setKind} options={KINDS} />
-            <Dropdown label="Sort by" value={sort} onChange={setSort} options={SORTS} />
-          </div>
-        )}
       </header>
-      {children(kind, sort)}
+      {children}
     </>
   );
-}
-
-function arrange<T extends { type: ContentType; name: string }>(items: T[] | undefined, kind: Kind, sort: Sort) {
-  if (!items) return undefined;
-  const shown = kind === "all" ? items : items.filter((i) => i.type === kind);
-  return sort === "title" ? [...shown].sort((a, b) => a.name.localeCompare(b.name)) : shown;
 }
 
 /** Title id → the episode last watched, for saved anime shown by their entry with seasons as separate shows (#22). */
@@ -347,36 +318,36 @@ function useWatching(): ReadonlyMap<string, string> {
   return useMemo(() => new Map((data ?? []).map((p) => [p.metaId, p.videoId])), [data]);
 }
 
-function Saved({ kind, sort }: { kind: Kind; sort: Sort }) {
-  const { data } = useLibrary();
+function Saved() {
+  const entries = useSavedEntries();
   const watching = useWatching();
-  const items = useMemo(() => arrange(data, kind, sort), [data, kind, sort]);
-  if (data?.length === 0) return <EmptyState>Titles you save with + on their page appear here.</EmptyState>;
+  if (entries?.length === 0) return <EmptyState>Titles you save with + on their page appear here.</EmptyState>;
   return (
-    <>
-      {items?.length === 0 && <EmptyState>Nothing here yet.</EmptyState>}
-      <PosterGrid>
-        {items?.map((item) => (
-          <PosterCard key={item.id} item={item} watching={watching.get(item.id)} />
-        ))}
-      </PosterGrid>
-    </>
+    <FilteredCollection collection="saved" title="Saved" entries={entries}>
+      {(items) => (
+        <PosterGrid>
+          {items?.map((item) => (
+            <PosterCard key={item.id} item={item} watching={watching.get(item.id)} />
+          ))}
+        </PosterGrid>
+      )}
+    </FilteredCollection>
   );
 }
 
-function WatchedGrid({ kind, sort }: { kind: Kind; sort: Sort }) {
-  const { data } = useWatchHistory();
-  const items = useMemo(() => arrange(data, kind, sort), [data, kind, sort]);
-  if (data?.length === 0) return <EmptyState>Movies and shows you watch appear here.</EmptyState>;
+function WatchedGrid() {
+  const entries = useWatchedEntries();
+  if (entries?.length === 0) return <EmptyState>Movies and shows you watch appear here.</EmptyState>;
   return (
-    <>
-      {items?.length === 0 && <EmptyState>Nothing here yet.</EmptyState>}
-      <PosterGrid>
-        {items?.map((p) => (
-          <PosterCard key={p.metaId} item={progressItem(p)} progress={progressFraction(p)} entry={p} />
-        ))}
-      </PosterGrid>
-    </>
+    <FilteredCollection collection="watched" title="Watched" entries={entries}>
+      {(items) => (
+        <PosterGrid>
+          {items?.map((p) => (
+            <PosterCard key={p.metaId} item={progressItem(p)} progress={progressFraction(p)} entry={p} />
+          ))}
+        </PosterGrid>
+      )}
+    </FilteredCollection>
   );
 }
 

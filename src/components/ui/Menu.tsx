@@ -53,9 +53,11 @@ export type MenuItemProps = {
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /** At the end (compact look): its keyboard shortcut. */
+  meta?: ReactNode;
 };
 
-export function MenuItem({ icon, children, onClick, disabled }: MenuItemProps) {
+export function MenuItem({ icon, children, onClick, disabled, meta }: MenuItemProps) {
   const look = useContext(LookContext);
   if (look === "roomy") {
     return (
@@ -69,6 +71,7 @@ export function MenuItem({ icon, children, onClick, disabled }: MenuItemProps) {
     <Base.Item className="menu-item" disabled={disabled} onClick={onClick}>
       {icon}
       <span>{children}</span>
+      {meta != null && <span className="menu-meta tabular">{meta}</span>}
     </Base.Item>
   );
 }

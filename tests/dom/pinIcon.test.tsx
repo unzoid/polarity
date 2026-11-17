@@ -20,7 +20,8 @@ test("Pin window's pushpin (#332) has a cut drawn for each size, tilted unpinned
     const [unpinned, pinned] = container.querySelectorAll("svg");
     for (const svg of [unpinned, pinned]) {
       expect(svg.getAttribute("viewBox")).toBe(`0 0 ${grid} ${grid}`);
-      expect(svg.getAttribute("width")).toBe(String(size));
+      // px at the 16px root, in rem so it grows with TV mode's type (icons.tsx).
+      expect(svg.getAttribute("width")).toBe(`${size / 16}rem`);
       expect(svg.getAttribute("aria-hidden")).toBe("true");
       expect(svg.querySelectorAll("path").length).toBe(3);
     }

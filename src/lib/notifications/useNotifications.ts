@@ -5,7 +5,7 @@ import { useDownloads, type Download } from "../library/downloads";
 import { cachedLookup, queryClient } from "../net/queries";
 import { notePermission, onNoteClick, planNotes, showNote, systemPlansNotes } from "../platform/notifications";
 import { usePrefs } from "../settings/prefs";
-import { useRouter, type TabRoute } from "../router";
+import { type TabRoute, useNavigation } from "../router";
 import { runCheck, type CheckDeps } from "./check";
 import { downloadNotes } from "./messages";
 import { payloadRoute, routePayload } from "./store";
@@ -32,7 +32,7 @@ export function useNotifications() {
   const { profile } = useAccount();
   const profileId = profile?.id ?? "guest";
   const { notifyEpisodes, notifySeasons, notifyDownloads, notifyScope } = usePrefs();
-  const { navigate, tab } = useRouter();
+  const { navigate, tab } = useNavigation();
 
   // Clicks, also the one that started the app.
   useEffect(

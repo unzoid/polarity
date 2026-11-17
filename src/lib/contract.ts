@@ -6,11 +6,14 @@
 import type { Download } from "./library/downloads";
 import type { CommandError } from "./errors";
 import type { AnimeLink } from "./library/identity";
+import type { EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo } from "./library/episodeOrder";
 import type {
   CacheInfo,
   CatalogExtra,
+  Extra,
   CustomTheme,
   Imported,
+  EpisodeRating,
   ExternalRatings,
   InstalledAddon,
   LibraryItem,
@@ -21,6 +24,7 @@ import type {
   MetaDetails,
   MetaPreview,
   Person,
+  PersonPage,
   Playable,
   Progress,
   RankedStream,
@@ -60,10 +64,12 @@ export const contract = {
     version: true,
   } satisfies Keys<Manifest>,
   ManifestCatalog: { extra: true, id: true, name: true, type: true } satisfies Keys<ManifestCatalog>,
+  Extra: { key: true, kind: true, name: true } satisfies Keys<Extra>,
   CatalogExtra: { isRequired: true, name: true, options: true } satisfies Keys<CatalogExtra>,
   Meta: {
     background: true,
     cast: true,
+    certification: true,
     description: true,
     details: true,
     director: true,
@@ -74,6 +80,8 @@ export const contract = {
     logos: true,
     name: true,
     people: true,
+    crew: true,
+    extras: true,
     poster: true,
     releaseInfo: true,
     runtime: true,
@@ -101,6 +109,7 @@ export const contract = {
   } satisfies Keys<MetaDetails>,
   MetaPreview: {
     background: true,
+    certification: true,
     description: true,
     genres: true,
     id: true,
@@ -112,7 +121,7 @@ export const contract = {
     releaseInfo: true,
     type: true,
   } satisfies Keys<MetaPreview>,
-  Person: { character: true, name: true, photo: true } satisfies Keys<Person>,
+  Person: { character: true, name: true, photo: true, tmdbId: true } satisfies Keys<Person>,
   RankedStream: {
     addon: true,
     fileEpisode: true,
@@ -176,6 +185,9 @@ export const contract = {
   Imported: { library: true, progress: true } satisfies Keys<Imported>,
   CmdError: { code: true, message: true } satisfies Keys<CommandError>,
   Cue: { endMs: true, h: true, sheet: true, startMs: true, w: true, x: true, y: true } satisfies Keys<SeekCue>,
+  EpisodeOrder: { groups: true, id: true, kind: true, name: true } satisfies Keys<EpisodeOrder>,
+  EpisodeOrderGroup: { episodes: true, name: true } satisfies Keys<EpisodeOrderGroup>,
+  EpisodeOrderInfo: { description: true, episodeCount: true, groupCount: true, id: true, kind: true, name: true } satisfies Keys<EpisodeOrderInfo>,
   Download: {
     addedAt: true,
     background: true,
@@ -196,13 +208,26 @@ export const contract = {
     total: true,
     type: true,
   } satisfies Keys<Download>,
-  InstalledAddon: { manifest: true, manifestUrl: true } satisfies Keys<InstalledAddon>,
+  InstalledAddon: { disabled: true, manifest: true, manifestUrl: true } satisfies Keys<InstalledAddon>,
   LocalChanges: { library: true, links: true, progress: true, pulledAt: true } satisfies Keys<LocalChanges>,
+  PersonPage: {
+    acting: true,
+    biography: true,
+    birthplace: true,
+    born: true,
+    died: true,
+    directing: true,
+    id: true,
+    knownFor: true,
+    name: true,
+    photo: true,
+  } satisfies Keys<PersonPage>,
   "Playable.external": { kind: true, url: true } satisfies Keys<Extract<Playable, { kind: "external" }>>,
   "Playable.torrent": { kind: true } satisfies Keys<Extract<Playable, { kind: "torrent" }>>,
   "Playable.unsupported": { kind: true, reason: true } satisfies Keys<Extract<Playable, { kind: "unsupported" }>>,
   "Playable.url": { kind: true, url: true } satisfies Keys<Extract<Playable, { kind: "url" }>>,
   PreviewTrack: { cues: true, sourceDurationMs: true } satisfies Keys<SeekTrack>,
+  EpisodeRating: { episode: true, rating: true, season: true, votes: true } satisfies Keys<EpisodeRating>,
   Ratings: {
     audience: true,
     awards: true,
@@ -282,7 +307,7 @@ export const contract = {
     wheelAction: true,
   } satisfies Keys<Settings>,
   Span: { end: true, start: true } satisfies Keys<Span>,
-  StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true } satisfies Keys<StreamsResult>,
+  StreamsResult: { asked: true, failed: true, hidden: true, ids: true, streams: true, waiting: true } satisfies Keys<StreamsResult>,
   CustomTheme: { accent: true, base: true, id: true, name: true, tint: true } satisfies Keys<CustomTheme>,
   SubtitleOption: { addon: true, id: true, lang: true, url: true } satisfies Keys<SubtitleOption>,
   SubtitleStyle: {

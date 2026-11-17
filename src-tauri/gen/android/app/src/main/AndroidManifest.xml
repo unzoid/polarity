@@ -16,6 +16,7 @@
         android:banner="@drawable/banner"
         android:label="@string/app_name"
         android:theme="@style/Theme.polar"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -28,6 +29,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- A TV's QR code (#133): polarity://tv-sign-in/<code> opens Settings → Account → Sign in a TV,
+                 which asks before anything is approved (MainActivity.kt IncomingLinks, src/lib/deepLink). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="polarity" android:host="tv-sign-in" />
             </intent-filter>
         </activity>
         <!-- Links meant for Stremio (#163): off until Settings → Add-ons → Open Stremio links in Polarity

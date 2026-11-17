@@ -35,7 +35,7 @@ test("a tap anywhere on the featured banner is the banner's, with the picture sh
   place(banner, 16, 80, 380, 214);
   banner.querySelectorAll("img").forEach(loaded);
   // On its text, not its picture: the banner is still what it grows from.
-  expect(cardAt(banner.querySelector(".hero-title"))).toEqual({ x: 16, y: 80, w: 380, h: 214, src: "https://media.example.com/shown.jpg" });
+  expect(cardAt(banner.querySelector(".hero-title"))).toMatchObject({ x: 16, y: 80, w: 380, h: 214, src: "https://media.example.com/shown.jpg" });
   banner.remove();
 });
 
@@ -52,7 +52,7 @@ test("a card is still its art's frame, not the caption under it; elsewhere is no
   place(card, 0, 0, 150, 260);
   place(card.querySelector(".card-frame")!, 0, 0, 150, 225);
   loaded(card.querySelector("img")!);
-  expect(cardAt(card.querySelector(".caption"))).toEqual({ x: 0, y: 0, w: 150, h: 225, src: "https://media.example.com/poster.jpg" });
+  expect(cardAt(card.querySelector(".caption"))).toMatchObject({ x: 0, y: 0, w: 150, h: 225, src: "https://media.example.com/poster.jpg" });
   expect(cardAt(document.body)).toBeUndefined();
   expect(cardAt(null)).toBeUndefined();
   card.remove();

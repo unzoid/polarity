@@ -168,10 +168,16 @@ test("settings on a phone: the sections, then one section with a way back", asyn
   const browsing = settings.getByRole("button", { name: "Browsing", exact: true });
   await expect(browsing).toBeVisible();
   await browsing.tap();
-  await expect(settings.getByRole("switch", { name: /^Show the Calendar/ })).toBeVisible();
+  // Browsing is split into sections: its list first, then the section's own view.
   await expect(settings).toHaveAccessibleName("Browsing");
   await expect(browsing).toBeHidden();
-  // The sheet's Back: from the section to the list of sections, then from the list back to the profiles.
+  const pages = settings.getByRole("button", { name: /^Home & Title Pages/ });
+  await pages.tap();
+  await expect(settings.getByRole("switch", { name: /^Show the Calendar/ })).toBeVisible();
+  await expect(settings).toHaveAccessibleName("Home & Title Pages");
+  // The sheet's Back: from the section to its page's list, to the list of pages, then back to the profiles.
+  await profiles.getByRole("button", { name: "Back", exact: true }).tap();
+  await expect(pages).toBeVisible();
   await profiles.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(browsing).toBeVisible();
   await profiles.getByRole("button", { name: "Back", exact: true }).tap();
@@ -472,8 +478,49 @@ test("the torrent notice fits a phone: the upload limit and both buttons inside 
   expect(await fitsWidth(app)).toBe(true);
 });
 
+/** Series and Movies at phone width: Genre and Catalog are two dropdowns sharing the row, no row of buttons (#457). */
+async function browseDropdownsFillRow(app: Page, pick = true) {
+  const trigger = (scope: ReturnType<Page["locator"]>, name: string) => scope.locator(`.select-trigger[aria-label="${name}"]`);
+  for (const tab of ["Series", "Movies"]) {
+    await app.locator(".navbar").getByRole("button", { name: tab, exact: true }).tap();
+    const controls = app.locator('.page[data-active="true"] .discover-controls');
+    const genre = trigger(controls, "Genre");
+    const catalog = trigger(controls, "Catalog");
+    await expect(catalog).toHaveText(/Trending/);
+    await expect(controls.getByRole("radiogroup", { name: "Catalog" })).toHaveCount(0);
+    const [row, g, c] = await Promise.all([controls.boundingBox(), genre.boundingBox(), catalog.boundingBox()]);
+    // Side by side, half the row each, from the row's left edge to its right one.
+    expect(Math.abs(g!.y - c!.y), tab).toBeLessThanOrEqual(1);
+    expect(Math.abs(g!.x - row!.x), tab).toBeLessThanOrEqual(1);
+    expect(Math.abs(c!.x + c!.width - (row!.x + row!.width)), tab).toBeLessThanOrEqual(1);
+    expect(Math.abs(g!.width - c!.width), tab).toBeLessThanOrEqual(1);
+    expect(c!.x, tab).toBeGreaterThan(g!.x + g!.width);
+    // The fake's add-on lists add List: on its own row above, the row's full width.
+    const l = await trigger(controls, "List").boundingBox();
+    expect(l!.y + l!.height, tab).toBeLessThan(g!.y);
+    expect(Math.abs(l!.width - row!.width), tab).toBeLessThanOrEqual(1);
+    expect(await fitsWidth(app), tab).toBe(true);
+  }
+  // The dropdown picks the list as the buttons did (on an iPhone it opens the system's menu, not in a browser).
+  if (!pick) return;
+  const active = app.locator('.page[data-active="true"]');
+  await trigger(active, "Catalog").tap();
+  await expect(app.getByRole("option")).toHaveText(["Trending", "Popular", "Top Rated", "New", "Hidden Gems", "Classics"]);
+  await app.getByRole("option", { name: "Top Rated" }).tap();
+  await expect(trigger(active, "Catalog")).toHaveText(/Top Rated/);
+  await expect(active.locator(".card").first()).toBeVisible();
+}
+
+test("Series and Movies: Genre and Catalog share the row as two dropdowns (#457)", async ({ app }) => {
+  await browseDropdownsFillRow(app);
+});
+
 test.describe("on an iPhone", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("Series and Movies: Genre and Catalog share the row as two dropdowns (#457)", async ({ app }) => {
+    await browseDropdownsFillRow(app, false);
+  });
 
   test("a torrent source can't play here: no notice, the player says so, nothing is opened (#458)", async ({ app }) => {
     await playTorrentFilm(app);
@@ -604,7 +651,8 @@ test.describe("on an iPhone, Back by swiping", () => {
     const title = app.getByRole("heading", { level: 1, name: "The Glass Orchard" });
     await expect(title).toBeVisible();
     const top = app.locator(".page[data-active='true']");
-    const under = app.locator(".page[data-active='false']");
+    // The page under the title's (Home's own page is kept under them both: each section keeps its page).
+    const under = app.locator(".page[data-active='false']").last();
     const matrix = (l: typeof top) => l.evaluate((el) => { const m = new DOMMatrix(getComputedStyle(el).transform); return { x: m.m41, scale: m.a }; });
 
     // Moving: a title page opened from a card goes back the way it came (pageDrag.ts): it shrinks and follows the
@@ -627,9 +675,11 @@ test.describe("on an iPhone, Back by swiping", () => {
     await swipe("begin", 4);
     await swipe("move", width * 0.6);
     await swipe("end", width * 0.6);
-    await expect(app.locator(".page")).toHaveCount(1);
-    await expect(app.locator(".page").first()).not.toHaveAttribute("data-motion", /./);
-    expect((await matrix(app.locator(".page").first())).x).toBe(0);
+    // The title's page is gone, and no page change plays (the other pages are the sections' own, kept).
+    await expect(app.locator(".page[data-page-key]")).not.toHaveCount(0);
+    await expect(app.locator(".page[data-motion]")).toHaveCount(0);
+    await expect(app.locator(".page", { has: title })).toHaveCount(0);
+    expect((await matrix(top)).x).toBe(0);
     await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
   });
 
@@ -694,14 +744,16 @@ test("each page starts right under the top bar, which sits right under the statu
     for (const [tab, first] of [
       ["Home", ".hero-card"],
       ["Series", ".discover-controls"],
-      ["Library", ".screen-header h1"],
+      ["Library", ".library-panel"],
     ] as const) {
       await (tab === "Series" ? app.locator(".navbar") : tabs).getByRole("button", { name: tab, exact: true }).tap();
       const content = app.locator(first).first();
       await expect(content).toBeVisible();
+      // Measured once the sections have finished turning (the old page carries a copy of the bar while they do).
+      await expect(app.locator(".page[data-motion]")).toHaveCount(0);
       const [bar, logo, page] = await Promise.all([
-        app.locator(".navbar").boundingBox(),
-        app.locator(".brand-logo").boundingBox(),
+        app.locator(".main > .navbar").boundingBox(),
+        app.locator(".main > .navbar .brand-logo").boundingBox(),
         content.boundingBox(),
       ]);
       // The bar's row begins where the status bar ends, the logo centred in it.
@@ -716,7 +768,8 @@ test("each page starts right under the top bar, which sits right under the statu
   await tabs.getByRole("button", { name: "Anime", exact: true }).tap();
   const note = app.locator(".anime-unreachable");
   await expect(note).toBeVisible({ timeout: 15_000 });
-  const barBottom = await app.locator(".navbar").evaluate((e) => e.getBoundingClientRect().bottom);
+  await expect(app.locator(".page[data-motion]")).toHaveCount(0);
+  const barBottom = await app.locator(".main > .navbar").evaluate((e) => e.getBoundingClientRect().bottom);
   // The text's own top, once the page has slid in.
   await expect.poll(() => note.evaluate((e) => e.getBoundingClientRect().top + parseFloat(getComputedStyle(e).paddingTop))).toBeGreaterThanOrEqual(barBottom);
 });

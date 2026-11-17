@@ -1,3 +1,4 @@
+import { EdgeBlur } from "./EdgeBlur";
 import logo from "../assets/polarity-white.png";
 import { Calendar, ChevronDown, Close, Search, Speed, Trailer, Tv } from "./icons";
 import {
@@ -90,12 +91,7 @@ export function NavBar() {
 
   return (
     <header className="navbar" data-scrolled={scrolled} data-tauri-drag-region>
-      <div className="navbar-fade" aria-hidden>
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
+      <EdgeBlur className="navbar-fade" edge="top" />
       {/* Always takes its place, so the brand and tabs never shift when it appears. */}
       <BackButton
         ref={backButton}
