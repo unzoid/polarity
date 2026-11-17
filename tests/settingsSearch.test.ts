@@ -16,3 +16,16 @@ test("the MyAnimeList link is found by its name and its short name (#84)", () =>
   expect(search("mal")).toContain("services:mal");
   expect(search("import")).toContain("services:mal");
 });
+
+test("each setting on a page split into sections is in one of them, so a search result opens it", async () => {
+  const { PAGE_SECTIONS } = await import("../src/lib/settings/pages");
+  const { SETTINGS } = await import("../src/lib/settings/schema");
+  // Shown above the list of sections rather than in one.
+  const above = new Set(["animeEnabled"]);
+  for (const [page, sections] of Object.entries(PAGE_SECTIONS)) {
+    const ids = sections!.flatMap((s) => s.settings);
+    expect(new Set(ids).size).toBe(ids.length);
+    const onPage = SETTINGS.filter((s) => s.page === page && !above.has(s.id)).map((s) => s.id);
+    expect(ids.slice().sort()).toEqual(onPage.slice().sort());
+  }
+});

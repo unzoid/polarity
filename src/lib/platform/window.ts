@@ -1,7 +1,13 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { call, type Unlisten } from "./bridge";
 import { isDesktop, os } from "./device";
+
+/** A window's outer position and inner size, in physical pixels. */
+export type Bounds = { x: number; y: number; width: number; height: number };
+/** A screen's usable area (no taskbar or dock), in physical pixels, and its scale. */
+export type WorkArea = Bounds & { scale: number };
 
 /**
  * The app's window: buttons for a frameless desktop window, fullscreen for the
@@ -28,6 +34,17 @@ export interface AppWindow {
   setAlwaysOnTop(on: boolean): Promise<void>;
   /** Locked: no resizing at the edges, minimise and maximise turned off (close still works). */
   setLocked(locked: boolean): Promise<void>;
+  // The player's Picture in Picture on desktop (components/player/miniWindow.ts):
+  isMaximized(): Promise<boolean>;
+  maximize(): Promise<void>;
+  unmaximize(): Promise<void>;
+  /** Outer position and inner size, physical pixels. */
+  bounds(): Promise<Bounds>;
+  setBounds(b: Bounds): Promise<void>;
+  /** The usable part of the screen the window is on. */
+  workArea(): Promise<WorkArea | null>;
+  /** Logical pixels; null for none. */
+  setMinSize(size: { width: number; height: number } | null): Promise<void>;
 }
 
 // Looked up on each use: the Tauri handle can't be made outside the shell, and importing this file must not fail there.
@@ -53,6 +70,25 @@ export const appWindow: AppWindow = {
     const w = win();
     await Promise.all([w.setResizable(!locked), w.setMinimizable(!locked), w.setMaximizable(!locked)]);
   },
+  isMaximized: () => win().isMaximized(),
+  maximize: () => win().maximize(),
+  unmaximize: () => win().unmaximize(),
+  bounds: async () => {
+    const [pos, size] = await Promise.all([win().outerPosition(), win().innerSize()]);
+    return { x: pos.x, y: pos.y, width: size.width, height: size.height };
+  },
+  setBounds: async (b) => {
+    // Size first: a window moved into a corner at its old size could land partly off the screen on the way.
+    await win().setSize(new PhysicalSize(b.width, b.height));
+    await win().setPosition(new PhysicalPosition(b.x, b.y));
+  },
+  workArea: async () => {
+    const m = await currentMonitor();
+    if (!m) return null;
+    const { position: p, size: s } = m.workArea;
+    return { x: p.x, y: p.y, width: s.width, height: s.height, scale: m.scaleFactor };
+  },
+  setMinSize: (size) => win().setMinSize(size ? new LogicalSize(size.width, size.height) : null),
 };
 
 export type FileDrag = { type: "enter"; paths: string[] } | { type: "leave" } | { type: "drop" };

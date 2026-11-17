@@ -33,17 +33,17 @@ const file = (sel: { audio?: number; sub?: number; secondary?: number } = {}): M
     "main-selection": sel.secondary === 2 ? 1 : sel.sub === 2 ? 0 : undefined,
   },
 ];
-const ADDON = [{ lang: "fr", url: "https://subs.example.com/episode.fr.srt" }];
+const ADDON = [{ key: "ext:abc", lang: "fr", url: "https://subs.example.com/episode.fr.srt" }];
 
 describe("mpvSelection", () => {
   test("mpv's own choice at start: aid/sid read back as auto, track-list says what plays", () => {
-    expect(mpvSelection(file({ audio: 1, sub: 1 }), "auto", "auto", ADDON)).toEqual({ audioId: "1", subId: "emb:1" });
+    expect(mpvSelection(file({ audio: 1, sub: 1 }), "auto", "auto", ADDON)).toMatchObject({ audioId: "1", subId: "emb:1" });
   });
 
   test("an explicit choice is shown even before the track list catches up", () => {
-    expect(mpvSelection(file({ audio: 1, sub: 1 }), 2, 2, ADDON)).toEqual({ audioId: "1", subId: "emb:1" });
+    expect(mpvSelection(file({ audio: 1, sub: 1 }), 2, 2, ADDON)).toMatchObject({ audioId: "1", subId: "emb:1" });
     const noFlags = file().map(({ selected: _, ...t }) => t);
-    expect(mpvSelection(noFlags, 2, 2, ADDON)).toEqual({ audioId: "2", subId: "emb:2" });
+    expect(mpvSelection(noFlags, 2, 2, ADDON)).toMatchObject({ audioId: "2", subId: "emb:2" });
   });
 
   test("Off only when no subtitle is shown", () => {
@@ -57,9 +57,9 @@ describe("mpvSelection", () => {
     expect(mpvSelection(file({ audio: 1, sub: 2, secondary: 1 }), "auto", "auto", ADDON).subId).toBe("emb:2");
   });
 
-  test("an add-on subtitle mpv loaded is shown as that language's entry", () => {
+  test("an add-on subtitle mpv loaded is shown as its entry", () => {
     const tracks: MpvTrack[] = [...file({ audio: 1 }), { id: 3, type: "sub", lang: "fra", external: true, "external-filename": ADDON[0].url, selected: true }];
-    expect(mpvSelection(tracks, "auto", "auto", ADDON).subId).toBe("ext:fr");
+    expect(mpvSelection(tracks, "auto", "auto", ADDON).subId).toBe("ext:abc");
   });
 
   test("an add-on subtitle from another source of the episode still matches by language", () => {
@@ -67,11 +67,33 @@ describe("mpvSelection", () => {
       ...file({ audio: 1 }),
       { id: 3, type: "sub", lang: "fra", external: true, "external-filename": "https://other.example.org/x.srt", selected: true },
     ];
-    expect(mpvSelection(tracks, "auto", "auto", ADDON).subId).toBe("ext:fr");
+    expect(mpvSelection(tracks, "auto", "auto", ADDON).subId).toBe("ext:abc");
     expect(mpvSelection(tracks, "auto", "auto", []).subId).toBeUndefined();
   });
 
   test("a file without audio has no audio choice", () => {
     expect(mpvSelection([{ id: 1, type: "video", selected: true }], "auto", "auto", []).audioId).toBeUndefined();
+  });
+});
+
+describe("the second subtitle", () => {
+  test("is read from mpv's secondary selection", () => {
+    expect(mpvSelection(file({ audio: 1, sub: 2, secondary: 1 }), "auto", "auto", ADDON).secondId).toBe("emb:1");
+    expect(mpvSelection(file({ audio: 1, sub: 2 }), "auto", "auto", ADDON).secondId).toBe("off");
+  });
+
+  test("an add-on's second subtitle is its entry", () => {
+    const tracks: MpvTrack[] = [
+      ...file({ audio: 1, sub: 1 }),
+      { id: 3, type: "sub", lang: "fra", external: true, "external-filename": ADDON[0].url, selected: true, "main-selection": 1 },
+    ];
+    expect(mpvSelection(tracks, "auto", "auto", ADDON)).toMatchObject({ subId: "emb:1", secondId: "ext:abc" });
+  });
+});
+
+describe("a subtitle loaded from this device", () => {
+  test("goes with the file's own, not the add-ons'", () => {
+    const tracks: MpvTrack[] = [...file({ audio: 1 }), { id: 3, type: "sub", lang: "eng", external: true, "external-filename": "C:\Videos\Film.en.srt", selected: true }];
+    expect(mpvSelection(tracks, "auto", "auto", ADDON).subId).toBe("emb:3");
   });
 });

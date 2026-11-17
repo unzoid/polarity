@@ -5,7 +5,7 @@ import { Calendar, Close, Desktop, Power, Profile, Search, Settings, Tv, Users, 
 import { partyAvailable, setJoinPartyOpen, setPartyMenuOpen, useParty } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
 import { useAccount } from "../lib/account";
-import { rootTab, useRouter, type TabRoute } from "../lib/router";
+import { rootTab, useRouter, type TabRoute, useNavigation } from "../lib/router";
 import { shortcutText, usePrefs } from "../lib/settings";
 import { useSettings } from "../lib/net";
 import { buttonFor, usePadBindings, type NavAction, type PadButton, type PlayerPadAction } from "./padBindings";
@@ -53,6 +53,14 @@ export function TvNav({ onMenu }: { onMenu: () => void }) {
   const active = rootTab(stack);
   const { profile } = useAccount();
   const tabs = useTvTabs();
+  // A section switched from elsewhere (the shoulder buttons) while you're on the tabs: the highlight goes with it.
+  const tabsRef = useRef<HTMLElement>(null);
+  const activeKey = JSON.stringify(active);
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav?.contains(document.activeElement)) return;
+    nav.querySelector<HTMLElement>('[aria-current="page"]')?.focus({ preventScroll: true });
+  }, [activeKey]);
 
   return (
     <header className="tv-nav" data-nav-memory data-nav-prefer-entry data-nav-lock-x>
@@ -62,7 +70,7 @@ export function TvNav({ onMenu }: { onMenu: () => void }) {
       {/* The app's name beside the profile, as the desktop navbar has it (#476); not a stop for the remote. */}
       <img className="tv-nav-brand wordmark" src={logo} alt="Polarity" draggable={false} />
       {/* Switching sections keeps focus on the tabs; the menu's choices (Settings) land in the page. */}
-      <nav className="tv-nav-tabs" aria-label="Sections" data-nav-keep>
+      <nav ref={tabsRef} className="tv-nav-tabs" aria-label="Sections" data-nav-keep>
         {tabs.map((t) => {
           const current = sameTab(t.route, active);
           return (
@@ -103,7 +111,7 @@ function Clock() {
 /** The side menu: profiles, back to desktop mode, quit. */
 export function TvMenu({ onClose }: { onClose: () => void }) {
   const account = useAccount();
-  const { tab } = useRouter();
+  const { tab } = useNavigation();
   const ref = useRef<HTMLDivElement>(null);
   useFocusTrap(ref);
   useBack(true, onClose);

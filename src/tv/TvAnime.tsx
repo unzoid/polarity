@@ -35,8 +35,9 @@ import {
 } from "../lib/anime";
 import { cachedLookup } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import type { Shape } from "../lib/catalog";
+import { useMatureContent } from "../lib/catalog";
 import { playSound } from "./sounds";
 import { TvBrowse, TvCard, TvRail, TvSkeletonRail, type RailRow } from "./TvRails";
 import { useStage } from "./TvStage";
@@ -145,7 +146,7 @@ export function TvAnimeRail({
   /** The featured row: the stage shows each franchise's base title's art and logo, and names the trending part (#325). */
   franchise?: boolean;
 }) {
-  const { matureContent } = usePrefs();
+  const matureContent = useMatureContent();
   // Waiting its turn behind AniList's limit: said beside the title (#109).
   const busy = useAniListBusy();
   if (!items) return <TvSkeletonRail title={title} shape={shape} note={busy ? "AniList is busy, loading…" : undefined} />;
@@ -179,7 +180,7 @@ function TvAnimeCard({
   near: boolean;
   franchise: boolean;
 }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const qc = useQueryClient();
   const stage = useStage();
   const prefs = usePrefs();
@@ -276,7 +277,7 @@ function TvAnimeCard({
 
 /** An anime link in TV mode (arriving from desktop mode, say): on to the show's title page. */
 export function TvAnimeDetail({ id }: { id: number }) {
-  const { replace } = useRouter();
+  const { replace } = useNavigation();
   const qc = useQueryClient();
   const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const [missing, setMissing] = useState(false);

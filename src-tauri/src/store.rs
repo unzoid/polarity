@@ -225,8 +225,8 @@ impl Default for Settings {
             anime_subtitle_language: "same".into(),
             seek_step: 10,
             auto_pick_source: true,
-            show_card_titles: true,
-            show_card_details: true,
+            show_card_titles: false,
+            show_card_details: false,
             show_card_ratings: false,
             rating_colors: false,
             episode_layout: "row".into(),
@@ -321,6 +321,9 @@ impl Settings {
 pub struct InstalledAddon {
     pub manifest_url: String,
     pub manifest: Manifest,
+    /// Switched off in Settings → Add-ons: kept, but asked for nothing. This device's own, like the order.
+    #[serde(default)]
+    pub disabled: bool,
 }
 
 /// The space used when nobody is signed in.

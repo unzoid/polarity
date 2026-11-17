@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -47,6 +48,9 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     keepAboveKeyboard()
+    // Makes the app's own folder on each storage volume (an SD card), which downloads may be moved to
+    // without a storage permission (downloads_volumes in src-tauri/src/downloads.rs lists them).
+    runCatching { getExternalFilesDirs(null) }
     launchNote = intent?.getStringExtra(Notes.EXTRA)
     // Recreated (turned, resized): the link that started it was already handed over.
     if (savedInstanceState == null) IncomingLinks.offer(intent)
@@ -232,11 +236,26 @@ open class PolarDevice(private val context: Context, private val tv: Boolean) {
   // Nothing is shared after playback while battery saver is on (#207).
   @JavascriptInterface
   fun batterySaver(): Boolean = context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+
+  // Where the player's brightness swipe starts (src/lib/platform/brightness.ts), 0 to 1: the level the player set on
+  // this window, else the system's (readable without a permission; its scale is 0 to 255 on most devices).
+  @JavascriptInterface
+  fun brightness(): Float {
+    val own = (context as? Activity)?.window?.attributes?.screenBrightness ?: -1f
+    if (own >= 0f) return own
+    val system = try {
+      Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+    } catch (e: Settings.SettingNotFoundException) {
+      return 0.5f
+    }
+    return (system / 255f).coerceIn(0f, 1f)
+  }
 }
 
 /**
  * The window and app changes, as messages from the app's own pages (src/lib/platform/back.ts, deepLinks.ts):
- * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, `predictive-back:on|off`, and
+ * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, `predictive-back:on|off`,
+ * `brightness:<0 to 1>|off`, and
  * notifications' `notes:…` (NotesWorker.kt).
  */
 class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessageListener {
@@ -254,7 +273,10 @@ class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessa
       "stremio-links:off" -> setStremioLinks(activity, false)
       "predictive-back:on" -> activity.runOnUiThread { activity.setPredictiveBack(true) }
       "predictive-back:off" -> activity.runOnUiThread { activity.setPredictiveBack(false) }
-      else -> if (data.startsWith("notes:")) noteAction(activity, data.removePrefix("notes:"))
+      "brightness:off" -> setBrightness(activity, null)
+      else ->
+        if (data.startsWith("notes:")) noteAction(activity, data.removePrefix("notes:"))
+        else if (data.startsWith("brightness:")) data.removePrefix("brightness:").toFloatOrNull()?.let { setBrightness(activity, it) }
     }
   }
 }
@@ -275,6 +297,10 @@ class PolarDeviceWithActions(private val activity: Activity, tv: Boolean) : Pola
 
   @JavascriptInterface
   fun setStremioLinks(on: Boolean) = setStremioLinks(activity, on)
+
+  // Below 0: back to the system's brightness.
+  @JavascriptInterface
+  fun setBrightness(level: Float) = setBrightness(activity, if (level < 0f) null else level)
 }
 
 // Back at the root (src/lib/platform/back.ts): to the background, as Android 12 and later do for a
@@ -303,6 +329,17 @@ private fun keepAwake(activity: Activity, on: Boolean) {
   }
 }
 
+// The player's swipe on the left half (src/lib/platform/brightness.ts): this window's own brightness, which needs no
+// permission and holds only while the app is in front (the system's comes back in the background by itself). Null
+// gives the system's back, as when the player closes. Never quite 0, which some screens take as off.
+private fun setBrightness(activity: Activity, level: Float?) {
+  activity.runOnUiThread {
+    val attributes = activity.window.attributes
+    attributes.screenBrightness = level?.coerceIn(0.01f, 1f) ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+    activity.window.attributes = attributes
+  }
+}
+
 // The page listens for stremio:// links (#163): the ones waiting come as a `polar-deep-link` event
 // (MainActivity.deliverLinks), untrusted text for src/lib/deepLink.
 private fun linksReady(activity: Activity) {
@@ -320,6 +357,8 @@ private fun setStremioLinks(activity: Activity, on: Boolean) {
 /**
  * Links meant for Stremio that reached the activity (#163), kept until the page takes them: the one
  * that started the app comes before the page listens. Only stremio:// links, not too long, latest few.
+ * And a TV's QR code (#133), `polarity://tv-sign-in/<code>`, the one Polarity link a phone receives
+ * (AndroidManifest.xml); the page parses it (src/lib/deepLink) and only asks.
  */
 object IncomingLinks {
   private const val MAX_LEN = 4096
@@ -330,7 +369,8 @@ object IncomingLinks {
   fun offer(intent: Intent?): Boolean {
     if (intent?.action != Intent.ACTION_VIEW) return false
     val link = intent.dataString ?: return false
-    val ours = link.startsWith("stremio://", ignoreCase = true) && link.length <= MAX_LEN && link.all { it in '!'..'~' }
+    val scheme = link.startsWith("stremio://", ignoreCase = true) || link.startsWith("polarity://tv-sign-in/")
+    val ours = scheme && link.length <= MAX_LEN && link.all { it in '!'..'~' }
     if (!ours) return false
     waiting.addLast(link)
     while (waiting.size > MAX_WAITING) waiting.removeFirst()

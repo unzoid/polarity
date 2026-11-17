@@ -79,12 +79,47 @@ pub fn player_keep_awake(on: bool) {
     let _ = on;
 }
 
+/// The screen's brightness from 0 to 1, for the player's swipe on the left half: on iPhones and iPads
+/// (ios/brightness.m). Android's comes through the page's bridge (src/lib/platform/brightness.ts);
+/// elsewhere there is none to read.
+#[tauri::command]
+pub fn player_brightness() -> Option<f64> {
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn polar_screen_brightness() -> f64;
+        }
+        let level = unsafe { polar_screen_brightness() };
+        return level.is_finite().then(|| level.clamp(0.0, 1.0));
+    }
+    #[cfg(not(target_os = "ios"))]
+    None
+}
+
+/// Set the screen's brightness while the player is open (`level` from 0 to 1), or give back the
+/// one it had (`None`). iOS puts the old level back by itself while the app is in the background
+/// (ios/brightness.m). Elsewhere nothing changes.
+#[tauri::command]
+pub fn player_set_brightness(level: Option<f64>) {
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn polar_set_screen_brightness(level: f64);
+        }
+        let level = level.filter(|l| l.is_finite()).map_or(-1.0, |l| l.clamp(0.0, 1.0));
+        unsafe { polar_set_screen_brightness(level) }
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = level;
+}
+
 /// Load `url` (optionally starting at `start` seconds) and play. With `probe_id`,
 /// the link check reports its steps as `player://probe` events. `headers` are
 /// the stream's `behaviorHints.proxyHeaders.request`; only those
 /// `polar_player::headers` passes reach the link check and mpv. `link`: a link the user chose
 /// (Watch a Link), checked without the placeholder rule for add-on streams (#474).
 /// `owner`: the page's player that asks, so a load it no longer wants is dropped (`polar_player::turns`).
+/// `user_config`: mpv reads the user's own mpv folder (desktop; restarted with or without it when that changes).
 #[tauri::command]
 // The webview's arguments, plus the three Tauri hands in.
 #[allow(clippy::too_many_arguments)]
@@ -98,6 +133,7 @@ pub async fn mpv_load(
     headers: Option<std::collections::HashMap<String, String>>,
     link: Option<bool>,
     owner: Option<u64>,
+    user_config: Option<bool>,
 ) -> Result<(), CmdError> {
     state.mpv.turns.ask(owner);
     // Web streams, a finished download, or a file the user opened - never any other path on disk.
@@ -121,7 +157,7 @@ pub async fn mpv_load(
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));
     }
     state.mpv.touch();
-    state.mpv.ensure(&app, &window).await.map_err(CmdError::Player)?;
+    state.mpv.ensure(&app, &window, user_config.unwrap_or(false)).await.map_err(CmdError::Player)?;
     let mut options = String::new();
     if let Some(s) = start.filter(|s| *s > 1.0) {
         options = format!("start={s:.2}");
@@ -254,6 +290,20 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
     if was.deband != tune.deband {
         mpv.request(json!(["set_property", "deband", tune.deband])).await?;
     }
+    if was.spdif() != tune.spdif() {
+        mpv.request(json!(["set_property", "audio-spdif", tune.spdif()])).await?;
+    }
+    if was.hdr != tune.hdr {
+        let hint = tune.hdr.colorspace_hint();
+        // "auto" is new in mpv 0.40: an older mpv (one found on PATH) is told "no", its own default.
+        if mpv.request(json!(["set_property", "target-colorspace-hint", hint])).await.is_err() && hint == "auto" {
+            mpv.request(json!(["set_property", "target-colorspace-hint", "no"])).await?;
+        }
+    }
+    if was.sub_hdr != tune.sub_hdr {
+        // An older mpv (one found on PATH) may not have it: it keeps its own.
+        let _ = mpv.request(json!(["set_property", "sub-hdr-peak", tune.sub_hdr.peak()])).await;
+    }
     if was.buffer != tune.buffer {
         let (secs, bytes) = tune.cache();
         mpv.request(json!(["set_property", "cache-secs", secs])).await?;
@@ -282,6 +332,73 @@ pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>, owner: Option<
     let stopped = state.mpv.request(json!(["stop"])).await.map(|_| ());
     state.mpv.turns.stopped();
     stopped
+}
+
+/// Save the picture on screen (with its subtitles) as a JPEG in Pictures/Polarity, named after `title` and
+/// the time `at` (seconds): the viewer's own screenshot. Returns the file's name; [`mpv_screenshot_reveal`]
+/// shows it. The page names nothing on disk: the folder is fixed and the title becomes a plain file name.
+#[tauri::command]
+pub async fn mpv_screenshot(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    title: String,
+    at: f64,
+) -> Result<String, CmdError> {
+    use polar_player::shots::{shot_name, unused_path};
+    let dir = app.path().picture_dir().map_err(|e| CmdError::Save(e.to_string()))?.join("Polarity");
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| CmdError::Save(e.to_string()))?;
+    let path = unused_path(&dir, &shot_name(&title, at));
+    let mpv = &state.mpv;
+    // Full quality for this one; the frosted overlays' snapshots go back to their small files.
+    let _ = mpv.request(json!(["set_property", "screenshot-jpeg-quality", 95])).await;
+    let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "subtitles"])).await;
+    let _ = mpv.request(json!(["set_property", "screenshot-jpeg-quality", 70])).await;
+    taken.map_err(CmdError::Player)?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    *mpv.last_shot.locked() = Some(path);
+    Ok(name)
+}
+
+/// The subtitle files the dialog offers: those mpv reads as text or as pictures.
+const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "ass", "ssa", "vtt", "sub", "idx", "sup", "smi", "txt"];
+
+/// A subtitle file the user picks in the system's dialog, added to what mpv plays and shown (desktop). Only
+/// the dialog's answer reaches mpv: the page can't name a file. False when the dialog is cancelled.
+#[tauri::command]
+pub async fn mpv_subtitle_pick(app: AppHandle, state: State<'_, AppState>) -> Result<bool, CmdError> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog().file().set_title("Add a subtitle file").add_filter("Subtitles", SUBTITLE_EXTENSIONS).pick_file(
+            move |picked| {
+                let _ = tx.send(picked);
+            },
+        );
+        let Some(path) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else { return Ok(false) };
+        state.mpv.request(json!(["sub-add", path.to_string_lossy(), "select"])).await.map_err(CmdError::Player)?;
+        Ok(true)
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, state, SUBTITLE_EXTENSIONS);
+        Err(CmdError::Unsupported("Adding a subtitle file isn't available on this device yet.".into()))
+    }
+}
+
+/// Open the user's own mpv folder (made, with a starter mpv.conf, if it isn't there yet).
+#[tauri::command]
+pub fn mpv_config_folder(app: AppHandle) -> Result<(), CmdError> {
+    let dir =
+        super::ensure_user_config_dir(&app).ok_or_else(|| CmdError::Save("couldn't make the mpv folder".into()))?;
+    tauri_plugin_opener::open_path(dir, None::<&str>).map_err(|e| CmdError::Other(e.to_string()))
+}
+
+/// Show the last screenshot in the system's file manager.
+#[tauri::command]
+pub fn mpv_screenshot_reveal(state: State<'_, AppState>) -> Result<(), CmdError> {
+    let path = state.mpv.last_shot.locked().clone().ok_or_else(|| CmdError::NotFound("no screenshot yet".into()))?;
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| CmdError::Other(e.to_string()))
 }
 
 /// The current frame as a JPEG data URL — mpv's picture lives in a native

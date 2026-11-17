@@ -2,19 +2,24 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent,
 import { NameList } from "../components/title/NameList";
 import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
-import { TitleDetails } from "../components/title/TitleDetails";
-import { Info } from "../components/icons";
-import { episodeState, progressMap, renamePlaylist, seasonsOf, upNext, usePlaylists, watchedFraction } from "../lib/library";
+import { AgeRatingBadge, TitleDetails } from "../components/title/TitleDetails";
+import { Hidden, Info, Star, Trailer } from "../components/icons";
+import { episodeState, hideTitle, progressMap, renamePlaylist, seasonsOf, unhideTitle, upNext, useIsHidden, usePlaylists, watchedFraction } from "../lib/library";
+import { shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
+import { TvEpisodeOrders } from "./TvEpisodeOrders";
+import { TvExtrasPanel } from "./TvExtras";
+import { personIds } from "../lib/catalog";
 import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
 import { TitleHeading } from "../components/title/TitleHeading";
 import { ProgressBar } from "../components/title/Card";
 import { Still } from "../components/StillPlaceholder";
 import { animeEntries, entryMeta, pickTitle, stillFor } from "../lib/anime";
 import { StreamList } from "../components/StreamList";
-import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, seasonLabel, shortRuntime } from "../lib/format";
+import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, shortRuntime } from "../lib/format";
 import { usePlayTarget, useTitlePlayback } from "../lib/playback";
 import { useLibrary, useMeta, useProgress, useStreams, useToggleLibrary } from "../lib/net";
 import { usePrefs } from "../lib/settings";
+import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 import { useArtGate } from "../lib/ui";
 import type { ContentType, Meta, MetaPreview, RankedStream, Video } from "../lib/types";
 import { useBack, useFocusTrap, usePageActive } from "./shell";
@@ -24,12 +29,17 @@ import { TvKeyboard } from "./TvKeyboard";
 import { Facts, TvBackdrop, titleFacts } from "./TvStage";
 import { Skeleton } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
+import { TvDescription, TvOverviewMore, TvRatingsPanel, TvTextPanel, useHasEpisodeRatings } from "./TvMore";
 
 type Panel =
   | { kind: "episodes" }
   | { kind: "details" }
+  | { kind: "extras" }
   | { kind: "sources"; videoId: string; subtitle: string }
   | { kind: "playlists" }
+  /** A description in full (TvMore.tsx). */
+  | { kind: "text"; heading: string; sub?: string; text: string }
+  | { kind: "ratings" }
   /** Name a playlist: rename `playlistId`, or create one holding the title. */
   | { kind: "name"; playlistId?: string };
 
@@ -46,7 +56,10 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
     const record = loaded && entry !== undefined && animeSeparateEntries ? animeEntries.entry(id, entry) : undefined;
     return record && loaded ? entryMeta(loaded, record, pickTitle(record.title, animeTitles) || loaded.name) : loaded;
   }, [loaded, entry, animeSeparateEntries, animeTitles, id]);
-  const shown: MetaPreview | undefined = meta ?? preview;
+  // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
+  const verdict = useTitleVerdict(loaded ?? preview, !!loaded || isError);
+  const shown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
+  const hidden = useIsHidden(id);
   const active = usePageActive();
   const [panels, setPanels] = useState<Panel[]>([]);
   const push = (p: Panel) => setPanels((ps) => [...ps, p]);
@@ -54,7 +67,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   useBack(active && panels.length > 0, pop);
 
   // The trailer behind the art, while nothing's open over the page.
-  const trailer = useBackdropTrailer(id, { active: active && panels.length === 0 });
+  const trailer = useBackdropTrailer(id, { active: active && panels.length === 0 && verdict === "show" });
   // The logo or name waits for the backdrop (#173).
   const gate = useArtGate(shown?.background);
 
@@ -67,6 +80,13 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   const play = (videoId: string, subtitle: string, opts: { stream?: RankedStream; resumable?: boolean } = {}) =>
     playback({ type, metaId: id, videoId, subtitle, resumable: opts.resumable }, opts.stream);
 
+  if (verdict === "hide") {
+    return (
+      <div className="tv-note">
+        <EmptyState variant="tv">{LIMIT_NOTICE}</EmptyState>
+      </div>
+    );
+  }
   if (!shown) {
     return isError ? (
       <div className="tv-note">
@@ -84,9 +104,17 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
       </TvBackdrop>
       <div className="tv-detail-body" {...gate}>
         <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" pending={!meta && !isError} />
-        <Facts facts={titleFacts(shown, [formatRuntime(meta?.runtime)])} />
-        {shown.description && <p className="tv-detail-description">{shown.description}</p>}
+        <Facts
+          facts={[
+            ...titleFacts(shown, [formatRuntime(meta?.runtime)]),
+            ...(shown.certification ? [<AgeRatingBadge key="rated" certification={shown.certification} />] : []),
+          ]}
+        />
+        {shown.description && (
+          <TvDescription text={shown.description} onMore={() => push({ kind: "text", heading: shown.name, text: shown.description ?? "" })} />
+        )}
         <Credits meta={meta} />
+        {hidden && <p className="tv-detail-hidden">Hidden from Home, Movies, Series and recommendations.</p>}
         {/* A series' Play depends on watch history: wait for it, or focus would land on the wrong button. */}
         {type === "movie" || meta ? (
           <Actions item={shown} meta={meta} play={play} push={push} />
@@ -104,9 +132,16 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
             meta={meta}
             onPlay={(v, resumable) => play(v.id, episodeLine(v), { resumable })}
             onSources={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })}
+            onMore={(v) => push({ kind: "text", heading: v.title || `Episode ${v.episode}`, sub: `${meta.name} · ${episodeCode(v.season, v.episode)}`, text: v.overview ?? "" })}
           />
+        ) : p.kind === "text" ? (
+          <TvTextPanel key={i} heading={p.heading} sub={p.sub} text={p.text} />
+        ) : p.kind === "ratings" && meta ? (
+          <TvRatingsPanel key={i} videos={meta.videos} onOpen={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })} />
         ) : p.kind === "details" && meta ? (
           <DetailsPanel key={i} meta={meta} />
+        ) : p.kind === "extras" && meta ? (
+          <TvExtrasPanel key={i} meta={meta} />
         ) : p.kind === "playlists" ? (
           <PlaylistsPanel
             key={i}
@@ -130,6 +165,7 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   );
 }
 
+const NO_VIDEOS: Video[] = [];
 const episodeLine = (v: Video) => `${episodeCode(v.season, v.episode)} · ${v.title}`;
 
 function Actions({
@@ -148,12 +184,30 @@ function Actions({
   const toggle = useToggleLibrary();
   const inLibrary = library?.some((l) => l.id === item.id);
   const inPlaylist = usePlaylistChecklist(item).inAny;
+  const hidden = useIsHidden(item.id);
   const subtitle = item.type === "series" && next?.video ? episodeLine(next.video) : item.name;
   // Warm the sources for Play while the page is read.
   useStreams(item.type, videoId);
+  const ratings = useHasEpisodeRatings(meta?.videos ?? NO_VIDEOS);
 
   return (
     <div className="tv-actions" data-nav-memory>
+      {/* The lesser actions, side by side above Play (as Netflix puts its rating and list buttons): round icons,
+          the focused one opening into a pill with its name. */}
+      <div className="tv-quick-actions" role="group" aria-label="More for this title">
+        {item.type === "series" && ratings && <QuickAction icon={<Star size={26} />} label="Episode Ratings" onClick={() => push({ kind: "ratings" })} />}
+        <QuickAction
+          icon={inPlaylist ? <Check size={26} /> : <PlaylistIcon size={26} />}
+          label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
+          onClick={() => push({ kind: "playlists" })}
+        />
+        <QuickAction
+          icon={<Hidden size={26} />}
+          label={hidden ? "Unhide" : "Hide This Title"}
+          pressed={hidden}
+          onClick={() => (hidden ? unhideTitle(item.id) : hideTitle(item))}
+        />
+      </div>
       <ActionPill
         icon={resumeAt ? <Reset size={26} /> : <Play size={26} />}
         label={label}
@@ -169,15 +223,11 @@ function Actions({
         onClick={() => videoId && push({ kind: "sources", videoId, subtitle })}
       />
       {meta && <ActionPill icon={<Info size={26} />} label="Details" onClick={() => push({ kind: "details" })} />}
+      {meta?.extras?.length ? <ActionPill icon={<Trailer size={26} />} label="Extras" onClick={() => push({ kind: "extras" })} /> : null}
       <ActionPill
         icon={inLibrary ? <Check size={26} /> : <Plus size={26} />}
         label={inLibrary ? "In Library" : "Add to Library"}
         onClick={() => toggle.mutate(item)}
-      />
-      <ActionPill
-        icon={<PlaylistIcon size={26} />}
-        label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
-        onClick={() => push({ kind: "playlists" })}
       />
     </div>
   );
@@ -215,14 +265,14 @@ export function PlaylistsPanel({
               data-nav-default={i === 0 || undefined}
               onClick={() => toggle(row)}
             >
-              <span className="tv-playlist-check">{row.has && <Check size={22} />}</span>
+              <span className="tv-playlist-check">{row.has && <Check size={16} />}</span>
               <span className="tv-playlist-name">{row.name}</span>
               <span className="tv-playlist-count tabular">
                 {row.count} {row.count === 1 ? "title" : "titles"}
               </span>
             </button>
             <button className="tv-playlist-rename" aria-label={`Rename ${row.name}`} onClick={() => onRename(row.id)}>
-              <Edit size={30} />
+              <Edit size={22} />
             </button>
           </div>
         ))}
@@ -233,7 +283,7 @@ export function PlaylistsPanel({
             onClick={onNew}
           >
             <span className="tv-playlist-check">
-              <Plus size={22} />
+              <Plus size={16} />
             </span>
             <span className="tv-playlist-name">New Playlist</span>
           </button>
@@ -313,6 +363,18 @@ function ActionPill({
   );
 }
 
+/** One of the round actions above Play: its name shows beside the icon while it has focus. */
+function QuickAction({ icon, label, onClick, pressed }: { icon: ReactNode; label: string; onClick: () => void; pressed?: boolean }) {
+  return (
+    <button className="tv-quick" onClick={onClick} aria-label={label} aria-pressed={pressed}>
+      {icon}
+      <span className="tv-quick-label" aria-hidden>
+        <span>{label}</span>
+      </span>
+    </button>
+  );
+}
+
 function Credits({ meta }: { meta?: Meta }) {
   if (!meta?.cast?.length && !meta?.director?.length) return null;
   return (
@@ -320,13 +382,13 @@ function Credits({ meta }: { meta?: Meta }) {
       {meta.cast?.length ? (
         <div>
           <dt>Starring</dt>
-          <dd><NameList names={meta.cast.slice(0, 3)} /></dd>
+          <dd><NameList names={meta.cast.slice(0, 3)} ids={personIds(meta)} /></dd>
         </div>
       ) : null}
       {meta.director?.length ? (
         <div>
           <dt>{meta.type === "series" ? "Created by" : "Director"}</dt>
-          <dd><NameList names={meta.director.slice(0, 2)} /></dd>
+          <dd><NameList names={meta.director.slice(0, 2)} ids={personIds(meta)} /></dd>
         </div>
       ) : null}
     </dl>
@@ -341,20 +403,35 @@ function EpisodesPanel({
   meta,
   onPlay,
   onSources,
+  onMore,
 }: {
   meta: Meta;
   onPlay: (v: Video, resumable: boolean) => void;
   onSources: (v: Video) => void;
+  /** The episode's synopsis in full, when the row cuts it off. */
+  onMore: (v: Video) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const seasonList = useRef<HTMLDivElement>(null);
   useFocusTrap(ref);
   const { data: progress } = useProgress(meta.id);
+  const orders = useEpisodeOrders(meta);
+  const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
-  const next = useMemo(() => upNext(meta, progress ?? []), [meta, progress]);
-  const [season, setSeason] = useState(next.video?.season ?? seasons[0]);
-  const episodes = meta.videos.filter((v) => v.season === season);
+  // The seasons, or the chosen episode order's groups (lib/library/episodeOrder.ts).
+  const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
+  const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
+  const [season, setSeason] = useState((next.video && shelfGroupOf(next.video, view)) ?? seasons[0]);
+  // Another order lists other groups: open on the one up next is in.
+  const shownOrder = useRef(view?.id);
+  useEffect(() => {
+    if (shownOrder.current === view?.id) return;
+    shownOrder.current = view?.id;
+    setSeason((next.video && shelfGroupOf(next.video, view)) ?? groups[0]?.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+  const episodes = groups.find((g) => g.id === season)?.videos ?? [];
   const map = useMemo(() => progressMap(progress), [progress]);
   const entryId = (episodes.find((v) => v.id === next.video?.id) ?? episodes.find(isReleased))?.id;
   // A long season draws only the episodes on and near the screen (#436).
@@ -379,18 +456,19 @@ function EpisodesPanel({
     <div className="tv-panel tv-episodes" ref={ref} data-nav-scope role="dialog" aria-label="Episodes">
       <aside className="tv-episodes-side">
         <TitleHeading name={meta.name} logo={meta.logo} logos={meta.logos} look="tv-panel" />
+        <TvEpisodeOrders orders={orders} />
         <div className="tv-seasons" ref={seasonList} data-nav-scroll="center" data-nav-memory data-nav-prefer-entry>
-          {seasons.map((s) => (
+          {groups.map((g) => (
             <button
-              key={s}
+              key={g.id}
               className="tv-season"
-              aria-current={s === season || undefined}
-              data-nav-entry={s === season || undefined}
-              onFocus={() => setSeason(s)}
-              onClick={() => setSeason(s)}
+              aria-current={g.id === season || undefined}
+              data-nav-entry={g.id === season || undefined}
+              onFocus={() => setSeason(g.id)}
+              onClick={() => setSeason(g.id)}
             >
-              <span>{seasonLabel(s)}</span>
-              <span className="tv-season-count">{meta.videos.filter((v) => v.season === s).length} episodes</span>
+              <span>{g.label}</span>
+              <span className="tv-season-count">{g.videos.length} episodes</span>
             </button>
           ))}
         </div>
@@ -428,15 +506,18 @@ function EpisodesPanel({
                 </span>
                 <span className="tv-episode-text">
                   <span className="tv-episode-kicker">
-                    {v.id === next.video?.id && next.kind !== "start" ? `Up Next · Episode ${v.episode}` : `Episode ${v.episode}`}
+                    {v.id === next.video?.id && next.kind !== "start"
+                      ? `Up Next · Episode ${view?.number.get(v.id) ?? v.episode}`
+                      : `Episode ${view?.number.get(v.id) ?? v.episode}`}
                   </span>
                   <span className="tv-episode-title">{v.title}</span>
                   {v.overview && <span className="tv-episode-overview">{v.overview}</span>}
                   <span className="tv-episode-status">{status}</span>
                 </span>
               </button>
+              <TvOverviewMore episode={v.episode} text={v.overview} onMore={() => onMore(v)} />
               {openable && (
-                <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${v.episode}`}>
+                <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${view?.number.get(v.id) ?? v.episode}`}>
                   <Sources size={26} />
                 </button>
               )}

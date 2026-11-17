@@ -5,6 +5,20 @@
   z-index: var(--z-sheet);
   background: rgb(0 0 0 / 0.45);
 }
+/* A phone's sheet rises over the page dimmed, not blurred: a blur of the whole screen behind a sheet still moving
+   is taken again every frame, which is what made it lag. The profile sheet's goes nearly black, as Netflix's does,
+   over the pages stepping back under it (Sheet.tsx). */
+.sheet-scrim[data-edge="bottom"] {
+  background: rgb(0 0 0 / 0.6);
+}
+.sheet-scrim[data-edge="bottom"][data-full] {
+  background: rgb(0 0 0 / 0.82);
+}
+/* The profile sheet's place (App.tsx): in the top bar's layer, under the notices. */
+.sheet-host {
+  position: relative;
+  z-index: var(--z-nav);
+}
 .sheet {
   position: fixed;
   top: 8px;
@@ -76,7 +90,9 @@
   width: auto;
   max-height: calc(100dvh - var(--safe-top) - 2.5rem);
   border-radius: var(--r-panel) var(--r-panel) 0 0;
-  padding-bottom: var(--safe-bottom);
+  /* The screen's own bottom inset as it is, not the one held for the pages while a sheet covers them
+     (NativeTabs.tsx): that one still counts iOS's tab bar, hidden under the sheet, and cut its list short. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   touch-action: auto;
   /* Solid, like the phone's own sheets: the page behind is dimmed by the scrim, not seen through the sheet. */
   background: var(--surface-1);
@@ -109,7 +125,13 @@
 /* On an iPhone the sheet is laid out at its large detent, nearly the screen's
    height, and Sheet.tsx moves it down to rest at half (lib/ui/detents.ts). */
 .sheet[data-detent] {
-  height: calc(100dvh - var(--safe-top) - 0.625rem);
+  height: calc(100dvh - var(--safe-top) - var(--sheet-gap));
+  max-height: none;
+}
+/* A sheet that is a place of its own (the profile sheet, with Settings inside it): the full height from the
+   start, just under the status bar, as Netflix's account sheet is, whatever its view holds. */
+.sheet[data-edge="bottom"][data-full] {
+  height: calc(100dvh - var(--safe-top) - var(--sheet-gap));
   max-height: none;
 }
 .sheet[data-detent] .sheet-grabber {

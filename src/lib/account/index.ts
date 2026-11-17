@@ -45,4 +45,6 @@ export { databaseHost, devDatabase, removeDevDatabase, saveDevDatabase } from ".
 export * from "./spacePush";
 export { linkHasKey } from "./keyedLink";
 export { formatTvCode, isTvCode, TV_CODE_LENGTH, type TvSignInRequest } from "./tvSignIn";
+export { hasTvCode, offerTvCode, takeTvCode, useLinkedTvCode } from "./tvSignInLink";
+export { groupSecret, isTwoStepCode, tidyCode, tidyEmail, TWO_STEP_CODE_LENGTH, type AccountSecurity } from "./twoStep";
 export { dismissNotice, exposedNames, noticeDue, onFirstPlainSync } from "./secretsNotice";

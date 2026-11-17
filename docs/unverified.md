@@ -1225,6 +1225,107 @@ same network:
 - Subtitles: add-on subtitles go to the element as WebVTT tracks; whether the receiver shows them is
   untested. Subtitles inside the file aren't sent.
 
+## The player's wishlist batch (volume to 200%, passthrough, HDR output, audio delay, hold to speed up, screenshots, Picture in Picture, media keys, other players, your own mpv settings, shuffle, Chromecast)
+
+Checked here (Windows): `cargo check`, `clippy -D warnings` and the tests of `polar-player` (screenshot names,
+other players' command lines, Tune presets), `polar-cast` (the CastMessage format, the JSON, and a whole cast
+against a fake TV over an in-memory pipe) and `src-tauri`; `tsc`, `vite build` and the unit and DOM tests
+(volume curve, track memory with the audio delay, the format line, the mini window with fake window calls, hold to
+speed up, shuffle, the next episode's warm-up, `CastMedia`). Nothing was run in the app's window. Needs the app:
+
+- **Volume past 100%** (Settings → Subtitles & Audio → Volume goes up to 200%), with mpv: the slider goes to 200%,
+  louder than 100% and about twice as loud at the top; the built-in player stops at 100%; the TV HUD's pill fills at
+  the limit.
+- **Passthrough**, with an AV receiver on HDMI or optical: Dolby and DTS tracks show as Dolby/DTS on the receiver;
+  AAC still plays; dialogue boost and volume don't apply to passed-through tracks.
+- **HDR video** (Settings → Advanced), on Windows with HDR on: "HDR on this screen" plays HDR10 in HDR; "Convert to
+  SDR" looks right with Windows' HDR off. mpv older than 0.40 refuses "auto": it's sent "no" then.
+- **Audio delay**: Subtitles & Audio → the Audio column's cog; ±0.05 s steps move the sound against the picture and
+  come back for the same source next time.
+- **Hold to speed up**: a mouse held on the picture and a finger on a touch screen play at 2x until let go; letting
+  go doesn't pause; a drag or a pinch never speeds up; nothing in a watch party.
+- **Show the controls when paused** off: pausing leaves the picture clear; the mouse or a key brings the controls.
+- **Screenshots** (Ctrl+S / ⌘S, More → Save Screenshot): a JPEG with the subtitles in Pictures/Polarity; Show Last
+  Screenshot opens Explorer or Finder on it.
+- **Picture in Picture** (More, or I): the window goes to the bottom-right corner of its screen at about a quarter of
+  its width, on top; it can be moved and resized; I, Esc, a double click, fullscreen or Back put it back as it was,
+  maximised or fullscreen included. Check two screens with different scaling, and macOS's own fullscreen.
+- **Media keys and now playing**: Windows: the keyboard's play/pause and next keys while another app is in front; the
+  volume flyout's media panel shows the title, show, poster and a timeline that seeks. macOS (now_playing.m was never
+  compiled here): Control Center's Now Playing and the keyboard's media keys. iOS: the Lock Screen and Control Center.
+  Closing the player clears it.
+- **Play in another player** (More → Play in VLC/mpv/MPC-HC/MPC-BE/PotPlayer/IINA): only installed ones are listed;
+  each starts at the same time with the title; a source needing request headers gets all of them in mpv and IINA,
+  only User-Agent and Referer in VLC, none in MPC and PotPlayer.
+- **Your own mpv settings** (Settings → Advanced, desktop): Open Folder makes the folder with a starter mpv.conf; a
+  shader named there applies from the next video; turning it off goes back to Polarity's own settings.
+- **Shuffle**: on a show's page and in the Episodes panel; each released episode once before any again; Continue
+  Watching, watched ticks and Trakt/Simkl don't change for shuffled episodes.
+- **Next episode warm-up**: as Up Next shows, the next episode's first two sources are asked once (the serving
+  host's log shows the request); with a source that's slow to open the first time, the next episode starts sooner.
+- **Chromecast**, with a Chromecast or a Google TV on the same network (no device was available here): the TV button
+  appears with the device's name; an MP4 or HLS link from the web plays there from the same moment, with the title
+  and backdrop; play/pause, seeking, the skips and volume act on the TV and the time follows it; Stop Casting comes
+  back at the TV's position; an MKV the TV can't play says so and plays here again. Finding receivers listens on
+  mDNS (UDP 5353): Windows may ask once to allow Polarity on private networks. No button for torrents, downloads, files
+  or sources that need request headers (phase 2 of #443), in a watch party, or while AirPlay casts.
+
+## Touch gestures in the player (swipe for volume and brightness, touch lock)
+
+Checked here (Windows): `tsc`, the unit tests of the swipe maths and the brightness bridge (`tests/swipeLevels.test.ts`),
+the DOM tests of the lock and the swipe handlers (`tests/dom/touchLock.test.tsx`), and `cargo check`/`clippy` of
+`src-tauri` on Windows, where the brightness commands do nothing. `ios/brightness.m` and the Kotlin in
+`MainActivity.kt` were never compiled, and none of this ran on a phone or tablet. Needs a device:
+
+- **Swipes**: in the player, one finger up or down the right half sets the volume (a pill at the right edge), the left
+  half the screen's brightness (a pill with a sun at the left edge); the pill stays while the finger is down and goes
+  a moment after. Sideways drags, presses within about 24 px of the sides or 40 px of the top and bottom (iOS's Back
+  swipe, Android's back gesture, the status bar, the home bar) and the scrubber or the bars do nothing new. A pinch
+  still fills or fits; double-tap on a side still skips; press and hold still speeds up, and a drag before it starts
+  cancels it; letting go after a swipe doesn't pause or toggle the controls.
+- **Brightness**: iOS changes the screen's brightness and puts back the old one when the player closes, when the app
+  goes to the Home Screen or the app switcher, and while Control Centre is pulled down; back in the app the player's
+  level returns. Android changes only the app's window (no permission asked) and the system's level is back when the
+  player closes or the app is in the background. Where the bridge is missing the left half does nothing.
+- **Volume** on phones (where the system sets the volume and the player has no slider): the swipe lowers the player's
+  own level under the system's; it starts at full each time the player opens.
+- **Touch lock**: the lock button in the top bar hides the controls; taps do nothing but show an Unlock chip for
+  3 s, and pressing it unlocks. Android's Back button and gesture, and iOS's edge swipe, show the chip instead of
+  leaving. Playback, Up Next's autoplay and the sleep timer carry on while locked.
+- **Settings → Controls & TV → Touch → Swipe gestures in the player**: shows on phones and tablets only (also in the
+  settings search); off, swipes do nothing and double-tap still skips.
+
+## Subtitles and add-ons batch (every add-on subtitle, track kinds, second subtitle, matching a line, a subtitle file, HDR subtitle brightness, add-ons off and in order, sources as they come)
+
+Checked here (Windows): `clippy -D warnings`, the tests of `polar-player` (the `sub-step` and `secondary-sid`
+allowlist, the HDR subtitle preset) and `src-tauri` (the field names, the partial ranking of sources and who's still
+out); `tsc`, `vite build` and the unit and DOM tests (track kinds, which subtitle mpv shows, every add-on file listed,
+the forced, SDH and audio-description choices, the second subtitle from the file and from an add-on). Nothing was run
+in the app's window. Needs the app, with mpv:
+
+- **Every add-on subtitle**: the Subtitles list has one row per file, its add-on under it, numbered when one add-on
+  offers several in a language. Picking the second English one plays it; playing the source again brings it back.
+- **Kinds of tracks**: a file with a forced (signs) English track and a full one starts with the full one; with
+  Settings → Subtitles & Audio → Prefer subtitles for the deaf and hard of hearing, the SDH one. "Only for foreign
+  audio" with English audio shows the signs track if there is one, else nothing. A file whose first English audio
+  is an audio description starts with the film's own. The labels say SDH, Forced or Audio description when the file
+  flags a track and its title doesn't.
+- **Second subtitle**: turn it on (the subtitle cog, or Settings); a Second Subtitles column appears, its pick shows at
+  the top, the first stays at the bottom; an add-on's file is added without replacing the first. The next episode
+  starts with the same second language. Turning it off removes it. Not offered with the built-in player.
+- **Match a line**: with subtitles late, press Next Line as a line is spoken: it shows now and the Delay above
+  changes to match; Previous Line the other way. The delay is remembered for the source like a typed one.
+- **A subtitle file** (desktop): Subtitles → Add from a File… opens the system's dialog for .srt, .ass, .vtt and the
+  rest; the file plays and is listed as "From a file". A video opened from disk with a .srt beside it now lists that
+  subtitle too (it used to load but not be listed).
+- **HDR subtitles** (Settings → Advanced, Windows and macOS, HDR video shown in HDR): Standard and Dim make white
+  subtitles less glaring than Full. Hidden with Convert to SDR.
+- **Add-ons off and in order** (Settings → Add-ons): an add-on switched off stays installed, says Off, and gives no
+  sources, subtitles, Home rows or search results until it's on again; reconfiguring it (installing its new link) keeps it off. Move Up and Move
+  Down change the order, which stays after a restart and isn't synced (each device has its own).
+- **Sources as they come**: with one slow add-on, the source list shows the fast ones' sources first with "Still
+  asking …", then fills in. Auto-pick and Play still wait for every add-on (or its 8 seconds).
+
 ## Downloads page (#15)
 
 Checked here: grouping, seasons, sorting, filters, search, totals and the saved view (`tests/downloadsView.test.ts`);
@@ -1282,6 +1383,59 @@ Account → Sign in a TV). Not checked: a real Supabase project, Deno, or a real
    `callerAddress` in `supabase/functions/tv-sign-in/handler.ts` has to read the entry the platform adds instead.
 9. Supabase's own projects with the new publishable keys: check `generateLink` + `verifyOtp({ token_hash, type:
    "magiclink" })` still signs in (the function and the app use supabase-js 2).
+
+### The QR code next to the code
+
+Checked here: the link (`polarity://tv-sign-in/<code>`, `tests/deepLink.test.ts`), the QR code drawn for the
+code shown and redrawn for a new one, and a linked code landing on "Sign in on <device>?" without an answer
+(`tests/dom/tvSignInQr.test.tsx`). Not checked: a camera, an Android build with the new intent filter, a real TV.
+
+1. Android TV (or a computer) on Sign in with your phone: a QR code shows under the code, black on white in the
+   light and dark themes. From the couch, an Android phone's camera reads it.
+2. The phone has Polarity, signed in: the camera offers to open Polarity, which opens on Settings → Account →
+   Sign in a TV asking "Sign in on Android TV?". Nothing is approved until Approve.
+3. The phone is a guest: Polarity opens its sign-in screen; after signing in and picking a profile it lands on
+   the same question. Cancelling the sign-in drops the code.
+4. Wait out the code (or Deny), Get a new code: the QR code changes with it, and scanning the new one asks
+   about the new code.
+5. TalkBack on the TV: the QR code reads as "QR code for the code ABCD-EFGH".
+6. Not wired: iPhone (the iOS app registers no `polarity://` link yet), a dev build's `polarity-dev://`
+   links on Android (the intent filter has the released scheme only), and the Apple TV app's own code screen.
+## Changing the email and two-step sign-in
+
+Checked here: the screens and their states against the stand-in account (`tests/dom/accountSecurity.test.tsx`:
+turning on with a wrong and a right code, a backup, turning off, the sign-in's second step with a wrong code and
+another authenticator, back to sign in, a device signed in by approval, the email change with a taken address and
+both codes), the QR image and error mapping (`tests/twoStep.test.ts`). Not checked: anything against a real
+Supabase project. With the dashboard set up as `docs/supabase-storage.md` §10 says:
+
+1. **Email change, secure change on:** Settings → Account → Email address, a new address. Both addresses get the
+   "Change Email Address" email, each with its own code. The new address's code first: no error, the row still
+   shows the old address ("Now enter the code sent to …"); then the current one's: the address changes. Also try
+   the current address's code first (the app asks for the new one first: note what Supabase answers).
+2. **Secure change off:** one code, to the new address, changes it at once.
+3. An address another account has: what Supabase answers (the app expects `email_exists`, "already used by another
+   account"; Supabase may instead answer as if it worked). Many changes in a row: "Too many attempts".
+4. After the change: is the session still at `aal2` for an account with two-step on (Authentication → Users → the
+   user's sessions, or `getAuthenticatorAssuranceLevel`)? If it drops to `aal1`, the next launch asks for an
+   authenticator code.
+5. A change confirmed on another device: coming back to the app (the window to the front) shows the new address.
+6. **Turning on:** the QR code shows in Settings on Windows, macOS, Linux, Android and iOS (an SVG `data:` image;
+   the web view's `img-src` allows `data:`), an authenticator app scans it, the key typed by hand works too, a
+   wrong code is refused, the right one turns it on. Other signed-in devices: signed out (supabase-js says
+   verifying a factor ends the other sessions)? A TV signed in by approval too?
+7. **Signing in:** email code, then "Two-step sign-in". Nothing syncs and no profile shows before the authenticator
+   code. A wrong code, a code from an authenticator removed meanwhile, a code typed after waiting a few minutes.
+   Quit at the second step and start again: it asks for the code again (not signed in).
+8. **Two authenticators:** "Use another authenticator" lists both; either one's code signs in.
+9. **A TV signed in by approval** while two-step is on: no code asked, now or after restarting the TV. Then sign in
+   with the second step on a computer: does the TV stay signed in? (If Supabase ends sessions below `aal2` when a
+   code is verified, every TV signed in this way is signed out each time.)
+10. **Backup and removal on a TV's session:** "Add a Backup Authenticator" asks for a code first, then shows the QR
+    code; removing one, and "Turn Off", ask for a code and work. After turning off, the next email sign-in asks for
+    no authenticator code.
+11. Supabase's answers for a wrong code (`mfa_verification_failed`), MFA off in the dashboard
+    (`mfa_totp_enroll_not_enabled`) and too many tries: the app's messages for each.
 
 ## Notifications (#209)
 
@@ -1362,6 +1516,43 @@ because mpv's `panscan` wasn't on the list of properties the player may set
 5. Phone or tablet: the full-screen button cycles the same way; pinch out fills, pinch in fits.
    TV mode: the controller's crop binding cycles and says the mode.
 
+## Age ratings and the viewing limit
+
+Checked by tests only: the ratings table and discover's bound (`tests/ageRating.test.ts`), shelves and title
+pages under a limit (`tests/dom/viewingLimit.test.tsx`), and TMDB's ratings and certification filter against the
+fake TMDB in `crates/index/src/tmdb.rs`. Never run against TMDB itself or on a device. To check, with a TMDB key:
+
+1. A film and a series page show their rating as a small box in the heading line (desktop, phone, TV) and in
+   Details → Rated. With Titles and descriptions set to Deutsch (Deutschland), German ratings (0, 6, 12, 16, 18)
+   show where TMDB has them, US ones otherwise.
+2. Settings → Browsing → Family → Hide titles rated above: 12. Home's rows and hero, Movies, Shows, Search and the
+   "Because you watched" rows leave out PG-13, R, TV-14 and TV-MA titles; genre rows on Movies still fill a page.
+   TV mode shows the same.
+3. A link to an R-rated film, or one in the Library or Continue Watching, opens "Not shown at this profile's limit"
+   and doesn't play from Continue Watching.
+4. Also hide titles without a rating: titles from add-ons and Cinemeta (no TMDB key) leave too.
+5. The Anime section leaves out ecchi titles while a limit is set, whatever Mature content says.
+6. A second device on the same profile picks the limit up after a sync round.
+## Pause screen and rating card (player)
+
+`components/player/PauseScreen.tsx` and `RatingPrompt.tsx`; when each shows is tested (`tests/pauseScreen.test.ts`,
+`tests/ratingPrompt.test.ts`), the components in `tests/dom`. Not run in the app, over mpv, on a phone, a TV or against
+a linked Trakt or Simkl. To check:
+
+1. Pause a film with mpv, then with the built-in player, and leave it: the controls hide, about 3 s later the picture
+   dims and the logo (or name), the overview and up to six cast members show. An episode adds its code and title.
+2. Move the mouse, press a key or tap: it goes at once, and the input does what it would have (Space plays, a click
+   plays or pauses as set, a tap shows the controls). It never shows over YouTube's player, with a panel or menu open,
+   with Up Next, the sleep timer's prompt, a party note or the player's own notice up, or on a stepped frame.
+3. Settings → Playback → On-Screen Controls → "Show details while paused" off: it never shows. With reduced motion on,
+   it appears without the fade. Phone upright and on its side, TV mode: the text fits, the cast row hides when short.
+4. Link Trakt (or Simkl), let its ratings load, play an unrated film to the end: "Rate <title>" shows in Up Next's
+   corner; a score shows "Rated n of 10 on Trakt" and the title page's star shows it. Dismiss on another film: it
+   doesn't come back for that film on this device. Not after an episode with another one out, a shuffle, a local
+   file, a party link or as a party member who isn't host; a show's last episode out asks for the show.
+5. Settings → Services: "Ask for a rating after finishing" shows only with Trakt or Simkl linked; off, no card.
+6. TV mode: the card's scores are reachable with the remote (not checked how focus gets to them).
+
 ## Apple TV core (`crates/ffi`, #504)
 
 The core's Swift binding for the Apple TV app (docs/ARCHITECTURE.md, "Apple TV"). Checked on the Linux dev machine:
@@ -1399,6 +1590,45 @@ values of `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`) in the target
    watching; Sign Out of This Apple TV goes back to the sign-in screen and leaves the phone signed in.
 8. Not Now on the sign-in screen: Home with the standard rows, and no sign-in screen at the next start; Account →
    Sign In brings it back.
+
+## Hide watched, hide a title, bulk remove from Continue Watching
+
+Checked with `bun run typecheck` and `bun run test` (`tests/browseFilter.test.ts`: what a shelf shows, the
+hidden-title list and its cap; `tests/dom/continueEdit.test.tsx`: Edit, Select All, Remove (n), Done, Escape). Never
+looked at in the app, on a phone or on a TV. To check:
+1. Settings → Browsing → Home & Title Pages → Hide watched titles on: a film you finished leaves Home's shelves, the
+   hero, Movies and "Because you watched" rows; a show only once every released episode is watched. Both stay in
+   Continue Watching (when part-way), the Library and Search. A shelf left short fills from the catalog's next page.
+2. Right-click a card (long press on a phone, X on TV) → Hide This Title: it leaves Home, the hero, Movies/Series and
+   the TV rails; the toast's Undo brings it back (TV's toast has no Undo: its page has Unhide). Search finds it; its
+   page says it is hidden, with Unhide. Settings → Browsing lists it with Unhide. On a second device signed in to the
+   same profile the title is hidden after settings sync.
+3. Home → Continue Watching → Edit: Tab reaches each card as a checkbox (a screen reader reads its name and checked
+   state), Space picks it; Select All, Remove (n) takes them out and their history stays in Library → Watched;
+   Done or Escape leaves Edit. On a phone the row's buttons wrap under the heading without overlapping it.
+4. iOS: the native card menu shows Hide This Title with its eye symbol.
+## Episode ratings and "More" for cut-off synopses
+
+The Episode Ratings table on a series' page (and TV's Episode Ratings panel), and "More" under a synopsis the
+page cuts off (TV: the title's and an episode's; desktop and phone: an episode card's). Checked by unit tests
+(`tests/episodeRatings.test.ts`: the grid, the scale, the threshold, keys) and component tests
+(`tests/dom/episodeRatings.test.tsx`) only; never looked at in a window, on a phone or on a TV. To check, with a
+show whose episodes have ratings (a long one too, 20+ seasons):
+
+1. Below the episodes, Episode Ratings shows a season per row, a rating per cell, tinted lighter (dark mode) or
+   darker (light mode) for higher ratings, and each season's average at the end. Unrated episodes show "–", ones
+   not out yet "·". A show with fewer than 6 rated episodes, or fewer than half of those out, shows none.
+2. The table scrolls sideways (and down, for many seasons) inside its box; the season column, the average column
+   and the episode numbers stay put. On a phone the page itself doesn't scroll sideways.
+3. Tab reaches one cell; the arrows, Home and End move; Enter opens the episode's season with its sources listed.
+   A screen reader reads the season and episode headers with each cell.
+4. TV: Episode Ratings sits in the action column (series with enough ratings); the arrows move cell to cell and the
+   focused cell scrolls into view clear of the sticky headers; a cell opens Choose a Source; Back closes it.
+5. TV: "More" under the title's description appears only when it's cut off at four lines, and beside an episode
+   only when its synopsis is cut off (not while Settings → Browsing hides it); it opens the whole text, which the
+   arrows scroll, and Back closes it.
+6. Desktop and phone: "More" under an episode card's cut-off synopsis, in Row and List layouts, lines up with the
+   text and opens the whole synopsis in a sheet.
 
 ## Screens in headless Chromium (T-051)
 
@@ -1653,3 +1883,148 @@ values of `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`) in the target
   6. B hosts and leaves: the next member becomes host and everyone gets a note.
   7. TV mode: the menu (side menu → Watch Party) works with the remote; the player's Watch Party panel has the
      same parts.
+
+## Profile PINs and viewing limits
+
+`supabase/migrations/20261115000000_profile_pin_and_limit.sql` (the owner applies it), `lib/account/pin.ts`,
+`pinTries.ts`, `profileRules.ts`, `profileGuard.ts`, `unlock.ts`, `components/profileLock/*`. Tested in PGlite and with
+happy-dom; not run against the real project, in the app, on a phone or on a TV. To check:
+
+1. Before the migration, this version signs in and lists, adds, renames and deletes profiles as before; the edit
+   sheet says a PIN and a viewing limit aren't available yet. After it, an older app version still does all of that.
+   Adding a profile right after the migration: one row, not two (`withLockColumns` asks again without the columns
+   only when the first answer is a missing column).
+2. Set a PIN on profile A (Manage Profiles → A, or the phone's sheet → Manage → A). Another device of the account,
+   after listing the profiles: choosing A asks for the PIN, on "Who's watching?", from the profile menu and TV's
+   side menu, and at start when A is the only profile. Offline (network off, restart): still asked, and checked.
+3. Three wrong PINs: the prompt waits 30 s; the next wrong one 60 s; restarting the app keeps the wait.
+4. "Forgot PIN?": the account's email gets a sign-in code (the same email template as sign-in); with it the PIN is
+   removed. With CAPTCHA on (§8.1 of docs/supabase-storage.md) the check shows first.
+5. Give profile B a viewing limit of 9. In B: Settings → Browsing shows the limit read-only, "Set in the profile";
+   Manage Profiles, the phone sheet's Manage and Settings → Account ask for A's PIN; with two profiles with PINs, it
+   asks whose first. Without any PIN on an unrestricted profile, they ask for an emailed code, and B's edit sheet
+   says anyone can switch away from it, offering a PIN for the profile in use.
+6. A limit changed on one device reaches another device's open profile when that app comes back to the front
+   (at most once a minute) or next lists the profiles.
+7. TV mode and a phone: the prompt's keys move with the arrows (remote) and take the remote's number keys; Back
+   closes it without leaving the page under it; over the phone's profile sheet the prompt takes focus and taps.
+8. The 600,000 PBKDF2 rounds take a moment on a slow TV or phone (WebCrypto, in the web view): typing the fourth
+   digit to the answer should stay under about a second.
+## Library: search, filters and sorts in Saved and Watched
+
+Checked with unit tests (`tests/libraryView.test.ts`) and a DOM test of the search and Clear Filters
+(`tests/dom/libraryFilters.test.tsx`); never looked at in the app or on a TV. To check:
+
+1. Library → Saved with a few dozen titles: Genre and Year appear as titles are looked up, the count line says
+   "Still looking up …" meanwhile, and nothing disappears until its details are in. Reopen the page: the facts
+   are there at once (kept on the device for a week).
+2. Combine Show, Status, Genre and Year; the count follows; a combination with no titles names the filters that
+   hide everything, and Clear Filters brings them back. Each collection remembers its own choices after a restart.
+3. Status on a show: Watched only once its last aired episode was watched to the end.
+4. Phone width: the controls wrap under the search field without overflowing.
+5. TV: Library's Arrange rail (Show, Status, Sort) is reachable with the D-pad, each press steps the choice,
+   and the Saved and Watched rails follow.
+6. Search for "horror", "sci fi" and (with Anime on) "isekai": the genre rows' headings open Movies or Series
+   with that genre, and Anime → Browse with it.
+## Episode orders
+
+- Other episode orders from TMDB's episode groups (`crates/index/src/episode_order.rs`, `tmdb/orders.rs`,
+  `src/lib/library/episodeOrder.ts`). Tested against a fake TMDB (listing, reading one order, groups and episodes
+  put in order) and with made-up lists for the mapping onto the episode list (air dates first, IMDb's numbering,
+  repeats, specials, episodes left out); the front end's grouping, numbering, next and previous in tests/episodeOrder.test.ts.
+  Not run against TMDB itself or in the app. To check, with a TMDB key, on a show TMDB lists episode groups for:
+  1. Its page shows "Episode order" beside the season picker; a show with none, or no TMDB key, shows nothing new.
+  2. Pick an order: the picker lists its groups, the episodes are numbered by their place in each, and the aired
+     episodes it leaves out are under "Not in This Order" at the end. Watched marks and progress are the same as before.
+  3. Play an episode: the player's Episodes panel lists the order's groups; Up Next, autoplay and Previous follow
+     the order; Trakt/Simkl, downloads and notifications still name the aired season and episode.
+  4. Back on the page, Play/Resume goes by the order. Reopen the app: the choice stays (this device only).
+  5. Phone (the picker wraps under the seasons) and TV (the order list above the seasons, with the remote).
+## Cast pages and extras
+
+The TMDB mapping (person page, crew ids, extras, the number of lookups) is tested against the fake TMDB in
+`crates/index/src/tmdb.rs`, the page's pure parts in `tests/people.test.ts`; the screens are only type-checked
+and were not looked at. Not run against TMDB itself, nor in the app. To check with a TMDB key:
+1. A title's cast faces and the Starring / Director names open the person's page: photo, name, facts, the
+   biography's start with More, then Acting and Directing grids that open each title. Without a key the names
+   stay plain text.
+2. A title with featurettes or clips shows an Extras row under its page; each tile plays in the trailer player.
+   A title with none shows no row. Tiles show YouTube's still, or their name and kind.
+3. TV mode: the Extras pill on a title opens a row of tiles; Enter plays one over the panel and Back closes the
+   player, then the panel. The cast in Details and the credit names open the person's page; its rails move with
+   the remote.
+4. A popular actor's page (many titles) loads without TMDB answering 429 for long.
+## Downloads: next episodes and the download folder
+
+Unit tests (`tests/autoDownloads.test.ts`, `tests/batchDownloads.test.ts`) and the Rust tests in
+`downloads.rs` (a new folder takes new downloads, old records keep their paths, an unwritable folder is
+refused) ran on Windows. Never run in the app or on a device:
+
+- Keep the next episodes downloaded: set it to 2, play a downloaded episode past the watched threshold: the
+  next two released episodes start one at a time, Library → Downloads lists them ("Keeping … downloaded:
+  S1 E2, S1 E3") and marks their rows "Downloaded automatically". With Remove downloaded episodes once
+  watched on, the finished episode's file is gone about five seconds after the player closes (on Windows,
+  check mpv has let go of the file by then; if not, the record goes and the file stays).
+- Android on mobile data: the run shows "Waiting for Wi-Fi" and starts once on Wi-Fi. With under 2 GB free
+  it shows "Stopped: not enough free space".
+- Desktop: Change… opens the system's folder dialog; a picked folder shows in "Saved in", the next download
+  lands there, older ones still play and Show in Folder still finds them; Use Default goes back. A folder
+  that can't be written (a read-only drive) shows why under the row.
+- Android with an SD card: "Save new downloads to" offers Internal storage and SD card
+  (`/storage/<volume>/Android/data/<app>/files`, made by `getExternalFilesDirs` at start); the next download
+  goes to the card. With the card out, finished downloads on it stay listed (they fail to play until it's
+  back). Without a card the row isn't shown.
+- iOS: no folder row. The downloads folder (`Library/Application Support/<app>/downloads`) holds the list,
+  the files and their `.part` files, and is excluded from backups at every start (`ios/files.m`).
+## Export library and history
+
+The export's content and the import were checked by tests (`crates/library/src/export.rs`,
+`tests/polarityExport.test.ts`, `tests/dom/polarityExport.test.tsx`); `library_export` was only type-checked.
+Never run in the app: the save dialog, the file written where it points, the CSV opened in a spreadsheet
+(UTF-8 without a byte-order mark: some spreadsheets may want one for accented titles), and the import's
+file picker on a phone. Phones have no export: the share sheet takes only text and a link today.
+To check on a desktop: Settings → Account → Export library and history → Export… for each format, save,
+open both files; then in another profile Import a Polarity export with the JSON and compare Library,
+Watched and Playlists.
+## Requests batch: season menu, ratings dialog, progressive blur, hero colour, Shift to select, TV quick actions
+
+Checked by unit and component tests (`tests/episodeRatings.test.ts`, `tests/dom/episodeRatings.test.tsx`,
+`tests/dom/continueEdit.test.tsx`, the Rust test in `src-tauri/src/episode_ratings.rs`) and type checks only;
+never looked at in a window, on a phone or on a TV. To check:
+
+1. A series' season bar: one round "…" button (Season Options) in place of Download Season and Shuffle. Its menu
+   has Download Season (or "Season Downloaded", greyed), Shuffle Episodes and, for a rated show, Episode Ratings.
+   A download under way shows its progress strip beside the button.
+2. Episode Ratings opens over the page: the page goes softly out of focus, more toward the bottom, under a light
+   wash and grain; the chart sits on a dark card: a column per season, a row per episode, the averages last over
+   a bar of their colour, the legend (Absolute Cinema to Garbage) above. Up and down move through a season, left
+   and right between seasons. Escape, a click outside and the small Close shut it; a cell closes it and lists that
+   episode's sources. TV's Episode Ratings panel is turned the same way.
+3. The numbers are IMDb's (a well-known show's pilot matches its IMDb page), and shows that showed no table
+   before now do. Offline, or for a show IMDb rates none of, TMDB's numbers show as before.
+4. The navbar once scrolled, a shelf's paddles on hover and a series' fold blur with no hard line and no
+   banding; scrolling a long Home stays smooth (compare frame rate with the previous build).
+5. Home, desktop and phone: the page takes a dark shade of the art's colour, full at the top of the window and
+   fading evenly down, as Netflix's; a grey or blue-grey picture gives a dark cool neutral, not a hue from a few
+   tinted pixels. The card has a fine light edge and no shadow. On a phone the buttons are pills, the second a
+   see-through grey. Light mode: a pale tint instead.
+6. Continue Watching with a mouse: no Edit button; pointing at the row shows "Hold Shift to select". Holding
+   Shift eases the checkmarks in along the row and the bar's round buttons (select all, the bin, done) in one
+   after another, with nothing jumping; let go with nothing picked and they ease out. Pick one and they stay
+   until Done, Escape or Remove; the bin asks for a second click with its lid open. Typing a capital letter in a
+   field doesn't show them. A touch screen still has Edit.
+7. TV, a title's page: Episode Ratings (series), Add to Playlist and Hide This Title are round icons in a row
+   above Play, lined up on the actions' icons; Play still has focus on arrival; Up reaches the row, the focused
+   icon turns light and its name shows just right of the row. Moving the mouse across the row doesn't flicker.
+8. A PIN asked for one profile shows that profile's picture over the keypad instead of a lock.
+9. Episode Ratings' views (the switch above the legend, remembered on the device): Wrapped (each season's
+   episodes as coloured tiles), Timeline (every episode as a dot along the show with seasons as bands, or each
+   season's average; the Trendline switch draws a moving average; hovering a dot names it, clicking opens it) and
+   Episode List (season chips, then rows with rating, number, title, IMDb votes and air date). In light mode the
+   card is light and every label reads. On TV, a focused cell lifts with a tight white ring.
+10. The player in fullscreen and in TV mode: Back sits in the top left corner, as far in as the controls are
+   from the right edge.
+11. A title page on desktop: Play, Trailer and Library in view, then the dots. Pressing them opens the row in place:
+   Playlist, Choose source, Download (an icon now, like the others), the Trakt rating when linked and Hide This
+   Title come in one after another while the dots turn into a close; pressing again or Escape folds them. A
+   download under way stays in view beside Library with its ring. A phone keeps one row of round buttons.

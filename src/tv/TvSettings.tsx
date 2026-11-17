@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight } from "../components/icons";
 import { ANIME_SHELVES, setShelfVisible, useShelfVisible } from "../lib/anime";
 import { os, torrentsPlayHere } from "../lib/platform";
 import { choicesOf, numberLabel, shownNumber, storedNumber, tvNumberSteps, usePrefs, useSetting } from "../lib/settings";
+import { useLimitFromProfile, useViewingLimit } from "../lib/catalog";
+import { limitLabel, SET_IN_PROFILE } from "../components/profileLock/LimitFromProfile";
 import { useBack, usePageActive } from "./shell";
 import { playSound } from "./sounds";
 import { focusWhenReady } from "./spatial";
@@ -68,7 +70,7 @@ export function TvSettings({ page }: { page?: string }) {
                 onClick={() => go(c.id)}
               >
                 <span className="tv-settings-label">{c.title}</span>
-                <ChevronRight size={24} className="tv-settings-chevron" />
+                <ChevronRight size={18} className="tv-settings-chevron" />
               </button>
             ))}
           </>
@@ -89,8 +91,15 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     "cropMode",
     "resumePlayback",
     "seekStep",
+    "pauseShowsControls",
+    "pauseDetails",
+    "showPlayingFormat",
     "audioLanguage",
     "subtitleLanguage",
+    "preferSdh",
+    // A TV is where a receiver or soundbar sits.
+    "maxVolume",
+    ...(os === "ios" ? [] : ["passthrough"]),
   ],
   sources: [
     "autoPickSource",
@@ -103,7 +112,7 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     ...(torrentsPlayHere ? ["torrentUploadMbps", "torrentCacheGb", "torrentKeepSharing"] : []),
     ...(os === "android" ? ["torrentMobileData"] : []),
   ],
-  browsing: ["trailerAutoplay", "trailerSound", "showCardRatings", "cardRatingPosition", "matureContent", "showCalendar", "showContinueWatching"],
+  browsing: ["trailerAutoplay", "trailerSound", "showCardRatings", "cardRatingPosition", "viewingLimit", "viewingHideUnrated", "matureContent", "showCalendar", "showContinueWatching", "hideWatched"],
   tv: ["uiSounds", "uiSoundVolume", "padHints", "padStick", "padPlayerVolume", "controllerAlerts"],
 };
 
@@ -134,9 +143,25 @@ function CategoryRows({ id }: { id: CategoryId }) {
 /** A schema setting as a TV row: its TV label, and its choices or the number steps to move through. */
 function SettingRow({ id, first }: { id: string; first?: boolean }) {
   const { def, value, set } = useSetting(id);
+  const fromProfile = useLimitFromProfile();
+  const viewing = useViewingLimit();
   const control = def.control;
   if (value === undefined || !control) return null;
   const label = def.tv ?? def.title;
+  // A restricted profile's limit is its own (set in its edit sheet behind a PIN): shown, not changed here.
+  if (fromProfile && (id === "viewingLimit" || id === "viewingHideUnrated")) {
+    const shown = id === "viewingLimit" ? limitLabel(viewing.limit) : viewing.hideUnrated ? "On" : "Off";
+    return (
+      <button className="tv-settings-row" data-nav-default={first || undefined} aria-label={`${label}: ${shown}. ${SET_IN_PROFILE}`}>
+        <span className="tv-settings-label">{label}</span>
+        <span className="tv-settings-value">
+          <span>
+            {shown} · {SET_IN_PROFILE}
+          </span>
+        </span>
+      </button>
+    );
+  }
 
   switch (control.kind) {
     case "toggle":

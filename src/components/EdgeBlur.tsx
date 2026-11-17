@@ -1,15 +1,33 @@
+import type { CSSProperties } from "react";
+
+export type Edge = "top" | "right" | "bottom" | "left";
+
+/** The gradient angle that runs from the clear side toward `edge`. */
+const ANGLE: Record<Edge, number> = { top: 0, right: 90, bottom: 180, left: 270 };
+
 /**
- * The navbar's progressive blur, pointed any way: an ellipse hanging from the
- * edge set by the `--edge-at` CSS variable (default: the bottom edge), deepest
- * at its middle and clearing to nothing inward. See `.edge-blur` in cards.css.
+ * A progressive blur: what's beneath goes out of focus toward `edge`, with no hard line. The technique of
+ * motion-primitives' ProgressiveBlur (MIT): `layers` stacked backdrop blurs, each a little stronger than the
+ * last and masked to its own overlapping band, so any point is under about three small blurs instead of every
+ * layer at full radius. A tint (`::before`, `--edge-tint`) darkens toward the edge. `--edge-strength` scales
+ * every radius, `--edge-shown` fades the whole thing (see `.edge-blur` in cards.css): opacity on the element
+ * itself would cut the layers off from the page behind them.
  */
-export function EdgeBlur({ className }: { className?: string }) {
+export function EdgeBlur({ className, edge = "bottom", layers = 6, step = 3 }: { className?: string; edge?: Edge; layers?: number; step?: number }) {
+  const n = Math.max(2, layers);
   return (
-    <span className={className ? `edge-blur ${className}` : "edge-blur"} aria-hidden>
-      <i />
-      <i />
-      <i />
-      <i />
+    <span className={className ? `edge-blur ${className}` : "edge-blur"} data-edge={edge} aria-hidden>
+      {Array.from({ length: n }, (_, i) => (
+        <i key={i} style={layerStyle(edge, i, n, step)} />
+      ))}
     </span>
   );
+}
+
+/** Layer `i` of `n`: opaque over its two segments of the run toward the edge, fading over the ones either side. */
+export function layerStyle(edge: Edge, i: number, n: number, step: number): CSSProperties {
+  const seg = 100 / (n + 1);
+  const stop = (k: number, on: boolean) => `${on ? "#000" : "transparent"} ${+(Math.min(k, n + 1) * seg).toFixed(2)}%`;
+  const band = `linear-gradient(${ANGLE[edge]}deg, ${stop(i, false)}, ${stop(i + 1, true)}, ${stop(i + 2, true)}, ${stop(i + 3, false)})`;
+  return { "--band": band, "--edge-filter": `blur(calc(${(i + 1) * step}px * var(--edge-strength, 1)))` } as CSSProperties;
 }
