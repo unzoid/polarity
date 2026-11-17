@@ -24,6 +24,8 @@ import { useNavigation } from "../../../src/lib/router";
 import { runtimeSeconds } from "../../../src/lib/format";
 import { useFormFactor, useNearViewport } from "../../../src/lib/ui";
 import type { MetaPreview, Progress } from "../../../src/lib/types";
+import { PlayIcon } from "@heroicons/react/24/solid";
+import { usePlayLabel } from "../ui/playLabel";
 import { Art } from "../ui/Art";
 import { Button } from "../ui/Button";
 import { PosterCard, ResumeCard, StillCard } from "../ui/Cards";
@@ -122,12 +124,18 @@ function Feature({ items }: { items?: MetaPreview[] }) {
 function FeatureText({ item }: { item: MetaPreview }) {
   const { navigate } = useNavigation();
   const { data: meta } = useMeta(item.type, item.id);
+  const { videoId, label } = usePlayLabel(item, meta);
   const length = runtimeSeconds(meta?.runtime);
+  const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   const facts = [item.type === "series" ? "Series" : "Film", yearOf(item.releaseInfo), ...(item.genres ?? []).slice(0, 2)].filter(Boolean);
   return (
     <div className="feature-text on-art">
       <p className="t-mono feature-facts">{facts.join(" · ")}</p>
-      <h1 className="t-display">{item.name}</h1>
+      <h1 className="t-display" data-long={item.name.length > 36 || undefined}>
+        <button className="title-link" onClick={open}>
+          {item.name}
+        </button>
+      </h1>
       {length > 0 && (
         <div className="feature-run">
           <RunLine length={length} />
@@ -136,8 +144,14 @@ function FeatureText({ item }: { item: MetaPreview }) {
       )}
       {item.description && <p className="feature-description clamp-3">{item.description}</p>}
       <div className="feature-actions">
-        <Button kind="primary" size="large" onClick={() => navigate({ name: "detail", type: item.type, id: item.id, preview: item })}>
-          {item.type === "series" ? "See episodes" : "Watch"}
+        <Button
+          kind="primary"
+          size="large"
+          icon={PlayIcon}
+          disabled={!videoId}
+          onClick={() => videoId && navigate({ name: "player", type: item.type, metaId: item.id, videoId })}
+        >
+          {label}
         </Button>
         <SaveButton item={item} size="large" />
       </div>

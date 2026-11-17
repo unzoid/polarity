@@ -7,8 +7,9 @@ export function formatRuntimeLong(seconds: number): string {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-/** "32 min left", "1 h 4 min left". */
+/** "32 min left", "1 h 4 min left"; nothing when the length isn't known. */
 export function formatLeft(position: number, duration: number): string {
+  if (!(duration > 0)) return "";
   return `${formatRuntimeLong(Math.max(0, duration - position))} left`;
 }
 

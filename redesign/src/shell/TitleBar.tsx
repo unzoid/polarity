@@ -8,11 +8,11 @@ import { IconButton } from "../ui/Button";
  * to go back to, and on Windows and Linux the window's own buttons sit at its right. It has no fill: the page shows
  * through it.
  */
-export function TitleBar() {
+export function TitleBar({ scrolled }: { scrolled: boolean }) {
   const { stack, back } = useRouter();
   const canGoBack = stack.length > 1;
   return (
-    <header className="titlebar" data-tauri-drag-region>
+    <header className="titlebar" data-scrolled={scrolled} data-tauri-drag-region>
       {canGoBack && <IconButton icon={ArrowLeftIcon} label="Back" className="titlebar-back" onClick={back} />}
       {isDesktop && !isMac && (
         <div className="window-buttons">

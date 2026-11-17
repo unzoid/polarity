@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAccount } from "../../src/lib/account";
 import { useSettings } from "../../src/lib/net";
 import { getPrefs } from "../../src/lib/settings";
@@ -57,6 +57,27 @@ function startRoute(page: Settings["startPage"] | undefined): Route {
 function Shell() {
   const { stack, tab, back } = useRouter();
   const phone = useFormFactor().form === "phone";
+  const { data: settings } = useSettings();
+  const [scrolled, setScrolled] = useState(false);
+
+  // Settings → Browsing that the pages read from the root.
+  useEffect(() => {
+    document.documentElement.dataset.hideOverviews = String(!!settings?.hideEpisodeDescriptions);
+  }, [settings?.hideEpisodeDescriptions]);
+  // A page scrolled away from its top gets a filled title bar, so nothing runs under the window's buttons.
+  // Scroll events don't bubble: one listener in the capture phase hears every page's.
+  const host = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    const measure = () => {
+      const page = el.querySelector<HTMLElement>(".page:not([hidden]) .scroll");
+      setScrolled((page?.scrollTop ?? 0) > 8);
+    };
+    measure();
+    el.addEventListener("scroll", measure, { capture: true, passive: true });
+    return () => el.removeEventListener("scroll", measure, { capture: true });
+  }, [stack]);
 
   // "/" goes to Search from anywhere but a text field; Escape goes back.
   useEffect(() => {
@@ -77,8 +98,8 @@ function Shell() {
   return (
     <div className="app">
       {!phone && <Sidebar />}
-      <main className="page-host">
-        <TitleBar />
+      <main className="page-host" ref={host}>
+        <TitleBar scrolled={scrolled} />
         {stack.map((entry, i) => (
           <Page key={entry.key} entry={entry} top={i === stack.length - 1} />
         ))}

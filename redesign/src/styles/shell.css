@@ -186,6 +186,15 @@
   height: 48px;
   padding: 0 var(--s-2) 0 calc(var(--gutter) - var(--s-2));
   pointer-events: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color var(--t-base) var(--ease),
+    border-color var(--t-base) var(--ease);
+}
+
+.titlebar[data-scrolled="true"] {
+  background: var(--bg);
+  border-bottom-color: var(--line);
 }
 
 .titlebar > * {

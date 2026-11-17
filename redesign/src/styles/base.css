@@ -105,6 +105,16 @@ img {
   text-wrap: balance;
 }
 
+/* A long name steps down a size and stops at four lines. */
+.t-display[data-long] {
+  font-size: clamp(32px, 3.2vw, 48px);
+  line-height: 1.08;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
 .muted {
   color: var(--text-2);
 }

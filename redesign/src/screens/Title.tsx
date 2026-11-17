@@ -5,15 +5,15 @@ import { useNavigation } from "../../../src/lib/router";
 import { personIds, LIMIT_NOTICE, useTitleVerdict } from "../../../src/lib/catalog";
 import { progressMap, seasonsOf, shelfGroupOf, shelfGroups, upNext, useEpisodeOrders } from "../../../src/lib/library";
 import { watchedFraction } from "../../../src/lib/library/watched";
-import { usePlayTarget } from "../../../src/lib/playback";
-import { formatTime, isReleased, runtimeSeconds } from "../../../src/lib/format";
+import { isReleased, runtimeSeconds } from "../../../src/lib/format";
+import { usePlayLabel } from "../ui/playLabel";
 import { errorMessage } from "../../../src/lib/errors";
 import type { ContentType, Meta, MetaPreview, Progress, Video } from "../../../src/lib/types";
 import { Art } from "../ui/Art";
 import { Button } from "../ui/Button";
 import { RunLine } from "../ui/RunLine";
 import { SaveButton } from "../ui/SaveButton";
-import { episodeCode, formatDay, formatLeft, formatRuntimeLong, yearOf } from "../ui/time";
+import { formatDay, formatLeft, formatRuntimeLong, yearOf } from "../ui/time";
 
 /**
  * A title's page. The art fills the top, the same neutral page under it whatever the picture's colours. A show's
@@ -49,18 +49,11 @@ function Empty({ children }: { children: ReactNode }) {
 
 function Hero({ item, meta }: { item: MetaPreview; meta?: Meta }) {
   const { navigate } = useNavigation();
-  const { next, videoId, resumeAt } = usePlayTarget(item, meta);
+  const { videoId, label } = usePlayLabel(item, meta);
   const isSeries = item.type === "series";
   const length = runtimeSeconds(meta?.runtime);
   const certification = meta?.certification ?? item.certification;
   const facts = [isSeries ? "Series" : "Film", yearOf(item.releaseInfo), certification, ...(item.genres ?? []).slice(0, 2)].filter(Boolean);
-
-  const label = (() => {
-    if (!isSeries) return resumeAt ? `Resume from ${formatTime(resumeAt)}` : "Play";
-    if (!next?.video) return "Play";
-    const code = episodeCode(next.video.season, next.video.episode);
-    return next.kind === "resume" ? `Resume ${code}` : `Play ${code}`;
-  })();
 
   const ids = personIds(meta);
   const credit = (names: string[] | undefined) =>
@@ -88,7 +81,9 @@ function Hero({ item, meta }: { item: MetaPreview; meta?: Meta }) {
       <div className="feature-scrim" />
       <div className="feature-text on-art">
         <p className="t-mono feature-facts">{facts.join(" · ")}</p>
-        <h1 className="t-display">{item.name}</h1>
+        <h1 className="t-display" data-long={item.name.length > 36 || undefined} title={item.name}>
+          {item.name}
+        </h1>
         {length > 0 && (
           <div className="feature-run">
             <RunLine length={length} />

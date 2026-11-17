@@ -200,6 +200,15 @@
   margin-bottom: var(--s-4);
 }
 
+/* A long heading ("Because you watched <a long title>") stops at two lines. */
+.section-head > h2 {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
 .skeleton {
   background: var(--surface-1);
   border-radius: var(--r-card);

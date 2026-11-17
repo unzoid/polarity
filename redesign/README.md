@@ -13,8 +13,9 @@ current app is used here, and nothing here changes them.
   Neutrals are graphite with a faint warm cast. Artwork is shown large and never tints the interface.
 - **Moments.** The artwork itself, full and steady, and running times drawn to scale.
 - **Signature.** The running-time line (`src/ui/RunLine.tsx`). Every film or episode shows its length on
-  one shared scale, three hours across, with what you've watched drawn on it in the accent. It appears on
-  cards, episode rows, Continue Watching and (later) the scrubber, and nowhere else.
+  one shared scale, three hours across, with what you've watched drawn on it in the accent. It appears where
+  the length is known: the featured title, a title's page, its episode rows, Continue Watching, and (later)
+  the scrubber. Browse cards don't carry it: a catalog entry has no running time.
 
 The accent is the logo's lavender (`#a7abff`), used only for progress, selection and focus. The primary
 action is an off-white fill. Type is Instrument Sans for the interface, Instrument Serif only for a

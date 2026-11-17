@@ -67,6 +67,20 @@
   color: var(--text-2);
 }
 
+.title-link {
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  border-radius: var(--r-control);
+}
+
+.title-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgb(var(--ink) / 0.3);
+  text-underline-offset: 8px;
+}
+
 .feature-run {
   display: grid;
   grid-template-columns: 240px auto;
