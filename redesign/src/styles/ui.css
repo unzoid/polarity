@@ -1,0 +1,220 @@
+/* --- Buttons ----------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 36px;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-control);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-large {
+  height: 44px;
+  padding: 0 var(--s-5);
+  font-size: 15px;
+}
+
+.btn-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-3);
+}
+
+/* Over artwork the raised surface would be a grey slab: a dark see-through one instead. */
+.on-art .btn-secondary {
+  background: rgb(16 15 14 / 0.6);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.16);
+}
+
+.on-art .btn-secondary:hover {
+  background: rgb(16 15 14 / 0.8);
+}
+
+.btn-quiet {
+  height: auto;
+  padding: 0;
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.btn-quiet:hover {
+  color: var(--text);
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-control);
+  color: var(--text-2);
+  transition:
+    background-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-btn:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+/* --- The running-time line ------------------------------------------- */
+
+.run {
+  position: relative;
+  height: 6px;
+  width: 100%;
+}
+
+.run-track,
+.run-length {
+  position: absolute;
+  left: 0;
+  top: 50%;
+}
+
+.run-track {
+  right: 0;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--run-track);
+}
+
+.run-hour {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 6px;
+  background: var(--run-track);
+}
+
+.run-length {
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--run-length);
+  overflow: hidden;
+}
+
+.run-watched {
+  display: block;
+  height: 100%;
+  background: var(--run-watched);
+}
+
+/* --- Artwork frames --------------------------------------------------- */
+
+.frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.frame > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A hairline drawn over the picture, so a dark poster still has an edge. */
+.frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--line);
+  pointer-events: none;
+}
+
+.frame-poster {
+  aspect-ratio: 2 / 3;
+}
+
+.frame-still {
+  aspect-ratio: 16 / 9;
+}
+
+.art-missing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--s-3);
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 24px;
+  color: var(--text-2);
+}
+
+/* --- Sections --------------------------------------------------------- */
+
+.section {
+  padding: 0 var(--gutter);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+
+.skeleton {
+  background: var(--surface-1);
+  border-radius: var(--r-card);
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--s-2);
+  min-height: 60vh;
+  padding: var(--s-8) var(--gutter);
+  text-align: center;
+}
+
+.empty p {
+  max-width: 36rem;
+}

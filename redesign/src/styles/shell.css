@@ -1,0 +1,282 @@
+/* --- The app's frame: a sidebar and the page ------------------------------ */
+
+.app {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  height: 100%;
+  background: var(--bg);
+}
+
+.page-host {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+}
+
+/* Every page below the top one stays mounted (the router keeps scroll), out of sight. */
+.page {
+  position: absolute;
+  inset: 0;
+}
+
+.page[hidden] {
+  display: block;
+  visibility: hidden;
+  content-visibility: hidden;
+}
+
+/* --- Sidebar ------------------------------------------------------------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0 var(--s-3) var(--s-3);
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 0 var(--s-3);
+  flex: none;
+}
+
+:root[data-os="mac"] .sidebar-brand {
+  height: 88px;
+  align-items: flex-end;
+  padding-bottom: var(--s-3);
+}
+
+.sidebar-logo {
+  height: 22px;
+  width: auto;
+  pointer-events: none;
+}
+
+.nav-item,
+.nav-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-control);
+  color: var(--text-2);
+  font-size: 14px;
+  text-align: left;
+  transition:
+    background-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.nav-item:hover,
+.nav-search:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.nav-item[aria-current="page"],
+.nav-search[aria-current="page"] {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.05);
+}
+
+.nav-item[aria-current="page"] .nav-icon,
+.nav-search[aria-current="page"] .nav-icon {
+  color: var(--text);
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-3);
+}
+
+.nav-search {
+  margin-bottom: var(--s-4);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.nav-search span {
+  flex: 1;
+}
+
+.keycap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--s-1);
+  border-radius: var(--r-tag);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-3);
+  box-shadow:
+    inset 0 0 0 1px var(--line-strong),
+    inset 0 -1px 0 var(--line-strong);
+}
+
+.nav-group {
+  display: grid;
+  gap: 2px;
+}
+
+.nav-label {
+  margin: var(--s-6) 0 var(--s-2);
+  padding: 0 var(--s-3);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-3);
+}
+
+.sidebar-foot {
+  display: grid;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: var(--s-6);
+}
+
+.nav-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: 52px;
+  margin-top: var(--s-2);
+  padding: var(--s-2) var(--s-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.nav-avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.nav-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+/* --- The title bar over the page ------------------------------------------ */
+
+.titlebar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 var(--s-2) 0 calc(var(--gutter) - var(--s-2));
+  pointer-events: none;
+}
+
+.titlebar > * {
+  pointer-events: auto;
+}
+
+.titlebar[data-tauri-drag-region] {
+  pointer-events: auto;
+}
+
+.titlebar-back {
+  color: var(--text);
+  background: rgb(16 15 14 / 0.55);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.titlebar-back:hover {
+  background: rgb(16 15 14 / 0.8);
+}
+
+.window-buttons {
+  display: flex;
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.window-buttons button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 32px;
+  color: var(--text-2);
+  transition:
+    background-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.window-buttons button:hover {
+  background: var(--fill-press);
+  color: var(--text);
+}
+
+.window-buttons .window-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+/* --- Phone: tabs at the bottom instead of the sidebar --------------------- */
+
+.phone-tabs {
+  display: none;
+}
+
+:root[data-form="phone"] .app {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+:root[data-form="phone"] .sidebar {
+  display: none;
+}
+
+:root[data-form="phone"] .phone-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: var(--s-1) var(--s-2) calc(var(--s-1) + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+
+.phone-tab {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: var(--s-2) 0;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.phone-tab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.phone-tab[aria-current="page"] {
+  color: var(--text);
+}
+
+:root[data-form="phone"] .titlebar {
+  padding-top: env(safe-area-inset-top);
+  height: calc(48px + env(safe-area-inset-top));
+}

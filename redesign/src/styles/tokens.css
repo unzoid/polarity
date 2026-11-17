@@ -1,0 +1,92 @@
+/*
+ * Polarity's design tokens, from zero (redesign/README.md has the direction).
+ *
+ * The world is a repertory cinema at night: a printed programme, the projectionist's running-time sheet.
+ * The chrome is graphite with a faint warm cast and stays the same on every page; artwork is shown large
+ * and never tints the interface. The logo's lavender is the one accent, kept for what is yours: progress,
+ * selection and focus.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Neutrals: one ramp, warm graphite. */
+  --bg: #100f0e;
+  --surface-1: #171615;
+  --surface-2: #1f1e1c;
+  --surface-3: #282725;
+  --ink: 238 234 227;
+  --line: rgb(var(--ink) / 0.08);
+  --line-strong: rgb(var(--ink) / 0.14);
+  --fill-hover: rgb(var(--ink) / 0.05);
+  --fill-press: rgb(var(--ink) / 0.08);
+
+  /* Text: three roles. */
+  --text: rgb(var(--ink));
+  --text-2: rgb(var(--ink) / 0.66);
+  --text-3: rgb(var(--ink) / 0.44);
+
+  /* The accent: the logo's mark. Dark text on it. */
+  --accent: #a7abff;
+  --accent-ink: #15162c;
+  --focus: #a7abff;
+
+  /* The primary action on dark: an off-white from the ramp. */
+  --primary: #eeeae3;
+  --primary-hover: #ffffff;
+  --primary-ink: #141312;
+
+  --danger: #e8806f;
+
+  /* Over artwork: a neutral fall to the page, never a hue. */
+  --scrim: rgb(16 15 14);
+
+  /* Type. */
+  --font-ui: "Instrument Sans Variable", "Instrument Sans", system-ui, "Segoe UI Variable Text", sans-serif;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* Spacing: a 4px grid. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* The page's side margin, which every section's left edge shares. */
+  --gutter: 40px;
+
+  /* Radius. */
+  --r-tag: 4px;
+  --r-control: 8px;
+  --r-card: 6px;
+  --r-panel: 14px;
+
+  /* Motion: one curve, three durations. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --t-fast: 120ms;
+  --t-base: 200ms;
+  --t-enter: 280ms;
+
+  /* The running-time line: three hours across its track (ui/RunLine.tsx). */
+  --run-track: rgb(var(--ink) / 0.07);
+  --run-length: rgb(var(--ink) / 0.34);
+  --run-watched: var(--accent);
+}
+
+@media (max-width: 600px) {
+  :root {
+    --gutter: 16px;
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --gutter: 56px;
+  }
+}

@@ -1,0 +1,328 @@
+.home {
+  height: 100%;
+  padding-bottom: var(--s-16);
+}
+
+/* --- Today's featured title -------------------------------------------- */
+
+.feature {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: end;
+  gap: var(--s-10);
+  height: clamp(480px, 68vh, 760px);
+  padding: 0 var(--gutter) var(--s-12);
+  isolation: isolate;
+}
+
+.feature-pending {
+  background: var(--surface-1);
+}
+
+.feature-none {
+  height: 64px;
+}
+
+.feature-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  animation: feature-in var(--t-enter) var(--ease) both;
+}
+
+.feature-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+}
+
+@keyframes feature-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A neutral fall from the picture to the page: darker on the left where the text sits, and down into the page. */
+.feature-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(to right, rgb(16 15 14 / 0.88) 0%, rgb(16 15 14 / 0.55) 38%, rgb(16 15 14 / 0) 66%),
+    linear-gradient(to top, var(--bg) 0%, rgb(16 15 14 / 0.6) 22%, rgb(16 15 14 / 0) 48%),
+    linear-gradient(to bottom, rgb(16 15 14 / 0.5) 0%, rgb(16 15 14 / 0) 14%);
+}
+
+.feature-text {
+  max-width: 600px;
+  display: grid;
+  gap: var(--s-4);
+  justify-items: start;
+}
+
+.feature-facts {
+  color: var(--text-2);
+}
+
+.feature-run {
+  display: grid;
+  grid-template-columns: 240px auto;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--text-2);
+}
+
+.feature-description {
+  max-width: 34rem;
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--text-2);
+}
+
+.feature-actions {
+  display: flex;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+
+/* The rest of today's featured titles, as a programme. */
+.programme {
+  align-self: end;
+}
+
+.programme-label {
+  padding-bottom: var(--s-2);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.programme-row {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: var(--s-3) 0;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  transition: color var(--t-fast) var(--ease);
+}
+
+.programme-row:hover,
+.programme-row[aria-current="true"] {
+  color: var(--text);
+}
+
+.programme-name {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Rails ------------------------------------------------------------- */
+
+.home-rails {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-12);
+}
+
+.rail-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.rail-tools .btn-quiet {
+  margin-right: var(--s-3);
+}
+
+.rail-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 168px;
+  gap: var(--s-5) var(--s-4);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 0 var(--gutter) var(--s-1);
+  scroll-padding: 0 var(--gutter);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.rail-track::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-track[data-kind="still"] {
+  grid-auto-columns: 300px;
+}
+
+.rail-track > * {
+  scroll-snap-align: start;
+}
+
+/* --- Cards ------------------------------------------------------------- */
+
+.card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--s-1);
+  min-width: 0;
+  text-align: left;
+}
+
+.card > .frame,
+.card-open .frame {
+  margin-bottom: var(--s-2);
+  transition: box-shadow var(--t-fast) var(--ease);
+}
+
+.card .frame::after {
+  transition: box-shadow var(--t-fast) var(--ease);
+}
+
+.card:hover .frame::after,
+.card-open:hover .frame::after {
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.4);
+}
+
+.card-name {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-facts {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-line {
+  height: 12px;
+  width: 70%;
+  margin-top: var(--s-2);
+}
+
+.card-open {
+  display: block;
+  border-radius: var(--r-card);
+}
+
+.card-play {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-3);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  opacity: 0;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.card-play svg {
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+}
+
+.card-resume:hover .card-play,
+.card-play:focus-visible,
+:root[data-touch="true"] .card-play {
+  opacity: 1;
+}
+
+.card-play:active {
+  transform: scale(0.96);
+}
+
+.card-run {
+  margin: 0 0 var(--s-1);
+}
+
+.card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.card-row .t-mono {
+  flex: none;
+}
+
+.clamp-1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Phone ------------------------------------------------------------- */
+
+:root[data-form="phone"] .feature {
+  grid-template-columns: minmax(0, 1fr);
+  height: auto;
+  min-height: 72vh;
+  padding-top: 40vh;
+  padding-bottom: var(--s-8);
+}
+
+:root[data-form="phone"] .feature-art {
+  bottom: 30%;
+}
+
+:root[data-form="phone"] .feature-scrim {
+  background: linear-gradient(to top, var(--bg) 30%, rgb(16 15 14 / 0.7) 50%, rgb(16 15 14 / 0) 72%);
+}
+
+:root[data-form="phone"] .t-display {
+  font-size: 40px;
+}
+
+:root[data-form="phone"] .feature-run {
+  grid-template-columns: 160px auto;
+}
+
+:root[data-form="phone"] .feature-actions {
+  width: 100%;
+}
+
+:root[data-form="phone"] .feature-actions .btn {
+  flex: 1;
+}
+
+:root[data-form="phone"] .rail-track {
+  grid-auto-columns: 112px;
+  gap: var(--s-4) var(--s-3);
+}
+
+:root[data-form="phone"] .rail-track[data-kind="still"] {
+  grid-auto-columns: 240px;
+}
+
+:root[data-form="phone"] .rail-arrow {
+  display: none;
+}
+
+:root[data-form="phone"] .home-rails {
+  gap: var(--s-8);
+}

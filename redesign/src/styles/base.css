@@ -1,0 +1,180 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  user-select: none;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-control);
+}
+
+/* --- Type roles --------------------------------------------------------- */
+
+/* Running times, dates, counts, codes: the programme's small print. */
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.t-meta {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-2);
+}
+
+.t-section {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 500;
+}
+
+.t-page {
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 500;
+}
+
+/* A title's name, large: the only place the serif appears. */
+.t-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(44px, 5vw, 72px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.faint {
+  color: var(--text-3);
+}
+
+.clamp-2,
+.clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.clamp-3 {
+  -webkit-line-clamp: 3;
+}
+
+/* --- Scrolling ---------------------------------------------------------- */
+
+.scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ink) / 0.16) transparent;
+}
+
+/* Images fade in once decoded. */
+.img-fade {
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease);
+}
+
+.img-fade[data-loaded="true"] {
+  opacity: 1;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* A page arriving: one short fade and rise. */
+.page-enter {
+  animation: page-enter var(--t-enter) var(--ease) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+
+  .img-fade {
+    transition: none;
+  }
+}
