@@ -249,5 +249,7 @@ fn player_options_are_the_iphones_and_fetch_nothing_by_themselves() {
     assert_eq!(get("ao"), Some("audiounit"));
     assert_eq!(get("ytdl"), Some("no"));
     assert_eq!(get("sub-auto"), Some("no"));
+    assert_eq!(get("vo"), Some("libmpv"));
+    assert_eq!(get("cache"), Some("yes"));
     assert!(opts.iter().all(|o| !o.name.starts_with('-') && !o.value.is_empty()));
 }

@@ -101,6 +101,9 @@ struct AccountView: View {
                     Button("Sign In") { account.showSignIn() }
                 }
             }
+            Section {
+                NavigationLink("Licences", value: LicencesPage())
+            }
         }
         .padding(.horizontal, 80)
         .navigationTitle("Account")
