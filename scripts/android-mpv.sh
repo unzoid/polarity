@@ -81,8 +81,13 @@ grep -qF "$v_ndk_n" "sdk/android-ndk-$v_ndk/source.properties" ||
 sha256() { # file sha256
 	echo "$2  $1" | sha256sum -c --quiet - || { echo "$1 isn't the file this script pins" >&2; exit 1; }
 }
+# A download tries again on a dropped connection or a server's passing error (CI once failed on
+# one, exit 4), and says why when it gives up.
+fetch() { # file url
+	wget -nv --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 -O "$1" "$2"
+}
 if [ ! -x sdk/bin/gas-preprocessor.pl ]; then
-	wget -q -O sdk/bin/gas-preprocessor.part \
+	fetch sdk/bin/gas-preprocessor.part \
 		"https://raw.githubusercontent.com/FFmpeg/gas-preprocessor/$GAS_PREPROCESSOR_COMMIT/gas-preprocessor.pl"
 	sha256 sdk/bin/gas-preprocessor.part "$GAS_PREPROCESSOR_SHA256"
 	chmod +x sdk/bin/gas-preprocessor.part
@@ -103,7 +108,7 @@ clone() { # dir url tag commit [git options]
 unpack() { # dir url sha256
 	if [ ! -d "deps/$1" ]; then
 		rm -rf "deps/$1.part" "deps/$1.archive"
-		wget -q -O "deps/$1.archive" "$2"
+		fetch "deps/$1.archive" "$2"
 		sha256 "deps/$1.archive" "$3"
 		mkdir "deps/$1.part"
 		tar -xf "deps/$1.archive" -C "deps/$1.part" --strip-components=1
