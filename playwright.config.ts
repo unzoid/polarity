@@ -36,11 +36,14 @@ export default defineConfig({
     timeout: 60_000,
   },
   projects: [
-    { name: "desktop", testIgnore: /(tv|phone)\.spec/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
+    { name: "desktop", testIgnore: /(tv|phone|performance)\.spec/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
     { name: "phone", testMatch: /phone\.spec/, use: { ...devices["Pixel 7"] } },
     { name: "tv", testMatch: /tv\.spec/, use: { ...devices["Desktop Chrome"], viewport: { width: 1920, height: 1080 } } },
+    // The timing tests (Chromium only: they read its trace). CI runs them in a job of their own with one
+    // worker, so nothing else shares the CPU while they measure (#481).
+    { name: "timing", testMatch: /performance\.spec/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
     ...(chromium
       ? []
-      : [{ name: "desktop-webkit", testIgnore: /(tv|phone)\.spec/, use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 } } }]),
+      : [{ name: "desktop-webkit", testIgnore: /(tv|phone|performance)\.spec/, use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 } } }]),
   ],
 });
