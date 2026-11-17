@@ -245,10 +245,20 @@ impl Core {
 }
 
 /// mpv's options on Apple TV: the iPhone's (cache, audio output, certificates, VideoToolbox frames
-/// copied back), and nothing fetched or opened that the app didn't ask for.
+/// copied back), drawing only through the app's render context, and nothing fetched or opened that
+/// the app didn't ask for.
 #[uniffi::export]
 pub fn player_options() -> Vec<PlayerOption> {
-    let common = ["--ytdl=no", "--sub-auto=no", "--audio-file-auto=no"];
+    let common = [
+        "--vo=libmpv",
+        "--config=no",
+        "--cache=yes",
+        "--cache-secs=90",
+        "--network-timeout=30",
+        "--ytdl=no",
+        "--sub-auto=no",
+        "--audio-file-auto=no",
+    ];
     common
         .into_iter()
         .chain(polar_player::tune::IOS_ARGS.iter().copied())
