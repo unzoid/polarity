@@ -1,11 +1,13 @@
 //! The core crates for the native apps, through UniFFI: the Apple TV app
 //! (`apple-tv/`) calls [`Core`] from Swift. Home's rows, title pages, sources
 //! ranked by `polar_addon`, and watch progress kept by `polar_library` on the
-//! device. Sign-in and the account's settings stay in Swift: the app hands the
-//! core the add-ons and keys it read from the settings document.
+//! device. Sign-in stays in Swift: the app fetches the account's settings
+//! document, [`account_settings`] reads it, and the app hands the core the
+//! add-ons and keys.
 //!
 //! The Swift side is generated: `scripts/apple-tv-core.sh`.
 
+mod account;
 mod model;
 mod store;
 
@@ -18,6 +20,7 @@ use polar_addon::{rank_asked, AddonClient, Asked, Manifest, StreamFilter, Wanted
 use polar_index::{IndexConfig, Indexer};
 use polar_library::Space;
 
+pub use account::{account_settings, AccountSettings};
 pub use model::{Addon, Card, Episode, Header, PlayerOption, Resume, Row, Source, Sources, Title};
 
 uniffi::setup_scaffolding!();
