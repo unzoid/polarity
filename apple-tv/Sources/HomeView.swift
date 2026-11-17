@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Home: Continue Watching, then the core's rows, each a shelf the remote moves along.
+/// Home: the account, Continue Watching, then the core's rows, each a shelf the remote moves along.
 struct HomeView: View {
     @EnvironmentObject private var library: Library
 
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 48) {
+                AccountBar()
                 if !library.continueWatching.isEmpty {
                     Shelf(title: "Continue Watching") {
                         ForEach(library.continueWatching, id: \.videoId) { resume in
@@ -42,6 +43,35 @@ struct HomeView: View {
         }
         .task { await library.loadHome() }
         .onAppear { library.refreshProgress() }
+    }
+}
+
+/// Who's watching, as a link to the Account page, and what of the profile didn't come across.
+struct AccountBar: View {
+    @EnvironmentObject private var account: Account
+
+    var body: some View {
+        HStack(spacing: 40) {
+            NavigationLink(value: AccountPage()) {
+                Label(label, systemImage: "person.crop.circle")
+            }
+            if let notice = account.notice {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 80)
+        .focusSection()
+    }
+
+    private var label: String {
+        switch account.state {
+        case let .watching(profile?): return profile.name
+        case .unavailable: return "Account"
+        default: return account.signedIn ? "Account" : "Sign In"
+        }
     }
 }
 
