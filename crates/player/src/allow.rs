@@ -9,7 +9,8 @@
 use serde_json::Value;
 
 /// Commands the UI sends through `mpv_command`.
-pub const ALLOWED_COMMANDS: &[&str] = &["seek", "set", "get_property", "sub-add", "frame-step", "frame-back-step"];
+pub const ALLOWED_COMMANDS: &[&str] =
+    &["seek", "set", "get_property", "sub-add", "sub-step", "frame-step", "frame-back-step"];
 
 /// Properties the UI reads or writes (`mpv_set`, `set`, `get_property`).
 pub const ALLOWED_PROPERTIES: &[&str] = &[
@@ -19,6 +20,8 @@ pub const ALLOWED_PROPERTIES: &[&str] = &[
     "speed",
     "aid",
     "sid",
+    // A second subtitle at the top, for two languages at once.
+    "secondary-sid",
     "sub-text",
     "sub-ass-override",
     // Styled subtitles: restyle only their dialogue styles (#347). Style fields and script info only, no files.
@@ -33,6 +36,8 @@ pub const ALLOWED_PROPERTIES: &[&str] = &[
     "sub-shadow-offset",
     "sub-back-color",
     "sub-delay",
+    // Sound that's ahead of or behind the picture, in seconds.
+    "audio-delay",
     // Fill window (#183, #330): the picture covers the window; the autocrop loop reads it too.
     "panscan",
 ];
@@ -88,6 +93,11 @@ pub fn check_command(args: &[Value]) -> Result<(), String> {
             [] => Ok(()),
             [n, flag] if matches!(n.as_i64(), Some(-1 | 1)) && flag.as_str() == Some("seek") => Ok(()),
             _ => Err("frame-step takes one frame, by seek".into()),
+        },
+        // Timing moved so the line before or after shows now: one line at a time.
+        "sub-step" => match &args[1..] {
+            [n] if matches!(n.as_i64(), Some(-1 | 1)) => Ok(()),
+            _ => Err("sub-step moves one line".into()),
         },
         "frame-back-step" if args.len() == 1 => Ok(()),
         "frame-back-step" => Err("frame-back-step takes no arguments".into()),
@@ -153,6 +163,11 @@ mod tests {
         assert!(check_command(&[json!("frame-back-step")]).is_ok());
         assert!(check_command(&[json!("frame-step"), json!(100000), json!("play")]).is_err());
         assert!(check_command(&[json!("frame-back-step"), json!(5)]).is_err());
+        assert!(check_command(&[json!("sub-step"), json!(1)]).is_ok());
+        assert!(check_command(&[json!("sub-step"), json!(-1)]).is_ok());
+        assert!(check_command(&[json!("sub-step"), json!(40)]).is_err());
+        assert!(check_command(&[json!("sub-step"), json!(1), json!("secondary")]).is_err());
+        assert!(check_command(&[json!("set"), json!("secondary-sid"), json!(3)]).is_ok());
         assert!(check_command(&[json!("get_property"), json!("container-fps")]).is_ok());
         assert!(check_command(&[json!("get_property"), json!("cache-speed")]).is_ok());
         assert!(check_command(&[json!("set"), json!("cache-speed"), json!(0)]).is_err());

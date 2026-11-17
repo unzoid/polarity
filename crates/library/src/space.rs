@@ -417,6 +417,28 @@ impl Space {
         }
         added
     }
+
+    /// Adds anime links from a Polarity export, keeping their times: one only over an older
+    /// decision about the same entry (or none). Removed links and ones no store keys by are left
+    /// out. Re-keys once if any was added. Returns how many were added.
+    pub fn import_links(&mut self, links: Vec<AnimeLink>) -> usize {
+        let mut added = 0;
+        for link in links {
+            if link.removed
+                || !link.is_valid()
+                || self.links.get(&link.anilist).is_some_and(|old| old.updated_at >= link.updated_at)
+            {
+                continue;
+            }
+            self.dirty_mut().links.insert(link.anilist);
+            self.put_link(link);
+            added += 1;
+        }
+        if added > 0 {
+            self.rekey();
+        }
+        added
+    }
 }
 
 /// The title a video id was played under: `tt1` for `tt1:1:2`, `kitsu:5` for `kitsu:5:3`.

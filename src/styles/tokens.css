@@ -297,6 +297,8 @@
   --safe-right: 0px;
   /* The smallest target a finger hits reliably (Apple 44pt, Material 48dp): 0 = no minimum. */
   --hit: 0px;
+  /* What a bottom sheet at its full height leaves between its top and the status bar (sheet.css). */
+  --sheet-gap: 0.625rem;
 }
 :root[data-form="phone"],
 :root[data-form="tablet"] {
@@ -414,4 +416,20 @@
     --glass-heavy: var(--tone-0);
     --glass-edge: rgb(var(--ink) / 0.45);
   }
+}
+
+/* Episode Ratings (components/title/EpisodeRatings.tsx): a colour per RATING_STEPS step
+   (lib/library/episodeRatings.ts), from Garbage (purple) through Bad, Average, Good and Great to Awesome
+   (deep green) and Absolute Cinema (blue). The same in both schemes; Average and Good are written in dark
+   ink, the rest in white. */
+:root {
+  --rating-0: #6c3fa3;
+  --rating-1: #d9443a;
+  --rating-2: #f0961c;
+  --rating-3: #f2cf3c;
+  --rating-4: #2bb05b;
+  --rating-5: #18703f;
+  --rating-6: #1e9bf0;
+  --rating-ink-light: #fff;
+  --rating-ink-dark: #161616;
 }

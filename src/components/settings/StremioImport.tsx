@@ -170,6 +170,7 @@ export function StremioImport() {
           type="file"
           accept=".json,application/json"
           hidden
+          aria-label="Stremio export file"
           onChange={(e) => {
             void read(e.target.files?.[0]);
             e.target.value = "";

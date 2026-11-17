@@ -203,6 +203,29 @@ export const moveInPlaylist = (id: string, from: number, to: number) =>
     return { ...p, items };
   });
 
+/**
+ * Playlists from a Polarity export (polarityExport.ts), with their ids and times: one replaces
+ * a playlist here only when it is newer (a deletion here that is newer stays), and the rest are
+ * added while there's room (MAX_PLAYLISTS). Returns how many were added or replaced.
+ */
+export function importPlaylists(incoming: { id: string; name: string; updatedAt: number; items: PlaylistItem[] }[]): number {
+  const byId = new Map(state.playlists.map((p) => [p.id, p]));
+  let live = state.playlists.filter((p) => !p.deleted).length;
+  const changed: string[] = [];
+  for (const p of incoming) {
+    const kept = byId.get(p.id);
+    if (kept && kept.updatedAt >= p.updatedAt) continue;
+    if ((!kept || kept.deleted) && live >= MAX_PLAYLISTS) continue;
+    if (!kept || kept.deleted) live++;
+    byId.set(p.id, { id: p.id, name: p.name.trim().slice(0, 60) || "Untitled Playlist", items: p.items.slice(0, MAX_PLAYLIST_ITEMS), updatedAt: p.updatedAt });
+    changed.push(p.id);
+  }
+  if (!changed.length) return 0;
+  publish({ ...state, playlists: [...byId.values()], dirty: [...new Set([...state.dirty, ...changed])] });
+  onChange?.();
+  return changed.length;
+}
+
 // --- Sync (account/sync.ts) ---------------------------------------------------
 
 /** A profile's playlists, shown or kept in storage (another profile of the account). */

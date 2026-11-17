@@ -1,4 +1,5 @@
-import { Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { api } from "../lib/api";
 import { appVersion } from "../lib/updater";
@@ -14,7 +15,7 @@ function reportProblem() {
 import { canOpenFiles, setOpenFilesOpen } from "../lib/localFiles";
 import { closePartySurface, getParty, leaveParty, partyAvailable, setJoinPartyOpen, usePartySurface } from "../lib/party";
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
-import { useRouter } from "../lib/router";
+import { useRouter, useNavigation } from "../lib/router";
 import { useAccount } from "../lib/account";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { FriendsBody } from "./friends/FriendsPanel";
@@ -24,6 +25,7 @@ import { lazyNamed, useFormFactor } from "../lib/ui";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { ProfileEditSheet } from "./ProfileEditSheet";
+import { useGuard } from "./profileLock/useGuard";
 import { Avatar } from "./Avatar";
 import { Sheet } from "./Sheet";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./ui/Popover";
@@ -69,7 +71,7 @@ export function ProfileMenu() {
   const others = me ? account.profiles.filter((p) => p.id !== me.id) : [];
   const name = me?.name ?? "Guest";
   const avatar = me?.avatar ?? GUEST_AVATAR;
-  const { tab } = useRouter();
+  const { tab } = useNavigation();
   // While Settings → Browsing → Show the Calendar makes it a navbar tab, it isn't listed here too (#92).
   const { data: settings } = useSettings();
   // Requests waiting for an answer show on the Friends item (#135).
@@ -322,14 +324,16 @@ function ProfilePopList({ name, avatar, me, email, status, profiles, manage, gro
 /**
  * On a phone: a sheet from the bottom edge. Who's watching first (the profile, then the others to switch to, a
  * tap each), then the rest as rows in cards. Friends, Join Watch Party and Settings (Account too, a page of it) open
- * as views inside it, with a Back to the list; the sheet's height follows the view, up to nearly the screen's for
- * Settings. Any other choice closes it as it runs.
+ * as views inside it, with a Back to the list; the sheet is the screen's full height throughout, as Netflix's account
+ * sheet is, so a view comes in without the sheet changing size under it. Any other choice closes it as it runs.
  */
 function ProfileSheet({ name, avatar, me, email, status, profiles, manage, groups }: MenuProps) {
   const settingsOpen = useSettingsOverlay().open;
   // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
   const [managing, setManaging] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // From a restricted profile, Manage asks first (lib/account/profileRules.ts).
+  const guard = useGuard();
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me, settingsOpen ? "settings" : editing ? "edit" : undefined);
   // What Settings says its view is (its name, and where its Back goes), for the sheet's header.
   const [settingsHead, setSettingsHead] = useState<SettingsHead>();
@@ -352,6 +356,11 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
     list(!!c.stay);
     c.run();
   };
+  // The sheet sits in its own place beside the pages and the top bar (App.tsx `.sheet-host`), not among the bar's
+  // actions: anything that scales them or the pages under it (the actions once scrolled, the pages stepping back as
+  // it opens) would otherwise hold the sheet's fixed layers inside its box.
+  const [bar, setBar] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => setBar(document.querySelector<HTMLElement>(".sheet-host") ?? document.body), []);
   const title =
     view === "list" ? (
       "Profiles"
@@ -373,41 +382,42 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
       <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => list(true)}>
         <Avatar id={avatar} />
       </button>
-      <Sheet open={open} onClose={shut} title={title} fit>
-        <FitHeight>
-          <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
-            {view === "friends" && <FriendsBody inDialog={false} />}
-            {view === "join" && me && <JoinView me={me} done={done} />}
-            {view === "settings" && (
-              <Suspense
-                fallback={
-                  <div className="profile-sheet-loading">
-                    <Spinner size={22} />
-                  </div>
-                }
-              >
-                <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
-              </Suspense>
-            )}
-            {view === "edit" && editing && <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />}
-            {view === "list" && (
-              <ProfileList
-                name={name}
-                avatar={avatar}
-                email={email ?? status}
-                profiles={profiles}
-                manage={manage}
-                groups={groups}
-                pick={pick}
-                managing={managing}
-                onManage={() => setManaging((m) => !m)}
-                onEdit={(id) => setEditing(id)}
-                meId={me?.id}
-              />
-            )}
-          </div>
-        </FitHeight>
-      </Sheet>
+      {bar && createPortal(
+      <Sheet open={open} onClose={shut} title={title} full>
+        <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
+          {view === "friends" && <FriendsBody inDialog={false} />}
+          {view === "join" && me && <JoinView me={me} done={done} />}
+          {view === "settings" && (
+            <Suspense
+              fallback={
+                <div className="profile-sheet-loading">
+                  <Spinner size={22} />
+                </div>
+              }
+            >
+              <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
+            </Suspense>
+          )}
+          {view === "edit" && editing && <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />}
+          {view === "list" && (
+            <ProfileList
+              name={name}
+              avatar={avatar}
+              email={email ?? status}
+              profiles={profiles}
+              manage={manage}
+              groups={groups}
+              pick={pick}
+              managing={managing}
+              onManage={() => (managing ? setManaging(false) : void guard.manage().then((ok) => ok && setManaging(true)))}
+              onEdit={(id) => setEditing(id)}
+              meId={me?.id}
+            />
+          )}
+        </div>
+      </Sheet>,
+      bar,
+      )}
     </>
   );
 }

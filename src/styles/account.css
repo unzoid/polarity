@@ -29,13 +29,32 @@
   overflow: hidden;
   animation: fade-in var(--dur-slow) var(--ease-out);
 }
+/* The accent glow behind fluted glass (components/FlutedGlow.tsx). The gradient is the same glow without
+   the glass: it shows until WebGL has drawn, and stays where WebGL isn't available. */
 .account-glow {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(110% 75% at 35% -15%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
-    radial-gradient(80% 60% at 50% 120%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%);
+  /* Carries the page colour too, so the shell can fade away as a whole over the app (data-leaving). */
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(90% 80% at 88% -5%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
+    radial-gradient(80% 60% at 14% 120%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%);
+}
+.account-glow canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 600ms var(--ease-out);
+}
+.account-glow canvas[data-ready] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-glow canvas {
+    transition: none;
+  }
 }
 .account-bar {
   position: relative;
@@ -178,6 +197,24 @@
 }
 .auth-device-code + .auth-fine {
   margin-top: 0;
+}
+/* The same code as a QR code (TvSignInQr): black on white in every theme, its quiet zone drawn in. On a TV,
+   big enough for a phone to read from the couch while the rest still fits on the screen. */
+.auth-device-qr {
+  margin: 1.25rem 0 0;
+}
+.auth-device-qr svg {
+  display: block;
+  width: 10rem;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 0.5rem;
+}
+:root[data-tv="true"] .auth-device-qr svg {
+  width: min(13rem, 30vh);
+}
+.auth-device-qr .auth-fine {
+  margin-top: 0.75rem;
 }
 .auth-link {
   margin-top: 1.25rem;
@@ -633,6 +670,50 @@
     color: var(--text);
     background: var(--fill-3);
   }
+}
+
+/* --- Picking a profile: everything but the chosen one clears away and it steps forward while the
+       profile loads (a failure brings the rest back). The spinner only shows if that takes a while. */
+.profiles-title,
+.profiles-actions,
+.profiles-grid li {
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.profiles[data-choosing] :is(.profiles-title, .profiles-actions),
+.profiles[data-choosing] .profiles-grid li:not([data-chosen]) {
+  opacity: 0;
+  pointer-events: none;
+}
+.profiles[data-choosing] .profile-tile {
+  background: transparent;
+}
+.profiles[data-choosing] .profile-tile-art {
+  transform: scale(1.06);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+.profile-tile-busy {
+  animation-delay: 450ms;
+  animation-fill-mode: backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .profiles[data-choosing] .profile-tile-art {
+    transform: none;
+  }
+}
+:root[data-reduce-motion="on"] .profiles[data-choosing] .profile-tile-art {
+  transform: none;
+}
+
+/* Then in: the screen stays over the app a moment (App's Gate) and fades off it, while a copy of the
+   chosen avatar flies into the navbar (screens/account/profileHandoff.ts). */
+.account-shell[data-leaving] {
+  z-index: var(--z-overlay);
+  background: transparent;
+  pointer-events: none;
+}
+.account-shell[data-leaving] > * {
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
 }
 
 /* --- Profile editor */
@@ -1277,12 +1358,13 @@ button.profile-sheet-me:active {
   white-space: nowrap;
 }
 /* The same cards as Settings in this sheet (settings-overlay.css `.t3s[data-embedded]`): filled, no outline. */
+/* Filled, with no outline: the same cards as Settings shows in this sheet (settings-overlay.css, embedded), so going
+   from one to the other is one look. */
 .profile-sheet-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-md);
-  background: rgb(var(--ink) / 0.025);
+  border-radius: 14px;
+  background: rgb(var(--ink) / 0.05);
   overflow: hidden;
 }
 .profile-sheet-card > * + * {
@@ -1328,4 +1410,55 @@ button.profile-sheet-me:active {
   flex-direction: column;
   gap: 0.5rem;
   width: 100%;
+}
+
+/* --- TV mode: the account screens at TV scale, with TV's focus. They come before the TV app
+       (src/tv), so its rules don't reach them: the bar takes the TV navbar's measures (tv.css .tv-nav),
+       and focus shows on :focus, since a controller's presses aren't keyboard use to the browser and
+       never set :focus-visible. */
+:root[data-tv="true"] .account-bar {
+  height: 6rem;
+  padding: 0 4.5vw;
+}
+:root[data-tv="true"] .account-bar .brand-logo {
+  height: 2.1rem;
+}
+:root[data-tv="true"] .account-shell :focus {
+  outline: 0.2rem solid #fff;
+  outline-offset: 0.2rem;
+}
+:root[data-tv="true"] .account-bar-link {
+  height: 2.35rem;
+  padding: 0 1.15rem;
+  font-size: var(--fs-lg);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform 200ms var(--ease-out);
+}
+:root[data-tv="true"] .account-bar-link:focus {
+  outline: none;
+  background: var(--pill-light);
+  color: var(--text-on-light);
+  transform: scale(1.06);
+}
+:root[data-tv="true"] .profiles-grid {
+  --tile: 7.5rem;
+  gap: 1rem;
+}
+:root[data-tv="true"] .profile-tile:focus {
+  outline: none;
+  color: var(--text);
+}
+:root[data-tv="true"] .profile-tile-art {
+  transition:
+    transform 200ms var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+:root[data-tv="true"] .profile-tile:focus .profile-tile-art {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 0.16rem var(--bg), 0 0 0 0.36rem #fff;
+}
+:root[data-tv="true"] .profile-add:focus .profile-tile-art {
+  color: var(--text);
 }

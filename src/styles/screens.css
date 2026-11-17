@@ -801,6 +801,105 @@
 .t3s .settings-expand-accessory {
   right: calc(1.25rem + 18px + 0.375rem);
 }
+/* A handle at the row's start (ExpandRow `handle`), in the row's left padding. */
+.settings-expand-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Settings → Add-ons: the installed ones, dragged into the order they're asked in. */
+.addon-item {
+  position: relative;
+  outline: none; /* focused only by a click (tabIndex -1); the handle shows keyboard focus */
+}
+.addon-item[data-lifted] {
+  background: var(--t3-bg, var(--tone-1));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28), 0 0 0 1px var(--fill-2);
+  border-radius: 11px;
+}
+.addon-item[data-lifted] .settings-row-button {
+  cursor: grabbing;
+}
+.addon-item .settings-row-button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.addon-item[data-off] .settings-row-text,
+.addon-item[data-off] .settings-row-icon {
+  opacity: 0.5;
+}
+/* Room before the chevron for Copy Link and the On/Off pill. */
+.addon-item .settings-row-button[data-accessory] .settings-chevron {
+  margin-left: calc(36px + 0.375rem + 5.25rem + 0.5rem);
+}
+.addon-item .settings-expand-accessory {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.addon-grip {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 2.5rem;
+  color: var(--t3-muted-fg, var(--text-2));
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+.addon-item:hover .addon-grip,
+.addon-grip:focus-visible,
+.addon-item[data-lifted] .addon-grip {
+  opacity: 1;
+}
+@media (hover: none) {
+  .addon-grip {
+    opacity: 1;
+  }
+}
+.addon-logo {
+  width: 24px;
+  height: 24px;
+  margin: -2px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.addon-power {
+  width: 5.25rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+}
+.addon-power[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: color-mix(in srgb, var(--accent) 55%, var(--t3-fg, #fff));
+}
+.addon-power[aria-pressed="false"] {
+  background: var(--fill-1);
+  color: var(--t3-muted-fg, var(--text-2));
+}
+@media (hover: hover) and (pointer: fine) {
+  .addon-power:hover {
+    filter: brightness(1.15);
+  }
+}
+.addon-power:disabled {
+  cursor: default;
+}
+.addon-item .settings-expand-actions {
+  flex-wrap: wrap;
+}
+.addon-error {
+  flex-basis: 100%;
+}
 /* The opened part fades in under its row. The height change itself is
    instant: animating height would re-lay out the page on every frame. */
 .settings-expand-body {
@@ -994,6 +1093,21 @@
 .settings-where dd {
   margin: 0;
   color: var(--text-2);
+}
+/* Two-step sign-in: the QR code to scan (dark on white in either theme, as scanners expect) and its key as text. */
+.settings-qr {
+  display: block;
+  width: 168px;
+  height: 168px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fff;
+}
+.settings-secret {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  user-select: all;
+  overflow-wrap: anywhere;
 }
 .settings-link {
   color: var(--text-2);
@@ -1205,7 +1319,8 @@
    Continuous (squircle) corners where the webview draws them, round ones
    otherwise, like the volume HUD. */
 .library-panel {
-  margin: 0 var(--gutter) 2.5rem var(--content-start);
+  /* First on the page (Library has no visible heading): it starts under the top bar. */
+  margin: calc(var(--nav-h) + 1.75rem) var(--gutter) 2.5rem var(--content-start);
   overflow: hidden;
   border-radius: var(--r-panel);
   corner-shape: squircle;
@@ -1224,9 +1339,9 @@
 .library-panel-head {
   display: flex;
   align-items: center;
-  gap: 0.875rem;
+  gap: 1rem;
   width: 100%;
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.25rem;
   text-align: left;
   transition: background-color var(--dur-fast) var(--ease-std);
 }
@@ -1238,8 +1353,8 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 3rem;
+  height: 3rem;
   border-radius: var(--r-md);
   corner-shape: squircle;
   background: var(--fill-3);
@@ -1253,7 +1368,7 @@
   gap: 0.125rem;
 }
 .library-panel-title {
-  font-size: var(--fs-xl);
+  font-size: 1.25rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -1261,7 +1376,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   color: var(--text-2);
 }
 .library-panel-chevron {
@@ -1289,6 +1404,7 @@
   }
 }
 :root[data-form="phone"] .library-panel {
+  margin-top: calc(var(--nav-h) + 0.5rem);
   margin-bottom: 1.75rem;
 }
 :root[data-form="phone"] .library-panel > * {
@@ -1296,10 +1412,10 @@
   --content-start: 1rem;
 }
 :root[data-form="phone"] .library-panel-head {
-  padding: 0.875rem 1rem;
+  padding: 1.125rem 1rem;
 }
 :root[data-form="phone"] .library-panel-title {
-  font-size: var(--fs-lg);
+  font-size: 1.1875rem;
 }
 .library-rows {
   padding-bottom: 3rem;
@@ -1319,6 +1435,30 @@
 .library-toolbar {
   display: flex;
   gap: 0.5rem;
+}
+/* Saved and Watched in full: search, filters and sort under the title, the count under them. */
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 var(--gutter) 0.75rem var(--content-start);
+}
+.library-search.search-field-pill {
+  width: 14rem;
+  height: 38px;
+  border: 0;
+  background: var(--glass);
+  backdrop-filter: var(--blur-control);
+  box-shadow: 0 0 0 1px var(--glass-edge);
+}
+.library-filter-summary {
+  margin: 0;
+  padding: 0 var(--gutter) 1rem var(--content-start);
+}
+:root[data-form="phone"] .library-search.search-field-pill {
+  flex: 1 1 100%;
+  width: auto;
 }
 .playlist-view {
   padding-top: calc(var(--nav-h) + 1.75rem);
@@ -1569,6 +1709,28 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* The download folder and its buttons (DownloadFolder.tsx); the path gives way first. */
+.downloads-folder-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+  min-width: 0;
+}
+.downloads-folder-row .downloads-folder {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-top: 0 !important;
+}
+.downloads-folder-row .download-row-error {
+  flex-basis: 100%;
+}
+.downloads-auto {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
 }
 .downloads-toolbar {
   display: flex;

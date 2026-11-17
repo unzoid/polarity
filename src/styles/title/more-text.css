@@ -1,0 +1,96 @@
+/* "More" under a cut-off synopsis: an episode card's (components/title/OverviewMore.tsx) and, on TV, the title's and
+   an episode's (tv/TvMore.tsx). */
+.overview-more {
+  display: block;
+  margin: 0.25rem 0 0;
+  padding: 0.125rem 2px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: var(--r-xs);
+}
+.overview-more[hidden] {
+  display: none;
+}
+.overview-more:hover {
+  color: var(--text);
+}
+.overview-more:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.overview-more-layer {
+  display: contents;
+}
+.overview-more-text {
+  margin: 0;
+  padding: 0 0.5rem;
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-line;
+}
+/* In a list the text starts after the number and the still (detail.css), so the More does too. */
+.episode-card[data-layout="list"] .overview-more {
+  margin: -0.5rem 0 0.5rem calc(0.25rem + 2.5rem + clamp(10rem, 14vw, 15rem) + 2.5rem);
+}
+@media (max-width: 600px) {
+  .episode-card[data-layout="list"] .overview-more {
+    margin-left: calc(0.25rem + 8.5rem + 0.75rem);
+  }
+}
+@media (max-width: 400px) {
+  .episode-card[data-layout="list"] .overview-more {
+    margin-left: 0.25rem;
+  }
+}
+/* A phone's list puts the synopsis under the still, full width. */
+:root[data-form="phone"] .episode-card[data-layout="list"] .overview-more {
+  margin: -0.5rem 0 0.5rem 0.25rem;
+}
+
+/* TV */
+.tv-more,
+.tv-episode-more {
+  flex: none;
+  align-self: flex-start;
+  padding: 0.35rem 1rem;
+  border-radius: var(--r-pill);
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text-2);
+  background: var(--fill-2);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    transform 200ms var(--ease-out);
+}
+.tv-episode-more {
+  align-self: center;
+}
+.tv-episode-more[hidden] {
+  display: none;
+}
+.tv-more:focus,
+.tv-episode-more:focus {
+  outline: none;
+  background: var(--pill-light);
+  color: var(--text-on-light);
+  transform: scale(1.06);
+}
+.tv-text .tv-text-body {
+  width: min(56rem, 100%);
+  outline: none;
+}
+.tv-text .tv-text-body p {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-line;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-more:focus,
+  .tv-episode-more:focus {
+    transform: none;
+  }
+}

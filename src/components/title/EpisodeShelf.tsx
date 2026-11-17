@@ -26,7 +26,10 @@ export function EpisodeShelf({
   onSources,
   menu,
   item,
+  numbers,
 }: {
+  /** Each episode's number for display, by id: its place in a chosen episode order (lib/library/episodeOrder.ts). */
+  numbers?: Map<string, number>;
   /** The show: given, each released episode gets a download control. */
   item?: MetaPreview;
   layout?: EpisodeLayout;
@@ -74,6 +77,7 @@ export function EpisodeShelf({
         key={v.id}
         layout={layout}
         video={v}
+        number={numbers?.get(v.id)}
         progress={progress.get(v.id)}
         runtime={runtime}
         stillFallback={stillFallback}

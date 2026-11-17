@@ -1,6 +1,7 @@
 mod art_focus;
 #[cfg(any(windows, test))]
 mod automation;
+mod cast;
 mod commands;
 mod controllers;
 mod deep_link;
@@ -8,13 +9,17 @@ mod dev_channel;
 mod discord;
 mod disk;
 mod downloads;
+mod episode_ratings;
+mod external_player;
 mod imdb;
 mod introdb;
 mod keychain;
+mod library_export;
 mod local_files;
 mod locks;
 mod logging;
 mod mal;
+mod media_session;
 mod native_back;
 mod native_dialogs;
 mod native_tabs;
@@ -181,7 +186,7 @@ async fn install_bundled_addons(app: tauri::AppHandle) {
         };
         let saved = state.persist(|data| {
             if !data.addons.iter().any(|a| a.manifest.id == manifest.id) {
-                data.addons.push(store::InstalledAddon { manifest_url: url.into(), manifest });
+                data.addons.push(store::InstalledAddon { manifest_url: url.into(), manifest, disabled: false });
             }
             data.bundled_addons.push(url.into());
         });
@@ -264,6 +269,7 @@ pub fn run() {
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
             app.manage(controllers::Controllers::default());
+            app.manage(cast::Cast::default());
             controllers::watch(app.handle().clone());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move { install_bundled_addons(handle).await });
@@ -285,6 +291,9 @@ pub fn run() {
             commands::search_movies,
             commands::meta,
             commands::imdb_for_tmdb,
+            commands::episode_orders,
+            commands::episode_order,
+            commands::person,
             commands::streams,
             commands::resolve_stream,
             torrent::torrent_open,
@@ -298,18 +307,23 @@ pub fn run() {
             commands::mal_api,
             commands::mal_token,
             commands::ratings,
+            commands::episode_ratings,
             commands::addons_list,
             commands::addon_catalog,
             commands::addons_bundled,
             commands::addon_preview,
             commands::addon_install,
             commands::addon_remove,
+            commands::addon_set_enabled,
+            commands::addon_reorder,
             commands::library_list,
             commands::library_toggle,
             commands::progress_for,
             commands::progress_save,
             commands::progress_save_many,
             commands::library_import,
+            library_export::library_export,
+            library_export::anime_links_import,
             commands::continue_watching,
             commands::watch_history,
             commands::link_anime,
@@ -338,6 +352,9 @@ pub fn run() {
             downloads::download_remove,
             downloads::download_reveal,
             downloads::downloads_storage,
+            downloads::downloads_volumes,
+            downloads::downloads_set_folder,
+            downloads::downloads_pick_folder,
             controllers::controllers_list,
             sync::space_activate,
             sync::space_import_local,
@@ -367,8 +384,21 @@ pub fn run() {
             player::mpv_tune,
             player::mpv_stop,
             player::mpv_snapshot,
+            player::mpv_screenshot,
+            player::mpv_screenshot_reveal,
+            player::mpv_config_folder,
+            player::mpv_subtitle_pick,
+            media_session::media_session,
+            external_player::external_players,
+            external_player::external_play,
+            cast::cast_devices,
+            cast::cast_play,
+            cast::cast_control,
+            cast::cast_stop,
             player::player_system_bars,
             player::player_keep_awake,
+            player::player_brightness,
+            player::player_set_brightness,
             native_tabs::native_tabs,
             native_back::native_back,
             art_focus::art_focus,

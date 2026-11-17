@@ -5,16 +5,20 @@ import {
   Close,
   Episodes,
   ExitFullscreen,
-  FillWindow,
+  CropBars,
+  CropFill,
+  CropFit,
   LayoutList,
   LayoutRow,
   Fullscreen,
   Pause,
   Play,
   Settings as Cog,
+  Shuffle,
   SkipForward,
   Sources,
   Speed,
+  Tv,
   Volume,
   VolumeMuted,
 } from "../components/icons";
@@ -31,7 +35,9 @@ import { TvSourceMenu, useSourceInfo } from "../components/SourceInfo";
 import { playingReport } from "../components/player/playingReport";
 import {
   airedAt,
+  autoPickOrder,
   autoplayStreak,
+  warmLinks,
   countAutoplay,
   describeStream,
   requestHeaders,
@@ -43,6 +49,7 @@ import {
   rememberLanguage,
   rememberTracks,
   resetAutoplay,
+  MAX_VOLUMES,
   sliderAmplitude,
   sourceRow,
   trackMemoryKey,
@@ -59,7 +66,8 @@ import {
   resumeFrom,
   startPosition,
 } from "../lib/playback";
-import { downloadedStream, episodeState, isLocalFile, nextVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
+import { downloadedStream, episodeState, isLocalFile, nextVideo, previousVideo, progressMap, seasonsOf, useDownloads, watchedFraction } from "../lib/library";
+import { nextInOrder, previousInOrder, shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
 import { Scrubber } from "../components/player/Scrubber";
 import { useSource } from "../components/player/useSource";
@@ -82,12 +90,23 @@ import {
   forgetAssOverride,
   subtitleCueVars,
 } from "../components/player/SubtitleSettings";
+import { AudioSettings } from "../components/player/AudioSettings";
 import { isMpv, MpvMedia, type MediaLike, type StepDetail } from "../components/player/mpvMedia";
 import { createFrameStepper, DEFAULT_FPS, measureFps, stepFrame } from "../components/player/frameStep";
 import { useStepping } from "../components/player/useStepping";
 import { createWindowPin } from "../components/player/windowPin";
+import { createMiniWindow } from "../components/player/miniWindow";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
+import { useHoldSpeed } from "../components/player/useHoldSpeed";
+import { useSwipeLevels } from "../components/player/useSwipeLevels";
+import { useScreenBrightness } from "../components/player/useScreenBrightness";
+import { BrightnessHud } from "../components/player/BrightnessHud";
+import { TouchLockLayer, useTouchLock } from "../components/player/TouchLock";
+import { Lock } from "../components/icons";
+import { usePlayingFormat } from "../components/player/usePlayingFormat";
+import { useMediaSession } from "../components/player/useMediaSession";
+import { useChromecast } from "../components/player/useChromecast";
 import { youtubeEmbed, youtubeUrl } from "../components/Trailer";
 import { listenProbe, nextProbeId, probeStep, useStartLog } from "../components/player/useStartLog";
 import {
@@ -105,10 +124,10 @@ import {
 import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
-import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds, seasonLabel } from "../lib/format";
-import { keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
-import { useRouter } from "../lib/router";
-import type { ContentType, Progress, RankedStream, Stream, Video } from "../lib/types";
+import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds } from "../lib/format";
+import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
+import { useNavigation } from "../lib/router";
+import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
 import { setTvMode, useTvMode } from "../tv/tvMode";
@@ -154,14 +173,17 @@ import { usePlayerKeyboard } from "../components/player/usePlayerKeyboard";
 import { useProgressSaver } from "../components/player/useProgressSaver";
 import { useSleepTimer } from "../components/player/useSleepTimer";
 import { SLEEP_CHOICES, sleepLabel, type SleepChoice } from "../lib/playback/sleepTimer";
+import { noteShuffled, shuffledNext, startShuffle } from "../lib/playback/shuffle";
 import { useSimklScrobble } from "../components/player/useSimklScrobble";
 import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
+import { PlayerPauseScreen } from "../components/player/PauseScreen";
+import { PlayerRatingPrompt } from "../components/player/RatingPrompt";
 
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 /** What Subtitles & Audio and Speed say for a YouTube video outside TV mode: they're YouTube's own controls there (#384). TV mode has menus for them (#434). */
 const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
 const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
@@ -169,6 +191,10 @@ const YT_SPEED = "Speed for a YouTube video is in YouTube's player settings.";
 const HOLD_SHOWS_MS = 1200;
 /** With "Up next" set to the very end, it appears this many seconds before. */
 const NEXT_UP_AT_END = 12;
+/** A media key's Previous this early in an episode goes to the one before; later it starts this one again. */
+const PREVIOUS_RESTARTS_S = 5;
+/** The subtitle list's "Add from a File…" entry. */
+const PICK_SUBTITLE = "pick-file";
 
 
 export function Player({
@@ -176,16 +202,19 @@ export function Player({
   metaId,
   videoId,
   stream,
+  shuffle = false,
   leaving = false,
 }: {
   type: ContentType;
   metaId: string;
   videoId: string;
   stream?: Stream;
+  /** The show's episodes in random order; nothing is saved or scrobbled (lib/playback/shuffle.ts). */
+  shuffle?: boolean;
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
-  const { back, replace, tab } = useRouter();
+  const { back, replace, tab } = useNavigation();
   // TV mode keeps the window fullscreen: no fullscreen toggle, and Esc simply goes back.
   const tv = useTvMode();
   // With a controller in TV mode, controls show the button that triggers them.
@@ -263,9 +292,14 @@ export function Player({
   // --- Progress -------------------------------------------------------------
   // Before AirPlay: leaving the player saves the receiver's position before the cast ends.
   const current = meta?.videos.find((v) => v.id === videoId);
-  const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state });
-  useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
-  useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local });
+  // An episode shuffle picked leaves progress, Continue Watching and the scrobbles as they were: a random
+  // episode isn't where you are in the show. The one shuffle was turned on in keeps its own.
+  const shuffled = shuffle && type === "series";
+  const [shuffling, setShuffling] = useState(shuffled);
+  useEffect(() => setShuffling(shuffled), [shuffled, videoId]);
+  const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state, keep: !shuffled });
+  useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local && !shuffled });
+  useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local && !shuffled });
   // A phone or tablet doesn't dim and lock while the video plays; paused, it does in its own time.
   const playingNow = started && !paused;
   useEffect(() => {
@@ -284,7 +318,21 @@ export function Player({
     // YouTube's player has no file to hand over.
     enabled: !party && engine !== "youtube",
   });
-  const media: MediaLike | null = airplay.media ?? baseMedia;
+  // --- Chromecast (#443): the same link on a TV, this player its remote -------------------------
+  const chromecast = useChromecast({
+    media: baseMedia,
+    url: playingUrl?.url,
+    headers: playingUrl ? requestHeaders(playingUrl.stream) : null,
+    title: current ? `${episodeCode(current.season, current.episode)} · ${current.title}` : (meta?.name ?? stream?.name ?? ""),
+    subtitle: current ? meta?.name : undefined,
+    artwork: meta?.background ?? meta?.poster,
+    // Never with a watch party or AirPlay; YouTube's player has its own.
+    enabled: !party && engine !== "youtube" && !airplay.casting,
+    onProblem: (text) => flashNotice(text, 5000),
+  });
+  /** The video plays on a TV (AirPlay or Chromecast): this player is its remote. */
+  const castingAway = airplay.casting || !!chromecast.casting;
+  const media: MediaLike | null = airplay.media ?? chromecast.media ?? baseMedia;
   // What the player did while it played, for "Copy Watch Log" (dev builds only, #424).
   useWatchLog(media, videoId);
   videoRef.current = media;
@@ -299,6 +347,11 @@ export function Player({
   /** Why the link check turned the built-in player's source down (mpv reports its own). */
   const linkError = useRef<string | null>(null);
   const [volume, setVolume] = useState(savedVolume);
+  // Past 100% only mpv can play (Settings → Subtitles & Audio): a <video>, AirPlay's included, stops at 100%.
+  const { maxVolume, holdSpeed, pauseShowsControls, showPlayingFormat, secondSubtitles } = usePrefs();
+  const volumeTop = engine === "mpv" && !castingAway ? maxVolume : 1;
+  /** The volume up or down a step, kept within what this player can play. */
+  const stepVolume = (by: number) => setVolume((v) => Math.min(volumeTop, Math.max(0, +(Math.min(v, volumeTop) + by).toFixed(2))));
   // TV mode: each volume press from the controller or remote shows the volume HUD.
   const [volumePing, setVolumePing] = useState<VolumePing>({ n: 0, dir: "up" });
   const pingVolume = (dir: VolumePing["dir"]) => tv && setVolumePing((p) => ({ n: p.n + 1, dir }));
@@ -350,6 +403,31 @@ export function Player({
     rememberTracks(memoryKey, videoId, { delay });
   };
   const [subSettingsOpen, setSubSettingsOpen] = useState(false);
+  // The system's file dialog hands mpv the file: desktop, not while another screen plays.
+  const canPickSubtitle = isDesktop && engine === "mpv" && !castingAway;
+  // mpv: the line heard before (-1) or after (1) shows now; the delay that makes it is this source's, like any other.
+  const stepLine = async (by: 1 | -1) => {
+    if (engine !== "mpv") return;
+    await mpv.command("sub-step", by).catch(warnFailed("sub-step"));
+    const delay = await mpv.command("get_property", "sub-delay").catch(() => null);
+    if (typeof delay === "number") changeSubDelay(Math.round(delay * 100) / 100);
+  };
+  // Sound ahead of or behind the picture, remembered for this source like the subtitle delay (mpv only).
+  const [audioDelay, setAudioDelay] = useState(0);
+  useEffect(() => setAudioDelay(recallTracks(memoryKey)?.audioDelay ?? 0), [memoryKey]);
+  const changeAudioDelay = (seconds: number) => {
+    setAudioDelay(seconds);
+    rememberTracks(memoryKey, videoId, { audioDelay: seconds });
+  };
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
+  useEffect(() => {
+    if (engine !== "mpv") return;
+    // An mpv option: it outlives the file, so each load gets this source's own (0 for most).
+    const apply = () => void mpv.set("audio-delay", audioDelay);
+    apply();
+    mpv.addEventListener("loadedmetadata", apply);
+    return () => mpv.removeEventListener("loadedmetadata", apply);
+  }, [engine, mpv, audioDelay]);
 
   // Subtitle add-ons match on the file's size and name (React Query compares keys by value).
   const playingFile = videoFile(playingStream);
@@ -402,13 +480,17 @@ export function Player({
   // Paused on a stepped frame, the controls hide after the set time, not the paused wait (#346).
   const frameSteps = useStepping(paused, buffering);
   // YouTube's bar stays out of the way while paused too: showing it moves the picture (#384).
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && !frameSteps.stepping && !ytFramed);
+  // Settings → Playback can leave the picture clear on pause: the controls then come only with input.
+  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && pauseShowsControls && !frameSteps.stepping && !ytFramed);
   // The focus ring shows only for focus moved by the keyboard, never after a click (#329).
   const keyFocus = useKeyboardFocus();
   const ready = source.state.status === "ready" && !error;
   // The top bar's "More" menu (#396) keeps the controls up while it's open.
   const [moreOpen, setMoreOpen] = useState(false);
-  const chromeVisible = chrome.visible || !!options || nativeMenu || moreOpen || !ready;
+  // Playing on a TV, nobody watches this screen: the controls that drive the TV stay up.
+  // Phones and tablets: locked against touches (TouchLock.tsx), the controls stay hidden.
+  const touchLock = useTouchLock(touch && !tv);
+  const chromeVisible = !touchLock.locked && (chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting);
   // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
   const [ytPlayed, setYtPlayed] = useState(false);
   useEffect(() => {
@@ -422,16 +504,25 @@ export function Player({
 
   // --- Current / next episode ---------------------------------------------
   const { animeSkipFiller } = usePrefs();
+  // The episode order chosen for the show on its page (lib/library/episodeOrder.ts): Up Next, autoplay and the
+  // Episodes panel follow it; undefined: as aired.
+  const order = useEpisodeOrders(local ? undefined : meta).view;
   // With "Skip filler" on, the next episode that isn't filler; `skipped` says how many were passed over.
   const { next, skipped } = useMemo(() => {
-    let n = meta && type === "series" ? nextVideo(meta, videoId) : undefined;
+    // Shuffling: one not played yet in this run, picked once per episode so Up Next doesn't change under you.
+    if (shuffling && meta) {
+      noteShuffled(metaId, videoId);
+      return { next: shuffledNext(meta, videoId), skipped: [] as Video[] };
+    }
+    const after = (m: Meta, id: string) => (order ? nextInOrder(order, id) : nextVideo(m, id));
+    let n = meta && type === "series" ? after(meta, videoId) : undefined;
     const skipped: Video[] = [];
     while (n && animeSkipFiller && playContext.isFiller(n.id) && meta) {
       skipped.push(n);
-      n = nextVideo(meta, n.id);
+      n = after(meta, n.id);
     }
     return { next: n, skipped };
-  }, [meta, type, videoId, animeSkipFiller]);
+  }, [meta, type, videoId, animeSkipFiller, shuffling, metaId, order]);
   // A YouTube video is called by its own title once its player says it.
   const [ytTitle, setYtTitle] = useState<string | null>(null);
   // YouTube's player is up with its own controls (#384): the loading screen leaves them clear, even before it plays.
@@ -504,7 +595,7 @@ export function Player({
     setError(null);
     setBuffering(true);
     watch(`source: ${describeStream(source.state.stream, source.state.url)}, ${engine}`);
-    v.volume = sliderAmplitude(volume);
+    v.volume = sliderAmplitude(volume, volumeTop);
     if (v instanceof MpvMedia) {
       // Start at the resume point (or where the watch party is) directly: no
       // fetching the opening of a network stream only to seek away from it.
@@ -565,16 +656,39 @@ export function Player({
     const v = videoRef.current;
     if (!v) return;
     // The sleep timer fades the sound out over its last 30 s; the stored level stays the viewer's.
-    v.volume = sliderAmplitude(volume) * sleep.gain;
+    v.volume = sliderAmplitude(volume, volumeTop) * sleep.gain;
     v.muted = muted;
     if (!systemVolume) storeLocal("polar.volume", String(volume));
-  }, [volume, muted, media, sleep.gain]);
+  }, [volume, muted, media, sleep.gain, volumeTop]);
 
   // A watch party plays at 1x for everyone (its sync nudges the rate itself).
   const inParty = !!party;
+  // Press and hold on the picture: faster until let go (Settings → Playback). Not in a party, nor on YouTube's own player.
+  const hold = useHoldSpeed(holdSpeed > 0 && !inParty && !ytFramed && started, started && !paused);
+  const playRate = hold.held ? holdSpeed : rate;
+  // Phones and tablets: a finger up or down the right half sets the volume, the left the screen's brightness
+  // (useSwipeLevels; Settings → Controls & TV turns it off). Not in TV mode, while locked or held, nor on YouTube's player.
+  const { swipeGestures } = usePrefs();
+  const brightness = useScreenBrightness(touch && !tv);
+  const swipe = useSwipeLevels({
+    enabled: touch && !tv && swipeGestures && !touchLock.locked && started && !ytFramed,
+    begin: (side) => {
+      if (hold.held) return null;
+      if (side === "left") return brightness.level == null ? null : { level: brightness.level, max: 1 };
+      return { level: muted ? 0 : Math.min(volume, volumeTop), max: volumeTop };
+    },
+    change: (side, level) => {
+      if (side === "left") return brightness.set(level);
+      const before = muted ? 0 : Math.min(volume, volumeTop);
+      if (level === before) return;
+      setMuted(false);
+      setVolume(level);
+      setVolumePing((p) => ({ n: p.n + 1, dir: level > before ? "up" : "down" }));
+    },
+  });
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : rate;
-  }, [rate, source.state, media, inParty]);
+    if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
+  }, [playRate, source.state, media, inParty]);
 
   // In a party, a source that won't start keeps the whole room waiting: move
   // on to the next one, as picking another source by hand would.
@@ -861,22 +975,38 @@ export function Player({
     });
   }, [pinner, flashNotice]);
 
+  // --- Picture in Picture on desktop: the window as a small player in a corner, on top of the others ---
+  const canMini = canPin && !tv;
+  const [mini, setMini] = useState(false);
+  const miniPlayer = useMemo(() => createMiniWindow(win, setMini), []);
+  // Leaving the player, or TV mode, puts the window back as it was.
+  useEffect(() => {
+    if (tv) void miniPlayer.leave();
+  }, [tv, miniPlayer]);
+  useEffect(() => () => void miniPlayer.leave(), [miniPlayer]);
+  // Pin locks the window's size and place: never both at once.
+  const toggleMini = useCallback(() => void pinner.unpin().then(() => miniPlayer.toggle()), [pinner, miniPlayer]);
+
   const toggleFullscreen = useCallback(async () => {
     if (tv) return;
+    // From Picture in Picture, its own size first (fullscreen again if it was), then fullscreen.
+    if (miniPlayer.mini) await miniPlayer.leave();
     const next = !(await win.isFullscreen());
     // Going fullscreen unpins first.
     await pinner.setFullscreen(next);
     setFullscreen(next);
-  }, [tv, pinner]);
+  }, [tv, pinner, miniPlayer]);
 
   // Fade back to the page first, *then* leave fullscreen: resizing the window
   // while mpv's native picture is up is what flickers, so do it once the page
   // is opaque on top.
   const exit = useCallback(async () => {
+    // Picture in Picture: the window's own size and place again (and fullscreen if it was, left below).
+    if (miniPlayer.mini) await miniPlayer.leave();
     const fs = !tv && (await win.isFullscreen());
     back();
     if (fs) window.setTimeout(() => void win.setFullscreen(false), PLAYER_EXIT_MS);
-  }, [back, tv]);
+  }, [back, tv, miniPlayer]);
 
   /**
    * The Settings page a playback problem names. In TV mode (#435): Sources is TV's own Sources settings; Add-ons, which
@@ -893,21 +1023,46 @@ export function Player({
   );
 
   const playVideo = useCallback(
-    (id: string, s?: Stream) => {
+    (id: string, s?: Stream, keepShuffle = true) => {
       save();
-      replace({ name: "player", type, metaId, videoId: id, stream: s });
+      // A shuffle carries on (Next, autoplay, another source) until the viewer picks an episode themselves.
+      replace({ name: "player", type, metaId, videoId: id, stream: s, shuffle: (shuffling && keepShuffle) || undefined });
     },
-    [save, replace, type, metaId],
+    [save, replace, type, metaId, shuffling],
   );
+  /** An episode the viewer picked from the list: in the show's order again. */
+  const pickEpisode = (id: string) => playVideo(id, undefined, false);
+  /** Shuffle on (a run starting from this episode) or off; this episode plays on either way. */
+  const toggleShuffle = useCallback(() => {
+    if (!shuffling) startShuffle(metaId, videoId);
+    setShuffling(!shuffling);
+    flashNotice(shuffling ? "Shuffle off" : "Shuffle on: episodes in random order, your progress left as it is", 3000);
+  }, [shuffling, metaId, videoId, flashNotice]);
 
   // --- Episodes & sources pickers -------------------------------------------
   const { data: progress } = useProgress(metaId);
   const progressById = useMemo(() => progressMap(progress), [progress]);
   const seasons = useMemo(() => (meta ? seasonsOf(meta) : []), [meta]);
+  // The seasons, or a chosen order's groups (ids: season numbers, or group ids).
+  const seasonGroups = useMemo(() => (meta ? shelfGroups(meta.videos, seasons, order) : []), [meta, seasons, order]);
   const [pickSeason, setPickSeason] = useState<number>();
-  const shownSeason = pickSeason ?? current?.season ?? seasons[0];
+  const shownSeason =
+    (seasonGroups.some((g) => g.id === pickSeason) ? pickSeason : undefined) ?? (current && shelfGroupOf(current, order)) ?? seasonGroups[0]?.id;
+  const shownEpisodes = seasonGroups.find((g) => g.id === shownSeason)?.videos ?? [];
   // Side by side or a list: the same choice as the title page's switch (#226).
   const [episodeLayout, setEpisodeLayout] = useEpisodeLayout();
+  // Beside the layout switch: the show's episodes in random order from here (lib/playback/shuffle.ts).
+  const shuffleButton = type === "series" && !local && (
+    <IconButton
+      variant="panel"
+      aria-pressed={shuffling}
+      label="Shuffle"
+      title={shuffling ? "Shuffle is on: episodes in random order. Your progress is left as it is" : "Shuffle episodes"}
+      onClick={toggleShuffle}
+    >
+      <Shuffle size={19} strokeWidth={2.1} />
+    </IconButton>
+  );
   const layoutSwitch = (
     <Segmented
       label="Episode layout"
@@ -924,14 +1079,12 @@ export function Player({
 
   const episodeItems = useMemo<OptionItem[]>(
     () =>
-      (meta?.videos ?? [])
-        .filter((v) => v.season === shownSeason)
-        .map((v) => {
+      shownEpisodes.map((v) => {
           const p = progressById.get(v.id);
           const { released, openable, fraction, watched, inProgress } = episodeState(v, p, watchedFraction());
           return {
             id: v.id,
-            label: `${v.episode}. ${v.title}`,
+            label: `${order?.number.get(v.id) ?? v.episode}. ${v.title}`,
             detail: released && inProgress && p ? formatRemaining(p.position, p.duration) : airLabel(v),
             thumbnail: stillFor(v.id) ?? v.thumbnail ?? "",
             progress: watched ? undefined : fraction,
@@ -939,7 +1092,7 @@ export function Player({
             disabled: !openable,
           };
         }),
-    [meta, shownSeason, progressById],
+    [shownEpisodes, order, progressById],
   );
   // A file on this device (#242): the other videos in its folder, in order, with how long each is and
   // where it stopped as Recent files has them. The paths stay on this device (lib/localFiles).
@@ -1071,13 +1224,13 @@ export function Player({
         case "volumeUp":
           // Where the system sets the volume, its keys are the system's.
           if (systemVolume) return false;
-          setVolume((v) => Math.min(1, +(v + 0.1).toFixed(2)));
+          stepVolume(0.1);
           pingVolume("up");
           setMuted(false);
           return true;
         case "volumeDown":
           if (systemVolume) return false;
-          setVolume((v) => Math.max(0, +(v - 0.1).toFixed(2)));
+          stepVolume(-0.1);
           pingVolume("down");
           return true;
         case "mute":
@@ -1089,8 +1242,12 @@ export function Player({
           void toggleFullscreen();
           return true;
         case "pinWindow":
-          if (!canPin) return false;
+          if (!canPin || mini) return false;
           togglePin();
+          return true;
+        case "miniPlayer":
+          if (!canMini) return false;
+          toggleMini();
           return true;
         case "fill":
           if (ytFramed) return false;
@@ -1120,9 +1277,18 @@ export function Player({
           if (type !== "series") return false;
           toggleOptions(action);
           return true;
+        case "screenshot":
+          if (!canShoot) return false;
+          takeScreenshot();
+          return true;
         case "escape":
           if (tv) {
             void exit();
+            return true;
+          }
+          // Picture in Picture goes back to the full window first.
+          if (miniPlayer.mini) {
+            void miniPlayer.leave();
             return true;
           }
           // Leave fullscreen first; a second Esc backs out of the player.
@@ -1148,6 +1314,37 @@ export function Player({
     },
     // Any other key brings the controls back too, with the focus ring where the keyboard left it (#329).
     () => poke(true, "key"),
+  );
+
+  // Media keys, headset buttons and the system's now-playing controls (Windows' media overlay, macOS's
+  // Now Playing, the iPhone's Lock Screen). Previous goes back to the start, or within its first seconds
+  // to the episode before, as music players do. Not for YouTube's player, which has its own.
+  const previous =
+    meta && type === "series" && !local ? (order ? previousInOrder(order, videoId) : previousVideo(meta, videoId)) : undefined;
+  useMediaSession(
+    started && !ytId && !castingAway ? media : null,
+    meta || title
+      ? {
+          title: heading || title,
+          subtitle: current ? title : undefined,
+          artwork: meta?.poster ?? meta?.background,
+          canNext: !!next,
+          canPrevious: true,
+        }
+      : null,
+    (key, position) => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (key === "play") void v.play().catch(() => {});
+      else if (key === "pause") v.pause();
+      else if (key === "toggle") togglePlay();
+      else if (key === "next" && next) playVideo(next.id);
+      else if (key === "seek" && position != null) seekTo(position, "the system's controls");
+      else if (key === "previous") {
+        if (v.currentTime < PREVIOUS_RESTARTS_S && previous) playVideo(previous.id);
+        else seekTo(0, "the system's controls");
+      }
+    },
   );
 
   // Warm the next episode's sources well before the credits.
@@ -1188,6 +1385,17 @@ export function Player({
     return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
   });
   const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
+  // As Up Next comes: the next episode's first two picks get the request pressing Play makes, so their
+  // servers have the file open by the time it starts (its sources were fetched at three quarters).
+  const nextId = next?.id;
+  useEffect(() => {
+    if (!nextId || local || link || nearEnd !== "yes") return;
+    const streams = cachedStreams(type, nextId);
+    if (!streams?.length) return;
+    return warmLinks(autoPickOrder(streams, settings, metaId).slice(0, 2));
+    // The settings at that moment: a change later doesn't need another look.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextId, nearEnd, local, link, type, metaId]);
   // What Best Match learns from this try (#230): how long it took to start, whether it played through, and
   // what the connection carried (links only: not a file here or the torrent engine's own link on this machine).
   useSourceRecord(source.kind, source.state.status === "resolving", started, ended || nearEnd === "yes");
@@ -1199,18 +1407,58 @@ export function Player({
 
   const VolumeIcon = muted || volume === 0 ? VolumeMuted : Volume;
 
+  // Screenshots (desktop, mpv): the picture as it is, subtitles included, to Pictures/Polarity.
+  const canShoot = isDesktop && engine === "mpv" && started && !castingAway;
+  const [shotSaved, setShotSaved] = useState(false);
+  const takeScreenshot = () =>
+    void api.screenshot(heading || title, videoRef.current?.currentTime ?? 0).then(
+      (name) => {
+        setShotSaved(true);
+        flashNotice(`Screenshot saved to Pictures › Polarity › ${name}`, 3500);
+      },
+      (e) => flashNotice(`Couldn't save the screenshot: ${errorMessage(e)}`, 4000),
+    );
+
+  // "4K · Dolby Vision · Dolby Atmos · English 5.1" under the title, once it plays (Settings → Playback).
+  const playingFormat = usePlayingFormat(started && !castingAway ? media : null, showPlayingFormat && !ytFramed);
+
+  // Play in another player installed here (desktop): this one pauses and keeps the place.
+  const { data: otherPlayers = [] } = useQuery({
+    queryKey: keys.externalPlayers,
+    queryFn: async () => (await api.externalPlayers()) ?? [],
+    enabled: isDesktop && !tv,
+    staleTime: Infinity,
+  });
+  const canHandOff = isDesktop && !tv && !ytId && source.state.status === "ready" && otherPlayers.length > 0;
+  const handOff = (player: { id: string; name: string }) => {
+    if (source.state.status !== "ready") return;
+    const v = videoRef.current;
+    v?.pause();
+    void api
+      .externalPlay(player.id, source.state.url, heading || title, v?.currentTime ?? 0, requestHeaders(source.state.stream))
+      .then(
+        () => flashNotice(`Playing in ${player.name}. Your place here is kept.`, 4000),
+        (e) => flashNotice(errorMessage(e), 4000),
+      );
+  };
+
+  /** "More" has items of its own (screenshots, Picture in Picture, other players), so it shows whatever fits. */
+  const moreItems = canShoot || canMini || canHandOff;
+
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
   const actionRow = useRef<HTMLDivElement>(null);
-  const showPin = canPin && !fullscreen;
+  const showPin = canPin && !fullscreen && !mini;
   const showFill = !tv && isDesktop;
   const barFit = useBarFit(
     topBar,
     actionRow,
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact,
-    [heading, title, rate, party?.members.length, next?.id, airplay.available, showPin, showFill, fullscreen, canParty, ytId, link, local].join("|"),
-    !!watchLog,
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join(
+      "|",
+    ),
+    !!watchLog || moreItems,
   );
   const more = barFit.more;
   // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
@@ -1387,6 +1635,8 @@ export function Player({
       className="player"
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
+      data-fullscreen={fullscreen || tv || undefined}
+      data-mini={mini || undefined}
       data-buffering={frameSteps.spinner && ready}
       data-chrome={chromeVisible}
       data-instant={chrome.instant}
@@ -1408,12 +1658,33 @@ export function Player({
         // can make a click only show/hide the controls instead; a tap always
         // does, as on every phone player (Play/Pause is in the controls).
         // A pinch out fills the screen and a pinch in fits the picture, as phone players do (#176).
-        {...pinch}
+        // Held down, it plays faster until let go (useHoldSpeed). A finger up or down sets volume or brightness (useSwipeLevels).
         onPointerDown={(e) => {
           chromeAtPress.current = chrome.visible;
           pinch.onPointerDown(e);
+          hold.handlers.onPointerDown(e);
+          swipe.handlers.onPointerDown(e);
         }}
+        onPointerMove={(e) => {
+          pinch.onPointerMove(e);
+          hold.handlers.onPointerMove(e);
+          swipe.handlers.onPointerMove(e);
+        }}
+        onPointerUp={(e) => {
+          pinch.onPointerUp(e);
+          hold.handlers.onPointerUp();
+          swipe.handlers.onPointerUp(e);
+        }}
+        onPointerCancel={(e) => {
+          pinch.onPointerCancel(e);
+          hold.handlers.onPointerCancel();
+          swipe.handlers.onPointerCancel(e);
+        }}
+        onPointerLeave={hold.handlers.onPointerLeave}
         onClick={() => {
+          // The release of a hold that sped up, or of a swipe: play/pause and the controls stay as they were.
+          const held = hold.swallowClick();
+          if (swipe.swallowClick() || held) return;
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
@@ -1431,6 +1702,8 @@ export function Player({
           if (!isDesktop) return cycleCrop();
           // Pinned, the window stays as it is (#266).
           if (pinner.pinned) return;
+          // Picture in Picture: back to the full window, as the mini players of phones and browsers do.
+          if (miniPlayer.mini) return void miniPlayer.leave();
           void toggleFullscreen();
         }}
         onWheel={(e) => {
@@ -1438,7 +1711,7 @@ export function Player({
           if (wheel === "none" || (wheel === "volume" && systemVolume)) return;
           if (wheel === "seek") seekBy(-Math.sign(e.deltaY) * seekStep);
           else {
-            setVolume((v) => Math.min(1, Math.max(0, +(v - Math.sign(e.deltaY) * 0.05).toFixed(2))));
+            stepVolume(-Math.sign(e.deltaY) * 0.05);
             setMuted(false);
           }
           poke(true, "wheel");
@@ -1487,19 +1760,37 @@ export function Player({
       )}
 
       {airplay.casting && (
-        <div className="player-casting">
-          {meta?.background && <Img className="player-status-bg" src={meta.background} alt="" />}
-          <div className="player-status-content">
-            <Cast size={40} />
-            <p className="t-title2">Playing on AirPlay</p>
-            <p className="t-callout player-casting-hint">To watch here again, choose this computer in the AirPlay list.</p>
+        <CastingPanel
+          art={meta?.background}
+          icon={<Tv size={40} />}
+          title="Playing on AirPlay"
+          hint="To watch here again, choose this computer in the AirPlay list."
+          action={
             <Button variant="glass" onClick={airplay.pick}>
               AirPlay
             </Button>
-          </div>
-        </div>
+          }
+        />
+      )}
+      {chromecast.casting && (
+        <CastingPanel
+          art={meta?.background}
+          icon={<Cast size={40} />}
+          title={`Playing on ${chromecast.casting.name}`}
+          hint="The controls here play, pause and skip on the TV."
+          action={
+            <Button variant="glass" onClick={chromecast.stop}>
+              Stop Casting
+            </Button>
+          }
+        />
       )}
       {notice && <div className="player-notice t-callout">{notice}</div>}
+      {hold.held && (
+        <div className="player-hold-speed t-callout tabular" role="status">
+          <Speed size={16} aria-hidden /> {holdSpeed}x
+        </div>
+      )}
       {party && ready && started && <PartyHold party={party} videoId={videoId} />}
       {party && <PartyNotes party={party} />}
 
@@ -1511,6 +1802,7 @@ export function Player({
         <div className="player-heading" data-tauri-drag-region={pinned ? undefined : true}>
           <span className="player-heading-title">{heading}</span>
           {current && <span className="player-heading-show">{title}</span>}
+          {playingFormat && <span className="player-heading-format">{playingFormat}</span>}
         </div>
         <div className="player-top-end">
           <div className="player-top-actions">
@@ -1530,23 +1822,49 @@ export function Player({
                   <input
                     type="range"
                     min={0}
-                    max={1}
+                    max={volumeTop}
                     step={0.01}
-                    value={muted ? 0 : volume}
+                    value={muted ? 0 : Math.min(volume, volumeTop)}
                     onChange={(e) => {
                       setVolume(Number(e.target.value));
                       setMuted(false);
                     }}
                     aria-label="Volume"
-                    style={{ "--value": `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
+                    aria-valuetext={`${Math.round((muted ? 0 : Math.min(volume, volumeTop)) * 100)}%`}
+                    style={{ "--value": `${((muted ? 0 : Math.min(volume, volumeTop)) / volumeTop) * 100}%` } as React.CSSProperties}
                   />
                 </span>
               </div>
             )}
             {airplay.available && (
               <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
-                <Cast size={22} />
+                <Tv size={22} />
               </IconButton>
+            )}
+            {/* Chromecast (#443): the TVs on the network, and back to this computer. */}
+            {chromecast.available && (
+              <MenuRoot modal={false} onOpenChange={setMoreOpen}>
+                <MenuTrigger
+                  className={iconButtonClass("player")}
+                  aria-label="Cast to a TV"
+                  title="Cast to a TV"
+                  aria-pressed={!!chromecast.casting}
+                >
+                  <Cast size={22} />
+                </MenuTrigger>
+                <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="Cast to a TV">
+                  {chromecast.devices.map((d) => (
+                    <MenuCheckItem
+                      key={d.id}
+                      checked={chromecast.casting?.id === d.id}
+                      onCheckedChange={() => (chromecast.casting?.id === d.id ? chromecast.stop() : chromecast.start(d))}
+                    >
+                      {d.name}
+                    </MenuCheckItem>
+                  ))}
+                  {chromecast.casting && <MenuItem onClick={chromecast.stop}>Stop Casting</MenuItem>}
+                </MenuPopup>
+              </MenuRoot>
             )}
             {showPin && !more && (
               <IconButton
@@ -1567,10 +1885,10 @@ export function Player({
                 data-crop={crop}
                 title={withShortcut(`${cropModeLabel(crop)} (next: ${cropModeLabel(nextCrop)})`, "fill")}
               >
-                <FillWindow size={22} />
+                {crop === "fit" ? <CropFit size={22} /> : crop === "bars" ? <CropBars size={22} /> : <CropFill size={22} />}
               </IconButton>
             )}
-            {(more || watchLog) && (
+            {(more || watchLog || moreItems) && (
               <MenuRoot modal={false} onOpenChange={setMoreOpen}>
                 <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More">
                   <More size={22} />
@@ -1586,6 +1904,27 @@ export function Player({
                       {`Crop: ${cropModeLabel(crop)}`}
                     </MenuCheckItem>
                   )}
+                  {canMini && (
+                    <MenuCheckItem checked={mini} onCheckedChange={toggleMini} meta={shortcutText("miniPlayer")}>
+                      Picture in Picture
+                    </MenuCheckItem>
+                  )}
+                  {canShoot && (
+                    <MenuItem onClick={takeScreenshot} meta={shortcutText("screenshot")}>
+                      Save Screenshot
+                    </MenuItem>
+                  )}
+                  {canShoot && shotSaved && (
+                    <MenuItem onClick={() => void api.revealScreenshot().catch(warnFailed("reveal screenshot"))}>
+                      Show Last Screenshot
+                    </MenuItem>
+                  )}
+                  {canHandOff &&
+                    otherPlayers.map((p) => (
+                      <MenuItem key={p.id} onClick={() => handOff(p)}>
+                        {`Play in ${p.name}`}
+                      </MenuItem>
+                    ))}
                   {watchLog && (
                     <MenuItem
                       onClick={() =>
@@ -1606,6 +1945,11 @@ export function Player({
             {!tv && isDesktop && (
               <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
                 {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
+              </IconButton>
+            )}
+            {touchLock.available && (
+              <IconButton variant="player" onClick={touchLock.lock} label="Lock screen" title="Lock screen">
+                <Lock size={22} />
               </IconButton>
             )}
             {!tv && !isDesktop && (
@@ -1636,12 +1980,13 @@ export function Player({
             title={withShortcut(`Back ${seekStep}s`, "seekBack")}
           />
           <IconButton variant="transport" className="player-transport-main" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut("Play/Pause", "playPause")}>
+            {/* In px like the circle (player.css), not the rem a number gives. */}
             {frameSteps.spinner ? (
-              <Spinner className="player-spinner" size={52} label="Buffering" />
+              <Spinner className="player-spinner" size="52px" label="Buffering" />
             ) : paused ? (
-              <Play size={64} fill="currentColor" strokeWidth={0} />
+              <Play size="64px" fill="currentColor" strokeWidth={0} />
             ) : (
-              <Pause size={64} fill="currentColor" strokeWidth={0} />
+              <Pause size="64px" fill="currentColor" strokeWidth={0} />
             )}
           </IconButton>
           <SkipTransport
@@ -1672,7 +2017,7 @@ export function Player({
               {sleepLabel(sleep.left)}
             </span>
           )}
-          <PlayerClock media={media} display={timeDisplay} rate={rate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
+          <PlayerClock media={media} display={timeDisplay} rate={inParty ? 1 : playRate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
         </div>
         <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (
@@ -1685,7 +2030,7 @@ export function Player({
           {/* YouTube's player keeps its own captions and audio. */}
           {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
           {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
-          {canParty && !airplay.casting && (
+          {canParty && !castingAway && (
             <ActionButton
               icon={<WatchParty size={22} />}
               label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
@@ -1784,12 +2129,28 @@ export function Player({
         onClose={() => {
           setOptions(null);
           setSubSettingsOpen(false);
+          setAudioSettingsOpen(false);
         }}
         foreground={subSettingsOpen ? <SubtitlePreview style={subStyle} media={media} /> : undefined}
         media={media}
         columns={[
           {
             title: "Audio",
+            size: audioSettingsOpen ? "medium" : "narrow",
+            // Delay and the sound options are mpv's.
+            header:
+              engine === "mpv" && !castingAway ? (
+                <IconButton
+                  variant="panel"
+                  aria-pressed={audioSettingsOpen}
+                  label="Audio settings"
+                  title="Audio settings"
+                  onClick={() => setAudioSettingsOpen((v) => !v)}
+                >
+                  <Cog size={19} strokeWidth={2.1} />
+                </IconButton>
+              ) : undefined,
+            content: audioSettingsOpen ? <AudioSettings delay={audioDelay} onDelay={changeAudioDelay} /> : undefined,
             value: tracks.audio.length ? tracks.audioId : "default",
             options: tracks.audio.length ? tracks.audio : [{ id: "default", label: "Default" }],
             onSelect: tracks.selectAudio,
@@ -1814,18 +2175,42 @@ export function Player({
                 onChange={(patch) => updateSettings.mutate({ subtitleStyle: { ...subStyle, ...patch } })}
                 delay={subDelay}
                 onDelay={changeSubDelay}
+                onStepLine={engine === "mpv" && !castingAway ? (by) => void stepLine(by) : undefined}
+                second={engine === "mpv" && !castingAway ? { on: secondSubtitles, onChange: (on) => setPrefs({ secondSubtitles: on }) } : undefined}
                 canPosition={engine === "mpv"}
               />
             ) : undefined,
             value: tracks.subId,
-            options: tracks.subtitles,
-            onSelect: (id) => void tracks.selectSubtitle(id),
+            // Desktop with mpv: a subtitle file from this computer too.
+            options: canPickSubtitle ? [...tracks.subtitles, { id: PICK_SUBTITLE, label: "Add from a File…", heading: "On This Computer" }] : tracks.subtitles,
+            onSelect: (id) =>
+              id === PICK_SUBTITLE
+                ? void api.pickSubtitleFile().catch((e: unknown) => flashNotice(`Couldn't add the subtitle: ${errorMessage(e)}`, 4000))
+                : void tracks.selectSubtitle(id),
             empty: tracks.subtitlesLoading ? "Loading…" : undefined,
           },
+          // mpv: another language at the top (Settings → Subtitles & Audio, or the cog above).
+          ...(engine === "mpv" && secondSubtitles && !castingAway
+            ? [
+                {
+                  title: "Second Subtitles",
+                  size: "narrow" as const,
+                  value: tracks.secondId,
+                  options: tracks.subtitles,
+                  onSelect: (id: string) => void tracks.selectSecond(id),
+                  empty: tracks.subtitlesLoading ? "Loading…" : undefined,
+                },
+              ]
+            : []),
         ]}
       />
 
-      {tv && <VolumeHud volume={volume} muted={muted} ping={volumePing} media={media} />}
+      {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
+      {/* Phones and tablets: the swipes' levels, each at the edge of its half. */}
+      {touch && !tv && (
+        <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} side="right" held={swipe.active === "right"} />
+      )}
+      {brightness.available && <BrightnessHud level={brightness.level ?? 0} held={swipe.active === "left"} media={media} />}
 
       <SkipButton
         active={started ? skip.active : null}
@@ -1883,6 +2268,31 @@ export function Player({
         )}
       </AnimatePresence>
 
+      <PlayerPauseScreen
+        meta={meta}
+        videoId={videoId}
+        state={{
+          engine,
+          playing: ready && started,
+          paused,
+          ended,
+          buffering,
+          controls: chromeVisible,
+          layer: !!options || moreOpen || nativeMenu || !!sourceMenu || torrentNotice || sleep.warning || sleep.asleep,
+          nextUp: showNextUp,
+          notice: !!notice || (!!party && (party.notes.length > 0 || party.knockers.length > 0 || !!partyHoldText(party, videoId))),
+          casting: castingAway,
+          stepping: frameSteps.stepping,
+        }}
+      />
+      <PlayerRatingPrompt
+        meta={meta}
+        type={type}
+        metaId={metaId}
+        videoId={videoId}
+        state={{ ended, nextUp: showNextUp, follower: !!party && party.hostId !== party.me, local, link: isLinkId(metaId), shuffle: shuffled || shuffling }}
+      />
+
       {canParty && (
         <OptionsOverlay
           open={options === "party"}
@@ -1916,16 +2326,21 @@ export function Player({
                 {
                   title: "Seasons",
                   value: String(shownSeason),
-                  options: seasons.map((n) => ({ id: String(n), label: seasonLabel(n) })),
+                  options: seasonGroups.map((g) => ({ id: String(g.id), label: g.label })),
                   onSelect: (id) => setPickSeason(Number(id)), // browse; playback continues
                 },
                 {
                   title: "Episodes",
                   size: "wide",
-                  header: meta && layoutSwitch,
+                  header: meta && (
+                    <>
+                      {layoutSwitch}
+                      {shuffleButton}
+                    </>
+                  ),
                   value: videoId,
                   options: episodeItems,
-                  onSelect: (id) => id !== videoId && playVideo(id),
+                  onSelect: (id) => id !== videoId && pickEpisode(id),
                 },
               ]
             : // The season to browse in a dropdown, its episodes side by side under it.
@@ -1941,9 +2356,10 @@ export function Player({
                         size="large"
                         value={String(shownSeason)}
                         onChange={(id) => setPickSeason(Number(id))} // browse; playback continues
-                        options={seasons.map((n) => ({ value: String(n), label: seasonLabel(n) }))}
+                        options={seasonGroups.map((g) => ({ value: String(g.id), label: g.label }))}
                       />
                       {layoutSwitch}
+                      {shuffleButton}
                     </div>
                   ),
                   options: [],
@@ -1951,13 +2367,14 @@ export function Player({
                   content: (
                     <EpisodeRail
                       meta={meta}
-                      episodes={meta.videos.filter((v) => v.season === shownSeason)}
+                      episodes={shownEpisodes}
+                      numbers={order?.number}
                       playing={videoId}
                       progress={progressById}
                       still={(v) => stillFor(v.id) ?? v.thumbnail}
                       onPlay={(id) => {
                         setOptions(null);
-                        playVideo(id);
+                        pickEpisode(id);
                       }}
                     />
                   ),
@@ -2020,12 +2437,42 @@ export function Player({
         />
       )}
       {sourceInfo.panel}
+      {/* Over everything while locked: touches go nowhere but its Unlock chip; playback carries on. */}
+      {touchLock.locked && (
+        <TouchLockLayer
+          onUnlock={() => {
+            touchLock.unlock();
+            poke(false, "unlocked");
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /** The Sources row of this video's finished download (#23); the others are indexes into the ranked list. */
 const DOWNLOADED = "downloaded";
+
+/**
+ * Playing on a TV (AirPlay, Chromecast): the show's art, what plays where above the centre controls, which drive
+ * the TV, and the way back below them, so the two never overlap (player.css).
+ */
+function CastingPanel({ art, icon, title, hint, action }: { art?: string; icon: React.ReactNode; title: string; hint: string; action: React.ReactNode }) {
+  return (
+    <div className="player-casting">
+      {art && <Img className="player-status-bg" src={art} alt="" />}
+      <div className="player-casting-content">
+        <div className="player-casting-head">
+          {icon}
+          <p className="t-title2">{title}</p>
+          <p className="t-callout player-casting-hint">{hint}</p>
+        </div>
+        <div className="player-casting-gap" aria-hidden />
+        <div className="player-casting-action">{action}</div>
+      </div>
+    </div>
+  );
+}
 
 function ActionButton({
   icon,
@@ -2072,7 +2519,7 @@ const systemVolume = (os === "android" || os === "ios") && !isTvDevice;
 function savedVolume() {
   if (systemVolume) return 1;
   const v = Number(localStorage.getItem("polar.volume") ?? 1);
-  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  return Number.isFinite(v) ? Math.min(Math.max(...MAX_VOLUMES), Math.max(0, v)) : 1;
 }
 
 /** `value` once it has stayed the same for `ms`, else null: a blip never shows. */

@@ -89,9 +89,12 @@ export function Facts({ facts, className = "" }: { facts: ReactNode[]; className
   );
 }
 
-export function TvStage({ entry }: { entry: StageEntry | null }) {
+/**
+ * The staged title, with what its card didn't carry filled in from its page: Continue Watching and
+ * the Library's history only know the name and art. `loading` while that page is on its way.
+ */
+export function useStagedTitle(entry: StageEntry | null) {
   const item = entry?.item;
-  // Continue Watching only knows the name and art; fill in the rest.
   const meta = useQuery({
     queryKey: keys.meta(item?.type ?? "movie", item?.id ?? ""),
     queryFn: () => api.meta(item!.type, item!.id),
@@ -103,6 +106,11 @@ export function TvStage({ entry }: { entry: StageEntry | null }) {
     const m = !item.description ? meta.data : undefined;
     return { ...m, ...Object.fromEntries(Object.entries(item).filter(([, v]) => v != null)) } as MetaPreview;
   }, [item, meta.data]);
+  return { shown, loading: meta.isLoading };
+}
+
+export function TvStage({ entry }: { entry: StageEntry | null }) {
+  const { shown, loading } = useStagedTitle(entry);
   // The logo or name waits for the backdrop (#173).
   const gate = useArtGate(shown?.background);
 
@@ -112,7 +120,7 @@ export function TvStage({ entry }: { entry: StageEntry | null }) {
       <TvBackdrop src={shown?.background} className="tv-stage-art" />
       {shown && (
         <div key={shown.id} className="tv-stage-info" aria-live="polite" {...gate}>
-          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-stage" pending={meta.isLoading || !!entry?.pending} />
+          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-stage" pending={loading || !!entry?.pending} />
           {entry?.kicker && <p className="tv-stage-kicker">{entry.kicker}</p>}
           <Facts facts={titleFacts(shown)} />
           {shown.description && <p className="tv-stage-description">{shown.description}</p>}

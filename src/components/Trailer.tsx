@@ -71,6 +71,8 @@ export function TrailerHost() {
       aria-modal
       tabIndex={-1}
       data-layer=""
+      // TV mode's arrows stay inside it (tv/spatial.ts).
+      data-nav-scope=""
       aria-label={`${open.name} trailer`}
       onClick={(e) => e.target === e.currentTarget && closeTrailer()}
     >

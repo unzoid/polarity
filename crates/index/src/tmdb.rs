@@ -20,6 +20,9 @@ use tokio::sync::{Mutex, Semaphore};
 use crate::cache::TtlCache;
 use crate::{curate, IndexError, Result, PAGE_SIZE};
 
+pub(crate) mod orders;
+mod people;
+
 const API: &str = "https://api.themoviedb.org/3";
 const IMG: &str = "https://image.tmdb.org/t/p";
 /// Requests to TMDB in flight at once, across every shelf: Home opens about a
@@ -112,9 +115,29 @@ impl Tmdb {
 
     /// `skip` titles in, up to [`PAGE_SIZE`] of them; fewer at the end of the
     /// list, or when the page after them failed.
+    #[cfg(test)]
     pub async fn catalog(&self, ty: &str, id: &str, skip: u32, genre: Option<&str>) -> Result<Vec<MetaPreview>> {
-        let key = format!("{ty}/{id}/{}", genre.unwrap_or(""));
-        let (path, query, first_page) = list_request(ty, id, genre)?;
+        self.catalog_within(ty, id, skip, genre, None).await
+    }
+
+    /// [`Tmdb::catalog`], with films from `/discover` kept at or below a certification (`(country, highest)`,
+    /// e.g. `("US", "PG-13")`) so a profile's age limit doesn't leave its pages short. Other lists ignore it.
+    pub async fn catalog_within(
+        &self,
+        ty: &str,
+        id: &str,
+        skip: u32,
+        genre: Option<&str>,
+        bound: Option<(&str, &str)>,
+    ) -> Result<Vec<MetaPreview>> {
+        let (path, mut query, first_page) = list_request(ty, id, genre)?;
+        let bound = bound.filter(|_| path == "/discover/movie");
+        let mut key = format!("{ty}/{id}/{}", genre.unwrap_or(""));
+        if let Some((country, highest)) = bound {
+            key.push_str(&format!("/{country}<={highest}"));
+            query.push(("certification_country".into(), country.into()));
+            query.push(("certification.lte".into(), highest.into()));
+        }
         let run = self.runs.get_or_insert_with(key, || {
             Arc::new(Mutex::new(Run {
                 path,
@@ -202,7 +225,11 @@ impl Tmdb {
         Ok(items
             .into_iter()
             .zip(found)
-            .filter_map(|(item, found)| Some(item.into_preview(ty, found.imdb_id?, found.logos)))
+            .filter_map(|(item, found)| {
+                let mut preview = item.into_preview(ty, found.imdb_id?, found.logos);
+                preview.certification = found.certification;
+                Some(preview)
+            })
             .collect())
     }
 
@@ -216,12 +243,13 @@ impl Tmdb {
         let d: Value = self
             .get(
                 &format!("/{}/{tmdb_id}", tmdb_kind(ty)),
-                &[("append_to_response", "external_ids,images"), ("include_image_language", "en,null")],
+                &[("append_to_response", lookup_append(ty)), ("include_image_language", "en,null")],
             )
             .await?;
         let found = Lookup {
             imdb_id: str_of(&d["external_ids"]["imdb_id"]).filter(|i| i.starts_with("tt")),
             logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
+            certification: pick_certification(ty, &d, &self.region()),
         };
         self.lookups.insert(key, found.clone());
         Ok(found)
@@ -240,13 +268,20 @@ impl Tmdb {
         let d: Value = self
             .get(
                 &format!("/{kind}/{tmdb_id}"),
-                &[("append_to_response", "credits,videos,images"), ("include_image_language", "en,null")],
+                &[("append_to_response", meta_append(ty)), ("include_image_language", "en,null")],
             )
             .await?;
 
         let videos = if ty == "series" { self.episodes(tmdb_id, imdb_id, &d).await? } else { Vec::new() };
         let logos = self.logos(kind, tmdb_id, &d).await;
-        Ok(detail_to_meta(ty, imdb_id, &d, videos, logos))
+        let mut meta = detail_to_meta(ty, imdb_id, &d, videos, logos);
+        meta.preview.certification = pick_certification(ty, &d, &self.region());
+        Ok(meta)
+    }
+
+    /// The country whose age ratings are shown: the metadata language's region (`de-DE` → `DE`), else the US.
+    fn region(&self) -> String {
+        region_of(&self.language)
     }
 
     /// The logos of a details answer (`pick_logos`). A title with no English or
@@ -474,6 +509,55 @@ fn pick_logos(logos: &Value) -> Vec<String> {
         .collect()
 }
 
+/// What a list result's details request appends: its IMDb id, logos and age ratings.
+fn lookup_append(ty: &str) -> &'static str {
+    if ty == "series" {
+        "external_ids,images,content_ratings"
+    } else {
+        "external_ids,images,release_dates"
+    }
+}
+
+/// What a title page's details request appends.
+fn meta_append(ty: &str) -> &'static str {
+    if ty == "series" {
+        "credits,videos,images,content_ratings"
+    } else {
+        "credits,videos,images,release_dates"
+    }
+}
+
+/// The region of a TMDB language (`pt-BR` → `BR`), else `US`.
+fn region_of(language: &str) -> String {
+    language
+        .split_once('-')
+        .map(|(_, r)| r.trim().to_ascii_uppercase())
+        .filter(|r| r.len() == 2 && r.chars().all(|c| c.is_ascii_alphabetic()))
+        .unwrap_or_else(|| "US".into())
+}
+
+/// A title's age rating from a details answer: `release_dates` for a film (its first release in the
+/// country that has one), `content_ratings` for a series; `region`'s first, else the US one.
+fn pick_certification(ty: &str, d: &Value, region: &str) -> Option<String> {
+    let in_country = |country: &str| -> Option<String> {
+        if ty == "series" {
+            d["content_ratings"]["results"]
+                .as_array()?
+                .iter()
+                .filter(|r| r["iso_3166_1"] == country)
+                .find_map(|r| str_of(&r["rating"]).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()))
+        } else {
+            d["release_dates"]["results"]
+                .as_array()?
+                .iter()
+                .filter(|r| r["iso_3166_1"] == country)
+                .flat_map(|r| r["release_dates"].as_array().into_iter().flatten())
+                .find_map(|r| str_of(&r["certification"]).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()))
+        }
+    };
+    in_country(region).or_else(|| if region == "US" { None } else { in_country("US") })
+}
+
 /// More logos than this aren't kept: the app measures at most a few.
 const MAX_LOGOS: usize = 6;
 
@@ -514,6 +598,7 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
     };
 
     let trailer_yt_id = d["videos"]["results"].as_array().map(Vec::as_slice).and_then(pick_trailer);
+    let extras = people::extras(&d["videos"]["results"], trailer_yt_id.as_deref());
 
     let people = d["credits"]["cast"]
         .as_array()
@@ -524,6 +609,7 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
                         name: str_of(&p["name"])?,
                         character: str_of(&p["character"]).or_else(|| str_of(&p["roles"][0]["character"])),
                         photo: str_of(&p["profile_path"]).map(|path| format!("{IMG}/w185{path}")),
+                        tmdb_id: p["id"].as_u64(),
                     })
                 })
                 .take(24)
@@ -585,6 +671,7 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
             release_info,
             imdb_rating: d["vote_average"].as_f64().filter(|r| *r > 0.0).map(|r| format!("{r:.1}")),
             genres: names(&d["genres"], 4),
+            certification: None,
         },
         runtime,
         cast: names(&d["credits"]["cast"], 10),
@@ -592,6 +679,8 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
         trailer_source: trailer_yt_id.as_ref().map(|_| "tmdb".to_string()),
         trailer_yt_id,
         videos,
+        crew: people::crew(d, is_series),
+        extras,
     }
 }
 
@@ -637,6 +726,7 @@ impl Item {
             release_info: self.release_date.or(self.first_air_date).and_then(|d| d.get(..4).map(str::to_owned)),
             imdb_rating: self.vote_average.filter(|r| *r > 0.0).map(|r| format!("{r:.1}")),
             genres: self.genre_ids.iter().filter_map(|&g| genre_name(ty, g)).map(str::to_owned).collect(),
+            certification: None,
         }
     }
 }
@@ -645,6 +735,7 @@ impl Item {
 struct Lookup {
     imdb_id: Option<String>,
     logos: Vec<String>,
+    certification: Option<String>,
 }
 
 #[cfg(test)]
@@ -701,6 +792,16 @@ mod tests {
                                 ids.iter().map(|id| json!({ "id": id, "title": format!("T{id}") })).collect();
                             ("200 OK", json!({ "results": results, "total_pages": 3 }).to_string())
                         }
+                    } else if path == "/discover/movie" {
+                        // Answers only when asked within a US certification (a profile's age limit).
+                        if query.contains("certification_country=US") && query.contains("certification.lte=PG-13") {
+                            let results = json!([{ "id": 701, "title": "T701" }, { "id": 702, "title": "T702" }]);
+                            ("200 OK", json!({ "results": results, "total_pages": 1 }).to_string())
+                        } else {
+                            ("404 Not Found", String::new())
+                        }
+                    } else if path == "/person/77" {
+                        ("200 OK", fake_person(query).to_string())
                     } else if path == "/movie/601/images" {
                         // Asked for in the original language only.
                         assert!(query.contains("include_image_language=zh"), "{query}");
@@ -708,6 +809,7 @@ mod tests {
                         ("200 OK", json!({ "logos": logos }).to_string())
                     } else if let Some(id) = path.strip_prefix("/movie/").and_then(|id| id.parse::<u64>().ok()) {
                         assert!(query.contains("append_to_response=external_ids%2Cimages"), "{query}");
+                        assert!(query.contains("release_dates"), "{query}");
                         assert!(query.contains("include_image_language=en%2Cnull"), "{query}");
                         let imdb = if id % 5 == 0 { Value::Null } else { json!(format!("tt{id}")) };
                         let square = |n: u64| json!({ "iso_639_1": "en", "file_path": format!("/sq{n}.png"), "aspect_ratio": 1.06 });
@@ -739,6 +841,13 @@ mod tests {
                                     "original_language": original,
                                     "external_ids": { "imdb_id": imdb },
                                     "images": { "logos": logos },
+                                    // A rating in Germany and the US for 101; the US only for the rest.
+                                    "release_dates": { "results": [
+                                        { "iso_3166_1": "DE", "release_dates": if id == 101 {
+                                            json!([{ "certification": "", "type": 1 }, { "certification": "12", "type": 3 }])
+                                        } else { json!([]) } },
+                                        { "iso_3166_1": "US", "release_dates": [{ "certification": "PG-13", "type": 3 }] },
+                                    ] },
                                 })
                                 .to_string(),
                             ),
@@ -755,6 +864,81 @@ mod tests {
             }
         });
         (base, hits)
+    }
+
+    /// A made-up person: three films acted in (101 the most voted on, 100 without an IMDb id), a talk show
+    /// and a film as themselves, which their page leaves out, and two films directed, one also acted in.
+    fn fake_person(query: &str) -> Value {
+        assert!(query.contains("append_to_response=combined_credits"), "{query}");
+        let film = |id: u64, votes: u64, character: &str| json!({ "id": id, "media_type": "movie", "title": format!("T{id}"), "vote_count": votes, "character": character });
+        json!({
+            "id": 77,
+            "name": "Ada Brennan",
+            "biography": "  An actor and director, made up for tests.  ",
+            "birthday": "1970-01-01",
+            "deathday": null,
+            "place_of_birth": "Example Town",
+            "known_for_department": "Acting",
+            "profile_path": "/ada.jpg",
+            "combined_credits": {
+                "cast": [
+                    film(102, 40, "Nora"),
+                    film(101, 900, "Clara"),
+                    film(100, 5000, "Mira"),
+                    film(103, 9000, "Self"),
+                    { "id": 9, "media_type": "tv", "name": "Late Talk", "vote_count": 99999, "genre_ids": [10767], "character": "Guest" },
+                    film(102, 40, "Nora (voice)"),
+                ],
+                "crew": [
+                    { "id": 104, "media_type": "movie", "title": "T104", "vote_count": 10, "job": "Director" },
+                    { "id": 101, "media_type": "movie", "title": "T101", "vote_count": 900, "job": "Director" },
+                    { "id": 106, "media_type": "movie", "title": "T106", "vote_count": 1, "job": "Producer" },
+                ],
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn a_person_page_lists_roles_and_directing_most_voted_first() {
+        let (api, hits) = fake_tmdb().await;
+        let tmdb = local(api);
+        let before = hits.load(Ordering::SeqCst);
+        let page = tmdb.person(77).await.unwrap();
+        // The person, then one lookup per title kept (101, 102, 100, 104): 101 is in both lists, asked for once.
+        assert_eq!(hits.load(Ordering::SeqCst) - before, 5);
+        assert_eq!(page.name, "Ada Brennan");
+        assert_eq!(page.biography.as_deref(), Some("An actor and director, made up for tests."));
+        assert_eq!(page.photo.as_deref(), Some("https://image.tmdb.org/t/p/w342/ada.jpg"));
+        assert_eq!((page.born.as_deref(), page.died), (Some("1970-01-01"), None));
+        assert_eq!(page.known_for.as_deref(), Some("Acting"));
+        let ids = |list: &[MetaPreview]| list.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+        // 100 has no IMDb id; 103 is themselves, the talk show an appearance; 102 once.
+        assert_eq!(ids(&page.acting), ["tt101", "tt102"]);
+        assert_eq!(ids(&page.directing), ["tt101", "tt104"]);
+        assert_eq!(page.acting[1].logo.as_deref(), Some("https://image.tmdb.org/t/p/w500/en102.png"));
+        // Without a TMDB person of that id, it's not found.
+        assert!(matches!(tmdb.person(78).await, Err(IndexError::NotFound)));
+    }
+
+    #[test]
+    fn details_name_people_by_id_and_list_extras() {
+        let d = json!({
+            "id": 1,
+            "title": "Made Up Film",
+            "credits": {
+                "cast": [{ "id": 77, "name": "Ada Brennan", "character": "Nora" }],
+                "crew": [{ "id": 78, "name": "Ines Marchetti", "job": "Director" }],
+            },
+            "videos": { "results": [
+                { "site": "YouTube", "key": "main", "type": "Trailer", "official": true, "name": "Trailer" },
+                { "site": "YouTube", "key": "making", "type": "Featurette", "official": true, "name": "Making Of" },
+            ]},
+        });
+        let meta = detail_to_meta("movie", "tt0000001", &d, Vec::new(), Vec::new());
+        assert_eq!(meta.people[0].tmdb_id, Some(77));
+        assert_eq!(meta.crew[0].tmdb_id, Some(78));
+        assert_eq!(meta.trailer_yt_id.as_deref(), Some("main"));
+        assert_eq!(meta.extras.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["making"]);
     }
 
     fn local(api: String) -> Tmdb {
@@ -907,5 +1091,53 @@ mod tests {
         );
         let d = json!({"id": 1, "name": "Made Up Toon", "original_language": ""});
         assert_eq!(detail_to_meta("series", "tt0000001", &d, Vec::new(), Vec::new()).details.original_language, None);
+    }
+
+    #[tokio::test]
+    async fn list_results_carry_their_age_rating_from_the_same_request() {
+        let (api, hits) = fake_tmdb().await;
+        let us = local(api.clone());
+        let page = us.catalog("movie", "popular", 0, None).await.unwrap();
+        assert_eq!(page[0].certification.as_deref(), Some("PG-13"));
+        // A German metadata language shows the German rating where there is one, else the US one.
+        let de = Tmdb { api, ..Tmdb::new("0123456789abcdef0123456789abcdef".into(), Some("de-DE".into())) };
+        let before = hits.load(Ordering::SeqCst);
+        let page = de.catalog("movie", "popular", 0, None).await.unwrap();
+        assert_eq!(page[0].id, "tt101");
+        assert_eq!(page[0].certification.as_deref(), Some("12"));
+        assert_eq!(page[1].certification.as_deref(), Some("PG-13"));
+        // One list request (after a refused one) and one details request per title: no extra request for ratings.
+        assert!(hits.load(Ordering::SeqCst) - before <= 2 + 20 + 20, "ratings cost requests of their own");
+    }
+
+    #[tokio::test]
+    async fn a_discover_film_list_can_be_kept_within_a_certification() {
+        let (api, _) = fake_tmdb().await;
+        let tmdb = local(api);
+        let ids = |list: Vec<MetaPreview>| list.into_iter().map(|m| m.id).collect::<Vec<_>>();
+        let bound = Some(("US", "PG-13"));
+        assert_eq!(
+            ids(tmdb.catalog_within("movie", "popular", 0, Some("Drama"), bound).await.unwrap()),
+            ["tt701", "tt702"]
+        );
+        // Without the bound the same list is another run (the fake refuses it).
+        assert!(tmdb.catalog("movie", "popular", 0, Some("Drama")).await.is_err());
+        // Lists that aren't TMDB's discover ignore it.
+        assert!(tmdb.catalog_within("movie", "popular", 0, None, bound).await.is_ok());
+    }
+
+    #[test]
+    fn the_rating_region_follows_the_metadata_language() {
+        assert_eq!(region_of("de-DE"), "DE");
+        assert_eq!(region_of("pt-br"), "BR");
+        assert_eq!(region_of("en"), "US");
+        let series = json!({ "content_ratings": { "results": [
+            { "iso_3166_1": "US", "rating": "TV-14" },
+            { "iso_3166_1": "NL", "rating": "" },
+        ] } });
+        assert_eq!(pick_certification("series", &series, "NL").as_deref(), Some("TV-14"));
+        assert_eq!(pick_certification("series", &series, "US").as_deref(), Some("TV-14"));
+        assert_eq!(pick_certification("series", &json!({}), "US"), None);
+        assert_eq!(pick_certification("movie", &series, "US"), None);
     }
 }
