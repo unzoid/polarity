@@ -1,4 +1,4 @@
-import type { Icon, IconProps } from "./icons";
+import { iconLength, type Icon, type IconProps } from "./icons";
 
 /**
  * Site logos for links out (Simple Icons, CC0): single-path 24×24 marks drawn in currentColor.
@@ -26,7 +26,7 @@ export function BrandIcon({ site, size = 16, className }: { site: string; size?:
   const d = BRAND_PATHS[site];
   if (!d) return null;
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" className={className} aria-hidden>
+    <svg viewBox="0 0 24 24" width={iconLength(size)} height={iconLength(size)} fill="currentColor" className={className} aria-hidden>
       <path d={d} />
     </svg>
   );

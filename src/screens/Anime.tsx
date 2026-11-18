@@ -48,7 +48,7 @@ import {
 import { PRIORITY } from "../lib/net";
 import { useViewportPlace } from "../lib/ui";
 import { usePrefs } from "../lib/settings";
-import { useRouter, type Route } from "../lib/router";
+import { useRouter, type Route, useNavigation } from "../lib/router";
 import type { MetaPreview } from "../lib/types";
 import { HeroCarousel } from "./Home";
 import { Button } from "../components/ui/Button";
@@ -75,7 +75,7 @@ export function Anime() {
   const next = nextSeason(now);
   const [index, setIndex] = useState(0);
   const handlers = useAnimeHandlers();
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
 
   if (isError && !data) {
     return (
@@ -169,7 +169,7 @@ const animePreviewId = (a: Card) => animePreview(a, null, "english").id;
 
 /** Where the rest of the section lives: the schedule, the full browser, and a way in by genre or kind of show. */
 function AnimeNav() {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (
     <nav className="anime-nav" aria-label="Browse anime">
       <Chip className="anime-nav-main" onClick={() => navigate({ name: "anime-schedule" })}>
@@ -327,7 +327,7 @@ function GenreShelf({ genre, shape, action }: { genre: string; shape: Shape; act
   const [ref, near, place] = useViewportPlace<HTMLDivElement>(reprioritiseAniList);
   const priority = useCallback(() => rowPriority(place.current), [place]);
   const { data } = useAnimeGenre(genre, near, priority);
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return (
     <div ref={ref}>
       <AnimeShelf

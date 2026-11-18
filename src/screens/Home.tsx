@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
-import { AmbientWash } from "../components/AmbientWash";
 import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
 import { Img } from "../components/Img";
@@ -9,7 +8,7 @@ import { TitleHeading } from "../components/title/TitleHeading";
 import { LandscapeCard, PosterCard, useIntent } from "../components/PosterCard";
 import { ArtTitle, Card, ProgressBar } from "../components/title/Card";
 import { Shelf } from "../components/title/Shelf";
-import { Row } from "../components/Row";
+import { ContinueEditRow } from "../components/ContinueEditRow";
 import { api } from "../lib/api";
 import { episodeCode, formatRemaining, joinFacts, kindFacts } from "../lib/format";
 import {
@@ -20,8 +19,8 @@ import {
   useRecommend,
   useSettings,
 } from "../lib/net";
-import { prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
-import { useRouter } from "../lib/router";
+import { heroBackdropUrl, prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
+import { useNavigation } from "../lib/router";
 import {
   catalogKey,
   catalogTitle,
@@ -30,6 +29,9 @@ import {
   shelfRoute,
   todaysShelves,
   useAddonCatalogRow,
+  useBrowseFeatured,
+  useBrowseShelf,
+  useBrowseVisible,
   useFeatured,
   useHomeCatalogs,
   useListable,
@@ -58,8 +60,10 @@ const NO_TITLES: MetaPreview[] = [];
 const EAGER_SHELVES = 2;
 
 export function Home() {
-  const { data: items } = useFeatured();
-  const [index, setIndex] = useState(0);
+  // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
+  const items = useBrowseFeatured(useFeatured().data);
+  const [picked, setIndex] = useState(0);
+  const index = items?.length ? Math.min(picked, items.length - 1) : 0;
   const seeds = useSeeds();
   const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
   const shownAbove = useShownAbove(shelves, items ?? NO_TITLES);
@@ -70,7 +74,7 @@ export function Home() {
 
   return (
     <div className="scroll home">
-      <HeroCarousel items={items} index={index} setIndex={setIndex} />
+      {items?.length !== 0 && <HeroCarousel items={items} index={index} setIndex={setIndex} />}
       <div className="rows home-rows">
         {(settings?.showContinueWatching ?? true) && <ContinueRow />}
         {addonRows.map((c) => (
@@ -100,6 +104,17 @@ const ADVANCE_MS = 9000;
  * for reduced motion. The art cross-fades rather than slides: a full-screen
  * slide is a vestibular trigger and an abrupt cut is a brightness jump.
  */
+function subscribeUltrawide(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const mq = window.matchMedia("(min-aspect-ratio: 2/1)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function isUltrawide() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-aspect-ratio: 2/1)").matches;
+}
+
 export function HeroCarousel({
   items,
   index,
@@ -115,14 +130,18 @@ export function HeroCarousel({
   /** What clicking and right-clicking the art does; by default the title's page and its options menu. */
   handlers?: (item: MetaPreview) => { onClick: () => void; onContextMenu: (e: React.MouseEvent<HTMLElement>) => void };
 }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const phone = useFormFactor().form === "phone";
+  const ultrawide = useSyncExternalStore(subscribeUltrawide, isUltrawide, () => false);
   const [paused, setPaused] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const count = items?.length ?? 0;
-  const item = items?.[index];
+  const rawItem = items?.[index];
+  const bgOf = useCallback((u?: string) => heroBackdropUrl(u, phone), [phone]);
+  const item = useMemo(() => (rawItem ? { ...rawItem, background: bgOf(rawItem.background) } : undefined), [rawItem, bgOf]);
   // The logo or name waits for the current backdrop (#173).
   const gate = useArtGate(item?.background);
+  const gateReady = gate["data-art"] === "ready";
   const gateRef = gate.ref;
   const heroRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -131,6 +150,12 @@ export function HeroCarousel({
     },
     [gateRef],
   );
+
+  // Only mount slides that are active, were shown, or have been warmed ahead so hidden slides don't contend at t=0.
+  const [warmed, setWarmed] = useState<ReadonlySet<number>>(() => new Set([index]));
+  useEffect(() => {
+    setWarmed((prev) => (prev.has(index) ? prev : new Set(prev).add(index)));
+  }, [index]);
 
   const { data: settings } = useSettings();
   const rotate = settings?.heroAutoplay ?? true;
@@ -146,10 +171,23 @@ export function HeroCarousel({
     return () => window.clearInterval(t);
   }, [index, count, paused, rotate, setIndex]);
 
-  // Decode the next backdrop ahead of time so the cross-fade never waits.
+  // Decode the next backdrop ahead of time once the current slide is in (after a short settle window),
+  // so slide 0 never competes with slide 1 at initial load yet the cross-fade never waits.
+  const [nextWarmed, setNextWarmed] = useState(false);
   useEffect(() => {
-    if (items && count) preloadImage(items[(index + 1) % count].background);
-  }, [items, index, count]);
+    setNextWarmed(false);
+  }, [index]);
+  useEffect(() => {
+    if (!items || count < 2 || !gateReady) return;
+    const nextIdx = (index + 1) % count;
+    const t = window.setTimeout(() => {
+      const nextBg = bgOf(items[nextIdx]?.background);
+      preloadImage(nextBg);
+      setNextWarmed(true);
+      setWarmed((prev) => (prev.has(nextIdx) ? prev : new Set(prev).add(nextIdx)));
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [items, index, count, gateReady, bgOf]);
 
   // A sideways swipe on touch steps through the titles, as the arrows do.
   const swiped = useRef(false);
@@ -167,23 +205,18 @@ export function HeroCarousel({
     onClick: () => navigate({ name: "detail", type: item.type, id: item.id, preview: item }),
     onContextMenu: cardMenu(item).onContextMenu,
   };
+  const nextBg = nextWarmed ? bgOf(items[(index + 1) % count]?.background) : undefined;
+  const prevItem = items[(index - 1 + count) % count];
+  const nextItem = items[(index + 1) % count];
 
   return (
     <section className="hero" aria-roledescription="carousel">
-      {/* The page around the card takes on the art's colour: on a phone its most prominent one glowing in from the
-          top right corner (Netflix's); elsewhere its main colour, one dimmed tint per backdrop, fading down from the
-          top and cross-fading with it. */}
-      {phone ? (
-        <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} />
-      ) : (
-        <div className="hero-ambient" aria-hidden>
-          {items.map((it, i) => (
-            <AmbientWash key={it.id} src={it.background} current={i === index} flat />
-          ))}
-        </div>
-      )}
+      {/* The page around the card takes on a dark shade of the art's colour, as Netflix's, fading down the window. */}
+      <HeroGlow src={item.background} next={nextBg} area={phone ? "middle" : "whole"} />
       <div className="hero-stage">
-      {count > 1 && <HeroPeek item={items[(index - 1 + count) % count]} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />}
+      {ultrawide && count > 1 && prevItem && (
+        <HeroPeek item={{ ...prevItem, background: bgOf(prevItem.background) }} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />
+      )}
       <div
         className="hero-card"
         ref={heroRef}
@@ -203,16 +236,19 @@ export function HeroCarousel({
         onContextMenu={h.onContextMenu}
       >
         <div className="hero-art">
-          {items.map((it, i) => (
-            <Img
-              key={it.id}
-              src={it.background}
-              alt=""
-              loading={i === 0 ? "eager" : "lazy"}
-              className="hero-backdrop"
-              data-current={i === index}
-            />
-          ))}
+          {items.map((it, i) =>
+            i === index || warmed.has(i) ? (
+              <Img
+                key={it.id}
+                src={bgOf(it.background)}
+                alt=""
+                loading={i === index ? "eager" : "lazy"}
+                fetchPriority={i === index ? "high" : undefined}
+                className="hero-backdrop"
+                data-current={i === index}
+              />
+            ) : null,
+          )}
         </div>
         <div className="hero-scrim" />
 
@@ -250,7 +286,9 @@ export function HeroCarousel({
           </div>
         )}
       </div>
-      {count > 1 && <HeroPeek item={items[(index + 1) % count]} side="next" onClick={() => setIndex((index + 1) % count)} />}
+      {ultrawide && count > 1 && nextItem && (
+        <HeroPeek item={{ ...nextItem, background: bgOf(nextItem.background) }} side="next" onClick={() => setIndex((index + 1) % count)} />
+      )}
       </div>
     </section>
   );
@@ -308,7 +346,7 @@ function HeroPeek({ item, side, onClick }: { item: MetaPreview; side: "prev" | "
 }
 
 function HeroContent({ item }: { item: MetaPreview }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const intent = useIntent(item);
   const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
@@ -343,10 +381,11 @@ function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: bo
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
   const { data, isLoading, isError } = isCatalog ? catalog : recommended;
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const to = shelfRoute(shelf);
   // Nothing to play and nothing to show (#337) stays out.
-  const shown = useListable(data);
+  // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
+  const shown = useBrowseShelf(useListable(data), isCatalog ? { type: shelf.type, id: shelf.id, genre: shelf.genre } : undefined);
   const items = useMemo(() => {
     const fresh = (shown ?? []).filter((m) => !exclude.has(m.id));
     return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (shown ?? []);
@@ -384,8 +423,8 @@ function LazyShelf({ shelf, eager, exclude }: { shelf: HomeShelf; eager: boolean
 function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   const [ref, near] = useNearViewport<HTMLDivElement>();
   const { data: found, isError } = useAddonCatalogRow(catalog, near);
-  const data = useListable(found);
-  const { navigate } = useRouter();
+  const data = useBrowseVisible(useListable(found));
+  const { navigate } = useNavigation();
   return (
     <div ref={ref} data-addon-row={catalog.id}>
       {!isError && !(data && !data.length) && (
@@ -405,13 +444,8 @@ function ContinueRow() {
   const items = useMemo(() => data ?? [], [data]);
   const order = useMemo(() => items.map((p) => p.videoId).join(" "), [items]);
   if (!items.length) return null;
-  return (
-    <Row title="Continue Watching" shape="landscape" order={order}>
-      {items.map((p) => (
-        <ContinueCard key={p.videoId} progress={p} />
-      ))}
-    </Row>
-  );
+  // Edit picks several cards to remove at once (components/ContinueEditRow.tsx).
+  return <ContinueEditRow items={items} order={order} card={(p) => <ContinueCard progress={p} />} />;
 }
 
 /**
@@ -419,7 +453,7 @@ function ContinueRow() {
  * an anime shows the entry the episode is part of and opens its page (#22).
  */
 function ContinueCard({ progress: p }: { progress: Progress }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const stored = useMemo(() => progressItem(p), [p]);
   const { item, entry, opens } = useEntryShown(stored, p.videoId);
   const openDetail = () => navigate({ name: "detail", type: p.type, id: opens });

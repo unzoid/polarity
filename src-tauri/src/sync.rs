@@ -21,7 +21,7 @@ pub struct LocalChanges {
 }
 
 /// Switch which space library/progress commands use. `None` = signed out.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_activate(state: State<'_, AppState>, space: Option<String>) -> Result<()> {
     state.persist(|d| {
         d.active_space = space.unwrap_or_else(|| LOCAL_SPACE.into());
@@ -31,7 +31,7 @@ pub fn space_activate(state: State<'_, AppState>, space: Option<String>) -> Resu
 
 /// Copy the signed-out library, history and anime links into a profile
 /// (first sign-in).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_import_local(state: State<'_, AppState>, space: String) -> Result<()> {
     state.persist(|d| {
         let local = d.spaces.get(LOCAL_SPACE).cloned().unwrap_or_default();
@@ -44,7 +44,7 @@ pub fn space_import_local(state: State<'_, AppState>, space: String) -> Result<(
 
 /// Forget cached profile data (sign-out, deleted profile). `None` = every
 /// profile; the signed-out space is always kept.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_forget(state: State<'_, AppState>, space: Option<String>) -> Result<()> {
     state.persist(|d| {
         match space {
@@ -61,7 +61,7 @@ pub fn space_forget(state: State<'_, AppState>, space: Option<String>) -> Result
 }
 
 /// Everything changed locally since the last push.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sync_changes(state: State<'_, AppState>, space: String) -> LocalChanges {
     let store = state.store.locked();
     match store.data.spaces.get(&space) {
@@ -71,7 +71,7 @@ pub fn sync_changes(state: State<'_, AppState>, space: String) -> LocalChanges {
 }
 
 /// These records reached the server (each with the time it carried).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sync_mark_pushed(state: State<'_, AppState>, space: String, pushed: Pushed) -> Result<()> {
     state.persist(|d| {
         if let Some(s) = d.spaces.get_mut(&space) {
@@ -82,7 +82,7 @@ pub fn sync_mark_pushed(state: State<'_, AppState>, space: String, pushed: Pushe
 
 /// Merge changes pulled from the server. Returns whether anything changed.
 /// `links` is optional until the account backends carry anime links.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sync_apply(
     state: State<'_, AppState>,
     space: String,
@@ -105,14 +105,14 @@ pub fn sync_apply(
 }
 
 /// Titles pulled without a name (the account keeps none), most recent first.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_untitled(state: State<'_, AppState>, space: String) -> Vec<Untitled> {
     state.store.locked().data.spaces.get(&space).map(|s| s.untitled()).unwrap_or_default()
 }
 
 /// Names and pictures found for pulled titles; fills only what is missing
 /// and moves no times, so nothing is pushed back.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_fill_display(state: State<'_, AppState>, space: String, found: Vec<Display>) -> Result<bool> {
     let mut changed = false;
     state.persist(|d| {

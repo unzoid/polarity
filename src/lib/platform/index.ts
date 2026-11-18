@@ -4,6 +4,7 @@
 // Its public surface: code outside src/lib imports this folder, code inside src/lib imports the file.
 
 export * from "./back";
+export * from "./brightness";
 export * from "./build";
 export * from "./bridge";
 export * from "./deepLinks";

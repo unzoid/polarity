@@ -1,4 +1,5 @@
 import { upNext } from "../library/episodes";
+import { useEpisodeOrders } from "../library/episodeOrderChoice";
 import { episodeCode, formatTime } from "../format";
 import { useProgress } from "../net/queries";
 import type { Meta, MetaPreview } from "../types";
@@ -12,7 +13,9 @@ export function usePlayTarget(item: MetaPreview, meta?: Meta) {
   const { data: progress } = useProgress(item.id);
   const isSeries = item.type === "series";
 
-  const next = meta && isSeries ? upNext(meta, progress ?? []) : undefined;
+  // The episode order chosen for the show, if any (lib/library/episodeOrder.ts), decides what comes next.
+  const { view } = useEpisodeOrders(isSeries ? meta : undefined);
+  const next = meta && isSeries ? upNext(meta, progress ?? [], view) : undefined;
   const movieProgress = !isSeries ? progress?.find((p) => p.videoId === item.id) : undefined;
   const videoId = isSeries ? next?.video?.id : item.id;
   const resumeAt = isSeries

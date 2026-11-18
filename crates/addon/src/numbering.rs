@@ -10,7 +10,7 @@
 //! the season/episode numbers only decide between episodes of the same day,
 //! or stand in when one side has no date or the dates are a few days apart.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::Video;
 
@@ -33,16 +33,41 @@ const EARLY_DAYS: i64 = 3;
 ///   under an id that plays something else.
 ///
 /// The result is ordered by season and episode.
+struct ImdbIndex {
+    days: Vec<Option<i64>>,
+    by_day: HashMap<i64, Vec<usize>>,
+    by_num: HashMap<(u32, u32), Vec<usize>>,
+}
+
+impl ImdbIndex {
+    fn new(imdb: &[Video]) -> Self {
+        let mut days = Vec::with_capacity(imdb.len());
+        let mut by_day: HashMap<i64, Vec<usize>> = HashMap::with_capacity(imdb.len());
+        let mut by_num: HashMap<(u32, u32), Vec<usize>> = HashMap::with_capacity(imdb.len());
+        for (i, r) in imdb.iter().enumerate() {
+            let d = r.released.as_deref().and_then(day_number);
+            days.push(d);
+            if let Some(day) = d {
+                by_day.entry(day).or_default().push(i);
+            }
+            by_num.entry((r.season, r.episode)).or_default().push(i);
+        }
+        Self { days, by_day, by_num }
+    }
+}
+
 pub fn renumber(videos: Vec<Video>, imdb: &[Video]) -> Vec<Video> {
     if imdb.is_empty() {
         return videos;
     }
+    let idx = ImdbIndex::new(imdb);
     let mut used = vec![false; imdb.len()];
     let mut out = Vec::with_capacity(imdb.len().max(videos.len()));
     let mut unmatched = Vec::new();
 
     for v in videos {
-        match pick(&v, imdb, &used) {
+        let v_day = v.released.as_deref().and_then(day_number);
+        match pick(&v, v_day, imdb, &idx, &used) {
             Some(i) => {
                 used[i] = true;
                 let r = &imdb[i];
@@ -50,7 +75,7 @@ pub fn renumber(videos: Vec<Video>, imdb: &[Video]) -> Vec<Video> {
                     id: r.id.clone(),
                     season: r.season,
                     episode: r.episode,
-                    released: earliest(v.released, r.released.clone()),
+                    released: earliest_with_days(v.released, v_day, r.released.clone(), idx.days[i]),
                     thumbnail: v.thumbnail.or_else(|| r.thumbnail.clone()),
                     overview: v.overview.or_else(|| r.overview.clone()),
                     rating: v.rating.or_else(|| r.rating.clone()),
@@ -62,25 +87,54 @@ pub fn renumber(videos: Vec<Video>, imdb: &[Video]) -> Vec<Video> {
     }
 
     out.extend(imdb.iter().zip(&used).filter(|(_, u)| !**u).map(|(r, _)| r.clone()));
-    let taken: HashSet<String> = imdb.iter().map(|r| r.id.clone()).collect();
-    out.extend(unmatched.into_iter().filter(|v| !taken.contains(&v.id)));
+    if !unmatched.is_empty() {
+        let taken: HashSet<&str> = imdb.iter().map(|r| r.id.as_str()).collect();
+        out.extend(unmatched.into_iter().filter(|v| !taken.contains(v.id.as_str())));
+    }
     out.sort_by_key(|v| (v.season, v.episode));
     out
 }
 
-/// Which unused IMDb episode is `v`?
-fn pick(v: &Video, imdb: &[Video], used: &[bool]) -> Option<usize> {
-    let free = || imdb.iter().enumerate().filter(|(i, _)| !used[*i]);
-    let same_number = |r: &Video| r.season == v.season && r.episode == v.episode;
+/// Which of `imdb` each of `videos` is, by the rules [`renumber`] matches by; `None` where nothing
+/// matches. Each of `imdb` is taken at most once, in the order `videos` come. Used to find the
+/// episodes another list (an episode order) names in an already renumbered one.
+pub fn matches(videos: &[Video], imdb: &[Video]) -> Vec<Option<usize>> {
+    if imdb.is_empty() {
+        return vec![None; videos.len()];
+    }
+    let idx = ImdbIndex::new(imdb);
+    let mut used = vec![false; imdb.len()];
+    videos
+        .iter()
+        .map(|v| {
+            let v_day = v.released.as_deref().and_then(day_number);
+            let found = pick(v, v_day, imdb, &idx, &used);
+            if let Some(i) = found {
+                used[i] = true;
+            }
+            found
+        })
+        .collect()
+}
 
-    if let Some(day) = v.released.as_deref().and_then(day_number) {
-        let near: Vec<(usize, &Video, i64)> = free()
-            .filter_map(|(i, r)| {
-                let gap = (r.released.as_deref().and_then(day_number)? - day).abs();
-                (gap <= 1).then_some((i, r, gap))
-            })
-            .collect();
-        if let Some((i, ..)) = near.iter().find(|(_, r, _)| same_number(r)) {
+/// Which unused IMDb episode is `v`?
+fn pick(v: &Video, v_day: Option<i64>, imdb: &[Video], idx: &ImdbIndex, used: &[bool]) -> Option<usize> {
+    if let Some(day) = v_day {
+        let mut near: Vec<(usize, &Video, i64)> = Vec::new();
+        for d in [day - 1, day, day + 1] {
+            if let Some(indices) = idx.by_day.get(&d) {
+                let gap = (d - day).abs();
+                for &i in indices {
+                    if !used[i] {
+                        near.push((i, &imdb[i], gap));
+                    }
+                }
+            }
+        }
+        if near.len() > 1 {
+            near.sort_unstable_by_key(|(i, ..)| *i);
+        }
+        if let Some((i, ..)) = near.iter().find(|(_, r, _)| r.season == v.season && r.episode == v.episode) {
             return Some(*i);
         }
         // Several on one day (double episodes): the closest date, then the
@@ -89,24 +143,31 @@ fn pick(v: &Video, imdb: &[Video], used: &[bool]) -> Option<usize> {
             return Some(*i);
         }
         // Dated here; only the same numbers a few days off, or undated, can still be it.
-        return free()
-            .find(|(_, r)| {
-                same_number(r)
-                    && r.released.as_deref().and_then(day_number).is_none_or(|d| (d - day).abs() <= EARLY_DAYS)
-            })
-            .map(|(i, _)| i);
+        return idx
+            .by_num
+            .get(&(v.season, v.episode))?
+            .iter()
+            .copied()
+            .find(|&i| !used[i] && idx.days[i].is_none_or(|d| (d - day).abs() <= EARLY_DAYS));
     }
-    free().find(|(_, r)| same_number(r)).map(|(i, _)| i)
+    idx.by_num.get(&(v.season, v.episode))?.iter().copied().find(|&i| !used[i])
 }
 
-/// The earlier of two air dates; a date that doesn't parse loses to one that does.
-fn earliest(a: Option<String>, b: Option<String>) -> Option<String> {
-    match (a.as_deref().and_then(day_number), b.as_deref().and_then(day_number)) {
+fn earliest_with_days(a: Option<String>, a_day: Option<i64>, b: Option<String>, b_day: Option<i64>) -> Option<String> {
+    match (a_day, b_day) {
         (Some(x), Some(y)) if y < x => b,
         (Some(_), _) => a,
         (None, Some(_)) => b,
         (None, None) => a.or(b),
     }
+}
+
+/// The earlier of two air dates; a date that doesn't parse loses to one that does.
+#[cfg(test)]
+fn earliest(a: Option<String>, b: Option<String>) -> Option<String> {
+    let ad = a.as_deref().and_then(day_number);
+    let bd = b.as_deref().and_then(day_number);
+    earliest_with_days(a, ad, b, bd)
 }
 
 /// Days since 1970-01-01 of an ISO date or date-time (`2008-01-20`,
@@ -242,6 +303,13 @@ mod tests {
         let tmdb = vec![ep(1, 1, Some("2020-01-01"), "A"), ep(1, 2, Some("2030-01-01"), "New")];
         let imdb = vec![ep(0, 1, Some("2019-06-01"), "Special"), ep(1, 1, Some("2020-01-01"), "1")];
         assert_eq!(ids(&renumber(tmdb, &imdb)), [("tt1:0:1", "Special"), ("tt1:1:1", "A"), ("tt1:1:2", "New")]);
+    }
+
+    #[test]
+    fn matches_finds_each_episode_once() {
+        let imdb = vec![ep(1, 1, Some("2020-01-01"), "1"), ep(1, 2, Some("2020-07-02"), "2")];
+        let tmdb = vec![ep(2, 1, Some("2020-07-01"), "C"), ep(1, 1, Some("2020-01-01"), "A"), ep(1, 1, None, "again")];
+        assert_eq!(matches(&tmdb, &imdb), [Some(1), Some(0), None]);
     }
 
     #[test]

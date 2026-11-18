@@ -17,6 +17,11 @@
   inset: 0;
   overflow: hidden;
 }
+/* Stepped back under the profile sheet (Sheet.tsx): its own layer for the move, its corners rounded. */
+.main[data-step-back] {
+  border-radius: 18px;
+  will-change: transform;
+}
 .page {
   position: absolute;
   inset: 0;
@@ -29,6 +34,10 @@
   /* Keeps state, scroll position and decoded images, but skips rendering. */
   visibility: hidden;
   content-visibility: hidden;
+}
+.page[data-active="false"]:not([data-motion]):not([data-drag]):not([data-under-player="true"]) *,
+.tv-page[data-active="false"]:not([data-under-player="true"]) * {
+  animation-play-state: paused !important;
 }
 /* The page the player returns to stays rendered (only not painted), so it's back in the
    first frame: no black frame, no entrance played again (test report 1, item 6). */
@@ -90,33 +99,129 @@
     opacity: 0;
   }
 }
-/* On a phone every page change moves as a pair (lib/ui/pageMotion.ts): the new page fades in from the side
-   it comes from (--page-dir: 1 the right, -1 the left, 0 in place) while the old one fades out the other
-   way, travelling half as far and leaving sooner. Both start together: nothing waits for the other. */
-:root[data-form="phone"] .page {
-  --page-shift: 28px;
+/* On a phone a page change moves whole screens (lib/ui/pageMotion.ts), each with its own background, so it's the
+   page that changes, not its contents over a still backdrop. Of the pair, the page drawn on top (`data-over`: the
+   page pushed, or the one going) moves. A page pushed comes in from the right fading up, and Back takes it out the
+   same way, while the page under drifts a little the other way (--page-dir: 1 forward, -1 back). Another section
+   (`data-tab`) is a pager's turn: the two pages slide across the whole width as one strip, the new one in from
+   the side its tab is on, the old one out the other, backgrounds and all; the top bar stays. A page replaced in
+   place (`data-fade`) crossfades: the old page goes in 90ms while the new one comes up over 180ms. pageMotion.ts
+   SETTLE follows these clocks. */
+:root[data-form="phone"] {
+  --page-shift: 32px;
+  --page-in: 320ms;
+  --page-tab: 380ms;
+  --page-fade: 180ms;
+  --page-fade-out: 90ms;
+}
+/* Both pages of a turn are whole pages, their own background with them; each its own stacking context, so what a
+   page puts behind its content (Home's glow) stays over that background. */
+:root[data-form="phone"] .page[data-tab] {
+  background: var(--bg);
+  isolation: isolate;
+}
+/* Until the turn starts (`data-go`), the page coming in waits in place under the one going, covered, drawn already:
+   then the strip moves, nothing left to paint. */
+/* And they crossfade as they cross, as Netflix's tabs do: the old page gone by half way, the new one in by two
+   thirds. The top bar turns with them: the real one comes in with the new page, and a copy of it as it was rides
+   out on the old one (App.tsx). */
+:root[data-form="phone"] {
+  --turn-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --turn-fade-out: 190ms;
+  --turn-fade-in: 250ms;
+}
+:root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
+  animation:
+    page-turn-in var(--page-tab) var(--turn-ease) both,
+    page-fade-in var(--turn-fade-in) linear both;
+  will-change: transform, opacity;
+}
+:root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
+  animation:
+    page-turn-out var(--page-tab) var(--turn-ease) forwards,
+    page-fade-out var(--turn-fade-out) linear forwards;
+}
+:root[data-form="phone"] .main[data-turn] > .navbar :is(.navbar-fade, .navbar-back, .navbar-brand, .navbar-title, .navbar-actions) {
+  animation:
+    navbar-turn-in var(--page-tab) var(--turn-ease) both,
+    page-fade-in var(--turn-fade-in) linear both;
+}
+:root[data-form="phone"] .main[data-turn] > .navbar::before {
+  animation: page-fade-in var(--turn-fade-in) linear both;
+}
+/* `translate`, not `transform`: the wordmark and actions keep their own scale (scrolled) as they move. */
+@keyframes navbar-turn-in {
+  from {
+    translate: calc(var(--turn-dir) * 100vw) 0;
+  }
+}
+/* The copy of the top bar on the page going: drawn only, at that page's top. */
+.navbar-copy {
+  pointer-events: none;
+}
+.navbar-copy .navbar-links {
+  display: none;
+}
+@keyframes page-turn-in {
+  from {
+    transform: translateX(calc(var(--page-dir) * 100%));
+  }
+}
+@keyframes page-turn-out {
+  to {
+    transform: translateX(calc(var(--page-dir) * -100%));
+  }
 }
 :root[data-form="phone"] .page-pushed {
   animation: none;
 }
-/* Neither moves until the new page is laid out (`data-go`, pageMotion.ts, the next frame): it waits unseen for
-   that frame, the old one stays as it was, and then the whole change is seen, every frame of it. */
-:root[data-form="phone"] .page[data-motion="enter"]:not([data-go]) {
+:root[data-form="phone"] .page[data-motion] {
+  visibility: visible;
+  content-visibility: visible;
+}
+:root[data-form="phone"] .page[data-motion="leave"] {
+  pointer-events: none;
+}
+:root[data-form="phone"] .page[data-over] {
+  z-index: 1;
+  background: var(--bg);
+  will-change: transform, opacity;
+}
+/* Nothing moves until a frame with both pages has been drawn (`data-go`, pageMotion.ts): a page coming in on top
+   waits unseen for it, while a page coming back under the one going is drawn already, covered, so painting it
+   (Home's rows, back from being skipped) is done before the clock starts instead of in its first frame. */
+:root[data-form="phone"] .page[data-motion="enter"][data-over]:not([data-card], [data-go]) {
   opacity: 0;
   pointer-events: none;
 }
-:root[data-form="phone"] .page[data-motion="enter"][data-go] {
-  animation: page-enter 300ms var(--ease-out) both;
-  will-change: transform, opacity;
+:root[data-form="phone"] .page[data-motion="enter"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
+  animation: page-enter var(--page-in) var(--ease-out) both;
 }
-:root[data-form="phone"] .page[data-motion="leave"] {
-  visibility: visible;
-  content-visibility: visible;
-  pointer-events: none;
+:root[data-form="phone"] .page[data-motion="leave"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
+  animation: page-leave var(--page-in) var(--ease-out) forwards;
 }
-:root[data-form="phone"] .page[data-motion="leave"][data-go] {
-  animation: page-leave 200ms var(--ease-out) forwards;
-  will-change: transform, opacity;
+:root[data-form="phone"] .page[data-motion="enter"][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
+  animation: page-under-in var(--page-in) var(--ease-out) both;
+}
+:root[data-form="phone"] .page[data-motion="leave"][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
+  animation: page-under-out var(--page-in) var(--ease-out) forwards;
+}
+:root[data-form="phone"] .page[data-fade][data-over][data-go] {
+  animation: page-fade-out var(--page-fade-out) linear forwards;
+}
+:root[data-form="phone"] .page[data-fade][data-motion="enter"][data-go]:not([data-over]) {
+  animation: page-fade-in var(--page-fade) cubic-bezier(0.2, 0.6, 0.35, 1) both;
+  will-change: opacity;
+}
+@keyframes page-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 @keyframes page-enter {
   from {
@@ -127,62 +232,37 @@
 @keyframes page-leave {
   to {
     opacity: 0;
-    transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.5));
+    transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -1));
   }
 }
-/* A title opened from a card (pageMotion.ts `card`), as one piece on one clock: the title's page starts as exactly
-   the card's box (--card-x/y, --card-sx/sy) and grows to the screen. Riding on it, the card's own picture
-   (.card-ghost, App.tsx) covers it at first, sharp, then softened and dark, and gives way to the page as it
-   settles. What's behind dims and softens under it (.card-scrim). Back plays it the other way and ends on the
-   card. Everything shares the duration and curve, and only transforms and opacity move (the scrim's blur is
-   fixed; its opacity carries it), so the compositor plays every frame whatever the pages are doing. The page is
-   scaled unevenly only while the picture covers it; by the time it shows it's within a hair of its own shape. */
-:root[data-form="phone"] :is(.page[data-card], .card-scrim) {
-  --card-ease: cubic-bezier(0.3, 0.8, 0.2, 1);
-  --card-open: 620ms;
-  --card-close: 540ms;
-  --card-at: translate(var(--card-x), var(--card-y)) scale(var(--card-sx), var(--card-sy));
+@keyframes page-under-in {
+  from {
+    transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * 0.33));
+  }
 }
+@keyframes page-under-out {
+  to {
+    transform: translateX(calc(var(--page-dir, 0) * var(--page-shift) * -0.33));
+  }
+}
+/* The top bar stays as the pages turn under it, but takes on the page coming in on the turn's clock: the frosted
+   bar, the shade over the hero and the wordmark's size, each scrolled or not as that page is. */
+:root[data-form="phone"] .main:has(> .page[data-tab]) .navbar::before,
+:root[data-form="phone"] .main:has(> .page[data-tab]) .navbar-fade::before,
+:root[data-form="phone"] .main:has(> .page[data-tab]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  transition-duration: var(--page-tab);
+}
+/* A title opened from a card (pageMotion.ts `card`), and back into it: the motion itself is lib/ui/cardMotion.ts,
+   Netflix's measured from its app, played from the commit with the Web Animations API. These are the pieces it
+   moves. The title's page is the card's box at first (transformed from its top left corner, its corners the card's
+   at that size). On it, the card's picture (.card-ghost, App.tsx): a plain panel in the page's grey, a soft copy
+   and a sharp one. Between it and the page behind, a shade of the page's own colour (.card-scrim). */
 :root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
 :root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
   z-index: 2;
-  background: var(--bg);
   transform-origin: 0 0;
   border-radius: var(--card-r);
   overflow: hidden;
-  will-change: transform;
-}
-:root[data-form="phone"] .page[data-card="open"][data-motion="enter"][data-go] {
-  animation: card-page var(--card-open) var(--card-ease) both;
-}
-:root[data-form="phone"] .page[data-card="close"][data-motion="leave"][data-go] {
-  animation: card-page-back var(--card-close) var(--card-ease) forwards;
-}
-/* The page behind holds still under the scrim; the scrim is all that changes over it. */
-:root[data-form="phone"] .page[data-card="open"][data-motion="leave"][data-go],
-:root[data-form="phone"] .page[data-card="close"][data-motion="enter"][data-go] {
-  animation: none;
-  opacity: 1;
-}
-@keyframes card-page {
-  from {
-    transform: var(--card-at);
-  }
-  to {
-    transform: none;
-  }
-}
-/* Back: the last stretch fades the page (the card's picture by then) out over the card itself, so the card comes
-   back as it is, its corners, rim and rating with it, instead of the copy being swapped for it at the end. */
-@keyframes card-page-back {
-  0%,
-  78% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-    transform: var(--card-at);
-  }
 }
 
 .card-ghost {
@@ -193,7 +273,7 @@
   pointer-events: none;
 }
 /* The picture fills the page's box, so at the card's box it's the card's picture exactly. */
-.card-ghost img {
+.card-ghost > * {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -201,116 +281,34 @@
   object-fit: fill;
   opacity: 0;
 }
-/* Softened once, not per frame: only its opacity moves. Scaled past the edges so the blur's rim never shows. */
-.card-ghost-soft {
-  filter: blur(18px) brightness(0.45);
-  transform: scale(1.15);
-}
-[data-card="open"][data-go] > .card-ghost .card-ghost-sharp {
-  animation: card-ghost-sharp-open var(--card-open) linear both;
-}
-[data-card="open"][data-go] > .card-ghost .card-ghost-soft {
-  animation: card-ghost-soft-open var(--card-open) linear both;
-}
-[data-card="close"][data-go] > .card-ghost .card-ghost-sharp {
-  animation: card-ghost-sharp-close var(--card-close) linear both;
-}
-[data-card="close"][data-go] > .card-ghost .card-ghost-soft {
-  animation: card-ghost-soft-close var(--card-close) linear both;
-}
-@keyframes card-ghost-sharp-open {
-  from {
-    opacity: 1;
-  }
-  30% {
-    opacity: 0;
-  }
-  to {
-    opacity: 0;
-  }
-}
-@keyframes card-ghost-soft-open {
-  from {
-    opacity: 1;
-  }
-  22% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 0;
-  }
-  to {
-    opacity: 0;
-  }
-}
-/* Back: the page is covered before it has shrunk enough to look squeezed, then the card's picture sharpens in. */
-@keyframes card-ghost-soft-close {
-  from {
-    opacity: 0;
-  }
-  20% {
-    opacity: 1;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes card-ghost-sharp-close {
-  from {
-    opacity: 0;
-  }
-  35% {
-    opacity: 0;
-  }
-  75% {
-    opacity: 1;
-  }
-  to {
-    opacity: 1;
-  }
+/* Netflix's panel is a step lighter than the page around it. */
+.card-ghost-panel {
+  background: color-mix(in srgb, var(--bg), rgb(var(--ink)) 9%);
 }
 
+/* What's behind fades towards the page's own colour (Netflix's goes black), without a blur: a blur over the whole
+   screen, taken again every frame the page above it moves, is what a phone drops frames over. */
 .card-scrim {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: rgb(0 0 0 / 0.62);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: var(--bg);
   pointer-events: none;
   opacity: 0;
-  will-change: opacity;
-}
-.card-scrim[data-card="open"][data-go] {
-  animation: card-scrim var(--card-open) var(--card-ease) both;
-}
-/* Back: over the page coming back until it moves, then clearing with the card's return. */
-.card-scrim[data-card="close"] {
-  opacity: 1;
-}
-.card-scrim[data-card="close"][data-go] {
-  animation: card-scrim-out var(--card-close) var(--card-ease) both;
-}
-@keyframes card-scrim {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes card-scrim-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
 }
 /* Less motion: the pair crossfades in place. */
 @media (prefers-reduced-motion: reduce) {
   :root[data-form="phone"] .page {
     --page-shift: 0px;
+  }
+  :root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
+    animation-name: none, page-fade-in;
+  }
+  :root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
+    animation-name: none, page-fade-out;
+  }
+  :root[data-form="phone"] .main[data-turn] > .navbar :is(.navbar-fade, .navbar-back, .navbar-brand, .navbar-title, .navbar-actions) {
+    animation-name: none, page-fade-in;
   }
 }
 
@@ -342,84 +340,81 @@
   );
   pointer-events: none;
 }
-/* Once the page scrolls under it, the bar is a progressive blur, as on iOS:
-   what passes beneath is most out of focus at the top edge and sharpens to
-   nothing a little below the bar, with no solid fill and no hard line.
-   Stacked layers, each blurrier than the last and masked to a thinner band
-   at the top; a light tint keeps the tabs readable over bright art. */
-.navbar-fade {
-  position: absolute;
+/* Once the page scrolls under it, the bar is a progressive blur, as on iOS
+   (components/EdgeBlur.tsx, pointed up): what passes beneath is most out of
+   focus at the top edge and sharpens to nothing a little below the bar, with
+   no solid fill and no hard line. A light tint keeps the tabs readable over
+   bright art. */
+.edge-blur.navbar-fade {
   inset: 0 0 auto 0;
   height: calc(var(--nav-h) + 2.75rem);
   z-index: -1;
-  pointer-events: none;
+  --edge-shown: 0;
 }
-/* The fade is on each layer, not the container: opacity on a parent would
-   cut the layers' blur off from the page behind it. */
-.navbar-fade::before,
-.navbar-fade i {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+.edge-blur.navbar-fade::before {
+  transition: opacity var(--dur-base) var(--ease-std);
+  background: linear-gradient(to top, transparent, color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent) 70%);
+}
+/* Like .row-paddle (#134), drop the 6 masked backdrop-filter surfaces once faded out at the top of the page. */
+.edge-blur.navbar-fade i {
+  backdrop-filter: none;
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    backdrop-filter 0s linear var(--dur-base);
+}
+.navbar[data-scrolled="true"] .navbar-fade {
+  --edge-shown: 1;
+}
+.navbar[data-scrolled="true"] .edge-blur.navbar-fade i {
+  backdrop-filter: var(--edge-filter);
   transition: opacity var(--dur-base) var(--ease-std);
 }
-.navbar-fade::before {
-  content: "";
-  /* Black under the white tabs in dark mode; the near-white page, stronger, under the dark ones in light. */
-  background: color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent);
-}
-/* The shape is a wide ellipse hanging from the top edge, not a straight
-   band: the blur is deepest in the middle and its lower edge curves up
-   toward the corners, like the soft cut-out around a phone's status bar. */
-.navbar-fade::before,
-.navbar-fade i {
-  --fade: radial-gradient(ellipse 125% 100% at 50% 0%, #000 var(--solid), transparent var(--end));
-  -webkit-mask-image: var(--fade);
-  mask-image: var(--fade);
-}
-.navbar-fade::before {
-  --solid: 0%;
-  --end: 92%;
-}
-.navbar[data-scrolled="true"] .navbar-fade::before,
-.navbar[data-scrolled="true"] .navbar-fade i {
-  opacity: 1;
-}
-.navbar-fade i:nth-child(1) {
-  backdrop-filter: blur(2px);
-  --solid: 45%;
-  --end: 100%;
-}
-.navbar-fade i:nth-child(2) {
-  backdrop-filter: blur(6px);
-  --solid: 32%;
-  --end: 82%;
-}
-.navbar-fade i:nth-child(3) {
-  backdrop-filter: blur(14px);
-  --solid: 20%;
-  --end: 64%;
-}
-.navbar-fade i:nth-child(4) {
-  backdrop-filter: blur(28px);
-  --solid: 0%;
-  --end: 44%;
-}
 /* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
-   the stacked blurs. Four masked blurs taken again on every frame of a scroll are more than a phone's web view
+   the stacked blurs. Six masked blurs taken again on every frame of a scroll are more than a phone's web view
    keeps up with over moving art; one unmasked layer is cheap. */
-:root[data-form="phone"] .navbar-fade {
+:root[data-form="phone"] .edge-blur.navbar-fade {
   height: var(--nav-h);
 }
-:root[data-form="phone"] .navbar-fade i {
+:root[data-form="phone"] .edge-blur.navbar-fade i {
   display: none;
 }
-:root[data-form="phone"] .navbar-fade::before {
-  -webkit-mask-image: none;
-  mask-image: none;
-  background: rgb(18 18 18 / 0.8);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  backdrop-filter: blur(20px) saturate(150%);
+/* Light, as Netflix's is: mostly the page itself, blurred and a little more vivid, under a thin grey veil
+   (about rgb(48 48 48 / 0.37) in dark mode), rather than a near-black bar. */
+:root[data-form="phone"] .edge-blur.navbar-fade::before {
+  background: color-mix(in srgb, var(--tone-sunk) 30%, rgb(var(--ink) / 0.1));
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+/* The dark shade over the hero's art gives way to the frosted bar, which would otherwise blur it in. */
+:root[data-form="phone"] .navbar::before {
+  transition: opacity var(--dur-slow) var(--ease-std);
+}
+:root[data-form="phone"] .navbar[data-scrolled="true"]::before {
+  opacity: 0;
+}
+/* Over Home's glow (HeroGlow.tsx) there's no art to shade, and the shade would dim the glow where it's brightest. */
+:root[data-form="phone"][data-hero-glow] .navbar::before {
+  opacity: 0;
+}
+/* Past the top the bar's contents settle a size smaller, each towards its own edge, as Netflix's header does
+   when the page leaves its hero: the content gets the attention, the chrome steps back.
+   Back keeps its size: it has its own press and slide (below). */
+:root[data-form="phone"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  transition: transform 420ms var(--ease-out);
+}
+:root[data-form="phone"] :is(.navbar-brand, .navbar-title) {
+  transform-origin: left center;
+}
+:root[data-form="phone"] .navbar-actions {
+  transform-origin: right center;
+}
+:root[data-form="phone"] .navbar[data-scrolled="true"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  transform: scale(0.9);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-form="phone"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+    transition: none;
+  }
 }
 .navbar-brand {
   flex: none;
@@ -561,13 +556,13 @@ html[data-os="mac"] {
   opacity: 0;
   pointer-events: none;
 }
-/* On a phone, Back comes and goes on the page change's own clock (the card's, the longer of the two), so it and
-   the wordmark making room for it move with the page rather than jumping ahead of it. */
+/* On a phone, Back comes and goes about on the page change's own clock (a pushed page's, between a card's opening
+   and its quicker close), so it and the wordmark making room for it move with the page rather than ahead of it. */
 :root[data-form="phone"] .navbar-back {
   transition:
     transform var(--dur-press) var(--ease-out),
-    opacity 400ms var(--ease-std),
-    margin-left 620ms cubic-bezier(0.3, 0.8, 0.2, 1);
+    opacity 300ms var(--ease-std),
+    margin-left 380ms var(--ease-out);
 }
 /* On iOS the system draws Back (NativeBack.tsx) over this one: it keeps its place, unseen. */
 [data-native-back] {
@@ -945,11 +940,13 @@ html[data-os="mac"] {
 }
 
 /* --- Segmented control. The selected state is a clipped "active" copy; the
-       clip moves with a transition, except for keyboard changes (instant). */
+       clip moves with a transition, except for keyboard changes (instant).
+       Sized in rem (3px, 44px, 32px at the 16px root) so it grows with its label
+       and icons where the root is larger (TV mode). */
 .segmented {
   position: relative;
   display: inline-flex;
-  padding: 3px;
+  padding: 0.1875rem;
   border-radius: var(--r-pill);
   background: var(--glass);
   backdrop-filter: var(--blur-control);
@@ -958,8 +955,8 @@ html[data-os="mac"] {
 }
 .segmented-item {
   position: relative;
-  min-width: 44px;
-  height: 32px;
+  min-width: 2.75rem;
+  height: 2rem;
   padding: 0 1rem;
   border-radius: var(--r-pill);
   font-weight: 600;
@@ -971,7 +968,7 @@ html[data-os="mac"] {
 }
 .segmented-active {
   position: absolute;
-  inset: 3px;
+  inset: 0.1875rem;
   display: flex;
   pointer-events: none;
   background: var(--pill-light);
@@ -1135,7 +1132,8 @@ html[data-os="mac"] {
 .discover-header {
   justify-content: flex-start;
 }
-.discover-title {
+.discover-title,
+.library-title {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1147,6 +1145,7 @@ html[data-os="mac"] {
 /* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
 .discover-controls .select-trigger,
 .library-toolbar .select-trigger,
+.library-filters .select-trigger,
 .downloads-toolbar .select-trigger,
 .seasons-picker .select-trigger:not([data-size="large"]) {
   width: auto;
@@ -1196,4 +1195,30 @@ html[data-os="mac"]:has(.app.tv) body,
 html[data-os="mac"]:has(.app.tv) body::after {
   border-radius: 0;
   box-shadow: none;
+}
+
+/* Playback host layer (PlayerLayer.tsx): kept in shell.css so the transition layer is styled before Player's chunk loads. */
+.player-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-player);
+  transition: opacity var(--dur-slow) var(--ease-std);
+  @starting-style {
+    opacity: 0;
+  }
+}
+.player-limit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+.player-layer[data-leaving="true"] {
+  opacity: 0;
+  transition-duration: 260ms; /* PLAYER_EXIT_MS */
+}
+html[data-player="mpv"] .app[data-player-leaving="true"] .main {
+  visibility: visible;
+  background: var(--bg);
 }

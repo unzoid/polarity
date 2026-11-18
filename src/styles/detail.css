@@ -362,9 +362,91 @@
   align-items: center;
   gap: 0.75rem;
   margin-top: 0.875rem;
+  /* As wide as its buttons, past the text column if More is open and the trailer's mute is there: squeezed to the
+     column, the open tray was clipped and its last buttons cut off. */
+  width: max-content;
+}
+.detail-actions > * {
+  flex-shrink: 0;
 }
 .detail-play {
   min-width: 200px;
+}
+/* More on a title page (TitleActions' MoreActions): the lesser actions folded beside the dots, opening in place.
+   The tray's width eases open through its grid track (0fr to 1fr: a short row, opened now and then), and each
+   button follows a beat after the one before it (--i), rising from a little smaller; folding is quicker and all at
+   once. The dots turn into a close as it opens. */
+.detail-more {
+  display: flex;
+  align-items: center;
+}
+.detail-more-tray {
+  display: grid;
+  grid-template-columns: 0fr;
+  transition: grid-template-columns 180ms var(--ease-out);
+}
+.detail-more[data-open] .detail-more-tray {
+  grid-template-columns: 1fr;
+  transition-duration: 260ms;
+}
+.detail-more-items {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
+  /* Room for the buttons' press and focus rings, which the clip would cut. */
+  padding: 4px 4px 4px 0.75rem;
+  margin: -4px -4px -4px 0;
+}
+.detail-more-item {
+  display: inline-flex;
+  flex: none;
+  gap: 0.75rem;
+  opacity: 0;
+  transform: translateX(-8px) scale(0.92);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.detail-more[data-open] .detail-more-item {
+  opacity: 1;
+  transform: none;
+  transition-duration: 240ms;
+  transition-delay: calc(var(--i) * 35ms + 40ms);
+}
+/* The dots and the close share one cell, so they stay centred on each other whatever the button's size. */
+.btn.detail-more-toggle {
+  display: grid;
+  place-items: center;
+}
+.btn.detail-more-toggle svg {
+  grid-area: 1 / 1;
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+.detail-more-close {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.6);
+}
+.detail-more[data-open] .detail-more-dots {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.6);
+}
+.detail-more[data-open] .detail-more-close {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .detail-more-item,
+  .detail-more-toggle svg {
+    transform: none !important;
+    transition-delay: 0s !important;
+  }
+  .detail-more-tray {
+    transition: none;
+  }
 }
 /* The title on the profile's Simkl lists (components/title/SimklPanel.tsx, #86): list, rating, a link to its Simkl page. */
 .simkl-panel {
@@ -929,6 +1011,7 @@
   /* Play takes the row and the round buttons sit under it: side by side, the
      last one (Download) ran off a phone's edge. */
   .detail-actions {
+    width: auto;
     flex-wrap: wrap;
     row-gap: 0.5rem;
   }
@@ -1266,6 +1349,7 @@
   justify-content: center;
 }
 :root[data-form="phone"] .detail-actions {
+  width: auto;
   align-self: stretch;
   flex-wrap: wrap;
   justify-content: center;
@@ -1495,4 +1579,155 @@
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon.episode-download.download-reveal {
   right: calc(72px - 0.25rem);
+}
+
+/* A hidden title's page (HiddenTitleControls.tsx): what that means, and Unhide. */
+.detail-hidden-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.75rem 0 0;
+  color: var(--text-2);
+}
+.detail-hidden-note .btn.btn-sm {
+  min-width: 0;
+}
+/* A cast member TMDB names by id: the face and name open their page (TitleDetails.tsx Cast). */
+.person-open {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  border-radius: var(--r-md);
+}
+.person-open:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .person-open:hover .person-name {
+    text-decoration: underline;
+  }
+}
+
+/* A name in the Starring / Director line that opens the person's page (NameList.tsx). */
+.name-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+}
+.name-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .name-link:hover {
+    text-decoration: underline;
+  }
+}
+
+/* A title's extras (ExtrasShelf.tsx): a row of tiles under the page; a tile without a still says what it is. */
+.extras {
+  position: relative;
+  padding: 0 0 1rem;
+}
+.extra-tile {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  text-align: center;
+  background: var(--fill-2);
+  overflow-wrap: anywhere;
+}
+.extra-tile-name {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.extra-tile-kind {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+/* A person's page (screens/Person.tsx): photo beside name, facts and biography, then their titles. */
+.person-head {
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 1.75rem;
+}
+.person-head-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 9rem;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--fill-3);
+  color: var(--text-2);
+  font-size: var(--fs-xl);
+  font-weight: 650;
+}
+.person-head-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.person-head-text {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 46rem;
+  min-width: 0;
+}
+.person-head-text h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.person-head-facts {
+  margin: 0;
+  color: var(--text-2);
+}
+.person-bio {
+  display: grid;
+  justify-items: start;
+  gap: 0.25rem;
+}
+.person-bio p {
+  margin: 0;
+  white-space: pre-line;
+  color: var(--text-2);
+}
+.person-titles h2 {
+  margin: 0 0 0.75rem;
+  padding: 0 var(--gutter) 0 var(--content-start);
+}
+.person-titles + .person-titles {
+  margin-top: 1.5rem;
+}
+:root[data-form="phone"] .person-head {
+  flex-direction: column;
+  gap: 1rem;
+}
+:root[data-form="phone"] .person-head-photo {
+  width: 7rem;
 }

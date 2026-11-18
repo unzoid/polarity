@@ -40,13 +40,20 @@ describe("glowColor", () => {
     expect(dominant(c)).toBe("blue");
   });
 
-  test("is always a dark, muted shade, however bright or dark the art", () => {
+  test("is always a dark shade, however bright or dark the art, as Netflix's page colours are", () => {
     for (const art of [pixels([400, [30, 8, 8]]), pixels([400, [250, 120, 120]]), pixels([400, [0, 255, 255]])]) {
       const c = glowColor(art)!;
-      expect(lightness(c)).toBeGreaterThan(0.14);
-      expect(lightness(c)).toBeLessThan(0.28);
+      expect(lightness(c)).toBeGreaterThan(0.08);
+      expect(lightness(c)).toBeLessThan(0.22);
     }
     expect(dominant(glowColor(pixels([400, [250, 120, 120]]))!)).toBe("red");
+  });
+
+  test("a dull, mostly grey picture with a faintly green patch gives a near-neutral, not green", () => {
+    // Dark blue-grey people over a greyish lawn: the lawn is only faintly green.
+    const [r, g, b] = glowColor(pixels([500, [40, 46, 56]], [300, [52, 64, 50]], [40, [30, 120, 40]]))!;
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(10);
+    expect(b).toBeGreaterThanOrEqual(g);
   });
 
   test("a grey picture gives a grey glow, and no pixels none", () => {

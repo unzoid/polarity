@@ -73,6 +73,8 @@ export function routeTitle(route: Route): string {
       return COLLECTIONS[route.view];
     case "playlist":
       return "Playlist";
+    case "person":
+      return route.title ?? "Person";
     case "player":
       return "Player";
   }

@@ -15,17 +15,21 @@
 //!   * [`turns`]: which player's load and stop count at the one mpv.
 //!   * [`now_playing`]: when the system's Now Playing controls hear where playback is (#461).
 //!   * [`video_path`]: one log line on how mpv decodes and draws the video (#416).
+//!   * [`shots`]: the file names of screenshots the viewer saves.
+//!   * [`external`]: other players a video can be handed to, and their command lines.
 
 pub mod allow;
 pub mod bars;
 pub mod certs;
 pub mod crop;
+pub mod external;
 pub mod frames;
 pub mod headers;
 pub mod lookahead;
 pub mod now_playing;
 pub mod png;
 pub mod sampler;
+pub mod shots;
 pub mod tune;
 pub mod turns;
 pub mod video_path;

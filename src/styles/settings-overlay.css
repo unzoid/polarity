@@ -370,6 +370,19 @@
   color: var(--t3-muted-fg);
   font-weight: 400;
 }
+/* In a section (PAGE_SECTIONS): its page's name, back to the page's list of sections. */
+.t3s-crumb-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 400;
+  color: var(--t3-muted-fg);
+  cursor: pointer;
+}
+.t3s-crumb-link:hover {
+  color: var(--t3-fg);
+}
 .t3s-header-actions {
   display: flex;
   align-items: center;
@@ -427,6 +440,29 @@
   max-width: 860px;
   margin: 0 auto;
   padding: 2.25rem 1.5rem 3.5rem;
+}
+/* Into a page's section and back out (PAGE_SECTIONS, data-move): the new view comes a little way in from the
+   side it lies on, deeper to the right, as a phone's Settings does. Other page changes show at once. */
+.t3s-page[data-move] {
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+@starting-style {
+  .t3s-page[data-move] {
+    opacity: 0;
+  }
+  .t3s-page[data-move="in"] {
+    transform: translateX(24px);
+  }
+  .t3s-page[data-move="out"] {
+    transform: translateX(-24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t3s-page[data-move] {
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
 }
 
 /* Section: heading outside, bordered group of rows inside. */
@@ -729,6 +765,7 @@
     padding: 0 0.5rem 0 1rem;
   }
   .t3s-crumb-root,
+  .t3s-crumb-link,
   .t3s-crumb-sep,
   .t3s-ghost-label {
     display: none;
@@ -845,6 +882,39 @@
 :root[data-form="phone"] .t3s[data-view="list"] .t3s-main,
 :root[data-form="phone"] .t3s[data-view="page"] .t3s-sidebar {
   display: none;
+}
+/* Into a section's page and back to the list (SettingsOverlay.tsx `push`): the one coming in pushes in from the
+   side it lies on, deeper from the right, on the phone's calmer navigation pace (base.css `view-in`). Each starts
+   as it's shown, so it plays on every move; opening Settings sets no push and plays nothing. */
+:root[data-form="phone"] .t3s {
+  --view-shift: 56px;
+  --view-dur: 420ms;
+}
+:root[data-form="phone"] .t3s[data-push="in"] .t3s-main,
+:root[data-form="phone"] .t3s[data-push="out"] .t3s-sidebar {
+  animation: view-in var(--view-dur) var(--ease-reveal) both;
+}
+:root[data-form="phone"] .t3s[data-push="out"] .t3s-sidebar {
+  --view-from: calc(var(--view-shift) * -1);
+}
+/* A long page's sections move the same way. */
+:root[data-form="phone"] .t3s-page[data-move] {
+  transition:
+    opacity var(--view-dur) var(--ease-reveal),
+    transform var(--view-dur) var(--ease-reveal);
+}
+@starting-style {
+  :root[data-form="phone"] .t3s-page[data-move="in"] {
+    transform: translateX(var(--view-shift));
+  }
+  :root[data-form="phone"] .t3s-page[data-move="out"] {
+    transform: translateX(calc(var(--view-shift) * -1));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-form="phone"] .t3s {
+    --view-shift: 0px;
+  }
 }
 :root[data-form="phone"] .t3s-sidebar {
   gap: 0.75rem;
@@ -1025,7 +1095,7 @@
   z-index: auto;
   inset: auto;
   width: auto;
-  height: calc(100dvh - var(--safe-top) - 2.5rem - 6.75rem);
+  height: calc(100dvh - var(--safe-top) - var(--sheet-gap) - 6.75rem);
   margin: 0;
   padding: 0;
   border: 0;

@@ -6,9 +6,68 @@ import { useEffect, useRef, useState, type RefObject } from "react";
  * Pages scroll inside their own `.scroll` container, not the window, so that container is the observer's
  * root. With the window as root the margin would be useless: whatever lies below the container's edge is
  * clipped by it and counts as out of view until it scrolls in.
+ *
+ * Observers are pooled per (root, rootMargin) so dozens of shelves and skeletons on one page share two
+ * IntersectionObserver instances instead of allocating dozens.
  */
 
 const scrollRoot = (el: Element) => el.closest(".scroll");
+
+type EntryCallback = (entry: IntersectionObserverEntry) => void;
+interface PoolEntry {
+  io: IntersectionObserver;
+  targets: Map<Element, Set<EntryCallback>>;
+}
+
+const nullRootPools = new Map<string, PoolEntry>();
+const elementRootPools = new WeakMap<Element, Map<string, PoolEntry>>();
+
+function observeIntersection(el: Element, root: Element | null, rootMargin: string, cb: EntryCallback): () => void {
+  if (typeof IntersectionObserver === "undefined") return () => {};
+  let byMargin: Map<string, PoolEntry>;
+  if (root) {
+    let m = elementRootPools.get(root);
+    if (!m) elementRootPools.set(root, (m = new Map()));
+    byMargin = m;
+  } else {
+    byMargin = nullRootPools;
+  }
+  let pool = byMargin.get(rootMargin);
+  if (!pool) {
+    const targets = new Map<Element, Set<EntryCallback>>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const set = targets.get(e.target);
+          if (set) for (const fn of set) fn(e);
+        }
+      },
+      { root, rootMargin },
+    );
+    pool = { io, targets };
+    byMargin.set(rootMargin, pool);
+  }
+  let set = pool.targets.get(el);
+  if (!set) {
+    set = new Set();
+    pool.targets.set(el, set);
+    pool.io.observe(el);
+  }
+  set.add(cb);
+  return () => {
+    const cur = pool!.targets.get(el);
+    if (!cur) return;
+    cur.delete(cb);
+    if (cur.size === 0) {
+      pool!.targets.delete(el);
+      pool!.io.unobserve(el);
+      if (pool!.targets.size === 0) {
+        pool!.io.disconnect();
+        byMargin.delete(rootMargin);
+      }
+    }
+  };
+}
 
 /**
  * While `active`, marks the element `data-offscreen` whenever none of it is in view, without a re-render, so CSS
@@ -19,10 +78,9 @@ export function useOffscreenMark(ref: RefObject<Element | null>, active: boolean
   useEffect(() => {
     const el = ref.current;
     if (!active || !el) return;
-    const io = new IntersectionObserver(([e]) => el.toggleAttribute("data-offscreen", !e.isIntersecting), { root: scrollRoot(el) });
-    io.observe(el);
+    const unobserve = observeIntersection(el, scrollRoot(el), "0px", (e) => el.toggleAttribute("data-offscreen", !e.isIntersecting));
     return () => {
-      io.disconnect();
+      unobserve();
       el.removeAttribute("data-offscreen");
     };
   }, [ref, active]);
@@ -38,9 +96,7 @@ export function useNearViewport<T extends Element>(eager = false, margin = 700):
   useEffect(() => {
     const el = ref.current;
     if (near || !el) return;
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { root: scrollRoot(el), rootMargin: `0px 0px ${margin}px 0px` });
-    io.observe(el);
-    return () => io.disconnect();
+    return observeIntersection(el, scrollRoot(el), `0px 0px ${margin}px 0px`, (e) => e.isIntersecting && setNear(true));
   }, [near, margin]);
   return [ref, near];
 }
@@ -72,13 +128,11 @@ export function useViewportPlace<T extends Element>(onChange?: () => void, margi
       changed.current?.();
     };
     const root = scrollRoot(el);
-    const seen = new IntersectionObserver(([e]) => ((inView = e.isIntersecting), update()), { root });
-    const around = new IntersectionObserver(([e]) => ((close = e.isIntersecting), update()), { root, rootMargin: `${margin}px 0px ${margin}px 0px` });
-    seen.observe(el);
-    around.observe(el);
+    const offSeen = observeIntersection(el, root, "0px", (e) => ((inView = e.isIntersecting), update()));
+    const offAround = observeIntersection(el, root, `${margin}px 0px ${margin}px 0px`, (e) => ((close = e.isIntersecting), update()));
     return () => {
-      seen.disconnect();
-      around.disconnect();
+      offSeen();
+      offAround();
     };
   }, [margin]);
   return [ref, near, place];
@@ -105,9 +159,7 @@ export function useInfiniteSentinel<T extends Element>(pager: Pager | undefined,
   useEffect(() => {
     const el = ref.current;
     if (!el || !more || busy || !fetchNext) return;
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && fetchNext(), { root: scrollRoot(el), rootMargin: `${margin}px` });
-    io.observe(el);
-    return () => io.disconnect();
+    return observeIntersection(el, scrollRoot(el), `${margin}px`, (e) => e.isIntersecting && fetchNext());
   }, [more, busy, fetchNext, margin]);
   return ref;
 }

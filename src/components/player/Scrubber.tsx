@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTime } from "../../lib/format";
 import { preloadImage } from "../../lib/net";
 import type { SeekCue, SeekTrack, Span } from "../../lib/types";
@@ -24,6 +24,7 @@ export function Scrubber({
   media: video,
   previews,
   span,
+  active = true,
   onSeek,
 }: {
   /** The intro, when IntroDB knows it: shown as a faint band on the bar. */
@@ -32,9 +33,12 @@ export function Scrubber({
   media: MediaLike | null;
   /** Seekr thumbnail track, when the feature is on and the title has one. */
   previews?: SeekTrack | null;
+  /** Whether the timeline is visible on screen; when hidden, the 60fps paint loop sleeps. */
+  active?: boolean;
   onSeek: (t: number) => void;
 }) {
   const bar = useRef<HTMLDivElement>(null);
+  const barWidth = useRef(0);
   const fill = useRef<HTMLDivElement>(null);
   const buffered = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLDivElement>(null);
@@ -44,6 +48,19 @@ export function Scrubber({
   const [tipText, setTipText] = useState("0:00");
   const [chapters, setChapters] = useState<MpvChapter[]>([]);
   const [dur, setDur] = useState(0);
+
+  // Track bar width via ResizeObserver so the rAF loop never forces synchronous layout reads.
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    barWidth.current = el.clientWidth;
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      barWidth.current = el.clientWidth;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Chapters (mpv only) and the duration they're laid out against.
   useEffect(() => {
@@ -65,15 +82,17 @@ export function Scrubber({
     sheets.slice(0, 2).forEach(preloadImage);
   }, [previews]);
 
-  // Paint loop: follows the video unless the user holds the knob.
-  useEffect(() => {
-    if (!video) return;
+  // Paint loop: runs only while the controls are visible (`active`) and playing (or scrubbing);
+  // syncs before paint whenever controls reappear so the playhead is already in place on frame 1.
+  useLayoutEffect(() => {
+    if (!video || !active) return;
     let raf = 0;
-    const paint = () => {
+    const paintOnce = () => {
       const d = video.duration || 0;
       const f = scrubbing.current ?? (d ? video.currentTime / d : 0);
+      const w = barWidth.current || bar.current?.clientWidth || 0;
       if (fill.current) fill.current.style.transform = `scaleX(${f})`;
-      if (knob.current) knob.current.style.transform = `translateX(${f * (bar.current?.clientWidth ?? 0)}px)`;
+      if (knob.current) knob.current.style.transform = `translateX(${f * w}px)`;
       if (buffered.current && d && video.buffered.length) {
         // The buffered range that contains the playhead.
         let end = 0;
@@ -82,11 +101,30 @@ export function Scrubber({
         }
         buffered.current.style.transform = `scaleX(${end / d})`;
       }
-      raf = requestAnimationFrame(paint);
     };
-    raf = requestAnimationFrame(paint);
-    return () => cancelAnimationFrame(raf);
-  }, [video]);
+    const loop = () => {
+      raf = 0;
+      paintOnce();
+      if (!video.paused || scrubbing.current != null) {
+        raf = requestAnimationFrame(loop);
+      }
+    };
+    const startLoop = () => {
+      if (!raf) raf = requestAnimationFrame(loop);
+    };
+    const onDiscrete = () => {
+      paintOnce();
+      if (!video.paused || scrubbing.current != null) startLoop();
+    };
+    paintOnce();
+    if (!video.paused || scrubbing.current != null) startLoop();
+    const events = ["play", "playing", "pause", "seeked", "timeupdate", "progress", "loadedmetadata"] as const;
+    for (const e of events) video.addEventListener(e, onDiscrete);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      for (const e of events) video.removeEventListener(e, onDiscrete);
+    };
+  }, [video, active]);
 
   const fractionAt = (clientX: number) => {
     const r = bar.current!.getBoundingClientRect();
@@ -112,13 +150,14 @@ export function Scrubber({
 
   const showTip = (clientX: number) => {
     const f = fractionAt(clientX);
-    const w = bar.current!.clientWidth;
+    const w = barWidth.current || bar.current!.clientWidth;
     const tw = tip.current?.offsetWidth ?? 0;
     // Keep the bubble inside the bar's edges.
     const x = Math.min(w - tw / 2, Math.max(tw / 2, f * w));
     if (tip.current) tip.current.style.transform = `translateX(${x - tw / 2}px)`;
     const t = f * (video?.duration || 0);
-    setTipText(formatTime(t));
+    const nextText = formatTime(t);
+    setTipText((prev) => (prev === nextText ? prev : nextText));
     showTile(t);
   };
 

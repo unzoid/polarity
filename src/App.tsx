@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { memo, startTransition, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { MotionConfig } from "motion/react";
 import { actionFor, getPrefs, isSettingsOpen, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
 import type { Settings as SettingsT } from "./lib/types";
@@ -9,12 +9,21 @@ import { useSettings } from "./lib/net";
 import { rootTab, RouterProvider, useRouter, type Entry, type Route } from "./lib/router";
 import { focusSearch } from "./lib/catalog";
 import { Home } from "./screens/Home";
-import { Discover } from "./screens/Discover";
-import { Library, LibraryCollection, LibraryPlaylist } from "./screens/Library";
-import { Calendar } from "./screens/Calendar";
-import { Search } from "./screens/Search";
-import { Detail } from "./screens/Detail";
-import { Anime, AnimeBrowse, AnimeSchedule } from "./screens/Anime";
+import {
+  LazyAnime,
+  LazyAnimeBrowse,
+  LazyAnimeDetail,
+  LazyAnimeSchedule,
+  LazyCalendar,
+  LazyDetail,
+  LazyDiscover,
+  LazyLibrary,
+  LazyLibraryCollection,
+  LazyLibraryPlaylist,
+  LazyPerson,
+  LazySearch,
+  preloadRoute,
+} from "./screens/lazyScreens";
 import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
 import { ControllerToast } from "./tv/TvChrome";
@@ -29,12 +38,18 @@ import {
   useFormFactor,
   usePageFocus,
   usePageMotion,
+  usePresence,
+  cardGhostParts,
   cardMotionVars,
+  playCardMotion,
+  liveCard,
   cardOrigin,
   watchCardTaps,
   useSystemBack,
   watchInputModality,
+  whenIdle,
 } from "./lib/ui";
+import { PROFILES_EXIT_MS } from "./screens/account/profileHandoff";
 import { CardMenuHost } from "./components/CardMenu";
 import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
@@ -46,11 +61,13 @@ import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { SignOutDialog } from "./components/SignOutDialog";
+import { PinHost } from "./components/profileLock/PinHost";
 import { StoreProblemToast } from "./components/StoreProblemToast";
 import { AccountFullToast } from "./components/AccountFullToast";
 import { SecretsSyncToast } from "./components/SecretsSyncToast";
 import { LockedKeysToast } from "./components/LockedKeysToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
+import { HiddenTitleToast } from "./components/HiddenTitleToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
@@ -60,49 +77,91 @@ import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "
 // Chunks of their own, loaded the first time they're drawn: most sessions never
 // see the sign-in screens, TV mode, Settings or an anime page (the player is in
 // PlayerLayer, preloaded once the app is idle).
-const AnimeDetail = lazyNamed(() => import("./screens/AnimeDetail"), "AnimeDetail");
 const AuthScreen = lazyNamed(() => import("./screens/account/AuthScreen"), "AuthScreen");
 const OnboardingScreen = lazyNamed(() => import("./screens/account/OnboardingScreen"), "OnboardingScreen");
 const ProfilesScreen = lazyNamed(() => import("./screens/account/ProfilesScreen"), "ProfilesScreen");
 const TvApp = lazyNamed(() => import("./tv/TvApp"), "TvApp");
 const SettingsOverlay = lazyNamed(() => import("./components/SettingsOverlay"), "SettingsOverlay");
 
-function Screen({ route }: { route: Route }) {
+/** A page. Its route never changes for its entry, so a change of motion or player around it doesn't render it again. */
+const Screen = memo(function Screen({ route }: { route: Route }) {
   switch (route.name) {
     case "home":
       return <Home />;
     case "discover":
-      return <Discover type={route.type} catalog={route.catalog} genre={route.genre} addon={route.addon} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyDiscover type={route.type} catalog={route.catalog} genre={route.genre} addon={route.addon} />
+        </Suspense>
+      );
     case "library":
-      return <Library />;
+      return (
+        <Suspense fallback={null}>
+          <LazyLibrary />
+        </Suspense>
+      );
     case "library-collection":
-      return <LibraryCollection view={route.view} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyLibraryCollection view={route.view} />
+        </Suspense>
+      );
     case "playlist":
-      return <LibraryPlaylist id={route.id} fresh={!!route.fresh} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyLibraryPlaylist id={route.id} fresh={!!route.fresh} />
+        </Suspense>
+      );
     case "calendar":
-      return <Calendar />;
+      return (
+        <Suspense fallback={null}>
+          <LazyCalendar />
+        </Suspense>
+      );
     case "search":
-      return <Search />;
+      return (
+        <Suspense fallback={null}>
+          <LazySearch />
+        </Suspense>
+      );
     case "settings":
       return <SettingsRoute page={route.page} />;
     case "detail":
       return <TitleRoute type={route.type} id={route.id} preview={route.preview} episode={route.episode} />;
     case "anime":
-      return <Anime />;
+      return (
+        <Suspense fallback={null}>
+          <LazyAnime />
+        </Suspense>
+      );
     case "anime-detail":
       return (
         <Suspense fallback={null}>
-          <AnimeDetail id={route.id} preview={route.preview} />
+          <LazyAnimeDetail id={route.id} preview={route.preview} />
         </Suspense>
       );
     case "anime-schedule":
-      return <AnimeSchedule />;
+      return (
+        <Suspense fallback={null}>
+          <LazyAnimeSchedule />
+        </Suspense>
+      );
     case "anime-browse":
-      return <AnimeBrowse />;
+      return (
+        <Suspense fallback={null}>
+          <LazyAnimeBrowse />
+        </Suspense>
+      );
+    case "person":
+      return (
+        <Suspense fallback={null}>
+          <LazyPerson id={route.id} name={route.title} />
+        </Suspense>
+      );
     case "player":
       return null; // rendered as a full-window layer below
   }
-}
+});
 
 /**
  * A title's one page (test report 1, item 1): an anime reached by any of its ids opens on its anime
@@ -111,15 +170,29 @@ function Screen({ route }: { route: Route }) {
  */
 function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: page } = useQuery(titlePageQuery(type, id, preview));
+  // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it for its first 300ms:
+  // the tap renders only the skeleton, so the motion starts in the next frame, and the page itself renders after,
+  // in a transition that gives way to every frame.
+  const phone = useFormFactor().form === "phone";
+  const [ready, setReady] = useState(!phone);
+  useEffect(() => {
+    if (ready) return;
+    const frame = requestAnimationFrame(() => startTransition(() => setReady(true)));
+    return () => cancelAnimationFrame(frame);
+  }, [ready]);
   const loading = <DetailPending />;
-  if (!page) return loading;
+  if (!page || !ready) return loading;
   if (page.kind === "anime")
     return (
       <Suspense fallback={loading}>
-        <AnimeDetail id={page.anilist} />
+        <LazyAnimeDetail id={page.anilist} />
       </Suspense>
     );
-  return <Detail type={type} id={id} preview={preview} episode={episode} />;
+  return (
+    <Suspense fallback={loading}>
+      <LazyDetail type={type} id={id} preview={preview} episode={episode} />
+    </Suspense>
+  );
 }
 
 /**
@@ -149,13 +222,35 @@ export function App() {
     <MotionConfig reducedMotion={reduce === "on" ? "always" : reduce === "off" ? "never" : "user"}>
       <Gate />
       <SignOutDialog />
+      <PinHost />
     </MotionConfig>
   );
 }
 
 function Gate() {
-  const { status, profile, profilesView } = useAccount();
+  const { status, profilesView } = useAccount();
+  // Going in from the profile screen, it stays on top of the app a moment to hand over (ProfilesScreen).
+  // Anywhere else (signing out) it goes at once.
+  const picker = usePresence(status === "profiles" ? profilesView : null, PROFILES_EXIT_MS);
+  const handingOver = picker.leaving && (status === "ready" || status === "guest");
+  return (
+    <>
+      {status !== "profiles" && <GateScreen />}
+      {picker.shown && (status === "profiles" || handingOver) && (
+        <Suspense fallback={<div className="account-shell" />}>
+          <ProfilesScreen initial={picker.shown} leaving={handingOver} />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
+/** What the account's status shows, but the profile screen (Gate keeps that one in its own place). */
+function GateScreen() {
+  const { status, profile } = useAccount();
   const { data: settings, isFetched } = useSettings();
+  // A phone's sections keep their pages, as a phone app's tabs do (router `kept`); elsewhere each opens afresh.
+  const phone = useFormFactor().form === "phone";
   const shell = <div className="account-shell" />;
   switch (status) {
     case "loading":
@@ -173,21 +268,20 @@ function Gate() {
         </Suspense>
       );
     case "profiles":
-      return (
-        <Suspense fallback={shell}>
-          <ProfilesScreen initial={profilesView} />
-        </Suspense>
-      );
+      return null;
     case "guest":
-    case "ready":
+    case "ready": {
       // Each profile starts on its start page with its own navigation. Wait
       // for settings (a local read) so it doesn't open on Home and then jump.
       if (!isFetched) return shell;
+      const initial = startRoute(settings?.startPage);
+      preloadRoute(initial);
       return (
-        <RouterProvider key={profile?.id ?? "guest"} initial={[startRoute(settings?.startPage)]}>
+        <RouterProvider key={profile?.id ?? "guest"} initial={[initial]} keepSections={phone}>
           <MainApp />
         </RouterProvider>
       );
+    }
   }
 }
 
@@ -306,19 +400,64 @@ function startRoute(page: SettingsT["startPage"] | undefined): Route {
 }
 
 function DesktopApp() {
-  const { stack, current, back, tab } = useRouter();
+  const { stack, kept, current, back, tab } = useRouter();
   const { playing, player, leaving } = usePlayerLayer(current);
   // The page under the player stays mounted so leaving playback is instant.
   const pages = stack.filter((e) => e.route.name !== "player");
   const topPage = pages[pages.length - 1];
   const { data: settings } = useSettings();
   usePageFocus(playing || !topPage ? undefined : String(topPage.key));
+  const phone = useFormFactor().form === "phone";
   // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
-  const motion = usePageMotion(pages, useFormFactor().form === "phone" && !playing);
-  const shown = motion?.leaving ? [...pages, motion.leaving] : pages;
+  const motion = usePageMotion(pages, phone && !playing);
+  // On a phone each section's page stays mounted when another is opened (router `kept`), as a phone app's tabs do:
+  // switching back is that page as it was, drawn already, so the switch is only the crossfade. In key order, so a
+  // page never moves among the others (moving it would reset its scroll); which is drawn over which is shell.css's.
+  const all = new Map<number, Entry>();
+  for (const e of [...(phone ? kept : []), ...pages, ...(motion?.leaving ? [motion.leaving] : [])]) all.set(e.key, e);
+  const shown = [...all.values()].sort((a, b) => a.key - b.key);
+  // A title's page out of its card plays from the commit itself (lib/ui/cardMotion.ts): the tap is answered in the
+  // next frame, whatever the new page still has to render or load. Back waits for the pair's first frame (`go`): the
+  // page coming back is drawn then, under the title's, so painting it doesn't eat the motion's first frames.
+  const main = useRef<HTMLElement>(null);
+  const card = motion?.card && (motion.dir === 1 || motion.go) ? motion.card : undefined;
+  const cardKey = card && motion ? (motion.dir === 1 ? motion.enter : motion.leave) : undefined;
+  useLayoutEffect(() => {
+    if (cardKey === undefined || !card) return;
+    const page = main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${cardKey}"]`);
+    if (!page) return;
+    const scrim = main.current?.querySelector<HTMLElement>(":scope > .card-scrim") ?? null;
+    const open = page.dataset.card === "open";
+    // Back lands where the card is now, not where it was tapped (pageMotion.ts liveCard).
+    return playCardMotion({ page, scrim, card: open ? card : liveCard(card), open, width: window.innerWidth, height: window.innerHeight });
+  }, [cardKey, card]);
+  // A section's turn takes the top bar with the pages (shell.css): the real bar comes in with the new page, and a
+  // copy of it as it was rides out on the old one. Copied here, while this render's change hasn't reached the
+  // screen, so it's the old page's bar (its title, scrolled or not).
+  const turn = motion?.tab ? motion : undefined;
+  const barCopy = useRef<{ key: number; node: HTMLElement } | null>(null);
+  if (turn && barCopy.current?.key !== turn.leave) {
+    const node = main.current?.querySelector(":scope > .navbar")?.cloneNode(true);
+    barCopy.current = node instanceof HTMLElement ? { key: turn.leave, node } : null;
+  }
+  useLayoutEffect(() => {
+    const copy = barCopy.current;
+    const page = turn && copy?.key === turn.leave ? main.current?.querySelector(`:scope > .page[data-page-key="${turn.leave}"]`) : null;
+    if (!copy || !page) return;
+    copy.node.classList.add("navbar-copy");
+    copy.node.setAttribute("aria-hidden", "true");
+    copy.node.inert = true;
+    copy.node.querySelectorAll("[id]").forEach((e) => e.removeAttribute("id"));
+    page.append(copy.node);
+    return () => {
+      copy.node.remove();
+      barCopy.current = null;
+    };
+  }, [turn?.leave, turn?.enter]); // eslint-disable-line react-hooks/exhaustive-deps
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
   useEffect(watchCardTaps, []);
+  useEffect(() => whenIdle(() => void LazyDetail.preload().catch(() => {}), 2500), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -338,7 +477,6 @@ function DesktopApp() {
   // Android's back button and gesture: Escape's Back, then Home, then the app goes to the background.
   // iOS's swipe in from the left edge: Escape's Back only.
   // iOS's swipe (#451) and Android 14's back gesture (#483), on a pushed page with nothing over it, move the page with the finger.
-  const main = useRef<HTMLElement>(null);
   const now = useRef({ pages, back });
   now.current = { pages, back };
   const drag = useMemo(
@@ -374,14 +512,20 @@ function DesktopApp() {
   return (
     <div
       className="app"
-      data-card-titles={settings?.showCardTitles ?? true}
-      data-card-details={settings?.showCardDetails ?? true}
+      data-card-titles={settings?.showCardTitles ?? false}
+      data-card-details={settings?.showCardDetails ?? false}
       data-card-ratings={settings?.showCardRatings ?? false}
       data-rating-position={settings?.cardRatingPosition ?? "poster"}
       data-rating-colors={settings?.ratingColors ?? false}
       data-player-leaving={leaving}
     >
-      <main className="main" ref={main}>
+      <main
+        className="main"
+        ref={main}
+        // A section's turn: the top bar comes in with the new page, from its side (shell.css).
+        data-turn={(turn?.go && turn.dir) || undefined}
+        style={turn ? ({ "--turn-dir": turn.dir } as CSSProperties) : undefined}
+      >
         <ErrorBoundary where="top bar">
           <NavBar />
         </ErrorBoundary>
@@ -397,6 +541,12 @@ function DesktopApp() {
             data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
             // The pair moves once the new page is laid out (pageMotion.ts `go`).
             data-go={motion?.go || undefined}
+            // Of the pair, the one drawn on top: the page pushed, or the one going (it comes last). It moves; the
+            // other holds still under it (shell.css).
+            data-over={(motion && entry.key === (motion.leaving ? motion.leave : motion.enter)) || undefined}
+            // Another section: the pair slides across as a pager's pages do. A page replaced: a crossfade in place.
+            data-tab={motion?.tab || undefined}
+            data-fade={(motion && !motion.card && !motion.tab && motion.dir === 0) || undefined}
             style={
               motion
                 ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
@@ -412,10 +562,7 @@ function DesktopApp() {
             {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
                 the same box, so they move as one piece (shell.css). */}
             {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
-              <div className="card-ghost" aria-hidden>
-                <img className="card-ghost-soft" src={motion.card.src} alt="" draggable={false} />
-                <img className="card-ghost-sharp" src={motion.card.src} alt="" draggable={false} />
-              </div>
+              <CardGhost src={motion.card.src} />
             )}
           </section>
         ))}
@@ -424,9 +571,13 @@ function DesktopApp() {
         <ErrorBoundary where="toasts" quiet>
           <ControllerToast tv={false} />
           <SeriesPickToast />
+          <HiddenTitleToast tv={false} />
           <UpdateToast hidden={!!playing} />
         </ErrorBoundary>
       </main>
+      {/* The profile sheet's place (ProfileMenu.tsx): beside the pages and the top bar, not in them, so they can step
+          back under it (Sheet.tsx) without taking it with them; in the top bar's layer, under the notices. */}
+      <div className="sheet-host" />
       <ErrorBoundary where="what's new" quiet>
         <WhatsNewSheet />
       </ErrorBoundary>
@@ -452,18 +603,40 @@ function DesktopApp() {
   );
 }
 
+/** The card's picture on a title's page while it grows out of the card or goes back into it (lib/ui/cardGhost.ts). */
+function CardGhost({ src }: { src: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const { panel, soft, medium, sharp } = cardGhostParts(src);
+    el.replaceChildren(panel, soft, medium, sharp);
+  }, [src]);
+  return <div ref={box} className="card-ghost" aria-hidden />;
+}
+
 /** The Settings window, loaded the first time it opens, then kept (it animates its own closing). */
 function LazySettingsOverlay() {
   const { open } = useSettingsOverlay();
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
-  // Fetched once the app has settled, so the first Settings opens as quickly as the rest.
-  useEffect(() => {
-    const later = window.setTimeout(() => void import("./components/SettingsOverlay").catch(() => {}), 2000);
-    return () => window.clearTimeout(later);
-  }, []);
   // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
   const phone = useFormFactor().form === "phone";
+  // Fetched once the app has genuinely settled (skipping phones and metered/slow connections), so initial load never competes with it.
+  useEffect(() => {
+    if (phone) return;
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
+    const c = nav.connection;
+    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    let cancelIdle: (() => void) | undefined;
+    const later = window.setTimeout(() => {
+      cancelIdle = whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 5000);
+    }, 5000);
+    return () => {
+      window.clearTimeout(later);
+      cancelIdle?.();
+    };
+  }, [phone]);
   if (!opened || phone) return null;
   return (
     <Suspense fallback={null}>

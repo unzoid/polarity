@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerLayer, usePlayerLayer } from "../components/PlayerLayer";
 import { rootTab, useRouter, type Route } from "../lib/router";
 import { TV_ACTION_EVENT, type TvAction } from "./gamepad";
@@ -26,6 +26,8 @@ import { ControllerToast, TvHints, TvMenu, TvNav, sameTab, useTvTabs } from "./T
 import { TvCardMenuHost, useCardMenuOpen } from "./TvCardMenu";
 import { TvAnime, TvAnimeDetail } from "./TvAnime";
 import { TvDetail } from "./TvDetail";
+import { TvPerson } from "./TvPerson";
+import { TrailerHost } from "../components/Trailer";
 import { TvDiscover, TvHome, TvLibrary, TvSearch } from "./TvScreens";
 import { TvCalendar } from "./TvCalendar";
 import { TvDownloads } from "./TvDownloads";
@@ -40,8 +42,9 @@ import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { SecretsSyncToast } from "../components/SecretsSyncToast";
 import { LockedKeysToast } from "../components/LockedKeysToast";
+import { HiddenTitleToast } from "../components/HiddenTitleToast";
 
-function TvScreen({ route }: { route: Route }) {
+const TvScreen = memo(function TvScreen({ route }: { route: Route }) {
   switch (route.name) {
     case "home":
       return <TvHome />;
@@ -70,8 +73,10 @@ function TvScreen({ route }: { route: Route }) {
       return <TvAnime />;
     case "anime-detail":
       return <TvAnimeDetail id={route.id} />;
+    case "person":
+      return <TvPerson id={route.id} name={route.title} />;
   }
-}
+});
 
 /** The cursor gets out of the way: hidden while you use keys or a controller, back when the mouse moves. */
 const CURSOR_IDLE_MS = 2500;
@@ -91,7 +96,7 @@ export function TvApp() {
   const activeTab = rootTab(stack);
   const [menuOpen, setMenuOpen] = useState(false);
   const cardMenuOpen = useCardMenuOpen();
-  const [cursorHidden, setCursorHidden] = useState(true);
+  const appRef = useRef<HTMLDivElement>(null);
   const pageEls = useRef(new Map<number, HTMLElement>());
   const { data: settings } = useSettings();
   const tabs = useTvTabs();
@@ -207,13 +212,19 @@ export function TvApp() {
 
   useEffect(() => {
     let t = 0;
-    const onMove = () => {
-      setCursorHidden(false);
-      window.clearTimeout(t);
-      t = window.setTimeout(() => setCursorHidden(true), CURSOR_IDLE_MS);
+    let hidden = true;
+    const setHidden = (next: boolean) => {
+      if (hidden === next) return;
+      hidden = next;
+      if (appRef.current) appRef.current.dataset.cursor = next ? "hidden" : "shown";
     };
-    const onKey = () => setCursorHidden(true);
-    window.addEventListener("pointermove", onMove);
+    const onMove = () => {
+      setHidden(false);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setHidden(true), CURSOR_IDLE_MS);
+    };
+    const onKey = () => setHidden(true);
+    window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(t);
@@ -224,9 +235,10 @@ export function TvApp() {
 
   return (
     <div
+      ref={appRef}
       className="app tv"
       data-player-leaving={leaving}
-      data-cursor={cursorHidden ? "hidden" : "shown"}
+      data-cursor="hidden"
       data-card-ratings={settings?.showCardRatings ?? false}
       data-rating-position={settings?.cardRatingPosition ?? "poster"}
       data-rating-colors={settings?.ratingColors ?? false}
@@ -263,6 +275,12 @@ export function TvApp() {
         {joinPartyOpen && !playing && <TvJoinParty />}
         {partyMenuOpen && !playing && <TvPartyMenu />}
         {friendsOpen && !playing && <TvFriendsPanel />}
+        {/* A title's extras play here, over the page (TvExtras.tsx). */}
+        {!playing && (
+          <ErrorBoundary where="trailer" variant="tv">
+            <TrailerHost />
+          </ErrorBoundary>
+        )}
         <TvHints />
         {!playing && (
           <button className="tv-exit" tabIndex={-1} onClick={() => setTvMode(false)}>
@@ -276,6 +294,7 @@ export function TvApp() {
         <AccountFullToast tv />
         <SecretsSyncToast tv />
         <LockedKeysToast tv />
+        <HiddenTitleToast tv />
       </main>
       <PlayerLayer player={player} leaving={leaving} />
     </div>

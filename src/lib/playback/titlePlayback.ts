@@ -9,6 +9,8 @@ export interface PlayRequest {
   subtitle?: string;
   /** Something to resume: it keeps the file it was on, so it never asks for a source. */
   resumable?: boolean;
+  /** Start a shuffle of the show from this episode (lib/playback/shuffle.ts). */
+  shuffle?: boolean;
 }
 
 /**

@@ -1,3 +1,5 @@
+import "../styles/settings-overlay.css";
+import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
 import { Avatar } from "./Avatar";
@@ -9,7 +11,18 @@ import { tvModeAvailable } from "../tv/tvMode";
 import { SearchField } from "./ui/SearchField";
 import { useAccount } from "../lib/account";
 import { buildChannel } from "../lib/platform";
-import { closeSettings, type PageId, prefsCustomized, resetPrefs, searchSettings, type SettingEntry, usePrefs, useSettingsOverlay } from "../lib/settings";
+import {
+  closeSettings,
+  PAGE_SECTIONS,
+  type PageId,
+  prefsCustomized,
+  resetPrefs,
+  searchSettings,
+  sectionOf,
+  type SettingEntry,
+  usePrefs,
+  useSettingsOverlay,
+} from "../lib/settings";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
 
@@ -26,6 +39,8 @@ const GROUPS: { heading?: string; pages: PageId[] }[] = [
 
 /** Settings for TV mode, left out of search where there is none (tvMode.ts). */
 const TV_ONLY = new Set(["tvMode", "showTvButton"]);
+/** Shown on phones and tablets only (ControlsPage). */
+const TOUCH_ONLY = new Set(["swipeGestures"]);
 
 /** Where a search result's row can be on its page. */
 const ROW_LABELS = ".settings-row-title, .settings-group-title, .sub-setting-label, .shortcut-label";
@@ -86,13 +101,29 @@ export function SettingsOverlay({
   const pages = account.enabled ? PAGES : PAGES.filter((p) => p.id !== "account");
   const fallback = pages.find((p) => p.id === "playback")?.id ?? pages[0].id;
   const [page, setPage] = useState<PageId>(fallback);
+  // A long page's section open (PAGE_SECTIONS), or null for the page itself: its list of sections.
+  const [sectionId, setSection] = useState<string | null>(null);
+  // Which way the last move between a page and its sections went, for the page's slide in (settings-overlay.css);
+  // null for any other change (another page, a search result), which shows at once.
+  const [move, setMove] = useState<"in" | "out" | null>(null);
+  const openSection = (id: string) => (setMove("in"), setSection(id));
+  const closeSection = () => (setMove("out"), setSection(null));
+  const section = PAGE_SECTIONS[page]?.find((s) => s.id === sectionId) ?? null;
   const [query, setQuery] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   // A phone has no room for the sidebar beside a page: it shows one or the other, the list of
   // sections first, as a phone's own Settings app does. Back (or Escape) goes from a page to the list.
-  const phone = useFormFactor().form === "phone";
+  const { form, touch } = useFormFactor();
+  const phone = form === "phone";
   const [view, setView] = useState<"list" | "page">("list");
+  // Which way the phone last went between the list and a page, for the one coming in to push in from that side
+  // (settings-overlay.css `data-push`); null when Settings opens, which its sheet's own entrance covers.
+  const [push, setPush] = useState<"in" | "out" | null>(null);
+  const showView = (next: "list" | "page") => {
+    if (next !== view) setPush(next === "page" ? "in" : "out");
+    setView(next);
+  };
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
@@ -103,7 +134,9 @@ export function SettingsOverlay({
   useEffect(() => {
     if (open) setBelow(dismissDepth());
   }, [open]);
-  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], () => setView("list"));
+  // Back from a section goes to its page's list of sections, then (on a phone) to the list of pages.
+  const back = () => (section ? closeSection() : showView("list"));
+  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], back);
   // Back on a phone's page goes to the list; on the list it closes Settings (#455). The system's Back (iOS's swipe,
   // Android's button and gesture) arrives as Escape (lib/ui/systemBack.ts), so Escape is taken here, before the
   // dialog would close on it (or the sheet below would). A menu open on the page closes first, as it always does.
@@ -118,13 +151,13 @@ export function SettingsOverlay({
       if (isTextField(at) && "value" in at && at.value) return;
       e.preventDefault();
       e.stopPropagation();
-      if (view === "page") setView("list");
+      if (view === "page") back();
       else if (onExit) onExit();
       else closeSettings();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, phone, view, below, onExit]);
+  }, [open, phone, view, below, onExit, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Each opening lands on the requested page (or where it was left, unless that was Account), search cleared.
   useEffect(() => {
@@ -133,28 +166,35 @@ export function SettingsOverlay({
     if (asked) setPage(requested);
     else if (page === "account") setPage(fallback);
     setView(asked ? "page" : "list");
+    setPush(null);
+    setSection(null);
+    setMove(null);
     setQuery("");
     setTarget(null);
   }, [open, requested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 });
-  }, [page]);
+  }, [page, sectionId]);
 
   const current = pages.find((p) => p.id === page) ?? pages[0];
   // The sheet holding it names the view and takes its Back.
   useEffect(() => {
     if (!onHead) return;
-    onHead(view === "page" ? { label: current.label, back: () => setView("list") } : { label: "Settings", back: () => (onExit ?? closeSettings)() });
-  }, [onHead, onExit, view, current.label]);
+    onHead(
+      view === "page"
+        ? { label: section?.label ?? current.label, back }
+        : { label: "Settings", back: () => (onExit ?? closeSettings)() },
+    );
+  }, [onHead, onExit, view, current.label, section]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageOf = (id: PageId) => pages.find((p) => p.id === id) ?? pages[0];
   const searching = query.trim() !== "";
   const results = useMemo(
     () =>
       searchSettings(query, (id) => pageOf(id).label, new Set(pages.map((p) => p.id))).filter(
-        (entry) => tvModeAvailable || !TV_ONLY.has(entry.id),
+        (entry) => (tvModeAvailable || !TV_ONLY.has(entry.id)) && (touch || !TOUCH_ONLY.has(entry.id)),
       ),
-    [query, pages], // eslint-disable-line react-hooks/exhaustive-deps
+    [query, pages, touch], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const [selected, setSelected] = useState(0);
   const resultsList = useRef<HTMLDivElement>(null);
@@ -176,18 +216,20 @@ export function SettingsOverlay({
       setTarget(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [target, page]);
+  }, [target, page, sectionId]);
 
-  const go = (id: PageId) => {
+  const go = (id: PageId, inSection: string | null = null) => {
     setPage(id);
-    setView("page");
+    setSection(inSection);
+    setMove(null);
+    showView("page");
     setQuery("");
   };
 
   const dragDown = useDragDown(closeSettings);
 
   const pick = (entry: SettingEntry) => {
-    go(entry.page);
+    go(entry.page, sectionOf(entry.page, entry.id)?.id ?? null);
     setTarget({ entry }); // a fresh object, so picking the same one again still scrolls
   };
 
@@ -233,6 +275,7 @@ export function SettingsOverlay({
               <div className="t3s-results" id="t3s-results" role="listbox" aria-label="Matching settings" ref={resultsList}>
                 {results.map((entry, i) => {
                   const p = pageOf(entry.page);
+                  const s = sectionOf(entry.page, entry.id);
                   return (
                     <div
                       key={entry.id}
@@ -248,7 +291,7 @@ export function SettingsOverlay({
                       <p.icon size={16} strokeWidth={2} />
                       <span className="t3s-result-text">
                         <span className="t3s-result-title">{entry.title}</span>
-                        <span className="t3s-result-page">{p.label}</span>
+                        <span className="t3s-result-page">{s ? `${p.label} › ${s.label}` : p.label}</span>
                       </span>
                     </div>
                   );
@@ -320,8 +363,8 @@ export function SettingsOverlay({
                 ref={backButton}
                 className={iconButtonClass("settings", "t3s-back")}
                 data-native-back={nativeBack || undefined}
-                aria-label="All settings"
-                onClick={() => setView("list")}
+                aria-label={section ? current.label : "All settings"}
+                onClick={back}
               >
                 <ChevronLeft size={20} strokeWidth={2.2} />
               </button>
@@ -331,7 +374,20 @@ export function SettingsOverlay({
               <span className="t3s-crumb-sep" aria-hidden>
                 /
               </span>
-              <span className="t3s-crumb-page">{current.label}</span>
+              {section ? (
+                <>
+                  {/* Back to the page's list of sections. */}
+                  <button className="t3s-crumb-link" onClick={closeSection}>
+                    {current.label}
+                  </button>
+                  <span className="t3s-crumb-sep" aria-hidden>
+                    /
+                  </span>
+                  <span className="t3s-crumb-page">{section.label}</span>
+                </>
+              ) : (
+                <span className="t3s-crumb-page">{current.label}</span>
+              )}
             </Dialog.Title>
             <div className="t3s-header-actions">
               {/* On a phone its label doesn't fit here, and its arrow alone read as a Back that did nothing (#455):
@@ -355,8 +411,8 @@ export function SettingsOverlay({
         )}
 
         <div className="t3s-scroll" ref={scroller}>
-          <div className="t3s-page" key={page}>
-            <SettingsPageBody page={page} />
+          <div className="t3s-page" key={`${page}/${sectionId ?? ""}`} data-move={move ?? undefined}>
+            <SettingsPageBody page={page} section={section?.id ?? null} openSection={openSection} />
           </div>
         </div>
       </div>
@@ -366,7 +422,7 @@ export function SettingsOverlay({
   if (embedded)
     return (
       // Named as the window is: by the section open, else Settings.
-      <div className="t3s" data-embedded="" data-view={view} role="region" aria-label={view === "page" ? current.label : "Settings"}>
+      <div className="t3s" data-embedded="" data-view={view} data-push={push ?? undefined} role="region" aria-label={view === "page" ? (section?.label ?? current.label) : "Settings"}>
         {body}
       </div>
     );
@@ -385,6 +441,7 @@ export function SettingsOverlay({
         <Dialog.Popup
           className="t3s"
           data-view={phone ? view : undefined}
+          data-push={phone ? (push ?? undefined) : undefined}
           aria-label="Settings"
           {...(phone ? dragDown : {})}
           onKeyDown={(e) => {

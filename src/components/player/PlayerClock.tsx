@@ -19,15 +19,17 @@ export function PlayerClock({
   rate,
   onCycle,
   fps = null,
+  active = true,
 }: {
   media: MediaLike | null;
   display: TimeDisplay;
   rate: number;
   onCycle: () => void;
   fps?: number | null;
+  active?: boolean;
 }) {
   // "Ends at" depends on the clock as well: select whole seconds left at this speed, format with the time now.
-  const shown = useMediaTime(media, (t) =>
+  const shown = useMediaTime(active ? media : null, (t) =>
     fps
       ? `${formatTime(t.current)} · Frame ${frameAt(t.current, fps)}`
       : display === "elapsed"

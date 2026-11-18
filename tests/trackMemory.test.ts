@@ -35,11 +35,13 @@ test("tracks picked for a source come back for that source after a restart, and 
   rememberTracks(key, episode, { audio: { id: "2", lang: "jpn", codec: "aac", channels: 2 } });
   rememberTracks(key, episode, { subtitle: { off: true } });
   rememberTracks(key, episode, { delay: -0.5 });
+  rememberTracks(key, episode, { audioDelay: 0.25 });
   resetTrackMemory(storage);
   expect(recallTracks(trackMemoryKey(episode, film))).toEqual({
     audio: { id: "2", lang: "jpn", codec: "aac", channels: 2, title: undefined },
     subtitle: { off: true },
     delay: -0.5,
+    audioDelay: 0.25,
   });
   // Another source of the same episode, or the same file for another episode, starts from the settings.
   expect(recallTracks(trackMemoryKey(episode, other))).toBeUndefined();

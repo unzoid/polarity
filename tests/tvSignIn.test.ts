@@ -2,6 +2,7 @@
 // what a device calls itself, and waiting for the answer.
 import { describe, expect, test } from "bun:test";
 import { deviceLabel, formatTvCode, isTvCode, TV_POLL_MS, waitForApproval, type TvClaim } from "../src/lib/account/tvSignIn";
+import { hasTvCode, offerTvCode, takeTvCode } from "../src/lib/account/tvSignInLink";
 
 describe("codes", () => {
   test("typed any way, read the same; shown in two groups of four", () => {
@@ -14,6 +15,20 @@ describe("codes", () => {
     expect(isTvCode("HJKM-NPQ0")).toBe(false);
     expect(isTvCode("HJKM-NPQ")).toBe(false);
     expect(isTvCode("HJKM-NPQRS")).toBe(false);
+  });
+});
+
+describe("a code from the TV's QR code", () => {
+  test("kept once until Sign in a TV takes it; the latest wins; anything else is ignored", () => {
+    takeTvCode();
+    offerTvCode("not a code");
+    expect(hasTvCode()).toBe(false);
+    offerTvCode("HJKMNPQR");
+    offerTvCode("hjkm-2345");
+    offerTvCode("HJKMNPQ0");
+    expect(hasTvCode()).toBe(true);
+    expect(takeTvCode()).toBe("HJKM2345");
+    expect(takeTvCode()).toBeNull();
   });
 });
 

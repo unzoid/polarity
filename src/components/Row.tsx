@@ -43,7 +43,7 @@ export function Row({
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && !placed && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
-  });
+  }, [children, placed]);
 
   // Resuming a title moves it to the front of Continue Watching; the shelf kept
   // its scroll offset, which now shows whatever took the title's old place.
@@ -141,7 +141,7 @@ export function RowPaddle({ dir, onPage }: { dir: "prev" | "next"; onPage: (dir:
       aria-label={prev ? "Scroll left" : "Scroll right"}
       tabIndex={-1}
     >
-      <EdgeBlur />
+      <EdgeBlur edge={prev ? "left" : "right"} layers={5} />
       {prev ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
     </button>
   );

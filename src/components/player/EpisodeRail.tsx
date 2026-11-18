@@ -30,7 +30,10 @@ export function EpisodeRail({
   progress,
   still,
   onPlay,
+  numbers,
 }: {
+  /** Each episode's number for display, by id: its place in a chosen episode order (lib/library/episodeOrder.ts). */
+  numbers?: Map<string, number>;
   meta: Meta;
   episodes: Video[];
   playing: string;
@@ -113,7 +116,7 @@ export function EpisodeRail({
                 disabled={!openable}
                 aria-disabled={current || undefined}
                 onClick={() => !current && onPlay(v.id)}
-                aria-label={`${v.episode}. ${v.title}${current ? ", playing" : ""}`}
+                aria-label={`${numbers?.get(v.id) ?? v.episode}. ${v.title}${current ? ", playing" : ""}`}
               >
                 <span className="episode-rail-still">
                   {still(v) ? <Img src={still(v)} alt="" /> : <StillPlaceholder />}
@@ -135,7 +138,7 @@ export function EpisodeRail({
                   )}
                 </span>
                 <span className="episode-rail-title">
-                  {v.episode}. {v.title}
+                  {numbers?.get(v.id) ?? v.episode}. {v.title}
                 </span>
               </button>
               {openable && <DownloadButton item={meta} video={v} className={buttonClass("plain", true, "episode-rail-download pressable")} size={20} />}

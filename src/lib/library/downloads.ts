@@ -6,7 +6,7 @@ import { queryClient } from "../net/queries";
 import { errorMessage } from "../errors";
 import type { ContentType, MetaPreview, RankedStream, Stream, Video } from "../types";
 import { api } from "../api";
-import { runBatch } from "./batchDownloads";
+import { runBatch, type BatchDeps } from "./batchDownloads";
 
 /**
  * Downloads (src-tauri/src/downloads.rs): a movie or an episode saved to this
@@ -55,6 +55,8 @@ export function useDownloads() {
 export interface DownloadsStorage {
   dir: string;
   free: number | null;
+  /** A folder chosen on this device (downloadFolder.ts), not the default. */
+  custom: boolean;
 }
 
 /** Under the list's key, so every change to the list asks again. */
@@ -124,7 +126,12 @@ export async function startDownload(item: MetaPreview, video: Video | undefined,
 
 /** Downloads `videos` of a show as one batch (batchDownloads.ts), with the app's sources and downloads. */
 export function downloadBatch(key: string, item: MetaPreview, videos: Video[]) {
-  return runBatch(key, item, videos, {
+  return runBatch(key, item, videos, batchDeps(item));
+}
+
+/** The app's sources and downloads, as the batch runner takes them. */
+export function batchDeps(item: MetaPreview): BatchDeps {
+  return {
     sources: (video) => api.streams(item.type, video.id).then((r) => r.streams),
     start: startDownload,
     status: async (id) => {
@@ -135,7 +142,7 @@ export function downloadBatch(key: string, item: MetaPreview, videos: Video[]) {
     resume: resumeDownload,
     remove: removeDownload,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-  });
+  };
 }
 
 export async function pauseDownload(id: string) {

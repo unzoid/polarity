@@ -59,6 +59,7 @@ test("the Calendar is in the profile menu only while it isn't a navbar tab (#92)
   await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   await settings.getByRole("button", { name: "Browsing", exact: true }).click();
+  await settings.getByRole("button", { name: /^Home & Title Pages/ }).click();
   await settings.getByRole("switch", { name: /^Show the Calendar/ }).click();
   await settings.getByRole("button", { name: "Close settings" }).click();
   await expect(settings).toHaveCount(0);
@@ -538,6 +539,8 @@ test("settings change and stay changed", async ({ app }) => {
     return app.getByRole("dialog", { name: /^Settings/ });
   };
   let settings = await open();
+  // Playback opens on its list of sections; Skip intros is under Skipping.
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   const skip = settings.getByRole("switch", { name: /^Skip intros/ });
   await expect(skip).not.toBeChecked();
   await skip.click();
@@ -546,6 +549,7 @@ test("settings change and stay changed", async ({ app }) => {
   await expect(settings).toHaveCount(0);
 
   settings = await open();
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   await expect(settings.getByRole("switch", { name: /^Skip intros/ })).toBeChecked();
   await settings.getByRole("button", { name: "Appearance", exact: true }).click();
   await expect(settings.getByRole("heading", { level: 2, name: /Appearance/ }).first()).toBeVisible();
@@ -588,12 +592,14 @@ test("a settings search result is highlighted once, not again when its page or S
   let before = await find();
   await settings.getByRole("button", { name: "Appearance", exact: true }).click();
   await settings.getByRole("button", { name: "Playback", exact: true }).click();
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   await noNewMark(before);
   // Closed before it ends, then opened again.
   before = await find();
   await settings.getByRole("button", { name: "Close settings" }).click();
   await expect(settings).toHaveCount(0);
   await open();
+  await settings.getByRole("button", { name: /^Skipping/ }).click();
   await noNewMark(before);
   // Played through: the mark goes with it.
   await find();
@@ -666,6 +672,8 @@ test("the first torrent source shows a notice once: Cancel plays nothing, Play g
 test("a source list marks its first links ready or not ready, checked ahead of time (#21)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
+  // Choose source is behind More on a title page.
+  await app.getByRole("button", { name: "More actions" }).click();
   await app.getByRole("button", { name: "Choose source", exact: true }).click();
   // The fake shell answers every link as ready in 0.4 s except one placeholder.
   const ready = app.locator('.stream-row[data-ready="yes"]');
@@ -846,7 +854,8 @@ test("a Stremio export is read, previewed and imported; its add-ons are only lis
   const settings = app.getByRole("dialog", { name: /^Settings/ });
   // Signed out (as here), it's under Advanced; signed in, under Account.
   await settings.getByRole("button", { name: "Advanced", exact: true }).click();
-  await settings.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
+  // By its name: Advanced also has the Polarity export's file picker.
+  await settings.getByLabel("Stremio export file").setInputFiles({ name: "export.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
   await expect(settings.getByText("1 title Polarity can show")).toBeVisible();
   await expect(settings.getByRole("switch", { name: /^Where you left off/ })).toBeChecked();
   const addon = settings.getByRole("switch", { name: /^Example One/ });
@@ -917,13 +926,18 @@ test("a Letterboxd export ZIP is read on the device, its films found by title an
 test("Download Season downloads every released episode of the season, then says so (#24)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
   await card(app, "Fieldwork").click();
-  const season = app.locator(".seasons-bar").getByRole("button", { name: /^Download Season/ });
+  // Download Season is in the season bar's menu, with Shuffle and Episode Ratings.
+  const options = app.locator(".seasons-bar").getByRole("button", { name: "Season Options" });
+  await options.click();
+  const season = app.getByRole("menuitem", { name: /^Download Season/ });
   await expect(season).toBeEnabled();
   // A show's downloads live with its episodes: the season bar, and each episode.
   await expect(app.locator(".detail-actions").getByRole("button", { name: /^Download/ })).toHaveCount(0);
   await season.click();
   // The fake shell finishes each download at once.
-  await expect(app.locator(".seasons-bar").getByRole("button", { name: "Season Downloaded" })).toBeDisabled({ timeout: 15_000 });
+  await options.click();
+  await expect(app.getByRole("menuitem", { name: "Season Downloaded" })).toBeDisabled({ timeout: 15_000 });
+  await app.keyboard.press("Escape");
   const released = app.locator(".episode-card:has(.episode-card-main:not([disabled]))");
   const count = await released.count();
   expect(count).toBeGreaterThan(1);
@@ -1076,7 +1090,7 @@ test("a long anime lists the episodes its series' catalog skips, between their n
   await expect(app.locator(".player")).toBeVisible({ timeout: 15_000 });
 });
 
-test("a movie's page has a Download button that names what it downloads; a show's action row has none (#26)", async ({ app }) => {
+test("a movie's page has a Download button, behind More, that names what it downloads; a show's action row has none (#26)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
   await card(app, "Fieldwork").click();
   const actions = app.locator(".detail-actions");
@@ -1084,7 +1098,9 @@ test("a movie's page has a Download button that names what it downloads; a show'
   await expect(actions.getByRole("button", { name: /^Download/ })).toHaveCount(0);
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
-  await expect(actions.getByRole("button", { name: "Download Movie", exact: true })).toHaveText("Download Movie");
+  await actions.getByRole("button", { name: "More actions" }).click();
+  // An icon like the actions beside it; its name is its label.
+  await expect(actions.getByRole("button", { name: "Download Movie", exact: true })).toBeVisible();
 });
 
 test("on a new install Discord shows only that something plays, never the title (#150)", async ({ app }) => {
@@ -1105,6 +1121,7 @@ test("with Show on Discord set to the title, the player sends what plays, its pa
   await app.getByRole("button", { name: /^Profile/ }).click();
   await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
   const settings = app.getByRole("dialog", { name: /^Settings/ });
+  await settings.getByRole("button", { name: /^Player/ }).click();
   await settings.getByRole("combobox", { name: "Show on Discord" }).click();
   await app.getByRole("option", { name: "What you're watching" }).click();
   await settings.getByRole("button", { name: "Close settings" }).click();
@@ -1307,6 +1324,8 @@ test("a source's i button shows what the source carries with every key masked, o
   });
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
+  // Choose source is behind More on a title page.
+  await app.getByRole("button", { name: "More actions" }).click();
   await app.getByRole("button", { name: "Choose source", exact: true }).click();
   const rows = app.locator(".sheet .stream-row-wrap");
   const last = rows.last();
@@ -1501,6 +1520,7 @@ test.describe("signed in, on a fresh profile", () => {
     await page.getByRole("button", { name: /^Profile/ }).click();
     await page.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = page.getByRole("dialog", { name: /^Settings/ });
+    await settings.getByRole("button", { name: /^Player/ }).click();
     await settings.getByRole("combobox", { name: "Show on Discord" }).click();
     await page.getByRole("option", { name: mode }).click();
     await expect(settings.getByRole("combobox", { name: "Who can join from Discord" })).toHaveText(/Ask me/);
@@ -2438,6 +2458,7 @@ test("subtitle Font starts at From the subtitles; a picked font is kept (#347)",
     await app.locator(".profile-pop").getByRole("button", { name: "Settings", exact: true }).click();
     const settings = app.getByRole("dialog", { name: /^Settings/ });
     await settings.getByRole("button", { name: "Subtitles & Audio", exact: true }).click();
+    await settings.getByRole("button", { name: /^Subtitle Style/ }).click();
     return settings;
   };
   let settings = await open();

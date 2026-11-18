@@ -51,16 +51,16 @@ body {
 /* The other app fonts, all variable (weight axis) so every weight the app uses is a real one. Their
    own features: Inter's character variants (body, above) don't apply to them. */
 :root[data-font="instrument"] {
-  --font: "Twemoji Country Flags", "Instrument Sans Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, sans-serif;
 }
 :root[data-font="hanken"] {
-  --font: "Twemoji Country Flags", "Hanken Grotesk Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Hanken Grotesk Variable", system-ui, sans-serif;
 }
 :root[data-font="onest"] {
-  --font: "Twemoji Country Flags", "Onest Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Onest Variable", system-ui, sans-serif;
 }
 :root[data-font="mona"] {
-  --font: "Twemoji Country Flags", "Mona Sans Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Mona Sans Variable", system-ui, sans-serif;
 }
 :root:is([data-font="instrument"], [data-font="hanken"], [data-font="onest"], [data-font="mona"]) body {
   font-feature-settings: normal;
@@ -587,16 +587,24 @@ img[data-logo-look="halo-dark"] {
   transition: height var(--fit-dur, 300ms) var(--ease-drawer);
 }
 [data-slide] {
-  animation: view-in 260ms var(--ease-out) both;
+  animation: view-in var(--view-dur, 260ms) var(--view-ease, var(--ease-out)) both;
 }
 [data-slide="back"] {
-  --view-from: -20px;
+  --view-from: calc(var(--view-shift, 20px) * -1);
 }
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translateX(var(--view-from, 20px));
+    transform: translateX(var(--view-from, var(--view-shift, 20px)));
   }
+}
+/* A phone's sheet is a screen's worth of panel in a hand: its views push in further and at a calmer pace, as a
+   phone's own navigation does, so going into a view (Settings, then a section of it) reads as going deeper. The
+   Settings in it moves the same way (settings-overlay.css). */
+.sheet[data-edge="bottom"] {
+  --view-shift: 56px;
+  --view-dur: 420ms;
+  --view-ease: var(--ease-reveal);
 }
 @media (prefers-reduced-motion: reduce) {
   .fit-height {

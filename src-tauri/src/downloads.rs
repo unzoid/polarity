@@ -13,6 +13,10 @@
 //!
 //! The UI polls `downloads_list` while anything is moving, so there's no
 //! event plumbing: progress is just the record's `received` count.
+//!
+//! The folder can be changed on this device (`folder.json` beside the list, never synced): on
+//! desktop through the system's folder dialog, on Android to the app's own folder on an SD card.
+//! Only new downloads go there; finished ones keep their paths. iOS has no choice.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -127,9 +131,59 @@ fn remove_files(file: &str) {
     let _ = std::fs::remove_file(part(file));
 }
 
+/// True when the folder a download's file is in is there.
+fn folder_present(file: &str) -> bool {
+    Path::new(file).parent().is_some_and(Path::is_dir)
+}
+
+/// The download folder chosen on this device: `folder.json` beside `downloads.json`, never synced.
+mod folder {
+    use std::path::{Path, PathBuf};
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct Chosen {
+        dir: PathBuf,
+    }
+
+    const FILE: &str = "folder.json";
+
+    pub fn read(state: &Path) -> Option<PathBuf> {
+        let bytes = std::fs::read(state.join(FILE)).ok()?;
+        serde_json::from_slice::<Chosen>(&bytes).ok().map(|c| c.dir).filter(|d| d.is_absolute())
+    }
+
+    /// `None`: the default again.
+    pub fn write(state: &Path, dir: Option<&PathBuf>) -> Result<(), String> {
+        let path = state.join(FILE);
+        match dir {
+            None => match std::fs::remove_file(&path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("Couldn't save the choice: {e}")),
+                _ => Ok(()),
+            },
+            Some(dir) => {
+                let json = serde_json::to_vec(&Chosen { dir: dir.clone() }).map_err(|e| e.to_string())?;
+                std::fs::create_dir_all(state).map_err(|e| format!("Couldn't save the choice: {e}"))?;
+                polar_library::saver::write_atomic(&path, &json).map_err(|e| format!("Couldn't save the choice: {e}"))
+            }
+        }
+    }
+
+    /// Made if missing, then a small file written and deleted there.
+    pub fn writable(dir: &Path) -> Result<(), String> {
+        let refuse = |e: std::io::Error| format!("Downloads can't be saved in {}: {e}", dir.display());
+        std::fs::create_dir_all(dir).map_err(refuse)?;
+        let probe = dir.join(".polarity-write-check");
+        std::fs::write(&probe, b"ok").map_err(refuse)?;
+        let _ = std::fs::remove_file(&probe);
+        Ok(())
+    }
+}
+
 pub struct Downloads {
-    /// Where the files go.
-    dir: PathBuf,
+    /// Where new files go: the folder chosen on this device, or `default_dir`.
+    dir: Mutex<PathBuf>,
+    /// Where they go when no folder was chosen (Videos/Polarity, or the app's own folder).
+    default_dir: PathBuf,
     /// Where `downloads.json` is.
     state: PathBuf,
     inner: Mutex<Inner>,
@@ -177,10 +231,13 @@ impl Downloads {
                 d.state = DownloadState::Paused;
             }
         }
-        // A finished file that's gone (deleted by hand) isn't a download any more.
-        items.retain(|d| d.state != DownloadState::Done || Path::new(&d.file).exists());
+        // A finished file that's gone (deleted by hand) isn't a download any more. One whose whole
+        // folder is missing is kept: an SD card or a drive that isn't there right now.
+        items.retain(|d| d.state != DownloadState::Done || Path::new(&d.file).exists() || !folder_present(&d.file));
+        let chosen = folder::read(state);
         Self {
-            dir,
+            dir: Mutex::new(chosen.unwrap_or_else(|| dir.clone())),
+            default_dir: dir,
             state: state.to_owned(),
             inner: Mutex::new(Inner { items, ..Inner::default() }),
             http: reqwest::Client::builder()
@@ -195,6 +252,27 @@ impl Downloads {
     /// Set when `downloads.json` couldn't be read at start-up.
     pub fn problem(&self) -> Option<&str> {
         self.problem.as_deref()
+    }
+
+    /// Where new downloads go now.
+    pub fn dir(&self) -> PathBuf {
+        self.dir.locked().clone()
+    }
+
+    /// New downloads go to `dir` from now on (`None`: back to the default). The files already
+    /// downloaded stay where they are; their records keep their paths. A folder that can't be
+    /// written is refused. The choice is this device's, kept beside `downloads.json`.
+    pub fn set_folder(&self, dir: Option<PathBuf>) -> std::result::Result<PathBuf, String> {
+        let dir = dir.unwrap_or_else(|| self.default_dir.clone());
+        if !dir.is_absolute() {
+            return Err("Choose a folder on this device.".into());
+        }
+        if dir != self.default_dir {
+            folder::writable(&dir)?;
+        }
+        folder::write(&self.state, (dir != self.default_dir).then_some(&dir))?;
+        *self.dir.locked() = dir.clone();
+        Ok(dir)
     }
 
     /// True when `path` is a finished download's file, so the player may open it.
@@ -446,7 +524,7 @@ fn file_for(dir: &Path, req: &DownloadRequest, url: &str, others: &[String]) -> 
 
 type Shared<'a> = State<'a, Arc<Downloads>>;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn downloads_list(downloads: Shared<'_>) -> Vec<Download> {
     let mut items = downloads.inner.locked().items.clone();
     items.sort_by_key(|i| std::cmp::Reverse(i.added_at));
@@ -470,9 +548,9 @@ pub async fn download_start(downloads: Shared<'_>, req: DownloadRequest) -> Resu
     downloads.stop(&req.video_id);
     let added_at = now();
     let others: Vec<String> = downloads.inner.locked().items.iter().map(|d| d.file.clone()).collect();
-    let file = file_for(&downloads.dir, &req, &url, &others);
-    std::fs::create_dir_all(&downloads.dir)
-        .map_err(|e| CmdError::Save(format!("Couldn't create the downloads folder: {e}")))?;
+    let dir = downloads.dir();
+    let file = file_for(&dir, &req, &url, &others);
+    std::fs::create_dir_all(&dir).map_err(|e| CmdError::Save(format!("Couldn't create the downloads folder: {e}")))?;
     let d = Download {
         id: req.video_id.clone(),
         meta_id: req.meta_id,
@@ -546,11 +624,101 @@ pub fn download_reveal(downloads: Shared<'_>, id: String) -> Result<()> {
 pub struct Storage {
     dir: String,
     free: Option<u64>,
+    /// A folder chosen on this device, not the default.
+    custom: bool,
 }
 
 #[tauri::command]
 pub fn downloads_storage(downloads: Shared<'_>) -> Storage {
-    Storage { dir: downloads.dir.display().to_string(), free: crate::disk::free_bytes(&downloads.dir) }
+    storage(&downloads)
+}
+
+fn storage(downloads: &Downloads) -> Storage {
+    let dir = downloads.dir();
+    Storage {
+        dir: dir.display().to_string(),
+        free: crate::disk::free_bytes(&dir),
+        custom: dir != downloads.default_dir,
+    }
+}
+
+/// A storage volume of the app's own on Android (an SD card): a folder downloads may go to
+/// without any storage permission.
+#[derive(Debug, Clone, Serialize)]
+pub struct Volume {
+    path: String,
+    label: String,
+}
+
+/// Android: the app's own folder on each removable volume (`/storage/<volume>/Android/data/<app>/files`,
+/// made by `getExternalFilesDirs` in MainActivity.kt). Elsewhere none.
+#[tauri::command]
+pub fn downloads_volumes(app: AppHandle) -> Vec<Volume> {
+    volumes(&app)
+}
+
+#[cfg(target_os = "android")]
+fn volumes(app: &AppHandle) -> Vec<Volume> {
+    let id = app.config().identifier.clone();
+    let Ok(entries) = std::fs::read_dir("/storage") else { return Vec::new() };
+    let mut found: Vec<Volume> = entries
+        .flatten()
+        .filter(|e| !matches!(e.file_name().to_str(), Some("emulated" | "self")))
+        .map(|e| e.path().join("Android").join("data").join(&id).join("files"))
+        .filter(|p| p.is_dir())
+        .map(|p| Volume { path: p.display().to_string(), label: "SD card".into() })
+        .collect();
+    found.sort_by(|a, b| a.path.cmp(&b.path));
+    if found.len() > 1 {
+        for (i, v) in found.iter_mut().enumerate() {
+            v.label = format!("SD card {}", i + 1);
+        }
+    }
+    found
+}
+
+#[cfg(not(target_os = "android"))]
+fn volumes(_: &AppHandle) -> Vec<Volume> {
+    Vec::new()
+}
+
+/// Back to the default folder (`dir` none), or, on Android, one of `downloads_volumes`. A folder
+/// anywhere else is chosen in the system's folder dialog (`downloads_pick_folder`), never named by
+/// the page.
+#[tauri::command]
+pub fn downloads_set_folder(app: AppHandle, downloads: Shared<'_>, dir: Option<String>) -> Result<Storage> {
+    if cfg!(target_os = "ios") {
+        return Err(CmdError::Unsupported("Downloads stay in the app's own folder on this device.".into()));
+    }
+    if let Some(dir) = &dir {
+        if !volumes(&app).iter().any(|v| v.path == *dir) {
+            return Err(CmdError::Unsupported("Choose a folder from the list.".into()));
+        }
+    }
+    downloads.set_folder(dir.map(PathBuf::from)).map_err(CmdError::Save)?;
+    Ok(storage(&downloads))
+}
+
+/// Desktop: the system's folder dialog; the folder picked becomes where new downloads go. `None`
+/// when it was cancelled.
+#[tauri::command]
+pub async fn downloads_pick_folder(app: AppHandle, downloads: Shared<'_>) -> Result<Option<Storage>> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog().file().set_title("Download folder").set_directory(downloads.dir()).pick_folder(move |picked| {
+            let _ = tx.send(picked);
+        });
+        let Some(picked) = rx.await.ok().flatten().and_then(|p| p.into_path().ok()) else { return Ok(None) };
+        downloads.set_folder(Some(picked)).map_err(CmdError::Save)?;
+        Ok(Some(storage(&downloads)))
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, downloads);
+        Err(CmdError::Unsupported("Choosing a folder isn't available on this device.".into()))
+    }
 }
 
 /// Cancel and delete: the record and the file.
@@ -729,6 +897,119 @@ mod tests {
         let (outcome, _, file) = run("past", Answer::PastEnd, FILE.len(), Some(FILE.len() as u64)).await;
         assert_eq!(outcome, Ok(true));
         assert_eq!(std::fs::read(&file).unwrap(), FILE);
+    }
+
+    /// A finished download of `id` with its file in `dir`.
+    fn finished(id: &str, dir: &Path) -> Download {
+        let file = dir.join(format!("{}.mkv", id.replace(':', "-"))).to_string_lossy().into_owned();
+        Download { state: DownloadState::Done, ..record(id, file) }
+    }
+
+    fn record(id: &str, file: String) -> Download {
+        Download {
+            id: id.into(),
+            meta_id: "tt0000000".into(),
+            ty: "series".into(),
+            name: "The Lantern Keepers".into(),
+            poster: None,
+            background: None,
+            logo: None,
+            season: Some(1),
+            episode: Some(1),
+            episode_title: None,
+            thumbnail: None,
+            quality: "1080p".into(),
+            url: "https://media.example.com/film.mkv".into(),
+            file,
+            received: 3,
+            total: Some(3),
+            state: DownloadState::Paused,
+            error: None,
+            added_at: 0,
+            headers: HashMap::new(),
+        }
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("polar-downloads-folder-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_new_folder_takes_new_downloads_and_the_old_files_stay_put() {
+        let root = scratch("move");
+        let (state, default, chosen) = (root.join("state"), root.join("Videos"), root.join("Elsewhere"));
+        std::fs::create_dir_all(&default).unwrap();
+        let downloads = Downloads::load(&state, default.clone(), None);
+        let old = finished("tt0000000:1:1", &default);
+        std::fs::write(&old.file, b"abc").unwrap();
+        {
+            let mut inner = downloads.inner.locked();
+            inner.items.push(old.clone());
+            downloads.save(&inner.items);
+        }
+
+        assert_eq!(downloads.set_folder(Some(chosen.clone())), Ok(chosen.clone()));
+        assert_eq!(downloads.dir(), chosen);
+        assert!(
+            chosen.is_dir() && std::fs::read_dir(&chosen).unwrap().next().is_none(),
+            "the check leaves nothing behind"
+        );
+        let req: DownloadRequest = serde_json::from_value(serde_json::json!({
+            "metaId": "tt0000000", "type": "series", "videoId": "tt0000000:1:2", "name": "The Lantern Keepers",
+            "season": 1, "episode": 2, "quality": "1080p", "stream": { "url": "https://media.example.com/film.mkv" }
+        }))
+        .unwrap();
+        assert!(file_for(&downloads.dir(), &req, "https://media.example.com/film.mkv", &[]).starts_with(&chosen));
+        // The one already downloaded keeps its path and still plays.
+        assert!(downloads.owns(&old.file));
+        assert!(storage(&downloads).custom);
+
+        // Kept on this device: the next start uses it, with the old record intact.
+        let again = Downloads::load(&state, default.clone(), None);
+        assert_eq!(again.dir(), chosen);
+        assert_eq!(again.get(&old.id).map(|d| d.file), Some(old.file.clone()));
+
+        // And back to the default.
+        assert_eq!(again.set_folder(None), Ok(default.clone()));
+        assert!(!state.join("folder.json").exists());
+        assert!(!storage(&again).custom);
+        assert_eq!(Downloads::load(&state, default.clone(), None).dir(), default);
+    }
+
+    #[test]
+    fn a_folder_that_cant_be_written_is_refused() {
+        let root = scratch("refuse");
+        let default = root.join("Videos");
+        let downloads = Downloads::load(&root.join("state"), default.clone(), None);
+        // A file where the folder would be: nothing can be made inside it.
+        let blocker = root.join("blocker");
+        std::fs::write(&blocker, b"x").unwrap();
+        assert!(downloads.set_folder(Some(blocker.join("inside"))).is_err());
+        assert!(downloads.set_folder(Some(PathBuf::from("relative/folder"))).is_err());
+        assert_eq!(downloads.dir(), default);
+        assert!(!root.join("state").join("folder.json").exists());
+    }
+
+    #[test]
+    fn a_download_on_a_missing_drive_is_kept_and_a_deleted_one_dropped() {
+        let root = scratch("missing");
+        let state = root.join("state");
+        let here = root.join("Videos");
+        std::fs::create_dir_all(&here).unwrap();
+        let downloads = Downloads::load(&state, here.clone(), None);
+        let deleted = finished("tt0000000:1:1", &here);
+        let away = finished("tt0000000:1:2", &root.join("card-not-inserted"));
+        {
+            let mut inner = downloads.inner.locked();
+            inner.items.extend([deleted.clone(), away.clone()]);
+            downloads.save(&inner.items);
+        }
+        let again = Downloads::load(&state, here, None);
+        assert!(again.get(&deleted.id).is_none());
+        assert!(again.get(&away.id).is_some());
     }
 
     #[tokio::test]

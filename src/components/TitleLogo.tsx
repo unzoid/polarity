@@ -98,15 +98,23 @@ export function useLogoChoice(src: string | undefined, logos?: string[], backdro
     if (!candidates.length || choices.has(id)) return;
     let live = true;
     const behind = backdrop && spot ? measureBackdrop(backdrop, spot) : Promise.resolve(DARK_PAGE);
-    Promise.all([behind, Promise.all(candidates.map(measureLogo))])
-      .then(([lum, measured]) =>
-        chooseLogo(
-          candidates,
-          measured.map((m) => m.ink),
-          lum,
-          measured.map((m) => m.shape),
-        ),
-      )
+    (async () => {
+      const [lum, first] = await Promise.all([behind, measureLogo(candidates[0])]);
+      if (candidates.length === 1) return chooseLogo(candidates, [first.ink], lum, [first.shape]);
+      // Fast-path: when the primary logo already reads cleanly as-is on the measured backdrop, skip downloading & scanning fallback logos 1..5.
+      if (lum !== null) {
+        const fast = chooseLogo([candidates[0]], [first.ink], lum, [first.shape]);
+        if (typeof fast === "object" && fast.look === "as-is") return fast;
+      }
+      const rest = await Promise.all(candidates.slice(1).map(measureLogo));
+      const measured = [first, ...rest];
+      return chooseLogo(
+        candidates,
+        measured.map((m) => m.ink),
+        lum,
+        measured.map((m) => m.shape),
+      );
+    })()
       // Whatever goes wrong measuring, the name shows rather than an error escaping.
       .catch((): Choice => "unsure")
       .then((c) => {
@@ -131,16 +139,32 @@ const MAX_CANDIDATES = 6;
 const choices = new Map<string, Choice>();
 const logos = new Map<string, Promise<MeasuredLogo>>();
 const behinds = new Map<string, Promise<number | null>>();
+const readables = new Map<string, Promise<HTMLImageElement | null>>();
+const MAX_READABLE_CACHE = 150;
 
 /** How long a picture may take to load for measuring before it counts as not loading. */
 const LOAD_TIMEOUT = 8000;
 
 /**
  * Loads a picture for measuring, so its pixels can be read: by a CORS request, or when the host refuses that
- * (no CORS headers), through the app (#354). Null when neither gets it.
+ * (no CORS headers), through the app (#354). Null when neither gets it. Shared across HeroGlow, TitleLogo,
+ * DetailArt and AmbientWash so one backdrop isn't fetched and decoded multiple times concurrently.
  */
-export async function loadReadable(src: string): Promise<HTMLImageElement | null> {
-  return (await load(src)) ?? (await loadThroughApp(src));
+export function loadReadable(src: string): Promise<HTMLImageElement | null> {
+  const key = toneUrl(src);
+  let pending = readables.get(key);
+  if (!pending) {
+    if (readables.size >= MAX_READABLE_CACHE) {
+      const oldest = readables.keys().next().value;
+      if (oldest !== undefined) readables.delete(oldest);
+    }
+    pending = (async () => (await load(src)) ?? (await loadThroughApp(src)))().then((img) => {
+      if (!img) readables.delete(key);
+      return img;
+    });
+    readables.set(key, pending);
+  }
+  return pending;
 }
 
 /**

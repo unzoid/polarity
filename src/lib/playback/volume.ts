@@ -7,14 +7,21 @@
  */
 const LOUDNESS_EXPONENT = 0.6;
 
-/** The amplitude (0–1) for a slider position. */
-export function sliderAmplitude(position: number): number {
+/**
+ * The amplitude for a slider position: 0–1 up to 100%, more past it. Positions past 100% follow
+ * the same curve (200% sounds about twice as loud as 100%, +10 dB), and only mpv can play them:
+ * `limit` is the furthest position the player may go (1 for a <video>, whose volume stops at 1).
+ */
+export function sliderAmplitude(position: number, limit = 1): number {
   if (!(position > 0)) return 0;
-  return Math.min(1, position) ** (1 / LOUDNESS_EXPONENT);
+  return Math.min(limit, position) ** (1 / LOUDNESS_EXPONENT);
 }
 
-/** mpv's `volume` (0–100) for an amplitude: mpv's own gain is (volume / 100)³. */
+/** The loudest slider positions Settings → Subtitles & Audio offers: 100%, 150% or 200%. */
+export const MAX_VOLUMES = [1, 1.5, 2] as const;
+
+/** mpv's `volume` for an amplitude (100 at amplitude 1): mpv's own gain is (volume / 100)³. Its launch allows up to 200. */
 export function mpvVolume(amplitude: number): number {
   if (!(amplitude > 0)) return 0;
-  return Math.round(Math.cbrt(Math.min(1, amplitude)) * 1000) / 10;
+  return Math.min(200, Math.round(Math.cbrt(amplitude) * 1000) / 10);
 }

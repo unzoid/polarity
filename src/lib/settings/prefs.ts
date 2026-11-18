@@ -41,6 +41,18 @@ export interface Prefs {
   autoSkipDelay: number;
   /** While a video loads, the list of loading steps with their times under the one line that says how far it got (#469). */
   loadingDetails: boolean;
+  /** Press and hold on the picture plays this much faster until let go; 0 = off. */
+  holdSpeed: number;
+  /** Phones and tablets: a finger swiped up or down the picture sets the volume (right half) and brightness (left). This device's own. */
+  swipeGestures: boolean;
+  /** Pausing brings the controls up. Off: the picture stays clear, the controls come with the mouse or a key. */
+  pauseShowsControls: boolean;
+  /** Under the title in the player: what's playing ("4K · Dolby Vision · Dolby Atmos · English 5.1"). */
+  showPlayingFormat: boolean;
+  /** Paused and left alone, the frame dims and shows the title, its overview and cast (components/player/PauseScreen.tsx). */
+  pauseDetails: boolean;
+  /** A film or a show's last released episode finished: a card asks for a rating on the linked Trakt or Simkl. */
+  askRating: boolean;
 
   // This machine's screen, speakers and GPU:
   /** Interface zoom, 1 = 100%. */
@@ -64,6 +76,20 @@ export interface Prefs {
   dialogueBoost: boolean;
   /** mpv: even out loud and quiet scenes. */
   volumeLeveling: boolean;
+  /** The loudest the volume goes, as a slider position: 1 (100%), 1.5 or 2 (lib/playback/volume.ts). Past 100% with mpv only. */
+  maxVolume: number;
+  /** mpv: Dolby and DTS go to an AV receiver undecoded (`audio-spdif`). */
+  passthrough: boolean;
+  /** mpv: HDR video as mpv picks, in HDR on a screen that takes it, or always converted to SDR. */
+  hdrOutput: "auto" | "screen" | "sdr";
+  /** mpv, HDR video shown in HDR: how bright subtitles are. "auto" as bright as the picture allows, "sdr" paper white, "dim" below it. */
+  subtitleHdrPeak: "auto" | "sdr" | "dim";
+  /** Subtitles picked by language: the ones for the deaf and hard of hearing (SDH) when the file has both. */
+  preferSdh: boolean;
+  /** mpv: a second subtitle at the top of the picture, picked in the player's Second Subtitles column. */
+  secondSubtitles: boolean;
+  /** The second subtitle's language, put on by itself like the first ("" = none). */
+  secondSubtitleLanguage: string;
   /** mpv: hardware decoding. */
   hwdec: boolean;
   /** mpv: smooth colour banding. */
@@ -76,6 +102,8 @@ export interface Prefs {
   autocropEveryFrame: boolean;
   /** mpv read-ahead. */
   buffer: "small" | "normal" | "large";
+  /** Desktop: mpv reads mpv.conf, input.conf, scripts and shaders from Polarity's own mpv folder (src-tauri player/mod.rs). */
+  mpvUserConfig: boolean;
   /** Torrent sources: most GB their cache on this device may hold; 0 = no limit. */
   torrentCacheGb: number;
   /** Torrent sources: download cap in Mbit/s; 0 = none. (Before #137 it capped upload too.) */
@@ -104,11 +132,19 @@ export interface Prefs {
   notifySeasons: boolean;
   /** A download finished or failed. */
   notifyDownloads: boolean;
+  /** On this device: how many episodes after a finished downloaded one stay downloaded (0: off; lib/library/autoDownloads.ts). */
+  autoDownloadNext: number;
+  /** On this device: a downloaded episode's file goes once it's watched and the player is closed. */
+  autoDownloadRemoveWatched: boolean;
   /** Which series count as followed: the library and what's been started, or only what's been started. */
   notifyScope: "library" | "started";
 
   /** Ecchi anime (AniList's adult titles never show): as is, blurred, or left out. Synced. */
   matureContent: "show" | "blur" | "hide";
+  /** Titles rated for older than this age leave browsing and can't be opened or played; 0 for no limit. Synced. Read only through useViewingLimit (lib/catalog/viewingLimit.ts). */
+  viewingLimit: number;
+  /** With a limit, titles without an age rating go too. Synced. */
+  viewingHideUnrated: boolean;
 
   // Anime:
   /** The Anime section at all: off removes its tab in desktop and TV mode. */
@@ -146,6 +182,11 @@ export interface Prefs {
 
   /** Which add-ons' catalogs are Home rows, and their order: JSON (lib/catalog/addonCatalogs.ts, #206). */
   addonCatalogsHome: string;
+
+  /** Leave titles the profile has watched out of Home, Discover and recommendations (lib/catalog/browseFilter.ts). */
+  hideWatched: boolean;
+  /** Titles hidden from browsing: JSON (lib/library/hiddenTitles.ts). */
+  hiddenTitles: string;
 }
 
 /**
@@ -172,6 +213,12 @@ const DEFAULTS: Prefs = {
   preferFileChapters: true,
   autoSkipDelay: 5,
   loadingDetails: false,
+  holdSpeed: 2,
+  swipeGestures: true,
+  pauseShowsControls: true,
+  showPlayingFormat: true,
+  pauseDetails: true,
+  askRating: true,
   uiScale: 1,
   pauseOnMinimize: false,
   discordPresence: "app",
@@ -180,12 +227,20 @@ const DEFAULTS: Prefs = {
   shareSetup: "account",
   dialogueBoost: false,
   volumeLeveling: false,
+  maxVolume: 1,
+  passthrough: false,
+  hdrOutput: "auto",
+  subtitleHdrPeak: "auto",
+  preferSdh: false,
+  secondSubtitles: false,
+  secondSubtitleLanguage: "",
   hwdec: true,
   deband: false,
   cropMode: "fit",
   autocropLookahead: true,
   autocropEveryFrame: false,
   buffer: "normal",
+  mpvUserConfig: false,
   torrentCacheGb: 20,
   torrentSpeedMbps: 0,
   torrentUploadMbps: TORRENT_UPLOAD_MBPS,
@@ -199,8 +254,12 @@ const DEFAULTS: Prefs = {
   notifyEpisodes: false,
   notifySeasons: false,
   notifyDownloads: false,
+  autoDownloadNext: 0,
+  autoDownloadRemoveWatched: false,
   notifyScope: "library",
   matureContent: "show",
+  viewingLimit: 0,
+  viewingHideUnrated: false,
   animeEnabled: true,
   animeHiddenShelves: "",
   animeCardScores: true,
@@ -218,6 +277,8 @@ const DEFAULTS: Prefs = {
   animeNo4k: true,
   animePreferredGroups: "",
   addonCatalogsHome: "",
+  hideWatched: false,
+  hiddenTitles: "",
 };
 
 const STORAGE = "polar.prefs";
@@ -259,9 +320,19 @@ export function readPrefs(v: unknown): Partial<Prefs> {
 export const SYNCED_PREFS = [
   "preferFileChapters",
   "autoSkipDelay",
+  "holdSpeed",
+  "pauseShowsControls",
+  "showPlayingFormat",
+  "pauseDetails",
+  "askRating",
+  "preferSdh",
+  "secondSubtitles",
+  "secondSubtitleLanguage",
   "saveRecentSearches",
   "searchSuggestions",
   "matureContent",
+  "viewingLimit",
+  "viewingHideUnrated",
   "animeEnabled",
   "animeHiddenShelves",
   "animeCardScores",
@@ -279,6 +350,8 @@ export const SYNCED_PREFS = [
   "animeNo4k",
   "animePreferredGroups",
   "addonCatalogsHome",
+  "hideWatched",
+  "hiddenTitles",
 ] as const satisfies readonly (keyof Prefs)[];
 
 export function setPrefs(patch: Partial<Prefs>, { quiet = false } = {}) {

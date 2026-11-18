@@ -8,17 +8,21 @@ import { SETTINGS } from "./schema";
  */
 export type SettingEntry = { id: string; title: string; page: PageId; keywords?: string };
 
-const ROWS: SettingEntry[] = SETTINGS.map(({ id, title, page, keywords }) => ({ id, title, page, keywords }));
+let cachedIndex: SettingEntry[] | undefined;
 
-/** Each rebindable shortcut, found under Controls & TV. */
-const SHORTCUTS: SettingEntry[] = ACTIONS.map((a) => ({
-  id: `shortcut:${a.id}`,
-  title: a.label,
-  page: "controls",
-  keywords: "keyboard shortcut keybind hotkey",
-}));
-
-export const SETTINGS_INDEX: SettingEntry[] = [...ROWS, ...SHORTCUTS];
+function getSettingsIndex(): SettingEntry[] {
+  if (!cachedIndex) {
+    const rows: SettingEntry[] = SETTINGS.map(({ id, title, page, keywords }) => ({ id, title, page, keywords }));
+    const shortcuts: SettingEntry[] = ACTIONS.map((a) => ({
+      id: `shortcut:${a.id}`,
+      title: a.label,
+      page: "controls",
+      keywords: "keyboard shortcut keybind hotkey",
+    }));
+    cachedIndex = [...rows, ...shortcuts];
+  }
+  return cachedIndex;
+}
 
 /**
  * Settings matching a query, best first: titles starting with it, then titles
@@ -28,7 +32,7 @@ export function searchSettings(query: string, pageLabel: (id: PageId) => string,
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const scored: { entry: SettingEntry; score: number; i: number }[] = [];
-  SETTINGS_INDEX.forEach((entry, i) => {
+  getSettingsIndex().forEach((entry, i) => {
     if (!pages.has(entry.page)) return;
     const title = entry.title.toLowerCase();
     const score = title.startsWith(q)

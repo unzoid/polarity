@@ -10,29 +10,43 @@
  * this folder, code inside src/lib imports the file.
  */
 import type { AccountBackend } from "./backend";
-import { createSupabaseBackend } from "./supabase";
 import { accountDatabase, devDatabase, loadDevDatabase } from "./devDatabase";
 import { buildChannel } from "../platform/build";
 
-function pick(): AccountBackend | null {
+function configuredDatabase() {
+  const builtIn = { url: import.meta.env.VITE_SUPABASE_URL as string | undefined, key: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined };
+  // The condition stays here so a release bundle leaves out the dev database (scripts/releaseBundle.ts).
+  return accountDatabase(buildChannel, builtIn, buildChannel === "dev" ? devDatabase() : null);
+}
+
+function initialBackend(): AccountBackend | null {
   // fake.html's stand-in account (lib/platform/fake/account.ts): dev server only, never in a build.
   if (import.meta.env.DEV) {
     const fake = (globalThis as { __polarFakeAccount?: AccountBackend }).__polarFakeAccount;
     if (fake) return fake;
   }
-  const builtIn = { url: import.meta.env.VITE_SUPABASE_URL as string | undefined, key: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined };
-  // The condition stays here so a release bundle leaves out the dev database (scripts/releaseBundle.ts).
-  const db = accountDatabase(buildChannel, builtIn, buildChannel === "dev" ? devDatabase() : null);
-  return db ? createSupabaseBackend(db.url, db.key) : null;
+  return null;
 }
 
-export let backend = pick();
+export let backend = initialBackend();
 
-/** Before the app renders: a dev build connects to the database its connection code names, if any. */
+/** Before the app renders: loads the configured account provider (and in dev builds, any saved connection code). */
 export async function startAccountBackend() {
-  if (buildChannel !== "dev") return;
-  await loadDevDatabase();
-  backend = pick();
+  if (import.meta.env.DEV) {
+    const fake = (globalThis as { __polarFakeAccount?: AccountBackend }).__polarFakeAccount;
+    if (fake) {
+      backend = fake;
+      return;
+    }
+  }
+  if (buildChannel === "dev") await loadDevDatabase();
+  const db = configuredDatabase();
+  if (!db) {
+    backend = null;
+    return;
+  }
+  const { createSupabaseBackend } = await import("./supabase");
+  backend = createSupabaseBackend(db.url, db.key);
 }
 
 export * from "./backend";
@@ -45,4 +59,6 @@ export { databaseHost, devDatabase, removeDevDatabase, saveDevDatabase } from ".
 export * from "./spacePush";
 export { linkHasKey } from "./keyedLink";
 export { formatTvCode, isTvCode, TV_CODE_LENGTH, type TvSignInRequest } from "./tvSignIn";
+export { hasTvCode, offerTvCode, takeTvCode, useLinkedTvCode } from "./tvSignInLink";
+export { groupSecret, isTwoStepCode, tidyCode, tidyEmail, TWO_STEP_CODE_LENGTH, type AccountSecurity } from "./twoStep";
 export { dismissNotice, exposedNames, noticeDue, onFirstPlainSync } from "./secretsNotice";

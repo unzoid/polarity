@@ -304,6 +304,12 @@
   font-size: 0.95rem;
   font-weight: 600;
 }
+/* The age rating's box (AgeRatingBadge), sized to the facts line from across the room. */
+.tv-facts .format-badge {
+  height: 1.35em;
+  padding: 0 0.35em;
+  font-size: 0.75em;
+}
 .tv-facts > span::before {
   content: "•";
   display: inline-block;
@@ -569,6 +575,119 @@
   right: 7%;
   bottom: 8%;
   height: 0.22rem;
+}
+
+/* --- Library shelves (TvBrowse layout="shelves") -------------------------------------------- */
+/* A library, not a storefront: rows on black under the navbar, no stage and no colour from the art. Every card
+   is a poster; the focused one opens out to the title's backdrop at the same height, and its facts and synopsis
+   sit under its row. Cards keep a poster-sized slot (the rail pins focus by the slots, tv/spatial.ts): only the
+   frame widens, and the cards after it slide over by the difference. */
+.tv-browse[data-layout="shelves"] {
+  --shelf-h: 40vh;
+  --shelf-w: calc(var(--shelf-h) * 2 / 3);
+  --shelf-wide: calc(var(--shelf-h) * 16 / 9);
+  background: #000;
+}
+.tv-browse[data-layout="shelves"] .tv-rails {
+  inset: 6rem 0 0; /* under the navbar (.tv-nav) */
+}
+.tv-browse[data-layout="shelves"] .tv-rail {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.75rem;
+}
+.tv-browse[data-layout="shelves"] .tv-rail-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.tv-browse[data-layout="shelves"] .tv-rail-track {
+  /* No lift here, only the ring, so less room above and below. */
+  padding-block: 1rem;
+}
+.tv-browse[data-layout="shelves"] .tv-card {
+  --tv-card-w: var(--shelf-w);
+  --tv-card-reach: calc(var(--shelf-wide) - var(--shelf-w));
+  aspect-ratio: 2 / 3;
+}
+.tv-browse[data-layout="shelves"] .tv-card:is(:focus, [data-menu-open]),
+.tv-browse[data-layout="shelves"] .tv-rail-track .tv-card:has(~ .tv-card:is(:focus, [data-menu-open])) {
+  transform: none;
+}
+.tv-browse[data-layout="shelves"] .tv-card-frame {
+  right: auto;
+  width: 100%;
+  transition: width var(--dur-base) var(--ease-out);
+}
+.tv-browse[data-layout="shelves"] .tv-card::before {
+  right: auto;
+  width: 100%;
+  transition:
+    width var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+.tv-browse[data-layout="shelves"] .tv-card::after {
+  right: auto;
+  width: calc(100% + 2 * var(--tv-ring-gap));
+  transition:
+    width var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-std);
+}
+.tv-browse[data-layout="shelves"] .tv-card:is(:focus, [data-menu-open]) .tv-card-frame {
+  width: var(--shelf-wide);
+}
+.tv-browse[data-layout="shelves"] .tv-card:is(:focus, [data-menu-open])::before {
+  width: var(--shelf-wide);
+}
+.tv-browse[data-layout="shelves"] .tv-card:is(:focus, [data-menu-open])::after {
+  width: calc(var(--shelf-wide) + 2 * var(--tv-ring-gap));
+}
+/* The poster keeps its own width while the frame opens out past it. */
+.tv-browse[data-layout="shelves"] .tv-card-frame > .tv-card-img {
+  width: var(--tv-card-w);
+}
+.tv-card-wide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+.tv-card:is(:focus, [data-menu-open]) .tv-card-wide {
+  opacity: 1;
+}
+:root[data-nav-held] .tv-browse[data-layout="shelves"] :is(.tv-card-frame, .tv-card-wide) {
+  transition-duration: 0ms;
+}
+/* The focused title's details, under its row (after the cards, though first in the markup). */
+.tv-shelf-info {
+  order: 1;
+  /* The same height whatever the title, so the rows under it don't shift as focus moves along. */
+  min-height: 6.2rem;
+  max-width: min(56rem, 62vw);
+  margin: 0 var(--tv-gutter) 1.25rem;
+}
+.tv-shelf-info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: fade-in var(--dur-fast) var(--ease-out);
+}
+.tv-shelf-description {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-wrap: pretty;
+}
+/* Only the row you're on shows its details (a card whose menu is open still counts); before focus reaches
+   the rows, the first row shows its first title's. */
+.tv-browse[data-layout="shelves"] .tv-rails:is(:focus-within, :has([data-menu-open])) .tv-rail:not(:focus-within, :has([data-menu-open])) .tv-shelf-info,
+.tv-browse[data-layout="shelves"] .tv-rails:not(:focus-within, :has([data-menu-open])) [data-row]:has(.tv-rail) ~ [data-row] .tv-shelf-info {
+  display: none;
 }
 
 /* --- Search ------------------------------------------------------------------------ */
@@ -883,9 +1002,73 @@
 .tv-pill:disabled {
   opacity: 0.4;
 }
+/* The lesser actions above Play (TvDetail's QuickAction): round icons side by side, lined up on the icons of the
+   actions below. They never change size: the mouse focuses what it rests on (tv/spatial.ts), and a button that
+   widened under it pushed its neighbours under the pointer, which took focus back. The focused one's name shows
+   in one place, just right of the row. */
+.tv-quick-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 0 1rem 0.5rem;
+}
+.tv-quick {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  /* Bare icons at rest, as the actions below are bare rows; focus lights a circle behind the icon. */
+  color: var(--text-2);
+  background: transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+.tv-quick svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.tv-quick:focus {
+  outline: none;
+  background: var(--pill-light);
+  color: var(--text-on-light);
+  /* No scale: a transformed button would hold its label (absolutely placed against the row) to itself. */
+}
+.tv-quick[aria-pressed="true"]:not(:focus) {
+  color: var(--text-3);
+}
+.tv-quick-label {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.875rem);
+  translate: -0.25rem -50%;
+  white-space: nowrap;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    translate var(--dur-fast) var(--ease-out);
+}
+.tv-quick:focus .tv-quick-label {
+  opacity: 1;
+  translate: 0 -50%;
+}
 .tv-note .tv-pill {
   justify-content: center;
   transform-origin: center;
+}
+/* Library's Arrange rail: type, status and sort, each press steps to the next choice. */
+.tv-arrange-pill {
+  flex: none;
+  min-width: 0;
+  background: var(--fill-1);
+  white-space: nowrap;
 }
 
 /* --- Settings ------------------------------------------------------------- */
@@ -1061,6 +1244,11 @@
   outline: none;
   background: var(--pill-light);
   color: var(--text-on-light);
+}
+/* The episode order choice (TvEpisodeOrders.tsx): its few rows above the seasons, which keep the scrolling. */
+.tv-episode-orders {
+  flex: none;
+  padding-block: 0;
 }
 .tv-season-count {
   font-size: 0.8rem;
@@ -1413,10 +1601,42 @@
   height: 1em;
 }
 
+/* --- The player's controls over the picture ---------------------------------------------- */
+/* While the controls are up the whole picture dims and darkens further toward its edges, so the
+   controls read from across the room over any scene; the bars' own gradients deepen the top and
+   bottom. Under the subtitles and everything else on the video; it fades with the controls. */
+:root[data-tv="true"] .player::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse 110% 95% at 50% 45%, transparent 30%, rgb(0 0 0 / 0.6) 100%),
+    rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+:root[data-tv="true"] .player[data-chrome="false"]::before {
+  opacity: 0;
+}
+:root[data-tv="true"] .player[data-instant="true"]::before {
+  transition: none;
+}
+:root[data-tv="true"] .player-top {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.8), rgb(0 0 0 / 0.35) 55%, transparent);
+}
+:root[data-tv="true"] .player-bottom {
+  background: linear-gradient(to top, rgb(0 0 0 / 0.9) 0%, rgb(0 0 0 / 0.5) 55%, transparent);
+}
+
 /* --- Player pickers (episodes, sources, audio & subtitles) ------------------------------- */
 /* The same language as the rest of TV mode: focus is the light pill, the current choice
    a quiet tint with its check hanging to the left of the text. Titles line up with the
    text, not the check. Sized in rem so it all grows with the type. */
+/* A darker shade over the frosted picture than on a desktop: the panels read from the couch. */
+.tv .options-shade {
+  background: var(--scrim-3);
+}
 .tv .options-overlay {
   --opt-pad: 0.9rem;
   --opt-check: 1.1rem;
@@ -1885,23 +2105,35 @@
   background: var(--scrim-1);
   animation: fade-in 200ms var(--ease-std);
 }
-.tv-card-menu {
-  position: absolute;
-  width: 23rem;
+/* The one TV menu look. A popup menu anywhere in TV mode (components/ui/Menu.tsx: the player's More, Cast)
+   is drawn as this menu too, so each rule names both. */
+.tv-card-menu,
+:root[data-tv="true"] .menu {
   /* No side padding: rows span the panel, so the focused one (scaled up)
      stands out past its edges, like a tvOS menu. */
   padding: 0.5rem 0;
+  border: none;
   border-radius: 1.25rem;
   background: var(--surface-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
   backdrop-filter: var(--blur-popover);
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 0.08),
     0 1.5rem 3.5rem -1rem var(--scrim-3);
-  transform-origin: top left;
   animation: tv-card-menu-in var(--dur-base) var(--ease-out);
+}
+.tv-card-menu {
+  position: absolute;
+  width: 23rem;
+  transform-origin: top left;
 }
 .tv-card-menu[data-side="left"] {
   transform-origin: top right;
+}
+:root[data-tv="true"] .menu {
+  min-width: 20rem;
+  max-width: 30rem;
+  transform-origin: var(--transform-origin);
 }
 @keyframes tv-card-menu-in {
   from {
@@ -1909,22 +2141,28 @@
     transform: scale(0.94);
   }
 }
-.tv-card-menu-head {
+.tv-card-menu-head,
+:root[data-tv="true"] .menu-head {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.55rem 1.4rem 0.7rem;
 }
-.tv-card-menu-head :is(strong, span) {
+.tv-card-menu-head :is(strong, span),
+:root[data-tv="true"] .menu-head :is(strong, span) {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  line-height: normal;
 }
-.tv-card-menu-head strong {
+.tv-card-menu-head strong,
+:root[data-tv="true"] .menu-head strong {
   font-size: 1.05rem;
   font-weight: 700;
+  color: var(--text);
 }
-.tv-card-menu-head span {
+.tv-card-menu-head span,
+:root[data-tv="true"] .menu-head span {
   font-size: 0.85rem;
   color: var(--text-3);
 }
@@ -1938,42 +2176,85 @@
   padding-top: 0.4rem;
   border-top: 1px solid var(--hairline);
 }
-.tv-card-menu-item {
+:root[data-tv="true"] .menu-sep {
+  margin: 0.4rem 0;
+}
+.tv-card-menu-item,
+:root[data-tv="true"] :is(.menu-item, .menu-roomy-item) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   width: 100%;
   position: relative;
+  /* Its focus pill (::before) sits under its text, over the panel. */
+  isolation: isolate;
   height: 3.4rem;
   padding: 0 1.4rem;
   border-radius: 1rem;
   font-size: 1.05rem;
   font-weight: 600;
+  line-height: normal;
   color: var(--text-2);
   text-align: left;
   transition:
-    background-color var(--dur-fast) var(--ease-std),
     color var(--dur-fast) var(--ease-std),
-    box-shadow 200ms var(--ease-out),
     transform 200ms var(--ease-out);
 }
-.tv-card-menu-item svg {
+/* The focus pill: taller than the row, reaching into its neighbours' room, so the focused row
+   stands out as a platter of its own (tvOS). It grows in from the row's height. */
+.tv-card-menu-item::before,
+:root[data-tv="true"] :is(.menu-item, .menu-roomy-item)::before {
+  content: "";
+  position: absolute;
+  inset: -0.4rem 0;
+  z-index: -1;
+  border-radius: 1.15rem;
+  background: var(--pill-light);
+  box-shadow: 0 0.75rem 1.75rem -0.5rem rgb(0 0 0 / 0.55);
+  opacity: 0;
+  transform: scaleY(0.8);
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    transform 200ms var(--ease-out);
+}
+.tv-card-menu-item svg,
+:root[data-tv="true"] :is(.menu-item, .menu-roomy-item) > svg,
+:root[data-tv="true"] .menu-check svg {
   flex: none;
   width: 1.35rem;
   height: 1.35rem;
+  color: inherit;
   opacity: 0.85;
 }
-.tv-card-menu-item:focus {
+:root[data-tv="true"] .menu-check {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+:root[data-tv="true"] .menu-check-item {
+  --check-room: 2.35rem;
+}
+:root[data-tv="true"] .menu-meta,
+:root[data-tv="true"] .menu-item[data-highlighted] .menu-meta {
+  color: inherit;
+  opacity: 0.55;
+}
+.tv-card-menu-item:focus,
+:root[data-tv="true"] :is(.menu-item, .menu-roomy-item):is([data-highlighted], [data-popup-open]) {
   outline: none;
-  background: var(--pill-light);
+  background: transparent;
   color: var(--text-on-light);
   /* Full panel width × 1.07: about 0.8rem past each side. */
   transform: scale(1.07);
-  box-shadow: 0 0.75rem 1.75rem -0.5rem rgb(0 0 0 / 0.55);
   z-index: 1;
 }
-.tv-card-menu-item:disabled {
+.tv-card-menu-item:focus::before,
+:root[data-tv="true"] :is(.menu-item, .menu-roomy-item):is([data-highlighted], [data-popup-open])::before {
+  opacity: 1;
+  transform: none;
+}
+.tv-card-menu-item:disabled,
+:root[data-tv="true"] :is(.menu-item, .menu-roomy-item)[data-disabled] {
   opacity: 0.4;
 }
 
@@ -2066,7 +2347,8 @@
 @media (prefers-reduced-motion: reduce) {
   .tv-main,
   .tv-menu,
-  .tv-card-menu {
+  .tv-card-menu,
+  :root[data-tv="true"] .menu {
     animation-name: fade-in;
   }
   .tv-card:is(:focus, [data-menu-open]),
@@ -2643,4 +2925,86 @@
 }
 .tv-card-more .tv-card-fallback {
   font-weight: 650;
+}
+/* A hidden title's page (TvDetail.tsx): said above its actions, which hold Unhide. */
+.tv-detail-hidden {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-2);
+}
+
+/* A person's page (TvPerson.tsx): photo, name, facts and biography, then their titles as rails. */
+.tv-person {
+  padding: 4rem 0 4rem;
+}
+.tv-person-head {
+  display: flex;
+  gap: 2.5rem;
+  align-items: flex-start;
+  padding: 0 var(--tv-gutter) 2rem;
+}
+.tv-person-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 13rem;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  font-size: 2rem;
+  font-weight: 700;
+}
+.tv-person-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tv-person-text {
+  max-width: 56rem;
+  min-width: 0;
+}
+.tv-person-facts {
+  margin: -0.5rem 0 1rem;
+  font-size: 1.25rem;
+  color: var(--text-2);
+}
+.tv-person-bio {
+  margin: 0 0 1.25rem;
+  font-size: 1.25rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  color: var(--text-2);
+}
+
+/* A title's extras panel (TvExtras.tsx): tiles with the name and kind under them. */
+.tv-extras .tv-rail {
+  margin-top: 2rem;
+}
+.tv-extra .tv-card-img {
+  position: absolute;
+  inset: 0;
+}
+.tv-extra-fallback {
+  align-content: center;
+  gap: 0.25rem;
+}
+.tv-extra-caption {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+.tv-extra-name {
+  font-size: 1.125rem;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-extra-kind {
+  font-size: 1rem;
+  color: var(--text-3);
 }

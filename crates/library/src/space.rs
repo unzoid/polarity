@@ -154,6 +154,11 @@ impl Space {
     /// Every progress entry for one title (all episodes of a series), under
     /// whichever of its ids it is asked for.
     pub fn progress_for(&self, meta_id: &str) -> Vec<Progress> {
+        if self.links.is_empty()
+            || (is_imdb(meta_id) && !self.links.values().any(|l| !l.removed && l.canonical == meta_id))
+        {
+            return self.progress.values().filter(|p| p.meta_id == meta_id).cloned().collect();
+        }
         let aliases = self.aliases();
         let id = aliases.canonical(meta_id);
         self.progress.values().filter(|p| aliases.canonical(&p.meta_id) == id).cloned().collect()
@@ -170,37 +175,54 @@ impl Space {
         }
     }
 
-    /// The latest video per title, among those `keep` accepts, newest first.
-    fn latest_per_title(&self, keep: impl Fn(&Progress) -> bool) -> Vec<Progress> {
-        let aliases = self.aliases();
-        let mut latest: HashMap<&str, &Progress> = HashMap::new();
-        for p in self.progress.values().filter(|p| keep(p)) {
-            let slot = latest.entry(aliases.canonical(&p.meta_id)).or_insert(p);
-            if (p.updated_at, &p.video_id) > (slot.updated_at, &slot.video_id) {
-                *slot = p;
+    /// The latest video per title, among those `keep` accepts, filtered by `post` and capped to `limit` newest first.
+    fn latest_per_title_top(
+        &self,
+        keep: impl Fn(&Progress) -> bool,
+        post: impl Fn(&Progress) -> bool,
+        limit: usize,
+    ) -> Vec<Progress> {
+        let cmp =
+            |a: &&Progress, b: &&Progress| b.updated_at.cmp(&a.updated_at).then_with(|| a.video_id.cmp(&b.video_id));
+        let mut refs: Vec<&Progress> = if self.links.is_empty() {
+            let mut latest: HashMap<&str, &Progress> = HashMap::new();
+            for p in self.progress.values().filter(|p| keep(p)) {
+                let slot = latest.entry(p.meta_id.as_str()).or_insert(p);
+                if (p.updated_at, &p.video_id) > (slot.updated_at, &slot.video_id) {
+                    *slot = p;
+                }
             }
+            latest.into_values().filter(|p| post(p)).collect()
+        } else {
+            let aliases = self.aliases();
+            let mut latest: HashMap<&str, &Progress> = HashMap::new();
+            for p in self.progress.values().filter(|p| keep(p)) {
+                let slot = latest.entry(aliases.canonical(&p.meta_id)).or_insert(p);
+                if (p.updated_at, &p.video_id) > (slot.updated_at, &slot.video_id) {
+                    *slot = p;
+                }
+            }
+            latest.into_values().filter(|p| post(p)).collect()
+        };
+        if refs.len() > limit && limit > 0 {
+            refs.select_nth_unstable_by(limit - 1, cmp);
+            refs.truncate(limit);
         }
-        let mut items: Vec<Progress> = latest.into_values().cloned().collect();
-        items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.video_id.cmp(&b.video_id)));
-        items
+        refs.sort_unstable_by(cmp);
+        refs.into_iter().cloned().collect()
     }
 
     /// Latest unfinished video per title, newest first. Only videos watched past the start
     /// count: opening another episode for a few seconds doesn't take the show out (test
     /// report 1, item 4); its latest started video still decides, finished or not.
     pub fn continue_watching(&self, watched: f64) -> Vec<Progress> {
-        let mut items = self.latest_per_title(Progress::started);
-        items.retain(|p| !p.finished(watched) && p.started());
-        items.truncate(CONTINUE_LIMIT);
-        items
+        self.latest_per_title_top(Progress::started, |p| !p.finished(watched) && p.started(), CONTINUE_LIMIT)
     }
 
     /// Everything watched: the latest video per title, finished or well under
     /// way, newest first.
     pub fn watch_history(&self, watched: f64) -> Vec<Progress> {
-        let mut items = self.latest_per_title(|p| p.finished(watched) || p.started());
-        items.truncate(HISTORY_LIMIT);
-        items
+        self.latest_per_title_top(|p| p.finished(watched) || p.started(), |_| true, HISTORY_LIMIT)
     }
 
     /// Records a link and moves what was kept under its other ids onto the
@@ -414,6 +436,28 @@ impl Space {
             self.dirty_mut().progress.insert(p.video_id.clone());
             self.progress.insert(p.video_id.clone(), p);
             added.1 += 1;
+        }
+        added
+    }
+
+    /// Adds anime links from a Polarity export, keeping their times: one only over an older
+    /// decision about the same entry (or none). Removed links and ones no store keys by are left
+    /// out. Re-keys once if any was added. Returns how many were added.
+    pub fn import_links(&mut self, links: Vec<AnimeLink>) -> usize {
+        let mut added = 0;
+        for link in links {
+            if link.removed
+                || !link.is_valid()
+                || self.links.get(&link.anilist).is_some_and(|old| old.updated_at >= link.updated_at)
+            {
+                continue;
+            }
+            self.dirty_mut().links.insert(link.anilist);
+            self.put_link(link);
+            added += 1;
+        }
+        if added > 0 {
+            self.rekey();
         }
         added
     }

@@ -1,3 +1,4 @@
+import { EdgeBlur } from "./EdgeBlur";
 import logo from "../assets/polarity-white.png";
 import { Calendar, ChevronDown, Close, Search, Speed, Trailer, Tv } from "./icons";
 import {
@@ -11,11 +12,11 @@ import {
   useSearchText,
 } from "../lib/catalog";
 import { setTvMode, tvModeAvailable } from "../tv/tvMode";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { rootTab, useRouter, type TabRoute } from "../lib/router";
 import { usePrefs, useSettingsOverlay } from "../lib/settings";
-import { dismissDepth, onDismissDepth, useFormFactor, useHandFocus } from "../lib/ui";
+import { dismissDepth, lazyNamed, onDismissDepth, useFormFactor, useHandFocus } from "../lib/ui";
 import { MOD_LABEL, nativeTabsAvailable } from "../lib/platform";
 import { useSettings } from "../lib/net";
 import { WindowControls } from "./WindowControls";
@@ -23,14 +24,16 @@ import { ProfileMenu } from "./ProfileMenu";
 import { UpdatePill } from "./Updates";
 import { setPartyMenuOpen, useParty, usePartyMenuOpen } from "../lib/party";
 import { PartyFaces, partyBadgeLabel } from "./party/PartyUI";
-import { PartyMenu } from "./party/PartyMenu";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./ui/Popover";
+
+const PartyMenu = lazyNamed(() => import("./party/PartyMenu"), "PartyMenu");
 import { Chip } from "./ui/Chip";
 import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "./ui/Menu";
 import { useNativeTabs } from "./NativeTabs";
 import { useNativeBack } from "./NativeBack";
 import { BackButton } from "./BackButton";
 import { backHistory, type NavLink } from "../lib/navTabs";
+import { preloadRoute } from "../screens/lazyScreens";
 
 const LINKS: NavLink[] = [
   { route: { name: "home" }, label: "Home" },
@@ -76,26 +79,22 @@ export function NavBar() {
   const scrolled = useActivePageScrolled(stack.length);
   const { data: settings } = useSettings();
   const { animeEnabled, showTvButton } = usePrefs();
-  const sections = animeEnabled ? LINKS : LINKS.filter((l) => l.route.name !== "anime");
+  const showCalendar = !!settings?.showCalendar;
+  const sections = useMemo(() => (animeEnabled ? LINKS : LINKS.filter((l) => l.route.name !== "anime")), [animeEnabled]);
   // A phone's tab bar (iOS's own or ours) holds the five sections; the Calendar is a button in the top bar there,
   // as on an iPad with iOS's tab bar. A sixth tab would make iOS add its own More tab (#449).
-  const calendarButton = !!settings?.showCalendar && (phone || nativeTabsAvailable);
+  const calendarButton = showCalendar && (phone || nativeTabsAvailable);
   // A phone's tab bar is Home, Anime, Library and Search, as phone apps have it: Series and Movies are the two
   // buttons beside the profile in the top bar, where Search used to be.
-  const catalogs = phone ? sections.filter((l) => l.route.name === "discover") : [];
-  const tabs = phone ? [...sections.filter((l) => l.route.name !== "discover"), SEARCH] : sections;
-  const links = settings?.showCalendar && !calendarButton ? [...tabs, CALENDAR] : tabs;
+  const catalogs = useMemo(() => (phone ? sections.filter((l) => l.route.name === "discover") : []), [phone, sections]);
+  const tabs = useMemo(() => (phone ? [...sections.filter((l) => l.route.name !== "discover"), SEARCH] : sections), [phone, sections]);
+  const links = useMemo(() => (showCalendar && !calendarButton ? [...tabs, CALENDAR] : tabs), [showCalendar, calendarButton, tabs]);
   useNativeTabs(tabs);
   useSearchTab(phone);
 
   return (
     <header className="navbar" data-scrolled={scrolled} data-tauri-drag-region>
-      <div className="navbar-fade" aria-hidden>
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
+      <EdgeBlur className="navbar-fade" edge="top" />
       {/* Always takes its place, so the brand and tabs never shift when it appears. */}
       <BackButton
         ref={backButton}
@@ -171,7 +170,9 @@ function NavParty() {
         <PartyFaces party={party} />
       </PopoverTrigger>
       <PopoverPopup sideOffset={8} align="end" collisionPadding={12} className="party-popover" aria-label="Watch party">
-        <PartyMenu party={party} onClose={() => setPartyMenuOpen(false)} />
+        <Suspense fallback={null}>
+          <PartyMenu party={party} onClose={() => setPartyMenuOpen(false)} />
+        </Suspense>
       </PopoverPopup>
     </PopoverRoot>
   );
@@ -218,6 +219,8 @@ function NavLinks({ links, isActive, open }: { links: NavLink[]; isActive: (r: T
           aria-hidden={i >= fit || undefined}
           tabIndex={i >= fit ? -1 : undefined}
           aria-current={isActive(l.route) ? "page" : undefined}
+          onPointerEnter={() => preloadRoute(l.route)}
+          onFocus={() => preloadRoute(l.route)}
           onPointerDown={(e) => e.button === 0 && open(l.route)} // respond on press
           onClick={(e) => e.detail === 0 && open(l.route)} // keyboard and screen readers (detail 0)
         >
@@ -230,6 +233,7 @@ function NavLinks({ links, isActive, open }: { links: NavLink[]; isActive: (r: T
           className="navbar-link navbar-more"
           data-overflow={rest.length ? undefined : true}
           aria-current={rest.some((l) => isActive(l.route)) ? "page" : undefined}
+          onPointerEnter={() => rest.forEach((l) => preloadRoute(l.route))}
         >
           {rest.find((l) => isActive(l.route))?.label ?? "More"}
           <ChevronDown size={14} />
@@ -455,13 +459,17 @@ function SearchSuggestions({ pick, under }: { pick: (text: string) => void; unde
 function useActivePageScrolled(depth: number) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
-    const check = () => {
-      const el = document.querySelector<HTMLElement>('.page[data-active="true"] .scroll');
-      setScrolled((el?.scrollTop ?? 0) > SCROLLED_AT);
+    const initial = document.querySelector<HTMLElement>('.page[data-active="true"] .scroll');
+    setScrolled((initial?.scrollTop ?? 0) > SCROLLED_AT);
+    const onScroll = (e: Event) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement) || !t.classList.contains("scroll")) return;
+      if (t.closest(".page")?.getAttribute("data-active") !== "true") return;
+      const next = t.scrollTop > SCROLLED_AT;
+      setScrolled((prev) => (prev === next ? prev : next));
     };
-    check();
-    document.addEventListener("scroll", check, { capture: true, passive: true });
-    return () => document.removeEventListener("scroll", check, { capture: true });
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
   }, [depth]);
   return scrolled;
 }

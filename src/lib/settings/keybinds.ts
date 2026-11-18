@@ -23,6 +23,7 @@ export type Action =
   | "mute"
   | "fullscreen"
   | "pinWindow"
+  | "miniPlayer"
   | "fill"
   | "skip"
   | "nextEpisode"
@@ -30,6 +31,7 @@ export type Action =
   | "episodes"
   | "sources"
   | "speed"
+  | "screenshot"
   | "toggleTv"
   | "search"
   | "openFile";
@@ -48,6 +50,7 @@ export const ACTIONS: { id: Action; label: string; group: ActionGroup; when?: st
   { id: "mute", label: "Mute", group: "player" },
   { id: "fullscreen", label: "Fullscreen", group: "player" },
   { id: "pinWindow", label: "Pin window on top", group: "player", when: "While watching, on desktop" },
+  { id: "miniPlayer", label: "Picture in Picture", group: "player", when: "While watching, on desktop" },
   { id: "fill", label: "Crop mode: Fit, Crop black bars, Fill window", group: "player" },
   { id: "skip", label: "Skip intro / recap", group: "player" },
   { id: "nextEpisode", label: "Next episode", group: "player" },
@@ -55,6 +58,7 @@ export const ACTIONS: { id: Action; label: string; group: ActionGroup; when?: st
   { id: "episodes", label: "Episodes", group: "player" },
   { id: "sources", label: "Sources", group: "player" },
   { id: "speed", label: "Playback speed", group: "player" },
+  { id: "screenshot", label: "Save a screenshot", group: "player", when: "While watching, on desktop" },
   { id: "toggleTv", label: "Switch TV / desktop mode", group: "app", when: "Anywhere, even while watching" },
   { id: "search", label: "Search", group: "app", when: "While browsing" },
   { id: "openFile", label: "Open file", group: "app", when: "Anywhere, even while watching" },
@@ -76,6 +80,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   mute: ["m"],
   fullscreen: ["f"],
   pinWindow: ["p"],
+  miniPlayer: ["i"],
   fill: ["z"],
   skip: ["s"],
   nextEpisode: ["n"],
@@ -83,6 +88,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   episodes: ["e"],
   sources: ["o"],
   speed: ["r"],
+  screenshot: [`${MOD}+s`],
   toggleTv: ["F10"],
   // Letters are stored lower-case (see comboOf); they're shown upper-case.
   search: ["/", `${MOD}+k`],

@@ -57,7 +57,7 @@ Each crate keeps unit tests next to its code. Worth knowing:
   holds the error codes on both sides.
 - `src-tauri` tests need the platform's web view libraries to build (WebKitGTK on Linux), so
   `cargo test --workspace` on a machine without them fails at `polar`; test the core crates with
-  `cargo test -p polar-addon -p polar-anime -p polar-index -p polar-library -p polar-player -p polar-torrent`.
+  `cargo test -p polar-addon -p polar-anime -p polar-index -p polar-library -p polar-player -p polar-torrent -p polar-ffi`.
 
 ## End to end, web build
 
@@ -67,7 +67,11 @@ Each crate keeps unit tests next to its code. Worth knowing:
 refuses every outside host (`media.example` answers with a silent WAV made by `e2e/media.ts`)
 and fails on any uncaught page error. Projects: `desktop` (Chromium; `desktop-webkit` too unless
 `POLAR_E2E_CHROMIUM` is set), `phone` (`phone.spec.ts`, Pixel 7) and `tv` (`tv.spec.ts`, keys
-only). One project: `bun run e2e --project=phone`. First time: `bunx playwright install chromium
+only), and `timing` (`performance.spec.ts`, Chromium: how quickly long pages open and scroll). One
+project: `bun run e2e --project=phone`. CI runs three jobs side by side: the other projects in two shards,
+and `timing` with one worker, so no other test shares the runner's CPU while one measures. Each timing is measured three times, short and long in turn, and the quickest counts:
+a busy runner only adds time, and a real slowdown is in every run. Budgets are in units of the runner's
+speed (`layoutUnit`) with a floor in milliseconds, and sit far below what the page took before each fix. First time: `bunx playwright install chromium
 webkit`; where that can't download, `POLAR_E2E_CHROMIUM=<path to chrome>` uses another
 Chromium. Reports and traces go to `e2e/.report` and `e2e/.results` (ignored; CI keeps them when
 a test fails).
@@ -109,7 +113,7 @@ sign-in and sync against a real Supabase project, and the real add-ons and metad
 | Check | When | Fails on | Run it |
 |---|---|---|---|
 | Licences, crate sources, bans (cargo-deny, `deny.toml`) | every push and pull request | a crate under a licence `deny.toml` doesn't allow, or from anywhere but crates.io | `cargo install cargo-deny --locked`, then `cargo deny check licenses sources bans` |
-| Advisories (OSV-Scanner on `Cargo.lock`, `bun.lock`, `web/bun.lock`, `fuzz/Cargo.lock`) | every push and pull request | high or critical advisories only (CVSS 7.0 or more, or rated so by GitHub); others are listed in the job summary | `osv-scanner scan --format=json --output=osv.json --lockfile=Cargo.lock --lockfile=bun.lock`, then `bun scripts/advisoryGate.ts osv.json` |
+| Advisories (OSV-Scanner on `Cargo.lock`, `bun.lock`, `web/bun.lock`, `fuzz/Cargo.lock`) | every push and pull request | high or critical advisories only (CVSS 7.0 or more, or rated so by GitHub); others are listed in the job summary; `osv-scanner.toml` leaves out advisories with no fix yet, each until a date (`bun audit --ignore` names the same) | `osv-scanner scan --format=json --output=osv.json --config=osv-scanner.toml --lockfile=Cargo.lock --lockfile=bun.lock`, then `bun scripts/advisoryGate.ts osv.json` |
 | Advisories (`bun audit`) | every push and pull request | high or critical | `bun audit --audit-level=high` |
 | CodeQL, TypeScript and Rust | pushes to `master`, Mondays, by hand | nothing: results go to the repository's Security tab | — |
 | Fuzzing (`fuzz/`, cargo-fuzz) | nightly, by hand (seconds per target as input) | a crash; the input that caused it is kept as the artifact `fuzz-crash-<target>` | `cargo install cargo-fuzz --locked`, then `cargo +nightly fuzz run <target> -- -max_total_time=60` |
