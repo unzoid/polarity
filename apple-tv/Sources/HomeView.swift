@@ -14,7 +14,7 @@ struct HomeView: View {
                             NavigationLink(value: resume.playing) {
                                 ResumeCard(resume: resume)
                             }
-                            .buttonStyle(.card)
+                            .buttonStyle(.borderless)
                         }
                     }
                 }
@@ -24,7 +24,7 @@ struct HomeView: View {
                             NavigationLink(value: card) {
                                 PosterCard(card: card)
                             }
-                            .buttonStyle(.card)
+                            .buttonStyle(.borderless)
                         }
                     }
                 }
@@ -39,30 +39,38 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.vertical, 40)
+            .padding(.vertical, 20)
         }
         .task { await library.loadHome() }
         .onAppear { library.refreshProgress() }
     }
 }
 
-/// Who's watching, as a link to the Account page, and what of the profile didn't come across.
+/// Who's watching, as a link to the Account page, and what of the profile or storage didn't come across.
 struct AccountBar: View {
     @EnvironmentObject private var account: Account
+    @EnvironmentObject private var library: Library
 
     var body: some View {
         HStack(spacing: 40) {
             NavigationLink(value: AccountPage()) {
                 Label(label, systemImage: "person.crop.circle")
             }
-            if let notice = account.notice {
-                Text(notice)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+            VStack(alignment: .leading, spacing: 6) {
+                if let problem = library.storageProblem {
+                    Text("Watch progress couldn't be read (\(problem)), so it won't be saved to disk this run.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
+                if let notice = account.notice {
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
         }
-        .padding(.horizontal, 80)
         .focusSection()
     }
 
@@ -75,7 +83,7 @@ struct AccountBar: View {
     }
 }
 
-/// A titled row of cards, scrolling sideways.
+/// A titled row of cards, scrolling sideways. Relies on tvOS's built-in safe-area insets rather than doubling 80pt.
 struct Shelf<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -85,12 +93,10 @@ struct Shelf<Content: View>: View {
             Text(title)
                 .font(.title3)
                 .bold()
-                .padding(.horizontal, 80)
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 40) {
                     content
                 }
-                .padding(.horizontal, 80)
                 .padding(.vertical, 30)
             }
             .scrollClipDisabled()
@@ -99,14 +105,15 @@ struct Shelf<Content: View>: View {
     }
 }
 
-/// A title's poster, with its name below.
+/// A title's poster lockup: rounded artwork lifts cleanly above its label.
 struct PosterCard: View {
     let card: Card
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Artwork(url: card.poster, label: card.name)
                 .frame(width: 240, height: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             Text(card.name)
                 .font(.caption)
                 .lineLimit(1)
@@ -115,18 +122,23 @@ struct PosterCard: View {
     }
 }
 
-/// A Continue Watching card: the backdrop, the title, how far along.
+/// A Continue Watching lockup: rounded widescreen artwork lifts above its subtitle.
 struct ResumeCard: View {
     let resume: Resume
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Artwork(url: resume.background ?? resume.poster, label: resume.name)
                 .frame(width: 480, height: 270)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 64)
+                }
                 .overlay(alignment: .bottom) {
                     ProgressView(value: resume.duration > 0 ? min(resume.position / resume.duration, 1) : 0)
                         .padding(16)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             Text(resume.subtitle)
                 .font(.caption)
                 .lineLimit(1)

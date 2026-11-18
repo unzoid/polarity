@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ACTIONS,
   DEFAULT_BINDINGS,
@@ -92,30 +92,51 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
   const [capturing, setCapturing] = useState<number | null>(null);
   const [held, setHeld] = useState<string[]>([]);
   const [note, setNote] = useState<string | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const restoreTarget = useRef<{ kind: "slot"; slot: number } | { kind: "add" } | null>(null);
   const changed = combos.join() !== DEFAULT_BINDINGS[action].join();
+
+  useEffect(() => {
+    if (capturing != null || !restoreTarget.current) return;
+    const target = restoreTarget.current;
+    restoreTarget.current = null;
+    const row = rowRef.current;
+    if (!row) return;
+    const btn =
+      target.kind === "add"
+        ? (row.querySelector<HTMLButtonElement>("[data-add]") ??
+          row.querySelector<HTMLButtonElement>(`button.shortcut-combo[data-slot="${Math.max(0, combos.length - 1)}"]`))
+        : (row.querySelector<HTMLButtonElement>(`button.shortcut-combo[data-slot="${target.slot}"]`) ??
+          row.querySelector<HTMLButtonElement>(`button.shortcut-combo[data-slot="${Math.max(0, combos.length - 1)}"]`));
+    btn?.focus({ preventScroll: true });
+  }, [capturing, combos.length]);
 
   useEffect(() => {
     if (capturing == null) return;
     setHeld([]);
+    const finishTo = (target: { kind: "slot"; slot: number } | { kind: "add" }) => {
+      restoreTarget.current = target;
+      setCapturing(null);
+    };
     // Capture phase, ahead of every other shortcut in the app.
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === "Escape") return setCapturing(null);
+      if (e.key === "Escape") return finishTo(capturing >= combos.length ? { kind: "add" } : { kind: "slot", slot: capturing });
       if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.altKey) {
         if (capturing < combos.length) unbind(action, capturing);
-        return setCapturing(null);
+        return finishTo({ kind: "slot", slot: Math.max(0, Math.min(capturing, combos.length - 2)) });
       }
       const combo = comboOf(e);
       if (!combo) return setHeld(heldModifiers(e)); // a modifier on its own: show it, wait for the key
       if (RESERVED.has(e.key)) return setNote(`${comboLabel(combo).join("+")} can't be used: it's reserved.`);
       const stolen = bind(action, capturing, combo);
       setNote(stolen ? `Removed from “${actionLabel(stolen)}”.` : null);
-      setCapturing(null);
+      finishTo({ kind: "slot", slot: capturing });
     };
     const onUp = (e: KeyboardEvent) => setHeld(heldModifiers(e));
     const cancel = () => setCapturing(null);
-    // A click anywhere else cancels, as Esc does.
+    // A click anywhere else cancels, as Esc does, without pulling focus back from what was clicked.
     const onDown = (e: PointerEvent) => {
       if (!(e.target as Element | null)?.closest?.(".shortcut-capture")) cancel();
     };
@@ -135,10 +156,14 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
     setNote(null);
     setCapturing(capturing === i ? null : i);
   };
+  const cancelCapture = (i: number) => {
+    restoreTarget.current = i >= combos.length ? { kind: "add" } : { kind: "slot", slot: i };
+    setCapturing(null);
+  };
   const adding = capturing === combos.length;
 
   return (
-    <div className="shortcut-row" data-capturing={capturing != null || undefined}>
+    <div ref={rowRef} className="shortcut-row" data-capturing={capturing != null || undefined}>
       <span className="shortcut-text">
         <span className="shortcut-label">
           {label}
@@ -165,13 +190,19 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
           </button>
         )}
         {combos.length < MAX_BINDINGS && capturing == null && (
-          <button className="shortcut-tool" title="Add another shortcut" aria-label={`Add a shortcut for ${label}`} onClick={() => start(combos.length)}>
+          <button
+            data-add=""
+            className="shortcut-tool"
+            title="Add another shortcut"
+            aria-label={`Add a shortcut for ${label}`}
+            onClick={() => start(combos.length)}
+          >
             <Plus size={14} />
           </button>
         )}
 
         {combos.length === 0 && !adding && (
-          <button className="shortcut-combo" data-empty onClick={() => start(0)}>
+          <button className="shortcut-combo" data-empty data-slot={0} onClick={() => start(0)}>
             Not set
           </button>
         )}
@@ -179,10 +210,11 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
           <span key={combo} className="shortcut-slot">
             {i > 0 && <span className="shortcut-or">or</span>}
             {capturing === i ? (
-              <Capture held={held} onCancel={() => setCapturing(null)} />
+              <Capture held={held} onCancel={() => cancelCapture(i)} />
             ) : (
               <button
                 className="shortcut-combo"
+                data-slot={i}
                 aria-label={`${label}: ${comboLabel(combo).join(" ")}. Change`}
                 title="Click to change"
                 onClick={() => start(i)}
@@ -195,7 +227,7 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
         {adding && (
           <span className="shortcut-slot">
             {combos.length > 0 && <span className="shortcut-or">or</span>}
-            <Capture held={held} onCancel={() => setCapturing(null)} />
+            <Capture held={held} onCancel={() => cancelCapture(combos.length)} />
           </span>
         )}
       </span>
@@ -204,8 +236,12 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
 }
 
 function Capture({ held, onCancel }: { held: string[]; onCancel: () => void }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+  }, []);
   return (
-    <span className="shortcut-combo shortcut-capture" role="status">
+    <span ref={ref} className="shortcut-combo shortcut-capture" tabIndex={-1} role="status">
       {held.length ? (
         <span className="keycaps">
           {held.map((k) => (

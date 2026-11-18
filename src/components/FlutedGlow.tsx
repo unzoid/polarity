@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { prefersReducedMotion } from "../lib/ui";
 
 /**
  * The account screens' backdrop: the accent glow seen through fluted glass, its reeds concentric copies
@@ -24,7 +25,7 @@ const VERT = `attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }
 const FRAG = `
 precision highp float;
 uniform vec2 uRes, uPointer, uGlow;
-uniform float uTime;
+uniform float uTime, uLight;
 uniform vec3 uBg, uAccent;
 
 const vec2 ORIGIN = vec2(${ORIGIN[0]}, ${ORIGIN[1]});
@@ -66,12 +67,14 @@ void main() {
   vec4 sc = scene(o / m + p + (g / slope) * lens);
   vec3 col = sc.rgb;
 
-  // Darkened edges and a lit leading lip, scaled by the light, so dark parts show no lines.
+  // Darkened edges and a lit leading lip, scaled by the light (softened on pale light-mode pages so reeds never look sooty).
   float edge = abs(t - 0.5) * 2.0;
   float lit = clamp(sc.w * 1.4, 0.0, 1.0);
-  col *= 1.0 - 0.16 * edge * edge * edge * lit;
-  col = mix(col, uAccent * 1.4 + 0.15, (1.0 - smoothstep(0.0, 0.05, t)) * 0.07 * lit);
-  col += (hash(gl_FragCoord.xy) - 0.5) * 0.012;
+  float edgeDark = mix(0.16, 0.045, uLight);
+  col *= 1.0 - edgeDark * edge * edge * edge * lit;
+  vec3 lip = mix(uAccent * 1.4 + 0.15, vec3(1.0), uLight * 0.65);
+  col = mix(col, lip, (1.0 - smoothstep(0.0, 0.05, t)) * 0.07 * lit);
+  col += (hash(gl_FragCoord.xy) - 0.5) * mix(0.012, 0.006, uLight);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -129,13 +132,16 @@ export function FlutedGlow({ className }: { className?: string }) {
     const attr = gl.getAttribLocation(program, "a");
     gl.enableVertexAttribArray(attr);
     gl.vertexAttribPointer(attr, 2, gl.FLOAT, false, 0, 0);
-    const [uRes, uTime, uPointer, uGlow, uBg, uAccent] = ["uRes", "uTime", "uPointer", "uGlow", "uBg", "uAccent"].map((n) =>
+    const [uRes, uTime, uPointer, uGlow, uBg, uAccent, uLight] = ["uRes", "uTime", "uPointer", "uGlow", "uBg", "uAccent", "uLight"].map((n) =>
       gl.getUniformLocation(program, n),
     );
 
     const readColors = () => {
-      gl.uniform3fv(uBg, tokenRgb(el, "--bg"));
+      const bg = tokenRgb(el, "--bg");
+      gl.uniform3fv(uBg, bg);
       gl.uniform3fv(uAccent, tokenRgb(el, "--accent"));
+      const isLight = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] > 0.5 ? 1 : 0;
+      gl.uniform1f(uLight, isLight);
     };
     readColors();
 
@@ -170,7 +176,15 @@ export function FlutedGlow({ className }: { className?: string }) {
       schedule();
     };
     const schedule = () => {
-      if (raf || lost || reduce.matches || document.hidden) {
+      if (prefersReducedMotion()) {
+        if (raf) {
+          cancelAnimationFrame(raf);
+          raf = 0;
+        }
+        last = 0;
+        return;
+      }
+      if (raf || lost || document.hidden) {
         if (!raf) last = 0;
         return;
       }
@@ -192,12 +206,16 @@ export function FlutedGlow({ className }: { className?: string }) {
       target[0] = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
       target[1] = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
     };
-    // A theme change (accent, scheme) re-reads the colours.
+    // A theme or motion-preference change re-reads colours and pauses/resumes the rAF loop.
     const themed = new MutationObserver(() => {
       readColors();
+      schedule();
       if (!raf) draw();
     });
-    themed.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "data-scheme"] });
+    themed.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style", "class", "data-scheme", "data-reduce-motion"],
+    });
     const onLost = () => {
       lost = true;
       cancelAnimationFrame(raf);

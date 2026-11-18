@@ -47,6 +47,7 @@ import {
   watchCardTaps,
   useSystemBack,
   watchInputModality,
+  warmUpBlurShaders,
   whenIdle,
 } from "./lib/ui";
 import { PROFILES_EXIT_MS } from "./screens/account/profileHandoff";
@@ -214,10 +215,31 @@ function SettingsRoute({ page }: { page?: string }) {
 
 /**
  * Sign-in and profile picking come before the app itself; sign-out may stop to ask over any of them.
- * Settings → Appearance → "Reduce motion" covers all of it, the account screens included.
+ * Theme, colour scheme, font, card size, spoiler flags and reduced motion sync onto `<html>` before
+ * paint so AuthScreen, OnboardingScreen, ProfilesScreen, SignOutDialog, PinHost and portalled menus
+ * all receive the user's preferences on frame 0.
  */
 export function App() {
-  const reduce = useSettings().data?.reduceMotion;
+  const tv = useTvMode();
+  const { data: settings } = useSettings();
+  const prefersLight = useSystemPrefersLight();
+  const scheme = tv ? "dark" : resolveScheme(settings?.colorScheme, prefersLight);
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.font = uiFontOf(settings?.uiFont);
+  }, [settings?.uiFont]);
+
+  useLayoutEffect(() => {
+    if (!settings) return;
+    const root = document.documentElement;
+    applyTheme(resolveTheme(settings), scheme, root);
+    root.dataset.cardSize = settings.cardSize ?? "medium";
+    root.dataset.reduceMotion = settings.reduceMotion ?? "system";
+    root.dataset.hideThumbs = String(!!settings.hideEpisodeThumbs);
+    root.dataset.hideOverviews = String(!!settings.hideEpisodeDescriptions);
+  }, [settings, scheme]);
+
+  const reduce = settings?.reduceMotion;
   return (
     <MotionConfig reducedMotion={reduce === "on" ? "always" : reduce === "off" ? "never" : "user"}>
       <Gate />
@@ -288,26 +310,6 @@ function GateScreen() {
 /** The desktop app or, in TV mode, the 10-foot one — over the same navigation stack. */
 function MainApp() {
   const tv = useTvMode();
-  const { data: settings } = useSettings();
-
-  // On the root element so portalled menus pick it up too.
-  useEffect(() => {
-    document.documentElement.dataset.font = uiFontOf(settings?.uiFont);
-  }, [settings?.uiFont]);
-
-  // Settings → Appearance and → Browsing, as attributes and variables on <html>
-  // (TV mode and portalled menus included). TV mode is always dark: it's made for a dim room.
-  const prefersLight = useSystemPrefersLight();
-  const scheme = tv ? "dark" : resolveScheme(settings?.colorScheme, prefersLight);
-  useEffect(() => {
-    if (!settings) return;
-    const root = document.documentElement;
-    applyTheme(resolveTheme(settings), scheme, root);
-    root.dataset.cardSize = settings.cardSize ?? "medium";
-    root.dataset.reduceMotion = settings.reduceMotion ?? "system";
-    root.dataset.hideThumbs = String(!!settings.hideEpisodeThumbs);
-    root.dataset.hideOverviews = String(!!settings.hideEpisodeDescriptions);
-  }, [settings, scheme]);
 
   // Interface size is this screen's, so it's a device pref.
   const { uiScale, animeEnabled } = usePrefs();
@@ -408,8 +410,8 @@ function DesktopApp() {
   const { data: settings } = useSettings();
   usePageFocus(playing || !topPage ? undefined : String(topPage.key));
   const phone = useFormFactor().form === "phone";
-  // On a phone pages change as a pair (lib/ui/pageMotion.ts); a page taken off the stack stays while it leaves.
-  const motion = usePageMotion(pages, phone && !playing);
+  // Pages change as a coordinated pair across desktop, tablet and phone (lib/ui/pageMotion.ts).
+  const motion = usePageMotion(pages, !playing, phone);
   // On a phone each section's page stays mounted when another is opened (router `kept`), as a phone app's tabs do:
   // switching back is that page as it was, drawn already, so the switch is only the crossfade. In key order, so a
   // page never moves among the others (moving it would reset its scroll); which is drawn over which is shell.css's.
@@ -431,10 +433,9 @@ function DesktopApp() {
     // Back lands where the card is now, not where it was tapped (pageMotion.ts liveCard).
     return playCardMotion({ page, scrim, card: open ? card : liveCard(card), open, width: window.innerWidth, height: window.innerHeight });
   }, [cardKey, card]);
-  // A section's turn takes the top bar with the pages (shell.css): the real bar comes in with the new page, and a
-  // copy of it as it was rides out on the old one. Copied here, while this render's change hasn't reached the
-  // screen, so it's the old page's bar (its title, scrolled or not).
-  const turn = motion?.tab ? motion : undefined;
+  // On a phone, a section's turn takes the top bar with the pages (shell.css): the real bar comes in with the new page,
+  // and a copy of it as it was rides out on the old one. Strictly gated to phone so desktop Back geometry never shifts.
+  const turn = phone && motion?.tab ? motion : undefined;
   const barCopy = useRef<{ key: number; node: HTMLElement } | null>(null);
   if (turn && barCopy.current?.key !== turn.leave) {
     const node = main.current?.querySelector(":scope > .navbar")?.cloneNode(true);
@@ -456,8 +457,17 @@ function DesktopApp() {
   }, [turn?.leave, turn?.enter]); // eslint-disable-line react-hooks/exhaustive-deps
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
-  useEffect(watchCardTaps, []);
+  useEffect(() => (phone ? watchCardTaps() : undefined), [phone]);
   useEffect(() => whenIdle(() => void LazyDetail.preload().catch(() => {}), 2500), []);
+  // Once Home has come in, the blur shaders a title page's entrance needs (lib/ui/shaderWarmup.ts).
+  useEffect(() => {
+    let cancelIdle = () => {};
+    const wait = window.setTimeout(() => (cancelIdle = whenIdle(warmUpBlurShaders, 2000)), 2500);
+    return () => {
+      window.clearTimeout(wait);
+      cancelIdle();
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -569,10 +579,12 @@ function DesktopApp() {
         {/* Between the title's page and the one behind it: dims and softens what's behind as the card opens. */}
         {motion?.card && <div className="card-scrim" aria-hidden data-card={motion.dir === 1 ? "open" : "close"} data-go={motion.go || undefined} />}
         <ErrorBoundary where="toasts" quiet>
-          <ControllerToast tv={false} />
-          <SeriesPickToast />
-          <HiddenTitleToast tv={false} />
-          <UpdateToast hidden={!!playing} />
+          <div className="toast-stack">
+            <ControllerToast tv={false} />
+            <SeriesPickToast />
+            <HiddenTitleToast tv={false} />
+            <UpdateToast hidden={!!playing} />
+          </div>
         </ErrorBoundary>
       </main>
       {/* The profile sheet's place (ProfileMenu.tsx): beside the pages and the top bar, not in them, so they can step
@@ -585,10 +597,12 @@ function DesktopApp() {
       <LazySettingsOverlay />
       {/* After Settings: it reports changes made there too, so it must never be under it or inert with the page. */}
       <ErrorBoundary where="notices" quiet>
-        <StoreProblemToast tv={false} />
-        <AccountFullToast tv={false} />
-        <SecretsSyncToast tv={false} />
-        <LockedKeysToast tv={false} />
+        <div className="toast-stack toast-stack-notice">
+          <StoreProblemToast tv={false} />
+          <AccountFullToast tv={false} />
+          <SecretsSyncToast tv={false} />
+          <LockedKeysToast tv={false} />
+        </div>
       </ErrorBoundary>
       <ErrorBoundary where="card menu" quiet>
         {!playing && <CardMenuHost />}

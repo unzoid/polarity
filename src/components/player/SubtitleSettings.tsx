@@ -276,7 +276,7 @@ export function SubtitleSettings({
         </Setting>
       )}
       {onStepLine && (
-        <Setting label="Match a line" caption="Just heard a line? Show its subtitle now, whether it's still to come or already gone">
+        <Setting label="Match a line" caption="Show the line you just heard now, whether it's still to come or already gone">
           <div className="source-chips">
             <Chip variant="choice" onClick={() => onStepLine(-1)}>
               Previous Line
@@ -414,7 +414,6 @@ function Swatches({ value, options, onChange }: { value: string; options: { valu
       <label
         className="sub-swatch sub-swatch-custom"
         data-custom={isCustom}
-        aria-checked={isCustom}
         title="Custom color"
         style={isCustom ? ({ "--swatch": value } as CSSProperties) : undefined}
       >

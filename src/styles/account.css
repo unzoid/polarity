@@ -38,8 +38,15 @@
   /* Carries the page colour too, so the shell can fade away as a whole over the app (data-leaving). */
   background-color: var(--bg);
   background-image:
-    radial-gradient(90% 80% at 88% -5%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 65%),
-    radial-gradient(80% 60% at 14% 120%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%);
+    radial-gradient(95% 85% at 88% -6%, color-mix(in srgb, var(--accent) 38%, transparent), transparent 68%),
+    radial-gradient(55% 45% at 78% 12%, color-mix(in srgb, var(--accent-hi) 15%, transparent), transparent 60%),
+    radial-gradient(85% 65% at 14% 118%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 72%);
+}
+:root[data-scheme="light"] .account-glow {
+  background-image:
+    radial-gradient(95% 85% at 88% -6%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 68%),
+    radial-gradient(55% 45% at 78% 12%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    radial-gradient(85% 65% at 14% 118%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 72%);
 }
 .account-glow canvas {
   display: block;
@@ -180,13 +187,15 @@
 }
 /* The code another device enters (#133): large enough to read across a room. */
 .auth-device-code {
+  display: grid;
+  place-items: center;
   margin: 0 0 1rem;
   font-size: calc(var(--fs-lg) * 2);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.12em;
   color: var(--text);
-  min-height: 1.3em;
+  min-height: calc(var(--fs-lg) * 2.6);
 }
 .auth-device-code[data-state="signing-in"],
 .auth-device-code[data-state="loading"] {
@@ -203,14 +212,23 @@
 .auth-device-qr {
   margin: 1.25rem 0 0;
 }
-.auth-device-qr svg {
+.auth-device-qr svg,
+.auth-device-qr-skeleton {
   display: block;
   width: 10rem;
-  height: auto;
   margin: 0 auto;
   border-radius: 0.5rem;
 }
-:root[data-tv="true"] .auth-device-qr svg {
+.auth-device-qr svg {
+  height: auto;
+  box-shadow:
+    0 0 0 1px rgb(var(--ink) / 0.1),
+    0 8px 24px -8px var(--shadow-deep);
+}
+.auth-device-qr-skeleton {
+  aspect-ratio: 1;
+}
+:root[data-tv="true"] .auth-device-qr :is(svg, .auth-device-qr-skeleton) {
   width: min(13rem, 30vh);
 }
 .auth-device-qr .auth-fine {
@@ -228,7 +246,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .auth-link:not(:disabled):hover {
-    color: #fff;
+    color: var(--text);
   }
 }
 .auth-link:disabled {
@@ -269,7 +287,7 @@
   margin-top: 0.875rem;
   font-size: var(--fs-sm);
   line-height: 1.45;
-  color: #eb5757;
+  color: var(--danger);
   animation: auth-in var(--dur-slow) var(--ease-out) both;
 }
 .auth-error .auth-link {
@@ -544,6 +562,11 @@
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 0.5rem;
 }
+@media (max-width: 520px) {
+  .onboard-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
 .onboard-choice {
   position: relative;
   border-radius: var(--r-sm);
@@ -577,7 +600,7 @@
 .onboard-submit {
   margin-top: 0.5rem;
 }
-/* Hover and keyboard focus both lift the tile onto a soft dark card. */
+/* Hover and keyboard focus both lift the tile onto a soft card with specular rim and ground shadow. */
 .profile-tile {
   display: flex;
   flex-direction: column;
@@ -585,7 +608,7 @@
   gap: 1rem;
   padding: 1rem 1rem 1.125rem;
   border-radius: var(--r-lg);
-  color: var(--text-3);
+  color: var(--text-2);
   transition: background-color var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
 }
 .profile-tile:focus-visible {
@@ -594,7 +617,7 @@
   background: var(--fill-3);
 }
 @media (hover: hover) and (pointer: fine) {
-  .profile-tile:hover {
+  .profile-tile:not(:disabled):hover {
     color: var(--text);
     background: rgb(var(--ink) / 0.08);
   }
@@ -606,14 +629,54 @@
   width: var(--tile);
   aspect-ratio: 1;
   border-radius: var(--r-md);
-  transition: transform var(--dur-press) var(--ease-out);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
 }
 .profile-tile-art .avatar {
   width: 100%;
   border-radius: var(--r-md);
 }
-.profile-tile:active .profile-tile-art {
+.profile-tile:focus-visible .profile-tile-art {
+  transform: translateY(-3px) scale(1.035);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px rgb(var(--ink) / 0.55),
+    0 14px 28px -10px var(--shadow-deep);
+}
+@media (hover: hover) and (pointer: fine) {
+  .profile-tile:not(:disabled):hover .profile-tile-art {
+    transform: translateY(-3px) scale(1.035);
+    box-shadow:
+      inset 0 0 0 1.5px rgb(var(--ink) / 0.28),
+      0 0 0 1px rgb(var(--ink) / 0.14),
+      0 14px 28px -10px var(--shadow-deep);
+  }
+}
+.profile-tile:not(:disabled):active .profile-tile-art {
   transform: scale(0.96);
+  transition-duration: var(--dur-press);
+}
+.profile-tile-lock {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--r-round);
+  background: rgb(0 0 0 / 0.58);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  color: rgb(255 255 255 / 0.92);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+.profile-tile[data-managing="true"] .profile-tile-lock,
+.profile-tile[data-entering="true"] .profile-tile-lock {
+  opacity: 0;
 }
 .profile-tile-name {
   max-width: calc(var(--tile) + 1rem);
@@ -696,7 +759,10 @@
   animation-fill-mode: backwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  .profiles[data-choosing] .profile-tile-art {
+  .profiles[data-choosing] .profile-tile-art,
+  .profile-tile:focus-visible .profile-tile-art,
+  .profile-tile:not(:disabled):hover .profile-tile-art,
+  .profile-tile:not(:disabled):active .profile-tile-art {
     transform: none;
   }
 }
@@ -706,6 +772,9 @@
 
 /* Then in: the screen stays over the app a moment (App's Gate) and fades off it, while a copy of the
    chosen avatar flies into the navbar (screens/account/profileHandoff.ts). */
+:root[data-profile-handoff] :is(.navbar-profile .avatar, .tv-nav-me .avatar) {
+  visibility: hidden;
+}
 .account-shell[data-leaving] {
   z-index: var(--z-overlay);
   background: transparent;
@@ -951,13 +1020,13 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 6px;
-  /* The menus' surface (tokens.css --surface-menu). */
-  border: var(--edge-menu);
-  border-radius: 14px;
-  background: var(--surface-menu);
-  -webkit-backdrop-filter: var(--blur-menu);
-  backdrop-filter: var(--blur-menu);
-  box-shadow: var(--shadow-menu);
+  /* The menus' panel (ui/menu.css): flat near-black, a clear edge, near-square corners. */
+  border: 1px solid rgb(var(--ink) / 0.2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
   outline: none;
   transform-origin: var(--transform-origin);
   transition:
@@ -991,7 +1060,7 @@
   gap: 0.375rem;
   width: 3.75rem;
   padding: 0.375rem 0 0.3125rem;
-  border-radius: var(--r-md);
+  border-radius: 4px;
   font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-2);
@@ -999,21 +1068,42 @@
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 button.profile-pop-profile:is(:hover, :focus-visible) {
-  background: var(--fill-3);
   color: var(--text);
 }
-.profile-pop-profile > .avatar,
+:root[data-input="keyboard"] button.profile-pop-profile:focus-visible {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
+}
+.profile-pop-face {
+  position: relative;
+  display: block;
+  line-height: 0;
+}
+.profile-pop-profile .avatar,
 .profile-pop-manage {
   width: 36px;
-  border-radius: var(--r-sm);
+  border-radius: 4px;
+}
+.profile-pop-lock {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: var(--r-round);
+  background: var(--tone-sunk);
+  box-shadow: 0 0 0 1px var(--hairline-strong);
+  color: var(--text-2);
 }
 .profile-pop-profile[aria-current] {
   color: var(--text);
 }
 /* You: ringed, the way the profiles screen marks who's watching. */
-.profile-pop-profile[aria-current] > .avatar {
+.profile-pop-profile[aria-current] .avatar {
   box-shadow:
-    0 0 0 2px #000,
+    0 0 0 2px var(--tone-sunk),
     0 0 0 4px var(--text);
 }
 .profile-pop-manage {
@@ -1032,9 +1122,8 @@ button.profile-pop-profile:is(:hover, :focus-visible) {
 .profile-pop-group {
   display: flex;
   flex-direction: column;
-  padding-top: 5px;
-  margin-top: 5px;
-  border-top: 1px solid var(--hairline);
+  padding-top: 4px;
+  margin-top: 8px;
 }
 .profile-pop-row {
   display: flex;
@@ -1043,19 +1132,18 @@ button.profile-pop-profile:is(:hover, :focus-visible) {
   width: 100%;
   min-height: 2.375rem;
   padding: 0.5rem 0.625rem;
-  border-radius: var(--r-sm);
+  border-radius: 2px;
   font-size: var(--fs-md);
-  color: rgb(var(--ink) / 0.85);
+  color: rgb(var(--ink-text) / 0.62);
   text-align: left;
   outline: none;
 }
 .profile-pop-row:is(:hover, :focus-visible) {
-  background: var(--fill-3);
   color: var(--text);
 }
 :root[data-input="keyboard"] .profile-pop-row:focus-visible {
-  background: var(--accent);
-  color: var(--accent-fg);
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
 }
 .profile-pop-row > svg:first-child {
   flex: none;
@@ -1246,6 +1334,26 @@ button.profile-pop-profile:is(:hover, :focus-visible) {
   display: block;
   line-height: 0;
 }
+.profile-sheet-lock {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-round);
+  background: var(--tone-2);
+  box-shadow: 0 0 0 1.5px var(--hairline-strong);
+  color: var(--text-2);
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+:root[data-scheme="light"] .profile-sheet-lock {
+  background: var(--tone-sunk);
+}
+[data-managing] .profile-sheet-lock {
+  opacity: 0;
+}
 .profile-sheet-edit {
   position: absolute;
   inset: 0;
@@ -1316,7 +1424,7 @@ button.profile-sheet-me:active {
   gap: 0.125rem;
   padding: 0.625rem 1rem;
   border-radius: 14px;
-  background: rgb(255 255 255 / 0.05);
+  background: rgb(var(--ink) / 0.05);
   box-shadow: inset 0 0 0 1px transparent;
   transition: box-shadow var(--dur-fast) var(--ease-std);
 }
@@ -1424,7 +1532,7 @@ button.profile-sheet-me:active {
   height: 2.1rem;
 }
 :root[data-tv="true"] .account-shell :focus {
-  outline: 0.2rem solid #fff;
+  outline: 0.2rem solid var(--text);
   outline-offset: 0.2rem;
 }
 :root[data-tv="true"] .account-bar-link {
@@ -1457,7 +1565,7 @@ button.profile-sheet-me:active {
 }
 :root[data-tv="true"] .profile-tile:focus .profile-tile-art {
   transform: scale(1.08);
-  box-shadow: 0 0 0 0.16rem var(--bg), 0 0 0 0.36rem #fff;
+  box-shadow: 0 0 0 0.16rem var(--bg), 0 0 0 0.36rem var(--text);
 }
 :root[data-tv="true"] .profile-add:focus .profile-tile-art {
   color: var(--text);

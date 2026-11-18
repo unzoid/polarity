@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, Backspace } from "../components/icons";
+import { TV_OSK_EVENT, useGamepadConnected, type TvOskKey } from "./gamepad";
+import { playSound } from "./sounds";
+import { PadGlyph } from "./TvChrome";
 
-const KEYS = [..."abcdefghijklmnopqrstuvwxyz1234567890"];
+const KEYS = [..."abcdefghijklmnopqrstuvwxyz1234567890'-"];
 
 /**
  * The on-screen keyboard: a text line with a caret, Space / Delete / Clear,
@@ -48,6 +51,32 @@ export function TvKeyboard({
     setShift(false);
   };
   const erase = () => set(textRef.current.slice(0, -1));
+  const connected = useGamepadConnected();
+
+  // Keep the end of long queries and the caret in view once past ~22 characters.
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [text]);
+
+  // Controller shortcuts while focused in the keyboard pane: Y inserts Space, X deletes.
+  useEffect(() => {
+    if (!active) return;
+    const onOsk = (e: Event) => {
+      const button = (e as CustomEvent<TvOskKey>).detail;
+      if (button === "y") {
+        if (textRef.current.length >= max) return playSound("edge");
+        type(" ");
+        playSound("select");
+      } else if (button === "x") {
+        if (!textRef.current) return playSound("edge");
+        erase();
+        playSound("back");
+      }
+    };
+    window.addEventListener(TV_OSK_EVENT, onOsk);
+    return () => window.removeEventListener(TV_OSK_EVENT, onOsk);
+  }, [active, max]);
 
   // A physical keyboard types without visiting the on-screen keys. Capture
   // phase, so Backspace deletes a letter before it can mean "Back" (once the
@@ -102,9 +131,11 @@ export function TvKeyboard({
         )}
         <button className="tv-key tv-key-wide" onClick={() => type(" ")}>
           Space
+          {connected && <PadGlyph button="y" />}
         </button>
         <button className="tv-key tv-key-wide" onClick={erase} aria-label="Delete">
           <Backspace size={26} />
+          {connected && <PadGlyph button="x" />}
         </button>
         <button className="tv-key tv-key-wide" onClick={() => set("")}>
           Clear

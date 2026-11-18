@@ -80,7 +80,6 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
           <ToggleRow
             setting="rememberSpeed"
             title="Remember playback speed"
-            caption="Keep the speed you last chose for the next video, instead of going back to normal"
             checked={!!data.rememberSpeed}
             onChange={(v) => update.mutate({ rememberSpeed: v, playbackSpeed: 1 })}
           />

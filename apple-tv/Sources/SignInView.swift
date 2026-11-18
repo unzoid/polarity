@@ -34,7 +34,7 @@ struct SignInView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
         }
-        .padding(80)
+        .padding(.vertical, 24)
         .focusSection()
     }
 }
@@ -66,16 +66,24 @@ struct ProfilesView: View {
             }
             .focusSection()
         }
-        .padding(80)
+        .padding(.vertical, 24)
     }
 }
 
 /// Account, from Home: who's watching, what didn't come across, switching and signing out.
 struct AccountView: View {
     @EnvironmentObject private var account: Account
+    @EnvironmentObject private var library: Library
 
     var body: some View {
         List {
+            if let problem = library.storageProblem {
+                Section {
+                    Text("Watch progress couldn't be read (\(problem)), so it won't be saved to disk this run.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
             switch account.state {
             case let .watching(profile?):
                 Section {
@@ -105,7 +113,6 @@ struct AccountView: View {
                 NavigationLink("Licences", value: LicencesPage())
             }
         }
-        .padding(.horizontal, 80)
         .navigationTitle("Account")
     }
 }

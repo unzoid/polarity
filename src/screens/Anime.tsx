@@ -5,6 +5,7 @@ import { Dropdown } from "../components/Dropdown";
 import { Calendar, Close, Filters, Grid, Play } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
+import { LibraryButton } from "../components/title/LibraryButton";
 import { joinFacts } from "../lib/format";
 import { Shelf } from "../components/title/Shelf";
 import { PosterGrid } from "../components/title/PosterGrid";
@@ -39,14 +40,16 @@ import {
   SEASON_LABEL,
   STATUS_LABEL,
   untilAiring,
+  useAniZip,
   useCardsShown,
   useAnimeTitle,
+  useLinkedImdb,
   slidesReady,
   useFranchiseBanners,
   useShelfVisible,
 } from "../lib/anime";
 import { PRIORITY } from "../lib/net";
-import { useViewportPlace } from "../lib/ui";
+import { useFormFactor, useViewportPlace } from "../lib/ui";
 import { usePrefs } from "../lib/settings";
 import { useRouter, type Route, useNavigation } from "../lib/router";
 import type { MetaPreview } from "../lib/types";
@@ -73,9 +76,22 @@ export function Anime() {
   const todayNote = useWaitNote(!today.slots);
   const now = seasonOf();
   const next = nextSeason(now);
-  const [index, setIndex] = useState(0);
   const handlers = useAnimeHandlers();
   const { navigate } = useNavigation();
+  const heroHandlers = useCallback(
+    (item: MetaPreview) => {
+      const card = hero.cards.find((a) => item.id === animePreviewId(a));
+      return card ? handlers(card) : { onClick: () => {}, onContextMenu: (e: React.MouseEvent<HTMLElement>) => e.preventDefault() };
+    },
+    [hero.cards, handlers],
+  );
+  const heroContent = useCallback(
+    (item: MetaPreview) => {
+      const i = hero.cards.findIndex((a) => item.id === animePreviewId(a));
+      return i >= 0 && <AnimeHeroContent card={hero.cards[i]} item={item} part={hero.parts[i]} />;
+    },
+    [hero.cards, hero.parts],
+  );
 
   if (isError && !data) {
     return (
@@ -142,17 +158,8 @@ export function Anime() {
       {hasHero && (
         <HeroCarousel
           items={hero.items}
-          // The set can shrink (a new title language, art that didn't load): never point past its end.
-          index={hero.items?.length ? index % hero.items.length : 0}
-          setIndex={setIndex}
-          handlers={(item) => {
-            const card = hero.cards.find((a) => item.id === animePreviewId(a));
-            return card ? handlers(card) : { onClick: () => {}, onContextMenu: (e) => e.preventDefault() };
-          }}
-          content={(item) => {
-            const i = hero.cards.findIndex((a) => item.id === animePreviewId(a));
-            return i >= 0 && <AnimeHeroContent card={hero.cards[i]} item={item} part={hero.parts[i]} />;
-          }}
+          handlers={heroHandlers}
+          content={heroContent}
         />
       )}
       <AnimeNav />
@@ -246,21 +253,46 @@ function useAnimeHero(trending?: Card[]) {
 
 function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview; part?: string }) {
   const open = useOpenAnime(card);
+  const phone = useFormFactor().form === "phone";
   const { animeCardCountdown } = usePrefs();
   const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
+  const year = card.seasonYear ?? card.startDate?.year;
+  const imdb = useLinkedImdb(card.id);
+  const { data: zip } = useAniZip(card.id);
+  const kitsu = zip?.mappings?.kitsu_id;
+  const linkedId = imdb ?? (kitsu ? `kitsu:${kitsu}` : undefined);
+  const libraryItem = useMemo(
+    () =>
+      linkedId
+        ? {
+            ...item,
+            id: linkedId,
+            poster: item.poster ?? card.coverImage.extraLarge ?? card.coverImage.large ?? undefined,
+          }
+        : undefined,
+    [linkedId, item, card.coverImage.extraLarge, card.coverImage.large],
+  );
   return (
     <div className="hero-content">
       <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
       {/* The franchise's logo above: which of its parts is trending (#325). */}
       {part && <p className="hero-part t-caption">{part}</p>}
       <p className="hero-kind t-callout tabular">
-        {joinFacts([card.format && FORMAT_LABEL[card.format], ...(card.genres ?? []).slice(0, 2), next && `Episode ${next.episode} in ${countdown(untilAiring(next.airingAt))}`])}
+        <span className="hero-kind-text">
+          {joinFacts([
+            card.format && FORMAT_LABEL[card.format],
+            ...(card.genres ?? []).slice(0, 2),
+            year,
+            next && `Episode ${next.episode} in ${countdown(untilAiring(next.airingAt))}`,
+          ])}
+        </span>
       </p>
       <p className="hero-description t-body">{item.description}</p>
       <div className="hero-actions">
         <Button variant="primary" {...open}>
           <Play size={18} fill="currentColor" /> Watch Now
         </Button>
+        {libraryItem && <LibraryButton item={libraryItem} labelled={phone} />}
       </div>
     </div>
   );

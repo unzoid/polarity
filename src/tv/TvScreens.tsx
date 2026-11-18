@@ -312,7 +312,7 @@ export function TvSearch() {
           max={MAX_QUERY}
         />
         {recent.length > 0 && (
-          <section className="tv-recent" data-nav-memory aria-label="Recent searches">
+          <section className="tv-recent" data-nav-scroll="center" data-nav-memory aria-label="Recent searches">
             <div className="tv-recent-head">
               <h2 className="tv-recent-title">Recent Searches</h2>
               <button className="tv-recent-clear" onClick={clearRecentSearches}>

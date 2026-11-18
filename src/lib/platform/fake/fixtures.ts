@@ -535,7 +535,7 @@ export const settings: Settings = {
   showCardRatings: false,
   ratingColors: false,
   episodeLayout: "row",
-  uiFont: "inter",
+  uiFont: "instrument",
   subtitleStyle: { size: 100, raise: 0, color: "#FFFFFF", opacity: 100, outline: "thin", outlineColor: "#000000", background: 0, font: "Segoe UI Semibold" },
   autoplayCountdown: 8,
   stillWatchingAfter: 0,

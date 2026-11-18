@@ -241,7 +241,7 @@ function DoneGlyph({ size }: { size: number }) {
   return (
     <svg className="download-done" width={iconLength(size)} height={iconLength(size)} viewBox="0 0 24 24" aria-hidden>
       <circle cx="12" cy="12" r="10" fill="currentColor" />
-      <path d="m7.75 12.25 2.75 2.75 5.75-6" fill="none" stroke="var(--download-check, #0a0a0a)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="m7.75 12.25 2.75 2.75 5.75-6" fill="none" stroke="var(--bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

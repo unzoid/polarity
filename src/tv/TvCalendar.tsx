@@ -105,7 +105,7 @@ export function TvCalendar() {
         </div>
       </header>
 
-      <div className="tv-cal-grid" ref={grid} data-nav-memory>
+      <div className="tv-cal-grid" ref={grid} data-nav-scroll="center" data-nav-memory>
         {days.map((day, i) => {
           const label = dayLabel(day);
           const items = byDate.get(day) ?? [];

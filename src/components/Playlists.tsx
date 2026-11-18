@@ -73,7 +73,7 @@ export function PlaylistTile({ playlist, onOpen }: { playlist: Playlist; onOpen:
   const summary = playlistSummary(playlist.items);
   return (
     <button className="card card-poster playlist-tile" onClick={onOpen} aria-label={`${playlist.name}, ${summary}`}>
-      <div className="card-frame playlist-cover">
+      <div className={covers.length ? "card-frame playlist-cover" : "card-frame frame-page playlist-cover"}>
         <div className="playlist-cover-art">
           {covers.length ? (
             <>

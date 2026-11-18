@@ -9,7 +9,7 @@ import { useNavigation } from "../lib/router";
 import { cardArtUrl, detailBackdropUrl, useArtGate, useCardIntent } from "../lib/ui";
 import { useBrowseShelf, useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
-import { Facts, StageProvider, TvStage, titleFacts, useStage, useStageSeed, useStagedTitle, type StageEntry } from "./TvStage";
+import { Facts, StageProvider, TvStage, titleFacts, useHasStage, useStage, useStageSeed, useStagedTitle, type StageEntry } from "./TvStage";
 import { isMenuKey, openCardMenu } from "./TvCardMenu";
 import { refocusNear } from "./spatial";
 import { Skeleton } from "../components/ui/Skeleton";
@@ -70,6 +70,7 @@ export const TvCard = memo(function TvCard({
   const { item, entry: shownEntry } = useEntryShown(stored, watching ?? entry?.videoId);
   const onStage = staged ?? item;
   const stage = useStage();
+  const hasStage = useHasStage();
   const seedStage = useStageSeed();
   const shelves = useContext(ShelvesLayout);
   // On the shelves every card is a poster, whatever the rail asked for; focus opens it out (`wide`).
@@ -146,6 +147,11 @@ export const TvCard = memo(function TvCard({
         {look === "poster" && <CardRating rating={item.imdbRating} placement="poster" />}
       </span>
       {look === "poster" && <CardRating rating={item.imdbRating} />}
+      {!hasStage && look === "poster" && item.name && (
+        <span className="tv-card-caption" aria-hidden>
+          {item.name}
+        </span>
+      )}
     </button>
   );
 });
@@ -219,6 +225,8 @@ function TvShelfInfo({ entry }: { entry: StageEntry | null }) {
  */
 export function TvSkeletonRail({ title, shape, count = 8, note }: { title?: string; shape: Shape; count?: number; note?: string }) {
   const first = useRef<HTMLSpanElement>(null);
+  const hasStage = useHasStage();
+  const shelves = useContext(ShelvesLayout);
   useLayoutEffect(
     () => () => {
       const el = first.current;
@@ -232,6 +240,7 @@ export function TvSkeletonRail({ title, shape, count = 8, note }: { title?: stri
         i === 0 ? (
           <span key={i} ref={first} className="tv-card tv-card-skeleton" data-shape={shape} tabIndex={0} role="img" aria-label="Loading" data-nav-loading>
             <Skeleton as="span" className="tv-card-frame" />
+            {!hasStage && !shelves && shape === "poster" && <span className="tv-card-caption" aria-hidden />}
           </span>
         ) : (
           <span key={i} className="tv-card tv-card-skeleton" data-shape={shape} aria-hidden>

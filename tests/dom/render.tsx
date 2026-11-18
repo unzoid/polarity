@@ -1,19 +1,32 @@
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
+const mounted = new Set<() => Promise<void>>();
+
+/** Unmounts every root `render` mounted that a test left behind. */
+export async function unmountRendered() {
+  for (const unmount of [...mounted]) await unmount();
+}
+
 /** Renders `node` into a fresh element on the page; `unmount` takes it away again. */
 export async function render(node: ReactNode) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  let active = true;
+  const unmount = async () => {
+    if (!active) return;
+    active = false;
+    mounted.delete(unmount);
+    await act(async () => root.unmount());
+    container.remove();
+  };
+  mounted.add(unmount);
   await act(async () => root.render(node));
   return {
     container,
     rerender: (next: ReactNode) => act(async () => root.render(next)),
-    unmount: async () => {
-      await act(async () => root.unmount());
-      container.remove();
-    },
+    unmount,
   };
 }
 

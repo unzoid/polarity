@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { ease } from "../../lib/ui";
+import { ease, usePresence } from "../../lib/ui";
 import { anchorOf, nativeDialogsAvailable, shareNatively } from "../../lib/platform";
 import { warnFailed } from "../../lib/errors";
 import {
@@ -453,10 +453,11 @@ export function PartyBadge({ party, onOpen }: { party: PartyState; onOpen: () =>
  */
 export function PartyHold({ party, videoId }: { party: PartyState; videoId: string }) {
   const text = partyHoldText(party, videoId);
+  const { shown } = usePresence(text, 140);
   return (
     <div className="party-hold t-callout" data-shown={!!text} role="status" aria-live="polite">
-      <Spinner size={16} />
-      <span>{text}</span>
+      {shown && <Spinner size={16} />}
+      <span>{shown}</span>
     </div>
   );
 }

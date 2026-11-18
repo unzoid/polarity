@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { MARKET_CATEGORIES, MARKETPLACE_REPO, searchMarketplace, useMarketplace, type MarketCategory } from "../lib/catalog";
@@ -22,21 +22,38 @@ export function MarketplacePage() {
   const qc = useQueryClient();
   const { data: addons } = useAddons();
   const [query, setQuery] = useState("");
+  const [installing, setInstalling] = useState<Set<string>>(() => new Set());
+  const [installError, setInstallError] = useState<string | null>(null);
   const { addons: market } = useMarketplace();
 
-  const install = useMutation({
-    mutationFn: api.installAddon,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.addons });
-      qc.invalidateQueries({ queryKey: keys.streamsAll });
-    },
-  });
+  const startInstall = (url: string) => {
+    if (installing.has(url)) return;
+    setInstallError(null);
+    setInstalling((prev) => new Set(prev).add(url));
+    api
+      .installAddon(url)
+      .then(
+        () => {
+          qc.invalidateQueries({ queryKey: keys.addons });
+          qc.invalidateQueries({ queryKey: keys.streamsAll });
+        },
+        (e: unknown) => setInstallError(errorMessage(e)),
+      )
+      .finally(() => {
+        setInstalling((prev) => {
+          const next = new Set(prev);
+          next.delete(url);
+          return next;
+        });
+      });
+  };
 
   const installedIds = useMemo(() => new Set(addons?.map((a) => a.manifest.id)), [addons]);
   const shown = useMemo(() => searchMarketplace(market, query), [market, query]);
   const groups = MARKET_CATEGORIES.map((c) => ({ category: c, items: shown.filter((a) => a.category === c) })).filter(
     (g) => g.items.length,
   );
+  const trimmed = query.trim();
 
   return (
     <div className="market">
@@ -48,7 +65,7 @@ export function MarketplacePage() {
           <Card title={category} key={category}>
             {items.map((a) => {
               const installed = installedIds.has(a.manifestId);
-              const busy = install.isPending && install.variables === a.install;
+              const busy = installing.has(a.install);
               return (
                 <div className="settings-row market-row" key={a.manifestId}>
                   <Cat className="settings-row-icon" size={20} strokeWidth={1.9} />
@@ -88,8 +105,8 @@ export function MarketplacePage() {
                         Set Up
                       </Button>
                     ) : (
-                      <Button variant="primary" disabled={busy} onClick={() => install.mutate(a.install)}>
-                        {busy ? "Installing…" : "Install"}
+                      <Button variant="primary" busy={busy} disabled={busy} onClick={() => startInstall(a.install)}>
+                        Install
                       </Button>
                     )}
                   </span>
@@ -102,7 +119,7 @@ export function MarketplacePage() {
 
       {!groups.length && (
         <p className="market-empty">
-          Nothing matches “{query.trim()}”. If you have an add-on's link,{" "}
+          {trimmed ? `Nothing matches “${trimmed}”.` : "No add-ons are listed right now."} If you have an add-on's link,{" "}
           <button className="settings-link" onClick={() => openSettings("addons")}>
             install it from its URL
           </button>
@@ -110,7 +127,11 @@ export function MarketplacePage() {
         </p>
       )}
 
-      {install.isError && <p className="settings-error">{errorMessage(install.error)}</p>}
+      {installError && (
+        <p className="settings-error" role="alert">
+          {installError}
+        </p>
+      )}
 
       <p className="settings-footer">
         Polarity doesn't provide or endorse third-party add-ons. Add-ons you install from a link are your own choice,

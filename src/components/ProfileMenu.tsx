@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
+import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, Lock, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { api } from "../lib/api";
 import { appVersion } from "../lib/updater";
 import { feedbackContext, feedbackUrl } from "../lib/feedback";
@@ -17,6 +17,7 @@ import { closePartySurface, getParty, leaveParty, partyAvailable, setJoinPartyOp
 import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
 import { useRouter, useNavigation } from "../lib/router";
 import { useAccount } from "../lib/account";
+import { hasPin } from "../lib/account/profileRules";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
@@ -43,7 +44,7 @@ const GUEST_AVATAR = "guest";
  * `stay`: the menu stays open (Friends and Join open as views inside it; on a phone Settings does too).
  * `view`: opens one of the menu's own views (Friends, Join). `count`: waiting for an answer (friend requests).
  */
-type Choice = { id: string; label: string; icon: ReactNode; run: () => void; stay?: boolean; view?: boolean; count?: number };
+type Choice = { id: string; label: string; icon: ReactNode; run: () => void; stay?: boolean; view?: boolean; count?: number; locked?: boolean };
 
 /** "Friends (2)" where there's no room for a badge. */
 const labelOf = (c: Choice) => (c.count ? `${c.label} (${c.count})` : c.label);
@@ -78,7 +79,14 @@ export function ProfileMenu() {
   const { entries } = useFriends();
   const requests = entries.filter((e) => e.state === "pending" && e.incoming).length;
 
-  const profiles: Choice[] = others.map((p) => ({ id: `profile:${p.id}`, label: p.name, icon: <Avatar id={p.avatar} />, run: () => void account.chooseProfile(p) }));
+  const profiles: Choice[] = others.map((p) => ({
+    id: `profile:${p.id}`,
+    label: p.name,
+    icon: <Avatar id={p.avatar} />,
+    locked: hasPin(p),
+    run: () => void account.chooseProfile(p),
+  }));
+  const meLocked = me ? hasPin(me) : false;
   const manage: Choice[] = me ? [{ id: "manage", label: "Manage Profiles", icon: <Edit />, run: () => account.switchProfile("manage") }] : [];
   const actions: Choice[] = [
     ...(me && partyAvailable() ? [{ id: "party", label: "Join Watch Party", icon: <WatchParty />, run: () => setJoinPartyOpen(true), stay: true, view: true }] : []),
@@ -118,7 +126,7 @@ export function ProfileMenu() {
   }
 
   const status = me ? undefined : !account.enabled && buildChannel === "dev" ? "No database connected" : "Not signed in";
-  const props = { name, avatar, me, email: me ? account.user?.email : undefined, status, profiles, manage: manage[0], groups: [actions, session] };
+  const props = { name, avatar, me, meLocked, email: me ? account.user?.email : undefined, status, profiles, manage: manage[0], groups: [actions, session] };
   return phone ? <ProfileSheet {...props} /> : <ProfilePopover {...props} />;
 }
 
@@ -126,6 +134,7 @@ type MenuProps = {
   name: string;
   avatar: string;
   me: Me | null;
+  meLocked?: boolean;
   email?: string;
   /** Under the name when there's no account: why. */
   status?: string;
@@ -201,7 +210,7 @@ function JoinView({ me, done }: { me: Me; done: () => void }) {
  * click each), then the rest as rows. Friends and Join open as views inside it, with a Back (and Escape) to
  * the list; its height follows the view. Any other choice closes it as it runs.
  */
-function ProfilePopover({ name, avatar, me, email, status, profiles, manage, groups }: MenuProps) {
+function ProfilePopover({ name, avatar, me, meLocked, email, status, profiles, manage, groups }: MenuProps) {
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me);
   const pick = (c: Choice) => {
     // A view's choice keeps the menu open through its surface; the rest close it.
@@ -236,7 +245,7 @@ function ProfilePopover({ name, avatar, me, email, status, profiles, manage, gro
             onKeyDown={view === "list" ? arrowKeys : backOnEscape(back)}
           >
             {view === "list" ? (
-              <ProfilePopList name={name} avatar={avatar} me={me} email={email} status={status} profiles={profiles} manage={manage} groups={groups} pick={pick} />
+              <ProfilePopList name={name} avatar={avatar} me={me} meLocked={meLocked} email={email} status={status} profiles={profiles} manage={manage} groups={groups} pick={pick} />
             ) : (
               <>
                 <div className="profile-pop-title">
@@ -273,7 +282,7 @@ function arrowKeys(e: KeyboardEvent<HTMLElement>) {
   items[next].focus();
 }
 
-function ProfilePopList({ name, avatar, me, email, status, profiles, manage, groups, pick }: MenuProps & { pick: (c: Choice) => void }) {
+function ProfilePopList({ name, avatar, me, meLocked, email, status, profiles, manage, groups, pick }: MenuProps & { pick: (c: Choice) => void }) {
   return (
     <>
       <div className="profile-menu-head">
@@ -286,12 +295,26 @@ function ProfilePopList({ name, avatar, me, email, status, profiles, manage, gro
       {me && (
         <div className="profile-pop-profiles" role="group" aria-label="Profiles">
           <span className="profile-pop-profile" aria-current="true">
-            <Avatar id={avatar} />
+            <span className="profile-pop-face">
+              <Avatar id={avatar} />
+              {meLocked && (
+                <span className="profile-pop-lock" aria-hidden>
+                  <Lock size={10} />
+                </span>
+              )}
+            </span>
             <span>{name}</span>
           </span>
           {profiles.map((c) => (
             <button key={c.id} className="profile-pop-profile pressable" aria-label={`Switch to ${c.label}`} onClick={() => pick(c)}>
-              {c.icon}
+              <span className="profile-pop-face">
+                {c.icon}
+                {c.locked && (
+                  <span className="profile-pop-lock" aria-hidden>
+                    <Lock size={10} />
+                  </span>
+                )}
+              </span>
               <span>{c.label}</span>
             </button>
           ))}
@@ -333,7 +356,7 @@ function ProfilePopList({ name, avatar, me, email, status, profiles, manage, gro
  * as views inside it, with a Back to the list; the sheet is the screen's full height throughout, as Netflix's account
  * sheet is, so a view comes in without the sheet changing size under it. Any other choice closes it as it runs.
  */
-function ProfileSheet({ name, avatar, me, email, status, profiles, manage, groups }: MenuProps) {
+function ProfileSheet({ name, avatar, me, meLocked, email, status, profiles, manage, groups }: MenuProps) {
   const settingsOpen = useSettingsOverlay().open;
   // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
   const [managing, setManaging] = useState(false);
@@ -417,6 +440,7 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
             <ProfileList
               name={name}
               avatar={avatar}
+              meLocked={meLocked}
               email={email ?? status}
               profiles={profiles}
               manage={manage}
@@ -439,6 +463,7 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
 function ProfileList({
   name,
   avatar,
+  meLocked,
   email,
   profiles,
   manage,
@@ -451,6 +476,7 @@ function ProfileList({
 }: {
   name: string;
   avatar: string;
+  meLocked?: boolean;
   email?: string;
   profiles: Choice[];
   manage?: Choice;
@@ -468,6 +494,11 @@ function ProfileList({
       <Me className="profile-sheet-me" {...(Me === "button" ? { type: "button" as const, onClick: () => onEdit(meId!), "aria-label": `Edit ${name}` } : {})}>
         <span className="profile-sheet-face">
           <Avatar id={avatar} />
+          {meLocked && (
+            <span className="profile-sheet-lock" aria-hidden>
+              <Lock size={12} />
+            </span>
+          )}
           <EditMark />
         </span>
         <strong>{name}</strong>
@@ -484,6 +515,11 @@ function ProfileList({
             >
               <span className="profile-sheet-face">
                 {c.icon}
+                {c.locked && (
+                  <span className="profile-sheet-lock" aria-hidden>
+                    <Lock size={11} />
+                  </span>
+                )}
                 <EditMark />
               </span>
               <span>{c.label}</span>

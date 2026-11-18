@@ -225,8 +225,8 @@ function nearestOf(
 ): HTMLElement | null {
   const a = boxOf(from);
   const horizontal = dir === "left" || dir === "right";
-  // At the end of a shelf (or the navbar), left/right stops — it never jumps to another row.
-  const inRail = horizontal && !!from.closest("[data-nav-rail], [data-nav-lock-x]");
+  // At the end of a shelf (or the navbar, or a cast strip), left/right stops — it never jumps to another row.
+  const inRail = horizontal && !!from.closest("[data-nav-rail], [data-nav-lock-x], .tv .people");
   const fromRow = inRail ? from.closest("[data-nav-row]") : null;
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
@@ -393,7 +393,7 @@ type RevealStep = { box: HTMLElement; axis: "x" | "y"; to: number; max: number }
 
 function planReveal(el: HTMLElement): RevealStep[] {
   const steps: RevealStep[] = [];
-  const rail = el.closest<HTMLElement>("[data-nav-rail]");
+  const rail = el.closest<HTMLElement>("[data-nav-rail], .tv .people");
   if (rail) {
     const card = [...rail.children].find((c) => c.contains(el)) as HTMLElement | undefined;
     const start = parseFloat(getComputedStyle(rail).scrollPaddingInlineStart) || 0;

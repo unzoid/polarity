@@ -161,12 +161,20 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
 
   const rawArt = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
   const art = { ...rawArt, background: detailBackdropUrl(rawArt.background, phone) ?? rawArt.background };
+  const coverFallbacks = [
+    meta?.poster,
+    first?.coverImage.extraLarge,
+    first?.coverImage.large,
+    shown.coverImage.extraLarge,
+    shown.coverImage.large,
+  ].filter((u): u is string => !!u);
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };
   const backdrop = (
     <DetailArt src={art.background}>
       <Img src={art.background} alt="" loading="eager" fetchPriority="high" className="detail-bg-sharp" />
       {trailer.node}
-      <Img src={art.background} alt="" loading="eager" className="detail-bg-blur" />
+      {/* No backdrop (or it fails): the cover, blurred, rather than plain black. */}
+      <Img src={art.background} fallbacks={coverFallbacks} alt="" loading="eager" className="detail-bg-blur" />
       <div className="detail-bg-scrim" />
     </DetailArt>
   );
@@ -198,13 +206,14 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
             logos={art.logos}
             logoPending={art.pending}
             background={art.background}
+            fallbacks={coverFallbacks}
             name={title(base.card.title)}
             onImdb={onImdb}
             trailer={trailer}
             franchise={heroFranchise}
           />
         ) : (
-          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} logoPending={art.pending} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} logoPending={art.pending} background={art.background} fallbacks={coverFallbacks} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
         )}
         {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} />}
       </div>
@@ -232,7 +241,7 @@ function Body({ anime, franchise, switching }: { anime: Anime; franchise?: Franc
         </section>
       )}
       <AnimeListPanels key={`list-${anime.id}`} anime={anime} />
-      {anime.characters.edges.length > 0 && <AnimeCharacters anime={anime} />}
+      {(anime.characters.edges.length > 0 || anime.staff.edges.length > 0) && <AnimeCharacters anime={anime} />}
       <h2 className="t-title2 anime-section-title">Details</h2>
       <AnimeDetails anime={anime} />
       {hasRelated && <AnimeRelated anime={anime} franchise={franchise} />}

@@ -15,8 +15,9 @@
   --t3-border: rgb(var(--ink) / 0.08);
   --t3-input: rgb(var(--ink) / 0.11);
   --t3-hover: var(--fill-1);
-  --t3-selected: var(--fill-2);
+  --t3-selected: var(--fill-3);
   --t3-primary: var(--accent);
+  --t3-danger: var(--danger);
   --t3-icon: color-mix(in srgb, var(--t3-muted-fg) 85%, var(--t3-card));
   --t3-ease: var(--ease-out);
 
@@ -315,10 +316,12 @@
 }
 .t3s-nav-item[data-active="true"] {
   background: var(--t3-selected);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.06);
   color: var(--t3-fg);
+  font-weight: 600;
 }
 .t3s-nav-item[data-active="true"] > svg {
-  color: var(--t3-fg);
+  color: var(--t3-primary);
 }
 @media (hover: hover) and (pointer: fine) {
   .t3s-nav-item:hover > svg {
@@ -442,7 +445,16 @@
   padding: 2.25rem 1.5rem 3.5rem;
 }
 /* Into a page's section and back out (PAGE_SECTIONS, data-move): the new view comes a little way in from the
-   side it lies on, deeper to the right, as a phone's Settings does. Other page changes show at once. */
+   side it lies on, deeper to the right, as a phone's Settings does. Desktop page switches settle gently. */
+:root:not([data-form="phone"]) .t3s-page:not([data-move]) {
+  animation: t3s-page-in 140ms var(--ease-out);
+}
+@keyframes t3s-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
 .t3s-page[data-move] {
   transition:
     opacity var(--dur-base) var(--ease-out),
@@ -460,6 +472,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  :root:not([data-form="phone"]) .t3s-page:not([data-move]) {
+    animation: none;
+  }
   .t3s-page[data-move] {
     transition: opacity var(--dur-fast) var(--ease-out);
   }
@@ -492,6 +507,7 @@
 :root[data-scheme="light"] .t3s {
   --t3-bg: var(--tone-1);
   --t3-card: var(--tone-sunk);
+  --t3-danger: color-mix(in srgb, var(--danger) 72%, #7a0000);
 }
 :root[data-scheme="light"] .t3s .settings-card {
   background: var(--t3-card);
@@ -580,6 +596,9 @@
 }
 .t3s .settings-footer {
   color: var(--t3-muted-fg);
+}
+.t3s .settings-error {
+  color: var(--t3-danger);
 }
 
 /* Controls, after T3 Code's (coss ui) outline button and select trigger: a
@@ -676,11 +695,11 @@
   }
 }
 .t3s .btn-danger {
-  color: #f87171;
+  color: var(--t3-danger);
 }
 @media (hover: hover) and (pointer: fine) {
   .t3s .btn-danger:not(:disabled):hover {
-    background: rgb(248 113 113 / 0.08);
+    background: color-mix(in srgb, var(--t3-danger) 10%, transparent);
   }
 }
 
@@ -1090,7 +1109,7 @@
    inside, and its cards take the profile sheet's look. */
 :root[data-form="phone"] .t3s[data-embedded] {
   --t3-bg: transparent;
-  --t3-card: rgb(255 255 255 / 0.05);
+  --t3-card: rgb(var(--ink) / 0.05);
   position: relative;
   z-index: auto;
   inset: auto;
@@ -1128,5 +1147,113 @@
 @media (prefers-reduced-motion: reduce) {
   .t3s .switch::after {
     transition: none;
+  }
+}
+
+/* --- Desktop and tablet: the settings window in the player's panel style. A flat window on the theme's
+       near-black with a clear edge and near-square corners, no glass; the sidebar and the page one surface,
+       set apart by a hairline. Rows don't sit on pills: text lights up under the pointer, the page you're on
+       is in full ink on a faint fill, and the keyboard's place gets the accent ring. */
+:root:not([data-form="phone"], [data-tv="true"]) .t3s {
+  border: 1px solid rgb(var(--ink) / 0.2);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tone-sunk) 98%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.5);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-sidebar {
+  padding: 0.75rem 0.5rem;
+  border-right: 1px solid rgb(var(--ink) / 0.1);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-main {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-search {
+  border: 1px solid rgb(var(--ink) / 0.14);
+  border-radius: 2px;
+  background: transparent;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-search:is(:hover, :focus-within) {
+  background: transparent;
+  border-color: rgb(var(--ink) / 0.28);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-search .search-field-kbd {
+  border-radius: 2px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-group-heading {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(var(--ink-text) / 0.45);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-nav-item {
+  border-radius: 2px;
+  color: rgb(var(--ink-text) / 0.62);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-nav-item:is(:hover, :active) {
+  background: transparent;
+  color: var(--text);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-nav-item[data-active="true"] {
+  background: rgb(var(--ink) / 0.07);
+  box-shadow: none;
+  color: var(--text);
+  font-weight: 600;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-nav-item[data-active="true"] > svg {
+  color: var(--accent-hi);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-result {
+  border-radius: 2px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-result[aria-selected="true"] {
+  background: transparent;
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) :is(.t3s-ghost, .t3s-icon-btn) {
+  border-radius: 2px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) :is(.t3s-ghost:not(:disabled), .t3s-icon-btn):hover {
+  background: transparent;
+  color: var(--t3-fg);
+}
+:root:not([data-form="phone"], [data-tv="true"]) :is(.t3s-nav-item, .t3s-icon-btn, .t3s-ghost):focus-visible,
+:root:not([data-form="phone"], [data-tv="true"]) .t3s-search:focus-within {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-group-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-card {
+  border: 1px solid rgb(var(--ink) / 0.14);
+  border-radius: 4px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-card > :first-child {
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-card > :last-child {
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-card > * + * {
+  border-top-color: rgb(var(--ink) / 0.07);
+}
+:root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-row-button .settings-row-title {
+  transition: color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-row-button:hover {
+    background: rgb(var(--ink) / 0.03);
+  }
+  :root:not([data-form="phone"], [data-tv="true"]) .t3s .settings-row-button:hover :is(.settings-chevron, .settings-row-icon) {
+    color: var(--t3-fg);
   }
 }

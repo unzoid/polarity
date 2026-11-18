@@ -43,7 +43,8 @@ import {
 import { episodeCode, formatBytes } from "../../lib/format";
 import { useProgressOf } from "../../lib/net";
 import { useNavigation } from "../../lib/router";
-import { useFormFactor } from "../../lib/ui";
+import { useFormFactor, usePresence } from "../../lib/ui";
+import { useTvMode } from "../../tv/tvMode";
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 const seasonName = (s: number) => (s === 0 ? "Specials" : `Season ${s}`);
@@ -69,10 +70,13 @@ export function DownloadsPage() {
   // A phone's page is the list and little else: no Movies / Shows / In Progress switch (what's coming down has
   // its own section at the top already), so everything shows whatever this device's last choice was.
   const phone = useFormFactor().form === "phone";
+  const tv = useTvMode();
   const [stored, setView] = useState<DownloadsView>(readDownloadsView);
   const view = useMemo((): DownloadsView => (phone ? { ...stored, filter: "all" } : stored), [stored, phone]);
   const [query, setQuery] = useState("");
+  const activeQuery = tv ? "" : query;
   const [selected, setSelected] = useState<Set<string> | null>(null);
+  const selectBar = usePresence(selected, 220);
   const update = (patch: Partial<DownloadsView>) =>
     setView((v) => {
       const next = { ...v, ...patch };
@@ -110,15 +114,15 @@ export function DownloadsPage() {
   const doneKey = done.map((d) => `${d.id}:${bytesOnDisk(d)}`).join("|");
   const finished = useMemo(() => groupDownloads(done, watched, lastWatched), [doneKey, watched, lastWatched]); // done read through doneKey
   const shownTitles = useMemo(
-    () => (view.filter === "active" ? [] : sortTitles(filterTitles(finished, view.filter, query), view.sort)),
-    [finished, view.filter, view.sort, query],
+    () => (view.filter === "active" ? [] : sortTitles(filterTitles(finished, view.filter, activeQuery), view.sort)),
+    [finished, view.filter, view.sort, activeQuery],
   );
   const shownActive = useMemo(
     () =>
       groupDownloads(active, watched, lastWatched)
-        .filter((t) => filterTitles([t], view.filter, query).length)
+        .filter((t) => filterTitles([t], view.filter, activeQuery).length)
         .flatMap((t) => t.items),
-    [active, watched, lastWatched, view.filter, query],
+    [active, watched, lastWatched, view.filter, activeQuery],
   );
 
   // Forget open groups and selected rows that are gone (deleted here, or elsewhere).
@@ -155,10 +159,23 @@ export function DownloadsPage() {
             onChange={(filter) => update({ filter })}
           />
         )}
-        {finished.length + new Set(active.map((d) => d.metaId)).size > SEARCH_FROM && (
+        {!tv && finished.length + new Set(active.map((d) => d.metaId)).size > SEARCH_FROM && (
           <SearchField look="pill" label="Search downloads" placeholder="Search" value={query} onChange={setQuery} className="downloads-search" />
         )}
-        <Dropdown label="Sort by" value={view.sort} onChange={(sort) => update({ sort })} options={DOWNLOAD_SORTS} />
+        {tv ? (
+          <Button
+            className="downloads-sort-cycle"
+            aria-label={`Sort by: ${DOWNLOAD_SORTS.find((s) => s.value === view.sort)?.label ?? "Recently Downloaded"}`}
+            onClick={() => {
+              const idx = DOWNLOAD_SORTS.findIndex((s) => s.value === view.sort);
+              update({ sort: DOWNLOAD_SORTS[(idx + 1) % DOWNLOAD_SORTS.length].value });
+            }}
+          >
+            Sort: {DOWNLOAD_SORTS.find((s) => s.value === view.sort)?.label ?? "Recently Downloaded"}
+          </Button>
+        ) : (
+          <Dropdown label="Sort by" value={view.sort} onChange={(sort) => update({ sort })} options={DOWNLOAD_SORTS} />
+        )}
         <span className="downloads-toolbar-gap" />
         {!selected && allWatched.length > 0 && <BulkDelete ids={allWatched} label={`Delete All Watched (${allWatched.length})`} />}
         <Button
@@ -184,19 +201,33 @@ export function DownloadsPage() {
         </section>
       )}
       {!shownActive.length && !shownTitles.length && (
-        <EmptyState>{view.filter === "active" && !query ? "Nothing is downloading." : "No downloads match."}</EmptyState>
+        <EmptyState>{view.filter === "active" && !activeQuery ? "Nothing is downloading." : "No downloads match."}</EmptyState>
       )}
 
       {/* While selecting, the actions float over the list at the bottom of the window, as in Photos. */}
-      {selected && (
-        <div className="downloads-selectbar" role="region" aria-label="Selection" data-nav-row>
-          <Button onClick={() => setSelected(selected.size === shownIds.length ? new Set() : new Set(shownIds))}>
-            {selected.size === shownIds.length && shownIds.length ? "Select None" : "Select All"}
+      {selectBar.shown && (
+        <div
+          className="downloads-selectbar"
+          role="region"
+          aria-label="Selection"
+          data-leaving={selectBar.leaving || undefined}
+          data-nav-row={!selectBar.leaving || undefined}
+        >
+          <Button
+            disabled={selectBar.leaving}
+            onClick={() => setSelected(selectBar.shown!.size === shownIds.length ? new Set() : new Set(shownIds))}
+          >
+            {selectBar.shown.size === shownIds.length && shownIds.length ? "Select None" : "Select All"}
           </Button>
           <span className="downloads-selectbar-count t-callout tabular" aria-live="polite">
-            {selected.size ? `${selected.size} selected` : "Select downloads"}
+            {selectBar.shown.size ? `${selectBar.shown.size} selected` : "Select downloads"}
           </span>
-          <BulkDelete ids={[...selected]} label="Delete" disabled={!selected.size} onDone={() => setSelected(new Set())} />
+          <BulkDelete
+            ids={[...selectBar.shown]}
+            label="Delete"
+            disabled={selectBar.leaving || !selectBar.shown.size}
+            onDone={() => setSelected(new Set())}
+          />
         </div>
       )}
     </div>
@@ -487,12 +518,20 @@ function DownloadRow({
   const play = usePlayDownload();
   const name = series && d.episode != null ? `${d.episode}. ${d.episodeTitle ?? `Episode ${d.episode}`}` : d.name;
   const art = poster ? d.poster : (d.thumbnail ?? d.background);
+  const selecting = selection !== null;
+  const picked = selection?.has(d.id) ?? false;
   return (
     <li className="download-row" data-state={d.state} data-watched={watched || undefined} data-leaving={leaving || undefined}>
       <div className="download-row-fold">
         <div className="download-row-inner" data-nav-row>
           {selection && <SelectBox ids={[d.id]} selection={selection} label={`Select ${series && showTitle ? `${d.name} ` : ""}${name}`} />}
-          <button className="download-row-main" disabled={d.state !== "done"} onClick={() => play(d)}>
+          <button
+            type="button"
+            className="download-row-main"
+            disabled={!selecting && d.state !== "done"}
+            aria-pressed={selecting ? picked : undefined}
+            onClick={() => (selection ? selection.set([d.id], !picked) : play(d))}
+          >
             <span className={poster ? "download-title-poster" : "download-row-still"}>
               {art ? <Img src={art} alt="" /> : <StillPlaceholder />}
               {d.state === "done" && (

@@ -55,11 +55,11 @@ export default defineConfig({
             },
             {
               name: "app-lib",
-              test: /[\\/]src[\\/]lib[\\/](?!(account[\\/](supabase|devDatabase)|settings[\\/](schema|searchIndex)|platform[\\/]fake))/,
+              test: /[\\/]src[\\/]lib[\\/]((api|contract|errors|feedback|format|navTabs|parse|router|types|updateFeed|updater)\.tsx?$|net[\\/]|platform[\\/][^\\/]+\.ts$|theme[\\/]|ui[\\/]|settings[\\/](index|prefs|overlay|keybinds|fonts|useSetting|cropMode|pages)\.ts$|account[\\/](index|AccountProvider|avatars|backend|accountFull|keyedLink|localSecrets|pin|pinTries|profileGuard|profileLock|profileRules|secrets|secretsNotice|settingsDoc|settingsSync|spacePush|sync|titleDisplay|tvSignIn|tvSignInLink|twoStep|unlock)\.tsx?$|catalog[\\/](index|shelves|browseFilter|listable|viewingLimit|ageRating|addonCatalogs|addonRows|genres|searchQuery)\.ts$|library[\\/](index|hiddenTitles|watched|identity|libraryEvents|playlists|playlistCodec|playlistChecklist|downloads|autoDownloads|keepDownloaded|episodes|episodeState)\.ts$|localFiles[\\/]|deepLink[\\/]|notifications[\\/])/,
             },
             {
               name: "app-ui",
-              test: /[\\/]src[\\/](components[\\/](?!(SettingsOverlay|avatarArt|player|downloads|anime[\\/](AnimeCharacters|AnimeDetails|AnimeEpisodes|AnimeHero|AnimeListPanel|AnimeRelated|FilmCard)|title[\\/](EpisodeCard|EpisodeOrderPicker|EpisodeShelf|ExtrasShelf|NameList|SeasonActions|SeasonPicker|SimklPanel|SourcePicker|TitleActions|TitleDetails)|friends[\\/]FriendsPanel|party[\\/]PartyMenu|profileLock[\\/](PinFlow|ProfileLockRows|LimitFromProfile|AccountCheck)|settings|ProfileEditSheet|StillPlaceholder|SliderField|StreamList|SourceFilters|SourceInfo|Segmented|RatingRing|BackdropTrailer))|tv[\\/](tvMode|gamepad|TvChrome)|screens[\\/](Home\.tsx|lazyScreens\.ts|account[\\/]profileHandoff))/,
+              test: /[\\/]src[\\/](components[\\/](ui[\\/](Button|Chip|EmptyState|ErrorBoundary|Menu|Popover|Skeleton|Switch|TextField|Toast)\.tsx$|title[\\/](Card|HeroSkeleton|LibraryButton|PlaylistChecklist|Shelf|TitleHeading)\.tsx$|anime[\\/]SeriesPickToast\.tsx$|profileLock[\\/](PinHost\.tsx|useGuard\.ts)$|(AccountFullToast|Avatar|BackButton|BusyLabel|CardMenu|ConfirmDeleteButton|ContinueEditRow|DeepLinks|EdgeBlur|HeroGlow|HiddenTitleToast|ImdbBadge|Img|LockedKeysToast|NativeBack|NativeTabs|NavBar|OpenFiles|PlayerLayer|PosterCard|ProfileMenu|SecretsSyncToast|Sheet|SignOutDialog|Spinner|StoreProblemToast|SwapIcon|TitleLogo|Trailer|Updates|ViewStack|WindowControls|icons|profileSheetHost)\.tsx?$)|tv[\\/](tvMode|gamepad|TvChrome)\.tsx?$|screens[\\/](Home\.tsx|lazyScreens\.ts|account[\\/]profileHandoff\.ts)$)/,
             },
           ],
         },

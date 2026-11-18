@@ -45,10 +45,13 @@
   border-radius: var(--r-sm);
   background: var(--fill-1);
   color: var(--text-3);
-  transition: border-color var(--dur-fast) var(--ease-std);
+  transition:
+    border-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
 }
 .search-field-box:focus-within {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .search-field-box input {
   height: 100%;
@@ -61,7 +64,7 @@
   color: var(--text-3);
 }
 
-/* A quiet pill, the same as the pills beside it. */
+/* A quiet pill, the same as the pills beside it; accent ring while typing. */
 .search-field-pill {
   display: inline-flex;
   gap: 0.5rem;
@@ -71,9 +74,13 @@
   border-radius: var(--r-pill);
   background: var(--fill-1);
   color: var(--text-3);
+  transition:
+    border-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
 }
 .search-field-pill:focus-within {
-  border-color: var(--hairline-strong);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .search-field-pill input {
   font-size: var(--fs-sm);
@@ -88,9 +95,14 @@
   background: var(--fill-2);
   box-shadow: inset 0 0 0 1px var(--hairline);
   color: var(--text-3);
+  transition:
+    box-shadow var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std);
 }
 .search-field-mini:focus-within {
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--text-2);
 }
 .search-field-mini input {
@@ -151,11 +163,19 @@
   backdrop-filter: var(--blur-control);
   box-shadow: inset 0 0 0 1px var(--glass-edge);
   clip-path: inset(0 0 0 calc(100% - var(--search-h)) round calc(var(--search-h) / 2));
-  transition: clip-path var(--dur-base) var(--ease-out);
+  transition:
+    clip-path var(--dur-base) var(--ease-out),
+    margin-left var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-std);
 }
 .expanding-search[data-open="true"] {
   margin-left: 0;
   clip-path: inset(0 round calc(var(--search-h) / 2));
+}
+.expanding-search[data-open="true"]:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .expanding-search-icon {
   position: absolute;
@@ -221,10 +241,10 @@
   color: var(--text-2);
 }
 @media (prefers-reduced-motion: reduce) {
-  .expanding-search {
-    transition: none;
+  :root:not([data-reduce-motion="off"]) .expanding-search {
+    transition: box-shadow var(--dur-fast) var(--ease-std);
   }
-  .expanding-search-icon {
+  :root:not([data-reduce-motion="off"]) .expanding-search-icon {
     transition-property: background-color;
   }
 }

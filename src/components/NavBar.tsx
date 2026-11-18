@@ -16,7 +16,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyn
 import { createPortal } from "react-dom";
 import { rootTab, useRouter, type TabRoute } from "../lib/router";
 import { usePrefs, useSettingsOverlay } from "../lib/settings";
-import { dismissDepth, lazyNamed, onDismissDepth, useFormFactor, useHandFocus } from "../lib/ui";
+import { dismissDepth, lazyNamed, onDismissDepth, useFormFactor, useHandFocus, usePresence } from "../lib/ui";
 import { MOD_LABEL, nativeTabsAvailable } from "../lib/platform";
 import { useSettings } from "../lib/net";
 import { WindowControls } from "./WindowControls";
@@ -76,7 +76,7 @@ export function NavBar() {
     // Never further than the stack goes, whatever number comes over the bridge.
     for (let i = 0; i < Math.min(steps, stack.length - 1); i++) back();
   });
-  const scrolled = useActivePageScrolled(stack.length);
+  const scrolled = useActivePageScrolled(stack[stack.length - 1]?.key);
   const { data: settings } = useSettings();
   const { animeEnabled, showTvButton } = usePrefs();
   const showCalendar = !!settings?.showCalendar;
@@ -186,43 +186,96 @@ function NavParty() {
 function NavLinks({ links, isActive, open }: { links: NavLink[]; isActive: (r: TabRoute) => boolean; open: (r: TabRoute) => void }) {
   const nav = useRef<HTMLElement>(null);
   const more = useRef<HTMLButtonElement>(null);
+  const pill = useRef<HTMLSpanElement>(null);
+  const hadPill = useRef(false);
+  const mousePressed = useRef(false);
   const [fit, setFit] = useState(links.length);
+  const activeIndex = links.findIndex((l) => isActive(l.route));
+
+  const syncPill = (instant: boolean) => {
+    const el = nav.current;
+    const bar = pill.current;
+    if (!el || !bar) return;
+    const current = el.querySelector<HTMLElement>(':scope > .navbar-link[aria-current="page"]:not([data-overflow])');
+    if (!current || current.offsetWidth <= 0) {
+      delete bar.dataset.shown;
+      hadPill.current = false;
+      return;
+    }
+    const snap = instant || !hadPill.current;
+    if (snap) bar.dataset.instant = "true";
+    else delete bar.dataset.instant;
+    bar.style.transform = `translate3d(${current.offsetLeft}px, ${current.offsetTop}px, 0)`;
+    bar.style.width = `${current.offsetWidth}px`;
+    bar.style.height = `${current.offsetHeight}px`;
+    bar.dataset.shown = "true";
+    if (snap) void bar.offsetWidth;
+    hadPill.current = true;
+  };
 
   useLayoutEffect(() => {
     const el = nav.current;
     if (!el) return;
+    let live = true;
     const measure = () => {
       const tabs = [...el.querySelectorAll<HTMLElement>(":scope > .navbar-link:not(.navbar-more)")];
       const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
       const widths = tabs.map((t) => t.offsetWidth + gap);
       const room = el.clientWidth;
-      if (widths.reduce((a, b) => a + b, 0) - gap <= room) return setFit(tabs.length);
+      if (widths.reduce((a, b) => a + b, 0) - gap <= room) {
+        setFit(tabs.length);
+        syncPill(true);
+        return;
+      }
       let used = (more.current?.offsetWidth ?? 90) + gap;
       let n = 0;
       while (n < widths.length && used + widths[n] <= room) used += widths[n++];
       setFit(n);
+      syncPill(true);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    return () => {
+      live = false;
+      ro.disconnect();
+    };
   }, [links]);
+
+  useLayoutEffect(() => {
+    syncPill(false);
+  }, [activeIndex, fit, links]);
 
   const rest = links.slice(fit);
   return (
     <nav ref={nav} className="navbar-links" aria-label="Primary" data-tauri-drag-region>
+      <span ref={pill} className="navbar-active-pill" aria-hidden="true" />
       {links.map((l, i) => (
         <button
           key={l.label}
           className="navbar-link"
+          data-label={l.label}
           data-overflow={i >= fit || undefined}
           aria-hidden={i >= fit || undefined}
           tabIndex={i >= fit ? -1 : undefined}
           aria-current={isActive(l.route) ? "page" : undefined}
           onPointerEnter={() => preloadRoute(l.route)}
           onFocus={() => preloadRoute(l.route)}
-          onPointerDown={(e) => e.button === 0 && open(l.route)} // respond on press
-          onClick={(e) => e.detail === 0 && open(l.route)} // keyboard and screen readers (detail 0)
+          onPointerDown={(e) => {
+            mousePressed.current = e.pointerType === "mouse" && e.button === 0;
+            if (mousePressed.current) open(l.route);
+          }}
+          onClick={(e) => {
+            if (e.detail > 0 && mousePressed.current) {
+              mousePressed.current = false;
+              return;
+            }
+            mousePressed.current = false;
+            open(l.route);
+          }}
         >
           {l.label}
         </button>
@@ -281,7 +334,8 @@ function useSearchTab(phone: boolean) {
 function SearchBox() {
   const { stack, current, navigate, back, tab } = useRouter();
   const text = useSearchText();
-  const { searchSuggestions } = usePrefs();
+  const { animeEnabled, searchSuggestions } = usePrefs();
+  const recent = useRecentSearches().slice(0, RECENT_SHOWN);
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const onResults = current.name === "search";
@@ -292,6 +346,15 @@ function SearchBox() {
   const [open, setOpen] = useState(resume);
   // Opened from the keyboard (Ctrl K, "/"): appear instantly, no transition.
   const [instant, setInstant] = useState(resume);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const suggestShown = open && !text && searchSuggestions;
+  const suggest = usePresence(suggestShown ? true : null, SUGGEST_OUT_MS);
+  const suggestItems = useMemo(() => [...recent, ...SEARCH_GENRES, ...(animeEnabled ? SEARCH_ANIME : [])], [recent, animeEnabled]);
+
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [suggestShown, recent.length, animeEnabled]);
+
   useEffect(() => {
     if (resume) return;
     setSearchText("");
@@ -368,6 +431,23 @@ function SearchBox() {
         onChange={(e) => change(e.target.value)}
         onBlur={() => !text && setOpen(false)}
         onKeyDown={(e) => {
+          if (suggestShown && suggestItems.length > 0) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActiveIndex((i) => (i + 1) % suggestItems.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActiveIndex((i) => (i <= 0 ? suggestItems.length - 1 : i - 1));
+              return;
+            }
+            if (e.key === "Enter" && activeIndex >= 0 && activeIndex < suggestItems.length) {
+              e.preventDefault();
+              change(suggestItems[activeIndex]);
+              return;
+            }
+          }
           if (e.key === "Enter") return addRecentSearch(text);
           if (e.key !== "Escape") return;
           e.stopPropagation();
@@ -379,7 +459,16 @@ function SearchBox() {
         aria-label="Search"
         tabIndex={open ? 0 : -1}
       />
-      {open && !text && searchSuggestions && <SearchSuggestions pick={change} under={box.current} />}
+      {suggest.shown && (
+        <SearchSuggestions
+          pick={change}
+          under={box.current}
+          leaving={suggest.leaving}
+          activeIndex={activeIndex}
+          recent={recent}
+          animeEnabled={animeEnabled}
+        />
+      )}
       {open && text && (
         <button className="navbar-search-clear" aria-label="Clear search" onMouseDown={(e) => e.preventDefault()} onClick={() => change("")}>
           <Close size={16} strokeWidth={2.25} />
@@ -391,25 +480,60 @@ function SearchBox() {
 
 /** The recent searches shown above the genres. */
 const RECENT_SHOWN = 3;
+const SUGGEST_OUT_MS = 150;
 
 /** The suggestions panel's width, and the least room it keeps from the window's edges. */
 const SUGGEST_W = 440;
 const SUGGEST_MARGIN = 16;
 
-/** Under the empty field: your last searches, then genres to search by, one click from their titles. */
-function SearchSuggestions({ pick, under }: { pick: (text: string) => void; under: HTMLElement | null }) {
-  const { animeEnabled } = usePrefs();
-  const recent = useRecentSearches().slice(0, RECENT_SHOWN);
-  if (!under) return null;
-  // The field clips everything inside it (its open/close sweep), so this sits on the body: under
-  // the field's right edge, moved in from the left edge where the window is narrower than it
-  // (a phone: the panel ran off the screen's left side).
+function suggestPosition(under: HTMLElement) {
   const r = under.getBoundingClientRect();
   const width = Math.min(SUGGEST_W, window.innerWidth - 2 * SUGGEST_MARGIN);
-  const right = Math.min(window.innerWidth - r.right, window.innerWidth - SUGGEST_MARGIN - width);
-  const chips = (list: string[]) =>
-    list.map((g) => (
-      <Chip key={g} tabIndex={-1} onClick={() => pick(g)}>
+  const right = Math.max(SUGGEST_MARGIN, Math.min(window.innerWidth - r.right, window.innerWidth - SUGGEST_MARGIN - width));
+  return { top: r.bottom + 8, right, width };
+}
+
+/** Under the empty field: your last searches, then genres to search by, one click or arrow-key away. */
+function SearchSuggestions({
+  pick,
+  under,
+  leaving,
+  activeIndex,
+  recent,
+  animeEnabled,
+}: {
+  pick: (text: string) => void;
+  under: HTMLElement | null;
+  leaving: boolean;
+  activeIndex: number;
+  recent: string[];
+  animeEnabled: boolean;
+}) {
+  const [pos, setPos] = useState(() => (under ? suggestPosition(under) : null));
+
+  useLayoutEffect(() => {
+    if (!under) return;
+    const measure = () => {
+      const next = suggestPosition(under);
+      setPos((prev) => (prev && prev.top === next.top && prev.right === next.right && prev.width === next.width ? prev : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(under);
+    if (under.parentElement) ro.observe(under.parentElement);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [under]);
+
+  if (!under || !pos) return null;
+  const genreOffset = recent.length;
+  const animeOffset = genreOffset + SEARCH_GENRES.length;
+  const chips = (list: string[], offset: number) =>
+    list.map((g, i) => (
+      <Chip key={g} tabIndex={-1} data-highlighted={activeIndex === offset + i ? "true" : undefined} onClick={() => pick(g)}>
         {g}
       </Chip>
     ));
@@ -417,7 +541,10 @@ function SearchSuggestions({ pick, under }: { pick: (text: string) => void; unde
     // Keeps focus in the field, so it doesn't blur (and close) on the way.
     <div
       className="search-suggest"
-      style={{ top: r.bottom + 8, right, width }}
+      data-leaving={leaving || undefined}
+      aria-hidden={leaving || undefined}
+      inert={leaving || undefined}
+      style={{ top: pos.top, right: pos.right, width: pos.width }}
       onMouseDown={(e) => e.preventDefault()}
     >
       {recent.length > 0 && (
@@ -429,8 +556,14 @@ function SearchSuggestions({ pick, under }: { pick: (text: string) => void; unde
             </button>
           </div>
           <div className="search-recent">
-            {recent.map((r) => (
-              <button key={r} className="search-recent-item" tabIndex={-1} onClick={() => pick(r)}>
+            {recent.map((r, i) => (
+              <button
+                key={r}
+                className="search-recent-item"
+                tabIndex={-1}
+                data-highlighted={activeIndex === i ? "true" : undefined}
+                onClick={() => pick(r)}
+              >
                 <Speed size={16} aria-hidden />
                 <span>{r}</span>
               </button>
@@ -439,11 +572,11 @@ function SearchSuggestions({ pick, under }: { pick: (text: string) => void; unde
         </>
       )}
       <span className="search-suggest-title">Genres</span>
-      <div className="genre-wrap">{chips(SEARCH_GENRES)}</div>
+      <div className="genre-wrap">{chips(SEARCH_GENRES, genreOffset)}</div>
       {animeEnabled && (
         <>
           <span className="search-suggest-title">Anime</span>
-          <div className="genre-wrap">{chips(SEARCH_ANIME)}</div>
+          <div className="genre-wrap">{chips(SEARCH_ANIME, animeOffset)}</div>
         </>
       )}
     </div>,
@@ -453,14 +586,20 @@ function SearchSuggestions({ pick, under }: { pick: (text: string) => void; unde
 
 /**
  * Whether the visible page is scrolled. Each page owns its scroller, so listen
- * for scroll anywhere (capture) and look at the active one; re-check when the
- * page stack changes, since going back restores a page at its old position.
+ * for scroll anywhere (capture) and look at the active one; re-check whenever
+ * `topKey` changes (plus 1 rAF for lazy `.scroll` mounts), so root tab switches
+ * and Back restore the right scrolled state immediately.
  */
-function useActivePageScrolled(depth: number) {
+function useActivePageScrolled(topKey: number | undefined) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
-    const initial = document.querySelector<HTMLElement>('.page[data-active="true"] .scroll');
-    setScrolled((initial?.scrollTop ?? 0) > SCROLLED_AT);
+    const read = () => {
+      const scroller = document.querySelector<HTMLElement>('.page[data-active="true"] .scroll');
+      const next = (scroller?.scrollTop ?? 0) > SCROLLED_AT;
+      setScrolled((prev) => (prev === next ? prev : next));
+    };
+    read();
+    const raf = requestAnimationFrame(read);
     const onScroll = (e: Event) => {
       const t = e.target;
       if (!(t instanceof HTMLElement) || !t.classList.contains("scroll")) return;
@@ -469,7 +608,10 @@ function useActivePageScrolled(depth: number) {
       setScrolled((prev) => (prev === next ? prev : next));
     };
     document.addEventListener("scroll", onScroll, { capture: true, passive: true });
-    return () => document.removeEventListener("scroll", onScroll, { capture: true });
-  }, [depth]);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("scroll", onScroll, { capture: true });
+    };
+  }, [topKey]);
   return scrolled;
 }

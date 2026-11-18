@@ -47,9 +47,25 @@ impl Turns {
         }
     }
 
-    /// mpv was stopped: it has nobody's file.
+    /// mpv was stopped: it has nobody's file, and no load in flight is wanted any more.
     pub fn stopped(&self) {
-        self.loaded.store(0, Ordering::SeqCst);
+        self.stopped_by(None);
+    }
+
+    /// `owner` stopped mpv: it has nobody's file, and if `owner` (or `None`, any caller) was the
+    /// player whose load was wanted, that load is no longer wanted either. A newer player's load
+    /// (`asked != o`) stays wanted.
+    pub fn stopped_by(&self, owner: Option<u64>) {
+        match owner {
+            Some(o) => {
+                let _ = self.loaded.compare_exchange(o, 0, Ordering::SeqCst, Ordering::SeqCst);
+                let _ = self.asked.compare_exchange(o, 0, Ordering::SeqCst, Ordering::SeqCst);
+            }
+            None => {
+                self.loaded.store(0, Ordering::SeqCst);
+                self.asked.store(0, Ordering::SeqCst);
+            }
+        }
     }
 }
 
@@ -90,9 +106,25 @@ mod tests {
         t.opened(Some(1));
         t.ask(Some(2));
         assert!(t.may_stop(Some(1)));
-        t.stopped();
+        t.stopped_by(Some(1));
+        assert!(t.wanted(Some(2)));
         t.opened(Some(2));
         assert!(!t.may_stop(Some(1)));
+    }
+
+    #[test]
+    fn stopping_during_preroll_drops_the_load() {
+        let t = Turns::default();
+        t.ask(Some(1));
+        t.opened(Some(1));
+        assert!(t.may_stop(Some(1)));
+        t.stopped_by(Some(1));
+        assert!(!t.wanted(Some(1)));
+
+        t.ask(Some(3));
+        t.opened(Some(3));
+        t.stopped();
+        assert!(!t.wanted(Some(3)));
     }
 
     #[test]

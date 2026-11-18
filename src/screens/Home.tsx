@@ -5,6 +5,7 @@ import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
+import { AgeRatingBadge } from "../components/title/TitleDetails";
 import { LandscapeCard, PosterCard, useIntent } from "../components/PosterCard";
 import { ArtTitle, Card, ProgressBar } from "../components/title/Card";
 import { Shelf } from "../components/title/Shelf";
@@ -62,19 +63,22 @@ const EAGER_SHELVES = 2;
 export function Home() {
   // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
   const items = useBrowseFeatured(useFeatured().data);
-  const [picked, setIndex] = useState(0);
-  const index = items?.length ? Math.min(picked, items.length - 1) : 0;
   const seeds = useSeeds();
   const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
   const shownAbove = useShownAbove(shelves, items ?? NO_TITLES);
   const { data: watching } = useContinueWatching();
   const watched = useMemo(() => new Set((watching ?? []).map((p) => p.metaId)), [watching]);
+  // Recommendations also skip what you're already watching; memoized so shelves keep stable Set references.
+  const excludes = useMemo(
+    () => shelves.map((shelf, i) => (shelf.kind === "because" ? new Set([...shownAbove[i], ...watched]) : shownAbove[i])),
+    [shelves, shownAbove, watched],
+  );
   const { data: settings } = useSettings();
   const addonRows = useHomeCatalogs();
 
   return (
     <div className="scroll home">
-      {items?.length !== 0 && <HeroCarousel items={items} index={index} setIndex={setIndex} />}
+      {items?.length !== 0 && <HeroCarousel items={items} />}
       <div className="rows home-rows">
         {(settings?.showContinueWatching ?? true) && <ContinueRow />}
         {addonRows.map((c) => (
@@ -85,8 +89,7 @@ export function Home() {
             key={shelfKey(shelf).join("/")}
             shelf={shelf}
             eager={i < EAGER_SHELVES}
-            // Recommendations also skip what you're already watching.
-            exclude={shelf.kind === "because" ? new Set([...shownAbove[i], ...watched]) : shownAbove[i]}
+            exclude={excludes[i]}
           />
         ))}
       </div>
@@ -115,16 +118,27 @@ function isUltrawide() {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-aspect-ratio: 2/1)").matches;
 }
 
+function subscribeOsReducedMotion(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function getOsReducedMotion() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function HeroCarousel({
   items,
-  index,
-  setIndex,
+  index: controlledIndex,
+  setIndex: controlledSetIndex,
   content,
   handlers,
 }: {
   items?: MetaPreview[];
-  index: number;
-  setIndex: (i: number | ((i: number) => number)) => void;
+  index?: number;
+  setIndex?: (i: number | ((i: number) => number)) => void;
   /** The text block over the art, for a page whose titles open somewhere else (Anime). */
   content?: (item: MetaPreview) => ReactNode;
   /** What clicking and right-clicking the art does; by default the title's page and its options menu. */
@@ -133,9 +147,40 @@ export function HeroCarousel({
   const { navigate } = useNavigation();
   const phone = useFormFactor().form === "phone";
   const ultrawide = useSyncExternalStore(subscribeUltrawide, isUltrawide, () => false);
-  const [paused, setPaused] = useState(false);
-  const hero = useRef<HTMLDivElement>(null);
+  const osReduced = useSyncExternalStore(subscribeOsReducedMotion, getOsReducedMotion, () => false);
+  const [picked, setPicked] = useState(0);
   const count = items?.length ?? 0;
+  const rawIndex = controlledIndex ?? picked;
+  const index = count ? ((rawIndex % count) + count) % count : 0;
+  const setIndex = useCallback(
+    (next: number | ((i: number) => number)) => {
+      if (controlledSetIndex) controlledSetIndex(next);
+      else setPicked((prev) => {
+        const cur = count ? ((prev % count) + count) % count : 0;
+        return typeof next === "function" ? next(cur) : next;
+      });
+    },
+    [controlledSetIndex, count],
+  );
+
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [windowInactive, setWindowInactive] = useState(() => typeof document !== "undefined" && document.hidden);
+  useEffect(() => {
+    const onVis = () => setWindowInactive(document.hidden);
+    const onBlur = () => setWindowInactive(true);
+    const onFocus = () => setWindowInactive(document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  const hero = useRef<HTMLDivElement>(null);
   const rawItem = items?.[index];
   const bgOf = useCallback((u?: string) => heroBackdropUrl(u, phone), [phone]);
   const item = useMemo(() => (rawItem ? { ...rawItem, background: bgOf(rawItem.background) } : undefined), [rawItem, bgOf]);
@@ -159,17 +204,14 @@ export function HeroCarousel({
 
   const { data: settings } = useSettings();
   const rotate = settings?.heroAutoplay ?? true;
-  useEffect(() => {
-    if (!count || paused || !rotate) return;
-    if (prefersReducedMotion()) return;
-    const t = window.setInterval(() => {
-      // Don't rotate while hidden under another page or behind other windows.
-      if (document.hasFocus() && hero.current?.checkVisibility({ visibilityProperty: true })) {
-        setIndex((i) => (i + 1) % count);
-      }
-    }, ADVANCE_MS);
-    return () => window.clearInterval(t);
-  }, [index, count, paused, rotate, setIndex]);
+  const reducedMotion =
+    settings?.reduceMotion === "on"
+      ? true
+      : settings?.reduceMotion === "off"
+        ? false
+        : osReduced || prefersReducedMotion();
+  const canRotate = rotate && !reducedMotion && count > 1;
+  const paused = hovered || focused || windowInactive;
 
   // Decode the next backdrop ahead of time once the current slide is in (after a short settle window),
   // so slide 0 never competes with slide 1 at initial load yet the cross-fade never waits.
@@ -221,8 +263,12 @@ export function HeroCarousel({
         className="hero-card"
         ref={heroRef}
         data-art={gate["data-art"]}
-        onPointerEnter={() => setPaused(true)}
-        onPointerLeave={() => setPaused(false)}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+        onFocusCapture={() => setFocused(true)}
+        onBlurCapture={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+        }}
         {...swipeHandlers}
         // The whole card opens the title, except where its own controls sit (or a swipe just ended on it).
         onClick={(e) => !swiped.current && !(e.target as Element).closest("button, a") && h.onClick()}
@@ -266,9 +312,18 @@ export function HeroCarousel({
                 className="hero-dot"
                 onClick={() => setIndex(i)}
               >
-                {i === index && !paused && (
+                {i === index && canRotate && (
                   <span key={index} className="hero-dot-clip">
-                    <span className="hero-dot-fill" style={{ animationDuration: `${ADVANCE_MS}ms` }} />
+                    <span
+                      className="hero-dot-fill"
+                      data-paused={paused || undefined}
+                      style={{ animationDuration: `${ADVANCE_MS}ms` }}
+                      onAnimationEnd={(e) => {
+                        if (e.target === e.currentTarget && hero.current?.checkVisibility({ visibilityProperty: true }) !== false) {
+                          setIndex((prev) => (prev + 1) % count);
+                        }
+                      }}
+                    />
                   </span>
                 )}
               </button>
@@ -338,9 +393,28 @@ function useHeroSwipe(enabled: boolean, step: (dir: 1 | -1) => void, swiped: Rea
  * Hidden by CSS everywhere else.
  */
 function HeroPeek({ item, side, onClick }: { item: MetaPreview; side: "prev" | "next"; onClick: () => void }) {
+  // Keep the outgoing backdrop mounted briefly beneath the incoming one so peek slides crossfade smoothly.
+  const [layers, setLayers] = useState<{ id: string; src?: string }[]>(() => [{ id: item.id, src: item.background }]);
+  useEffect(() => {
+    setLayers((prev) => {
+      if (prev.at(-1)?.id === item.id) return prev;
+      return [...prev.slice(-1), { id: item.id, src: item.background }];
+    });
+    const t = window.setTimeout(() => setLayers((prev) => prev.slice(-1)), 650);
+    return () => window.clearTimeout(t);
+  }, [item.id, item.background]);
+
   return (
     <button className="hero-peek" data-side={side} onClick={onClick} aria-label={`${side === "prev" ? "Previous" : "Next"} featured: ${item.name}`} tabIndex={-1}>
-      <Img key={item.id} src={item.background} alt="" className="hero-peek-img" />
+      {layers.map((l, idx) => (
+        <Img
+          key={l.id}
+          src={l.src}
+          alt=""
+          className="hero-peek-img"
+          data-current={idx === layers.length - 1}
+        />
+      ))}
     </button>
   );
 }
@@ -351,11 +425,15 @@ function HeroContent({ item }: { item: MetaPreview }) {
   const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
   const phone = useFormFactor().form === "phone";
+  const facts = joinFacts([...kindFacts(item), item.releaseInfo]);
 
   return (
     <div className="hero-content">
       <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
-      <p className="hero-kind t-callout">{joinFacts(kindFacts(item))}</p>
+      <p className="hero-kind t-callout">
+        <span className="hero-kind-text">{facts}</span>
+        <AgeRatingBadge certification={item.certification} />
+      </p>
       <p className="hero-description t-body">{item.description}</p>
       <div className="hero-actions">
         <Button variant="primary" onClick={open} {...intent}>
@@ -449,58 +527,53 @@ function ContinueRow() {
 }
 
 /**
- * The card opens the title's page; the play button resumes straight away. With seasons as separate shows,
- * an anime shows the entry the episode is part of and opens its page (#22).
+ * Single-focus Continue Watching card: clicking resumes straight away (the title's page is in the context menu).
+ * With seasons as separate shows, an anime shows the entry the episode is part of (#22).
  */
 function ContinueCard({ progress: p }: { progress: Progress }) {
   const { navigate } = useNavigation();
   const stored = useMemo(() => progressItem(p), [p]);
   const { item, entry, opens } = useEntryShown(stored, p.videoId);
-  const openDetail = () => navigate({ name: "detail", type: p.type, id: opens });
-  // Which page it opens on is known before the click (mostly a stored anime link: no network).
+  // Which page it opens on is known before the menu is used (mostly a stored anime link: no network).
   useEffect(() => prefetchTitlePage(p.type, opens), [p.type, opens]);
   // The player goes on with the saved source only while the add-ons still offer it (#394).
   const resume = () => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId });
   const fraction = p.duration ? p.position / p.duration : 0;
+  const remaining = formatRemaining(p.position, p.duration);
   const meta = useQuery({ queryKey: keys.meta(p.type, p.metaId), queryFn: () => api.meta(p.type, p.metaId), staleTime: 60 * 60_000 });
   const logo = meta.data?.logo;
+  const artChain = useMemo(
+    () => [p.background, meta.data?.background, p.poster, meta.data?.poster].filter((u, i, a): u is string => !!u && a.indexOf(u) === i),
+    [p.background, meta.data?.background, p.poster, meta.data?.poster],
+  );
+  const captionTitle = entry
+    ? `Episode ${entry.number} · ${p.episodeTitle ?? item.name}`
+    : p.season != null
+      ? `${episodeCode(p.season, p.episode)} · ${p.episodeTitle ?? p.name}`
+      : joinFacts(["Movie", meta.data?.releaseInfo]);
 
   return (
     <Card
       shape="landscape"
       frameClass="card-frame-resume"
-      art={p.background ?? p.poster}
-      title={
-        entry
-          ? `Episode ${entry.number} · ${p.episodeTitle ?? item.name}`
-          : p.season != null
-            ? `${episodeCode(p.season, p.episode)} · ${p.episodeTitle ?? p.name}`
-            : p.name
-      }
+      art={artChain[0]}
+      artFallbacks={artChain.slice(1)}
+      fallback={<span className="card-fallback t-headline">{item.name}</span>}
+      title={captionTitle}
       // Always shown: it's what you're watching, not a description.
       keepCaption
-      onClick={openDetail}
+      onClick={resume}
       {...cardMenu(stored, p)}
-      actions={
-        <button
-          type="button"
-          className="card-play"
-          aria-label="Resume"
-          onClick={(e) => {
-            e.stopPropagation();
-            resume();
-          }}
-        >
-          <Play size={20} fill="currentColor" />
-        </button>
-      }
     >
       {/* The logo names the show; an entry of it goes by its own name. */}
       <ArtTitle name={item.name} logo={entry ? undefined : logo} pending={!entry && meta.isLoading} />
-      {/* Where you are, on the picture like Apple TV's: a short bar and the time left, over a gradient (#38). */}
+      <span className="card-play" aria-hidden>
+        <Play size={20} fill="currentColor" />
+      </span>
+      {/* Where you are, on the picture like Apple TV's: a bar and the time left, over a gradient (#38). */}
       <div className="card-resume">
         <ProgressBar fraction={fraction} />
-        <span className="card-resume-left tabular">{formatRemaining(p.position, p.duration)}</span>
+        {remaining && <span className="card-resume-left tabular">{remaining}</span>}
       </div>
     </Card>
   );

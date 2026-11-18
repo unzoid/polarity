@@ -1,11 +1,13 @@
-import { ArrowLeft, Check, Edit, Plus } from "../../components/icons";
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { ArrowLeft, Check, Edit, Lock, Plus } from "../../components/icons";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/ui/Button";
 import { TextField } from "../../components/ui/TextField";
 import { BusyRing } from "../../components/BusyLabel";
 import { AVATAR_GROUPS, type AvatarId, AVATARS, nextAvatar, type Profile, useAccount } from "../../lib/account";
+import { hasPin } from "../../lib/account/profileRules";
 import { errorMessage } from "../../lib/errors";
+import { prefersReducedMotion } from "../../lib/ui";
 import { AccountShell } from "./AccountShell";
 import { flyToNavbar } from "./profileHandoff";
 import { useGuard } from "../../components/profileLock/useGuard";
@@ -39,18 +41,30 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
   const [entering, setEntering] = useState<string | null>(null);
   const guard = useGuard();
   const chosenArt = useRef<HTMLSpanElement>(null);
+  const flown = useRef(false);
   const managing = view.name === "manage";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!leaving) {
+      flown.current = false;
+      return;
+    }
     const avatar = chosenArt.current?.querySelector<HTMLElement>(".avatar");
-    if (!leaving || !avatar) return;
-    // A frame on, so the app underneath has laid out its navbar. If that frame comes late (the app's
-    // first render was heavy), the avatar has already begun fading with the screen: let it.
-    const start = performance.now();
-    const frame = requestAnimationFrame((now) => {
-      if (now - start < 120) flyToNavbar(avatar);
+    if (!avatar || flown.current || prefersReducedMotion()) return;
+    document.documentElement.dataset.profileHandoff = "";
+    if (flyToNavbar(avatar)) {
+      flown.current = true;
+      return;
+    }
+    // 1-rAF fallback when <Suspense> hasn't committed the destination navbar avatar yet.
+    const frame = requestAnimationFrame(() => {
+      if (flyToNavbar(avatar)) flown.current = true;
+      else delete document.documentElement.dataset.profileHandoff;
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (!flown.current) delete document.documentElement.dataset.profileHandoff;
+    };
   }, [leaving]);
 
   if (view.name === "edit") {
@@ -109,6 +123,11 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
               >
                 <span className="profile-tile-art" ref={entering === p.id ? chosenArt : undefined}>
                   <Avatar id={p.avatar} />
+                  {hasPin(p) && (
+                    <span className="profile-tile-lock" aria-hidden>
+                      <Lock size={12} />
+                    </span>
+                  )}
                   <span className="profile-tile-overlay profile-tile-edit" aria-hidden>
                     <span className="profile-tile-pencil">
                       <Edit size={22} strokeWidth={2.25} />
@@ -281,6 +300,24 @@ export function ProfileEditor({
  * Full-page icon chooser, grouped into rows. `bare`: the icons alone, inside something that has its own header and
  * Back (the profile sheet's Edit Profile, ProfileEditSheet.tsx).
  */
+function moveRadioFocus(e: KeyboardEvent<HTMLElement>) {
+  if (isTvMode()) return;
+  const cols = getComputedStyle(e.currentTarget).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+  const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+  if (!step) return;
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=radio]:not(:disabled)")];
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  if (i < 0) return;
+  const next =
+    e.key === "ArrowRight" || e.key === "ArrowLeft"
+      ? items[(i + step + items.length) % items.length]
+      : items[i + step];
+  if (next) {
+    e.preventDefault();
+    next.focus();
+  }
+}
+
 export function IconPicker({
   name,
   current,
@@ -296,6 +333,7 @@ export function IconPicker({
   onBack: () => void;
   bare?: boolean;
 }) {
+  const [stops, setStops] = useState<Record<string, AvatarId>>({});
   return (
     <div className="icon-picker" data-bare={bare || undefined}>
       {!bare && (
@@ -313,35 +351,41 @@ export function IconPicker({
         </div>
       </header>
       )}
-      {AVATAR_GROUPS.map((g) => (
-        <section key={g.id} className="icon-picker-group">
-          <h2>{g.name}</h2>
-          <div className="icon-picker-row" role="radiogroup" aria-label={g.name} onKeyDown={moveFocus}>
-            {AVATARS.filter((a) => a.group === g.id).map((a) => (
-              <button
-                type="button"
-                key={a.id}
-                data-tile
-                role="radio"
-                aria-checked={a.id === current}
-                aria-label={a.id}
-                className="icon-choice"
-                onClick={() => onPick(a.id)}
-                autoFocus={a.id === current}
-              >
-                <Avatar id={a.id} />
-                {a.id === current ? (
-                  <span className="icon-choice-check">
-                    <Check size={14} strokeWidth={3} />
-                  </span>
-                ) : (
-                  taken.includes(a.id) && <span className="icon-choice-taken">In use</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+      {AVATAR_GROUPS.map((g) => {
+        const items = AVATARS.filter((a) => a.group === g.id);
+        const stop = stops[g.id] ?? (items.some((a) => a.id === current) ? current : items[0]?.id);
+        return (
+          <section key={g.id} className="icon-picker-group">
+            <h2>{g.name}</h2>
+            <div className="icon-picker-row" role="radiogroup" aria-label={g.name} onKeyDown={moveRadioFocus}>
+              {items.map((a) => (
+                <button
+                  type="button"
+                  key={a.id}
+                  data-tile
+                  role="radio"
+                  aria-checked={a.id === current}
+                  aria-label={a.id}
+                  tabIndex={a.id === stop ? 0 : -1}
+                  className="icon-choice"
+                  onFocus={() => setStops((s) => (s[g.id] === a.id ? s : { ...s, [g.id]: a.id }))}
+                  onClick={() => onPick(a.id)}
+                  autoFocus={a.id === current}
+                >
+                  <Avatar id={a.id} />
+                  {a.id === current ? (
+                    <span className="icon-choice-check">
+                      <Check size={14} strokeWidth={3} />
+                    </span>
+                  ) : (
+                    taken.includes(a.id) && <span className="icon-choice-taken">In use</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

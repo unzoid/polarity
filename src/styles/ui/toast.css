@@ -1,7 +1,32 @@
-/* --- Toast (components/ui/Toast.tsx): the controller notice and the update notice. */
+/* --- Toast (components/ui/Toast.tsx): standalone toasts (.tv, FriendsHost) and non-overlapping stacks. */
+.toast-stack {
+  position: fixed;
+  inset: auto 0 calc(1.5rem + var(--tabbar-h)) 0;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+  transition: bottom var(--dur-base) var(--ease-out);
+}
+.toast-stack-notice {
+  z-index: var(--z-notice);
+}
+body:has(.downloads-selectbar) .toast-stack {
+  bottom: calc(5.5rem + var(--tabbar-h));
+}
+.toast-stack > .toast {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  translate: none;
+  pointer-events: auto;
+}
+
 .toast {
   position: absolute;
-  z-index: 25;
+  z-index: var(--z-toast);
   left: 50%;
   bottom: 1.5rem;
   translate: -50% 0;
@@ -11,10 +36,12 @@
   padding: 0.375rem 0.375rem 0.375rem 1rem;
   border-radius: var(--r-pill);
   background: var(--glass-heavy);
+  -webkit-backdrop-filter: var(--blur-glass);
   backdrop-filter: var(--blur-glass);
   box-shadow:
+    var(--glass-highlight),
     0 0 0 1px var(--glass-edge),
-    0 18px 40px -16px rgb(0 0 0 / 0.8);
+    0 18px 40px -16px var(--shadow-deep);
   font-size: 0.9rem;
   /* Rises from the edge it sits on. Transitions, not keyframes: a toast that
      comes back while leaving (the same failure again) turns round where it is
@@ -111,8 +138,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast,
-  .toast-tv {
+  :root:not([data-reduce-motion="off"]) :is(.toast, .toast-tv) {
     --toast-from: 0px;
+  }
+  :root:not([data-reduce-motion="off"]) .toast-stack {
+    transition: none;
   }
 }

@@ -12,8 +12,9 @@ export function AppearancePage() {
 
       <Card title="Size">
         <NumberRow
+          setting="uiScale"
           title="Interface size"
-          caption="Zoom everything in or out. On this device."
+          caption="On this device."
           value={Math.round((prefs.uiScale > 0 ? prefs.uiScale : 1) * 100)}
           min={70}
           max={175}

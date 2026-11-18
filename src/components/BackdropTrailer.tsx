@@ -1,10 +1,23 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useSettings } from "../lib/net";
 import { prefersReducedMotion } from "../lib/ui";
 import { useFileTrailer } from "../lib/playback";
 
 /** How long a title's page shows its art before the trailer takes over. */
 const DELAY_MS = 4000;
+/** Smooth audio fade on mute/unmute and scroll-pause instead of a 0ms hard cut. */
+const AUDIO_RAMP_MS = 220;
+
+export type BackdropTrailerState = "idle" | "playing" | "paused" | "ended";
+
+export interface BackdropTrailerHandle {
+  node: React.ReactNode;
+  visible: boolean;
+  state: BackdropTrailerState;
+  muted: boolean;
+  toggleMute: () => void;
+  replay: () => void;
+}
 
 /**
  * A title's trailer playing behind its page. Only a trailer the app has as a
@@ -23,24 +36,55 @@ const DELAY_MS = 4000;
 export function useBackdropTrailer(
   imdbId: string | undefined,
   { active, paused = false, scroller }: { active: boolean; paused?: boolean; scroller?: RefObject<HTMLElement | null> },
-) {
+): BackdropTrailerHandle {
   const { data: settings } = useSettings();
   const allowed = (settings?.trailerAutoplay ?? true) && !prefersReducedMotion();
   const fileUrl = useFileTrailer(imdbId, allowed).data?.url;
   const enabled = !!fileUrl && allowed;
-  const video = useRef<HTMLVideoElement>(null);
+  const video = useRef<HTMLVideoElement | null>(null);
+  const rampRaf = useRef<number | null>(null);
+  const finishTimer = useRef<number | null>(null);
   const [mounted, setMounted] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [ended, setEnded] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [errored, setErrored] = useState(false);
   const [scrolledAway, setScrolledAway] = useState(false);
   const [muted, setMuted] = useState(!(settings?.trailerSound ?? false));
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+
+  const stopRamp = useCallback(() => {
+    if (rampRaf.current != null) {
+      cancelAnimationFrame(rampRaf.current);
+      rampRaf.current = null;
+    }
+  }, []);
+
+  const clearFinishTimer = useCallback(() => {
+    if (finishTimer.current != null) {
+      window.clearTimeout(finishTimer.current);
+      finishTimer.current = null;
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      stopRamp();
+      clearFinishTimer();
+    },
+    [stopRamp, clearFinishTimer],
+  );
+
   // A different title starts over.
   useEffect(() => {
-    setEnded(false);
+    stopRamp();
+    clearFinishTimer();
+    setFinished(false);
+    setErrored(false);
     setPlaying(false);
     setMounted(false);
     setScrolledAway(false);
-  }, [fileUrl]);
+  }, [fileUrl, stopRamp, clearFinishTimer]);
 
   // Only watch scroll position once a backdrop trailer is actually mounted, so scrolling Detail never re-renders the page.
   useEffect(() => {
@@ -63,60 +107,163 @@ export function useBackdropTrailer(
 
   // Wait a moment on the page; leaving it removes the player (and its sound).
   useEffect(() => {
-    if (!enabled || !active || ended) {
+    if (!enabled || !active || errored) {
       setMounted(false);
       setPlaying(false);
       return;
     }
-    if (mounted) return;
+    if (finished || mounted) return;
     const t = window.setTimeout(() => setMounted(true), DELAY_MS);
     return () => window.clearTimeout(t);
-  }, [enabled, active, ended, mounted]);
+  }, [enabled, active, errored, finished, mounted]);
 
   // Settings load asynchronously and can change while a preview is mounted.
   useEffect(() => {
     setMuted(!(settings?.trailerSound ?? false));
   }, [settings?.trailerSound]);
 
+  // Ramp <video> volume smoothly over 220ms on mute/unmute and scroll-pause instead of hard-cutting in 0ms.
   useEffect(() => {
-    if (mounted && video.current) video.current.muted = muted;
-  }, [mounted, muted]);
-
-  useEffect(() => {
+    stopRamp();
     const v = video.current;
-    if (mounted && v) void (effectivePaused ? v.pause() : v.play().catch(() => {}));
-  }, [effectivePaused, mounted]);
+    if (!mounted || !v) return;
 
-  const finish = () => {
+    const rampVolume = (target: number, onDone?: () => void) => {
+      const from = Math.max(0, Math.min(1, v.muted ? 0 : v.volume));
+      const distance = Math.abs(target - from);
+      if (distance < 0.01 || prefersReducedMotion()) {
+        v.volume = target;
+        onDone?.();
+        return;
+      }
+      const duration = Math.max(40, distance * AUDIO_RAMP_MS);
+      const start = performance.now();
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - (1 - t) * (1 - t);
+        v.volume = Math.max(0, Math.min(1, from + (target - from) * eased));
+        if (t < 1) {
+          rampRaf.current = requestAnimationFrame(step);
+        } else {
+          rampRaf.current = null;
+          onDone?.();
+        }
+      };
+      rampRaf.current = requestAnimationFrame(step);
+    };
+
+    if (effectivePaused) {
+      if (v.muted || v.volume === 0 || v.paused) {
+        v.pause();
+      } else {
+        rampVolume(0, () => v.pause());
+      }
+      return stopRamp;
+    }
+
+    if (muted) {
+      void v.play().catch(() => {});
+      if (v.muted || v.volume === 0) {
+        v.volume = 0;
+        v.muted = true;
+      } else {
+        rampVolume(0, () => {
+          v.muted = true;
+        });
+      }
+      return stopRamp;
+    }
+
+    if (v.muted) {
+      v.volume = 0;
+      v.muted = false;
+    }
+    void v.play().catch(() => {});
+    rampVolume(1);
+    return stopRamp;
+  }, [mounted, muted, effectivePaused, stopRamp]);
+
+  const attachVideo = useCallback((node: HTMLVideoElement | null) => {
+    video.current = node;
+    if (!node) return;
+    const initialMuted = mutedRef.current;
+    node.defaultMuted = initialMuted;
+    node.muted = initialMuted;
+    node.volume = initialMuted ? 0 : 1;
+  }, []);
+
+  const finish = useCallback(() => {
+    stopRamp();
+    clearFinishTimer();
     setPlaying(false);
-    // Let the art fade back in before the player goes.
-    window.setTimeout(() => setEnded(true), 900);
-  };
+    setFinished(true);
+    // Let the art fade back in before the player unmounts.
+    finishTimer.current = window.setTimeout(() => {
+      finishTimer.current = null;
+      setMounted(false);
+    }, 900);
+  }, [stopRamp, clearFinishTimer]);
 
-  const toggleMute = () => {
-    setMuted(!muted);
-  };
+  const toggleMute = useCallback(() => {
+    setMuted((m) => !m);
+  }, []);
 
-  const visible = mounted && playing && !effectivePaused;
+  const replay = useCallback(() => {
+    if (!enabled || !active) return;
+    stopRamp();
+    clearFinishTimer();
+    const el = scroller?.current;
+    if (el && el.scrollTop > 0) {
+      el.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }
+    setScrolledAway(false);
+    setErrored(false);
+    setFinished(false);
+    setPlaying(false);
+    setMounted(true);
+    const v = video.current;
+    if (v) {
+      v.currentTime = 0;
+      void v.play().catch(() => {});
+    }
+  }, [enabled, active, scroller, stopRamp, clearFinishTimer]);
+
+  const visible = mounted && playing && !effectivePaused && !finished;
+  const state: BackdropTrailerState =
+    !enabled || !active || errored
+      ? "idle"
+      : finished
+        ? "ended"
+        : mounted && playing
+          ? effectivePaused
+            ? "paused"
+            : "playing"
+          : "idle";
+
   const node =
     mounted && fileUrl ? (
       <div className="backdrop-trailer" data-visible={visible} aria-hidden>
         <video
-          ref={video}
+          ref={attachVideo}
           src={fileUrl}
           autoPlay
-          muted={muted}
           playsInline
           tabIndex={-1}
           // Only shows once it's actually playing: a slow start never covers the art with black.
           onPlaying={() => setPlaying(true)}
           onEnded={finish}
-          onError={() => setEnded(true)}
+          onError={() => {
+            stopRamp();
+            clearFinishTimer();
+            setPlaying(false);
+            setMounted(false);
+            setErrored(true);
+          }}
         />
       </div>
     ) : null;
 
-  return { node, visible, muted, toggleMute };
+  return { node, visible, state, muted, toggleMute, replay };
 }
 
 /**

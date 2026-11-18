@@ -37,8 +37,8 @@
   background: var(--tone-2);
   box-shadow:
     inset 0 1px 0 rgb(var(--ink) / 0.04),
-    0 0 0 1px rgb(var(--ink) / 0.07),
-    0 2rem 4rem -1rem rgb(0 0 0 / 0.7);
+    0 0 0 1px var(--ring-outer),
+    0 2rem 4rem -1rem var(--shadow-deep);
   outline: none;
   transform-origin: 50% 50%;
   transition:
@@ -68,6 +68,34 @@
   white-space: nowrap;
 }
 
+.open-files-close {
+  position: absolute;
+  top: 0.875rem;
+  right: 0.875rem;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  color: var(--text-3);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .open-files-close:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
+}
+.open-files-close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  color: var(--text);
+}
+
 /* --- Drop zone ------------------------------------------------------------------------------- */
 
 .open-files-zone {
@@ -80,17 +108,27 @@
   /* Dashed at rest, solid accent while something is dragged over. */
   outline: 1px dashed rgb(var(--ink) / 0.12);
   outline-offset: -1px;
+  cursor: pointer;
   transition:
     background-color var(--dur-fast) var(--ease-out),
     outline-color var(--dur-fast) var(--ease-out);
 }
+.open-files-zone[data-busy] {
+  cursor: progress;
+}
+@media (hover: hover) and (pointer: fine) {
+  .open-files:not([data-dragging]) .open-files-zone:not([data-busy]):hover {
+    background: color-mix(in srgb, rgb(var(--ink)) 2%, var(--tone-0));
+    outline-color: var(--hairline-strong);
+  }
+}
 .open-files[data-dragging] .open-files-zone {
   background: var(--zone-tint);
-  outline: 1.5px solid color-mix(in srgb, var(--accent) 75%, white);
+  outline: 1.5px solid var(--focus);
 }
 .open-files[data-dragging] .open-files-zone[data-refused] {
   background: color-mix(in srgb, var(--danger) 7%, var(--tone-0));
-  outline-color: color-mix(in srgb, var(--danger) 70%, white);
+  outline-color: var(--danger);
 }
 
 .open-files-stack {
@@ -108,7 +146,7 @@
   background: var(--tone-sunk);
   box-shadow:
     0 0 0 1px rgb(var(--ink) / 0.09),
-    0 0.5rem 1rem -0.25rem rgb(0 0 0 / 0.8);
+    0 0.5rem 1rem -0.25rem var(--shadow-deep);
   color: var(--text);
   transform: translate(var(--x, 0), var(--y, 0)) rotate(var(--r, 0deg));
   /* Settling back: quick, no overshoot. */

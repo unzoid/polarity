@@ -29,7 +29,13 @@
   height: 2rem;
   font-size: var(--fs-md);
   font-weight: 500;
-  color: var(--text-3);
+  color: var(--text-2);
+}
+.market-installed > svg {
+  color: var(--good);
+}
+:root[data-scheme="light"] .market-installed > svg {
+  color: color-mix(in srgb, var(--good) 72%, #0a5c36);
 }
 
 .market-empty {

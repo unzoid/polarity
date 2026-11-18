@@ -91,9 +91,9 @@ final class MpvPlayer: ObservableObject {
 
     func pause() { command(["set", "pause", "yes"]) }
 
-    /// Moves by `seconds` (back when negative), to the nearest keyframe.
+    /// Moves by `seconds` (back when negative), to that exact moment so backward skips never stick on a 10 s keyframe.
     func seek(by seconds: Double) {
-        command(["seek", String(format: "%.0f", seconds), "relative"])
+        command(["seek", String(format: "%.0f", seconds), "relative+exact"])
     }
 
     /// Chooses an audio or subtitle track; `nil` turns subtitles off.

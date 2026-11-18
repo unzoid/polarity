@@ -108,13 +108,17 @@ function Clock() {
   return <time className="tv-clock tabular">{timeFmt.format(now)}</time>;
 }
 
+const MENU_OUT_MS = 160;
+
 /** The side menu: profiles, back to desktop mode, quit. */
-export function TvMenu({ onClose }: { onClose: () => void }) {
+export function TvMenu({ open = true, onClose }: { open?: boolean; onClose: () => void }) {
+  const { shown, leaving } = usePresence(open ? true : null, MENU_OUT_MS);
+  const active = open && !leaving;
   const account = useAccount();
   const { tab } = useNavigation();
   const ref = useRef<HTMLDivElement>(null);
-  useFocusTrap(ref);
-  useBack(true, onClose);
+  useFocusTrap(ref, active);
+  useBack(active, onClose);
   const party = useParty();
   const { data: settings } = useSettings();
   // Invites and requests waiting: counted on the Friends item.
@@ -124,8 +128,15 @@ export function TvMenu({ onClose }: { onClose: () => void }) {
   const others = me ? account.profiles.filter((p) => p.id !== me.id) : [];
   const hasAccountItems = account.enabled && (others.length > 0 || account.status === "ready" || account.status === "guest");
 
+  if (!shown) return null;
+
   return (
-    <div className="tv-menu-layer" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="tv-menu-layer"
+      data-leaving={leaving || undefined}
+      inert={leaving || undefined}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="tv-menu" ref={ref} data-nav-scope role="dialog" aria-label="Menu">
         {me && (
           <div className="tv-menu-me">

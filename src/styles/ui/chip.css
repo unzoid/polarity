@@ -192,13 +192,11 @@
   transition-delay: 40ms;
 }
 @media (prefers-reduced-motion: reduce) {
-  .toggle-chip::before,
-  .toggle-chip-check svg {
+  :root:not([data-reduce-motion="off"]) :is(.toggle-chip::before, .toggle-chip-check svg) {
     transform: none !important;
     filter: none !important;
   }
-  .toggle-chip-check,
-  .toggle-chip[aria-pressed="true"] .toggle-chip-check {
+  :root:not([data-reduce-motion="off"]) :is(.toggle-chip-check, .toggle-chip[aria-pressed="true"] .toggle-chip-check) {
     transition: none;
   }
 }
@@ -251,4 +249,8 @@
 .anime-tag[data-spoiler="true"] {
   background: rgb(239 68 68 / 0.12);
   color: #fca5a5;
+}
+:root[data-scheme="light"] .anime-tag[data-spoiler="true"] {
+  background: rgb(220 38 38 / 0.1);
+  color: #b91c1c;
 }

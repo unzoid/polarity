@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
-import { AlertCircle, Check, Filters, Info, Instant, Puzzle } from "./icons";
+import { AlertCircle, Check, Filters, Info, Instant, Puzzle, Reset } from "./icons";
 import { useNavigation } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
 import { useMeta, usePartialStreams, useStreams } from "../lib/net";
 import { runtimeSeconds } from "../lib/format";
-import { airedAt, NO_TORRENT_ENGINE, READY_CHECKS, readinessNote, sourceKey, sourceRow, TAG_LABELS, tagsOf, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
+import { airedAt, NO_TORRENT_ENGINE, READY_CHECKS, readinessNote, sourceKey, sourceRow, useReadiness, useSourceFilters, useTitleSettings } from "../lib/playback";
+import { featuredMatchSummary, sourceBadges } from "../lib/playback/sources";
 import { torrentsPlayHere } from "../lib/platform";
 import type { ContentType, RankedStream, Readiness } from "../lib/types";
 import { SourceFilterBar } from "./SourceFilters";
@@ -33,7 +34,7 @@ export function StreamList({
   tv?: boolean;
 }) {
   const { tab } = useNavigation();
-  // Desktop settings are the overlay over this page; TV has its own settings screen.
+  // Desktop settings are the overlay over this page; TV has its own settings screen (no "addons" page on TV).
   const showSettings = (page: PageId) => (tv ? tab({ name: "settings", page }) : openSettings(page));
   const whole = useStreams(type, videoId);
   // While add-ons are still answering, the sources so far: the list fills in as each one does.
@@ -56,38 +57,82 @@ export function StreamList({
 
   if (isLoading) {
     return (
-      <div className="stream-list">
-        {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} className="stream-row" height={64} />
+      <div className="stream-list" aria-busy="true" aria-label="Loading sources">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="stream-skeleton-row" data-featured={i === 0 || undefined} aria-hidden>
+            <Skeleton className="stream-skeleton-lead" />
+            <div className="stream-skeleton-text">
+              <div className="stream-skeleton-main">
+                <Skeleton shape="line" width={i === 0 ? "5.5rem" : "4.5rem"} height="0.95rem" />
+                <Skeleton className="stream-skeleton-badge" />
+                {i < 2 && <Skeleton className="stream-skeleton-badge" />}
+              </div>
+              <Skeleton shape="line" width={i % 2 === 0 ? "62%" : "48%"} height="0.75rem" />
+            </div>
+            <Skeleton shape="line" width="3.25rem" height="0.85rem" />
+          </div>
         ))}
       </div>
     );
   }
-  if (isError) return <p className="t-body muted">Couldn't load sources: {errorMessage(error)}</p>;
+  if (isError) {
+    return (
+      <div className="stream-empty">
+        <p className="t-body muted">Couldn't load sources: {errorMessage(error)}</p>
+        <Button variant="glass" onClick={() => void whole.refetch()}>
+          <Reset size={18} />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
   if (!data) return null;
 
   const hidden = data.hidden ?? 0;
   if (!data.streams.length) {
+    const timedOut = !hidden && data.failed.length > 0;
     return (
       <div className="stream-empty">
         <p className="t-body muted">
           {hidden
             ? `All ${hidden} sources are hidden by your source filters.`
-            : data.failed.length
+            : timedOut
               ? "Your add-ons didn't respond in time."
-              : "No sources found."}
+              : tv
+                ? "No sources found. Manage stream add-ons in desktop mode, or try again."
+                : "No sources found."}
         </p>
-        {hidden ? (
-          <Button variant="glass" onClick={() => showSettings("sources")}>
-            <Filters size={18} />
-            Source Filters
-          </Button>
-        ) : (
-          <Button variant="glass" onClick={() => showSettings("addons")}>
-            <Puzzle size={18} />
-            Manage Add-ons
-          </Button>
-        )}
+        <div className="stream-empty-actions">
+          {hidden ? (
+            <Button variant="glass" onClick={() => showSettings("sources")}>
+              <Filters size={18} />
+              Source Filters
+            </Button>
+          ) : timedOut ? (
+            <>
+              <Button variant="glass" onClick={() => void whole.refetch()}>
+                <Reset size={18} />
+                Try Again
+              </Button>
+              {!tv && (
+                <Button variant="plain" onClick={() => showSettings("addons")}>
+                  <Puzzle size={18} />
+                  Manage Add-ons
+                </Button>
+              )}
+            </>
+          ) : tv ? (
+            <Button variant="glass" onClick={() => void whole.refetch()}>
+              <Reset size={18} />
+              Try Again
+            </Button>
+          ) : (
+            <Button variant="glass" onClick={() => showSettings("addons")}>
+              <Puzzle size={18} />
+              Manage Add-ons
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -99,6 +144,7 @@ export function StreamList({
   const otherEpisodes = f.view.slice(f.otherEpisodes).map(({ r }) => r);
   const grouped = f.sort === "best";
   const [best, ...rest] = shown;
+  const bestSummary = grouped && best ? featuredMatchSummary(f.match(best)) : null;
 
   return (
     <div className="stream-list">
@@ -118,7 +164,16 @@ export function StreamList({
       {grouped && best && (
         <>
           <div className="stream-group-label t-micro faint">Best Match</div>
-          <StreamRow s={best} featured current={currentKey === streamKey(best)} readiness={ready.get(streamKey(best))} onPick={onPick} onInfo={showInfo} onMenu={tv ? (a) => setMenu({ s: best, anchor: a }) : undefined} />
+          <StreamRow
+            s={best}
+            featured
+            matchSummary={bestSummary}
+            current={currentKey === streamKey(best)}
+            readiness={ready.get(streamKey(best))}
+            onPick={onPick}
+            onInfo={showInfo}
+            onMenu={tv ? (a) => setMenu({ s: best, anchor: a }) : undefined}
+          />
           {rest.length > 0 && <div className="stream-group-label t-micro faint">More Sources</div>}
           {rest.map((s) => (
             <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={onPick} onInfo={showInfo} onMenu={tv ? (a) => setMenu({ s: s, anchor: a }) : undefined} />
@@ -144,17 +199,20 @@ export function StreamList({
         </>
       )}
 
-      {!!data.waiting?.length && (
-        <p className="stream-failed t-caption faint" role="status">
-          Still asking {data.waiting.join(", ")}…
-        </p>
-      )}
-      {hidden > 0 && <p className="stream-failed t-caption faint">{hidden} more hidden by Settings → Sources</p>}
-      {data.failed.length > 0 && (
-        <p className="stream-failed t-caption faint">
-          <AlertCircle size={12} /> No response from {data.failed.join(", ")}
-        </p>
-      )}
+      <div className="stream-footer" aria-live="polite">
+        {!!data.waiting?.length && (
+          <p className="stream-status t-caption" role="status">
+            <span className="stream-status-dot" aria-hidden />
+            <span>Asking {data.waiting.join(", ")}…</span>
+          </p>
+        )}
+        {hidden > 0 && <p className="stream-failed t-caption faint">{hidden} more hidden by Settings → Sources</p>}
+        {data.failed.length > 0 && (
+          <p className="stream-failed t-caption faint">
+            <AlertCircle size={12} /> No response from {data.failed.join(", ")}
+          </p>
+        )}
+      </div>
       {menu && (
         <TvSourceMenu
           anchor={menu.anchor}
@@ -177,12 +235,10 @@ export function StreamList({
   );
 }
 
-/** Tags worth a badge on the row itself (the label already says resolution, HDR and codec). */
-const ROW_TAGS = new Set(["hdr10+", "remux", "atmos", "truehd", "dts:x", "dts-hd", "10-bit", "imax", "3d"]);
-
 function StreamRow({
   s,
   featured,
+  matchSummary,
   current,
   readiness,
   onPick,
@@ -191,6 +247,7 @@ function StreamRow({
 }: {
   s: RankedStream;
   featured?: boolean;
+  matchSummary?: string | null;
   current?: boolean;
   /** What a look at the link ahead of time found (#21); unchecked rows look as before. */
   readiness?: Readiness;
@@ -201,7 +258,7 @@ function StreamRow({
   onMenu?: (anchor: HTMLElement) => void;
 }) {
   const row = sourceRow(s);
-  const tags = tagsOf(s).filter((t) => ROW_TAGS.has(t));
+  const badges = sourceBadges(s);
   // No torrent engine here (iOS, #458): the row says so, whatever a check found.
   const unplayable = !!s.stream.infoHash && !torrentsPlayHere;
   const isReady = !unplayable && readiness?.state === "ready";
@@ -227,9 +284,9 @@ function StreamRow({
       <span className="stream-text">
         <span className="stream-main">
           <span className="stream-title">{row.title}</span>
-          {tags.map((t) => (
-            <span key={t} className="badge">
-              {TAG_LABELS[t]}
+          {badges.map((b) => (
+            <span key={b.key} className="badge" data-kind={b.kind}>
+              {b.label}
             </span>
           ))}
           {s.quality.lowQualitySource && <span className="badge badge-bad">CAM</span>}
@@ -239,6 +296,7 @@ function StreamRow({
           {current ? "Playing · " : note ? `${note.short} · ` : ""}
           {row.detail}
         </span>
+        {featured && matchSummary && <span className="stream-match-pill">{matchSummary}</span>}
       </span>
       {row.size && <span className="stream-size tabular">{row.size}</span>}
     </button>

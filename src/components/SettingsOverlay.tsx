@@ -1,7 +1,7 @@
 import "../styles/settings-overlay.css";
 import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { Avatar } from "./Avatar";
 import { ChevronLeft, ChevronRight, Close, Reset, SignOut } from "./icons";
 import { iconButtonClass } from "./ui/Button";
@@ -52,6 +52,9 @@ function revealSetting(root: HTMLElement, entry: SettingEntry) {
   const label = marked ?? [...root.querySelectorAll<HTMLElement>(ROW_LABELS)].find((el) => el.textContent?.trim() === entry.title);
   if (!label) return;
   const box = marked ?? label.closest<HTMLElement>(ROW_BOXES) ?? label;
+  const expand = box.classList.contains("settings-expand") ? box : box.closest<HTMLElement>(".settings-expand");
+  const toggle = expand?.dataset.open === "false" ? expand.querySelector<HTMLButtonElement>('.settings-row-button[aria-expanded="false"]') : null;
+  toggle?.click();
   box.scrollIntoView({ block: "center" });
   clearTimeout(hitTimers.get(box));
   box.removeAttribute("data-search-hit");
@@ -233,6 +236,39 @@ export function SettingsOverlay({
     setTarget({ entry }); // a fresh object, so picking the same one again still scrolls
   };
 
+  const focusSearch = () => {
+    const input = searchInput.current;
+    if (!input) return false;
+    if (!phone && getComputedStyle(input.closest(".t3s-search") ?? input).display === "none") return false;
+    if (phone && view === "page") {
+      showView("list");
+      requestAnimationFrame(() => {
+        searchInput.current?.focus();
+        searchInput.current?.select();
+      });
+      return true;
+    }
+    input.focus();
+    input.select();
+    return true;
+  };
+
+  const onRootKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+    const k = e.key.toLowerCase();
+    if (mod && (k === "f" || k === "k")) {
+      if (focusSearch()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+    const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+    if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (focusSearch()) e.preventDefault();
+    }
+  };
+
   // The sections and the page, the same in the window and in the sheet; only the chrome round them differs.
   const body = (
     <>
@@ -327,7 +363,7 @@ export function SettingsOverlay({
         )}
         {!account.enabled && buildChannel === "dev" && (
           <div className="t3s-sidebar-foot">
-            <button className="t3s-nav-item" onClick={() => go("advanced")}>
+            <button className="t3s-nav-item" aria-label="No database: connect one" title="No database: connect one" onClick={() => go("advanced")}>
               <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
               <span>No database: connect one</span>
             </button>
@@ -336,7 +372,7 @@ export function SettingsOverlay({
         {account.enabled && (
           <div className="t3s-sidebar-foot">
             {account.status === "guest" ? (
-              <button className="t3s-nav-item" onClick={account.showSignIn}>
+              <button className="t3s-nav-item" aria-label="Sign in to sync" title="Sign in to sync" onClick={account.showSignIn}>
                 <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
                 <span>Sign in to sync</span>
               </button>
@@ -345,6 +381,8 @@ export function SettingsOverlay({
                 className="t3s-nav-item"
                 data-active={!phone && page === "account"}
                 aria-current={!phone && page === "account" ? "page" : undefined}
+                aria-label={account.profile.name}
+                title={account.profile.name}
                 onClick={() => go("account")}
               >
                 <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
@@ -422,7 +460,15 @@ export function SettingsOverlay({
   if (embedded)
     return (
       // Named as the window is: by the section open, else Settings.
-      <div className="t3s" data-embedded="" data-view={view} data-push={push ?? undefined} role="region" aria-label={view === "page" ? (section?.label ?? current.label) : "Settings"}>
+      <div
+        className="t3s"
+        data-embedded=""
+        data-view={view}
+        data-push={push ?? undefined}
+        role="region"
+        aria-label={view === "page" ? (section?.label ?? current.label) : "Settings"}
+        onKeyDown={onRootKeyDown}
+      >
         {body}
       </div>
     );
@@ -444,13 +490,7 @@ export function SettingsOverlay({
           data-push={phone ? (push ?? undefined) : undefined}
           aria-label="Settings"
           {...(phone ? dragDown : {})}
-          onKeyDown={(e) => {
-            const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-            if (e.key === "/" && !typing) {
-              e.preventDefault();
-              searchInput.current?.focus();
-            }
-          }}
+          onKeyDown={onRootKeyDown}
         >
           {phone && (
             <div className="t3s-grab" aria-hidden>
@@ -477,7 +517,14 @@ function NavItem({
   onClick: () => void;
 }) {
   return (
-    <button className="t3s-nav-item" data-active={active} aria-current={active ? "page" : undefined} onClick={onClick}>
+    <button
+      className="t3s-nav-item"
+      data-active={active}
+      aria-current={active ? "page" : undefined}
+      aria-label={page.label}
+      title={page.label}
+      onClick={onClick}
+    >
       <page.icon size={16} strokeWidth={2} />
       <span>{page.label}</span>
       {chevron && <ChevronRight size={18} className="t3s-nav-chevron" aria-hidden />}

@@ -138,7 +138,12 @@ export function AddonsPage() {
                   {!a.disabled && <HomeLists addon={id} />}
                   <div className="settings-expand-actions">
                     {a.manifest.behaviorHints?.configurable && <ConfigureButton manifestUrl={a.manifestUrl} />}
-                    <Button variant="danger" onClick={() => remove.mutate(id)} disabled={remove.isPending}>
+                    <Button
+                      variant="danger"
+                      busy={remove.isPending && remove.variables === id}
+                      disabled={remove.isPending && remove.variables === id}
+                      onClick={() => remove.mutate(id)}
+                    >
                       <Trash size={15} /> Remove
                     </Button>
                   </div>
@@ -158,7 +163,7 @@ export function AddonsPage() {
       )}
       <Card
         title="Install from URL"
-        footer="Looking for something to add? Browse the Marketplace."
+        footer="Or browse the Marketplace."
       >
         <FormRow
           placeholder="https://…/manifest.json"
@@ -433,7 +438,7 @@ function StremioLinksCard() {
     <Card title="Links" footer="Polarity isn't Stremio: these are links meant for Stremio, opened by Polarity.">
       <SettingRow id="stremioLinks" caption={`Links meant for the Stremio app, such as an add-on's install button or a title's link. ${STREMIO_LINKS_ON[os]}`} onChanged={(v) => change(!!v)} />
       {error && (
-        <p className="settings-card-pad settings-expand-text" role="alert">
+        <p className="settings-card-pad settings-error" role="alert">
           {error}
         </p>
       )}

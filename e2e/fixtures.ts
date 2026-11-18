@@ -138,7 +138,7 @@ export const barOverlaps = (page: Page) =>
     };
     const problems: string[] = [];
     for (const bar of player.querySelectorAll(".player-top, .player-bottom")) {
-      const parts = [...bar.querySelectorAll("button, input, .player-heading > *")]
+      const parts = [...bar.querySelectorAll("button, input, .player-heading > *, .player-title > *")]
         .filter((el) => shown(el) && !el.closest(".player-volume[data-folded] .player-volume-slider"))
         .map((el) => ({ name: el.getAttribute("aria-label") ?? el.textContent?.slice(0, 24) ?? el.tagName, box: el.getBoundingClientRect() }));
       for (const { name, box } of parts) {

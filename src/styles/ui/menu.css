@@ -2,17 +2,36 @@
    a subtle blur, the settings window's border), so a right-click menu and the party and profile menus are
    one family. Compact rows are 32px at 14px type, room enough to read and hit; roomy rows are taller, with
    room for an avatar (the navbar's "More"). */
+/* Like the player's menus (player.css): a flat panel on the theme's near-black with a clear edge and
+   near-square corners, the rows in dim ink that light up under the pointer, no fills or pills. */
 .menu {
   padding: 6px;
-  border: var(--edge-menu);
-  border-radius: 14px;
-  background: var(--surface-menu);
-  -webkit-backdrop-filter: var(--blur-menu);
-  backdrop-filter: var(--blur-menu);
-  box-shadow: var(--shadow-menu);
+  border: 1px solid rgb(var(--ink) / 0.2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
   -webkit-font-smoothing: antialiased;
-  color: rgb(var(--ink-text) / 0.85);
+  color: rgb(var(--ink-text) / 0.62);
   outline: none;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+.menu[data-starting-style],
+.menu[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+.menu[data-ending-style] {
+  transition-duration: 100ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion="off"]) .menu {
+    transform: none !important;
+  }
 }
 .menu-compact {
   min-width: 220px;
@@ -49,11 +68,11 @@
   width: 100%;
   height: 32px;
   padding: 0 10px 0 12px;
-  border-radius: var(--r-sm);
+  border-radius: 2px;
   font-size: var(--fs-md);
   font-weight: 400;
   line-height: 18px;
-  color: rgb(var(--ink-text) / 0.85);
+  color: rgb(var(--ink-text) / 0.62);
   text-align: left;
   cursor: default;
   outline: none;
@@ -80,12 +99,14 @@
    Enter can't be missed. No transition either way: the highlight follows the hand at once. */
 .menu-item[data-highlighted],
 .menu-item[data-popup-open] {
-  background: var(--fill-3);
+  background: transparent;
   color: var(--text);
 }
 :root[data-input="keyboard"] .menu-item[data-highlighted] {
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: transparent;
+  color: var(--text);
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
 }
 .menu-item[data-disabled] {
   color: rgb(var(--ink-text) / 0.25);
@@ -129,7 +150,7 @@
   transform: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .menu-check-item :is(.menu-check, .menu-check-label) {
+  :root:not([data-reduce-motion="off"]) .menu-check-item :is(.menu-check, .menu-check-label) {
     transition-property: opacity;
   }
 }
@@ -138,12 +159,13 @@
   color: rgb(var(--ink-text) / 0.5);
 }
 :root[data-input="keyboard"] .menu-item[data-highlighted] .menu-meta {
-  color: rgb(var(--ink-text) / 0.75);
+  color: rgb(var(--ink-text) / 0.5);
 }
+/* Groups are set apart by space, not a rule. */
 .menu-sep {
-  height: 1px;
-  margin: 6px 10px;
-  background: var(--hairline);
+  height: 0;
+  margin: 4px 10px;
+  background: none;
 }
 .menu-sep:first-child,
 .menu-sep + .menu-sep {
@@ -157,20 +179,22 @@
   gap: 0.75rem;
   width: 100%;
   padding: 0.5rem 0.625rem;
-  border-radius: var(--r-sm);
+  border-radius: 2px;
   font-size: var(--fs-md);
-  color: rgb(var(--ink-text) / 0.85);
+  color: rgb(var(--ink-text) / 0.62);
   cursor: default;
   outline: none;
   user-select: none;
 }
 .menu-roomy-item[data-highlighted] {
-  background: var(--fill-3);
+  background: transparent;
   color: var(--text);
 }
 :root[data-input="keyboard"] .menu-roomy-item[data-highlighted] {
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: transparent;
+  color: var(--text);
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
 }
 .menu-roomy-item .avatar {
   width: 26px;

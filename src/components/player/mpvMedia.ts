@@ -149,10 +149,10 @@ export class MpvMedia extends EventTarget implements MediaLike {
     return p.then((fns) => () => fns.forEach((u) => u()));
   }
 
-  /** Stop playback (mpv stays alive, idle, for the next title). */
+  /** Stop playback (mpv stays alive, idle, for the next title). Sent immediately so an in-flight pre-roll `mpv_load` aborts before unpausing. */
   stop() {
     this.turn++;
-    this.enqueue(() => call("mpv_stop", { owner: this.owner }));
+    void call("mpv_stop", { owner: this.owner }).catch(() => {});
   }
 
   private enqueue<T>(fn: () => Promise<T>) {

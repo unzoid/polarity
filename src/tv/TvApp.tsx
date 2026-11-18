@@ -16,7 +16,7 @@ import {
 } from "./spatial";
 import { dismissDepth, dismissTop, onDismissed, pressEscape, useSystemBack } from "../lib/ui";
 import { leaveApp, systemBack } from "../lib/platform";
-import { Desktop } from "../components/icons";
+import { ArrowLeft, Desktop } from "../components/icons";
 import { actionFor, shortcutText } from "../lib/settings";
 import { playSound } from "./sounds";
 import { markHeldMove } from "./held";
@@ -172,19 +172,29 @@ export function TvApp() {
     const onAction = (e: Event) => {
       const action = (e as CustomEvent<TvAction>).detail;
       if (action === "menu") {
+        if (dismissDepth() > 0 && !menuOpen) return;
         playSound(menuOpen ? "back" : "select");
         return setMenuOpen((o) => !o);
       }
-      if (menuOpen) return;
-      playSound("move");
-      if (action === "search") return tab({ name: "search" });
+      // On a pushed page or inside an open panel/modal, Y and shoulder buttons stay local instead of tearing it down.
+      if (menuOpen || !atRoot || dismissDepth() > 0) return;
+      if (action === "search") {
+        if (activeTab.name === "search") return;
+        playSound("move");
+        return tab({ name: "search" });
+      }
       const i = tabs.findIndex((t) => sameTab(t.route, activeTab));
       const j = Math.min(tabs.length - 1, Math.max(0, i + (action === "nextTab" ? 1 : -1)));
-      if (j !== i) tab(tabs[j].route);
+      if (j !== i) {
+        playSound("move");
+        tab(tabs[j].route);
+      } else {
+        playSound("edge");
+      }
     };
     window.addEventListener(TV_ACTION_EVENT, onAction);
     return () => window.removeEventListener(TV_ACTION_EVENT, onAction);
-  }, [playing, menuOpen, cardMenuOpen, tab, activeTab, tabs]);
+  }, [playing, menuOpen, cardMenuOpen, atRoot, tab, activeTab, tabs]);
 
   // Arriving on a page (or back from the player) puts focus where you were on it, or its first title.
   useEffect(() => {
@@ -270,8 +280,23 @@ export function TvApp() {
         })}
         {/* Sections are for the top level; a title page is a place of its own. */}
         {atRoot && <TvNav onMenu={() => setMenuOpen(true)} />}
+        {!atRoot && !playing && !menuOpen && (
+          <button
+            className="tv-back"
+            tabIndex={-1}
+            aria-label="Back"
+            onClick={() => {
+              if (dismissTop()) return;
+              playSound("back");
+              goBack();
+            }}
+          >
+            <ArrowLeft size={20} />
+            Back
+          </button>
+        )}
         {!playing && <TvCardMenuHost />}
-        {menuOpen && <TvMenu onClose={() => setMenuOpen(false)} />}
+        <TvMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         {joinPartyOpen && !playing && <TvJoinParty />}
         {partyMenuOpen && !playing && <TvPartyMenu />}
         {friendsOpen && !playing && <TvFriendsPanel />}

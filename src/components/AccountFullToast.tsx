@@ -14,12 +14,19 @@ import { Toast } from "./ui/Toast";
  */
 export function AccountFullToast({ tv }: { tv: boolean }) {
   const [full, setFull] = useState<AccountError | null>(null);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  if (!full && (hovered || focused)) {
+    setHovered(false);
+    setFocused(false);
+  }
+  const paused = hovered || focused;
   useEffect(() => onAccountFull(setFull), []);
   useEffect(() => {
-    if (!full) return;
+    if (!full || paused) return;
     const t = setTimeout(() => setFull(null), SAVE_FAILURE_MS);
     return () => clearTimeout(t);
-  }, [full]);
+  }, [full, paused]);
   const { shown, leaving } = usePresence(full, TOAST_OUT_MS);
   if (!shown) return null;
   const dismiss = (
@@ -28,7 +35,20 @@ export function AccountFullToast({ tv }: { tv: boolean }) {
     </IconButton>
   );
   return (
-    <Toast variant={tv ? "tv" : undefined} lines actions={!tv && dismiss} leaving={leaving} className="store-toast" data-kind="account-full">
+    <Toast
+      variant={tv ? "tv" : undefined}
+      lines
+      actions={!tv && dismiss}
+      leaving={leaving}
+      className="store-toast"
+      data-kind="account-full"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
+    >
       <strong>Your account is full</strong>
       <span>New changes of this kind stay on this device. Removing some makes room, then they sync.</span>
       <span className="toast-detail">{shown.message}</span>

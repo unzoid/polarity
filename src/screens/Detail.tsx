@@ -1,4 +1,5 @@
-import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
+import { LayoutList, LayoutRow, Reset, Volume, VolumeMuted } from "../components/icons";
+import { SwapIcon } from "../components/SwapIcon";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
 import { ExtrasShelf } from "../components/title/ExtrasShelf";
@@ -8,7 +9,7 @@ import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
 import { useEpisodeLayout } from "../lib/settings";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
+import { type BackdropTrailerHandle, useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
 import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
@@ -144,7 +145,7 @@ function DetailHero({
   /** The full metadata hasn't answered yet: the preview's missing logo may still come (#343). */
   metaPending: boolean;
   onSheet: (open: boolean) => void;
-  trailer: { visible: boolean; muted: boolean; toggleMute: () => void };
+  trailer: BackdropTrailerHandle;
 }) {
   const picker = useSourcePicker(onSheet);
 
@@ -158,12 +159,18 @@ function DetailHero({
   // Sources for the primary action load as soon as the page opens, so Play
   // (or the source list) is ready by the time the user reaches for it.
   useStreams(item.type, videoId);
+  const nextTitle = next?.video?.title?.trim();
   const request = videoId && {
     type: item.type,
     metaId: item.id,
     videoId,
     resumable: !!resumeAt,
-    subtitle: isSeries && next?.video ? `${episodeCode(next.video.season, next.video.episode)} · ${next.video.title}` : item.name,
+    subtitle:
+      isSeries && next?.video
+        ? nextTitle
+          ? `${episodeCode(next.video.season, next.video.episode)} · ${nextTitle}`
+          : episodeCode(next.video.season, next.video.episode)
+        : item.name,
   };
 
   const facts = joinFacts([item.releaseInfo, formatRuntime(meta?.runtime)]);
@@ -212,15 +219,23 @@ function DetailHero({
           download={item.type === "movie"}
           more={<HideTitleButton item={item} />}
         >
-          {trailer.visible && (
+          {trailer.state !== "idle" && (
             <IconButton
               variant="glass"
               className="detail-mute"
-              onClick={trailer.toggleMute}
-              label={trailer.muted ? "Turn trailer sound on" : "Mute trailer"}
-              title={trailer.muted ? "Sound on" : "Mute"}
+              onClick={trailer.state === "ended" ? trailer.replay : trailer.toggleMute}
+              label={
+                trailer.state === "ended"
+                  ? "Replay trailer"
+                  : trailer.muted
+                    ? "Turn trailer sound on"
+                    : "Mute trailer"
+              }
+              title={trailer.state === "ended" ? "Replay trailer" : trailer.muted ? "Sound on" : "Mute"}
             >
-              {trailer.muted ? <VolumeMuted size={20} /> : <Volume size={20} />}
+              <SwapIcon state={trailer.state === "ended" ? "ended" : trailer.muted ? "muted" : "sound"}>
+                {trailer.state === "ended" ? <Reset size={20} /> : trailer.muted ? <VolumeMuted size={20} /> : <Volume size={20} />}
+              </SwapIcon>
             </IconButton>
           )}
         </TitleActions>
@@ -293,13 +308,16 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
 
   const [layout, setLayout] = useEpisodeLayout();
   // A started episode keeps its file.
-  const request = (v: Video): PlayRequest => ({
-    type: "series",
-    metaId: meta.id,
-    videoId: v.id,
-    resumable: map.has(v.id),
-    subtitle: `${episodeCode(v.season, v.episode)} · ${v.title}`,
-  });
+  const request = (v: Video): PlayRequest => {
+    const epTitle = v.title?.trim();
+    return {
+      type: "series",
+      metaId: meta.id,
+      videoId: v.id,
+      resumable: map.has(v.id),
+      subtitle: epTitle ? `${episodeCode(v.season, v.episode)} · ${epTitle}` : episodeCode(v.season, v.episode),
+    };
+  };
   const offered = useRef(false);
   useEffect(() => {
     if (!linked || offered.current || progress === undefined) return;

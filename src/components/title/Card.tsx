@@ -126,17 +126,35 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
  * `logos` are the title's other logos, `logo` first: the first shaped like a logo that reads is drawn (TitleLogo).
  * While `pending` (the logo isn't known yet) neither shows, for at most `NAME_WAIT` (#343).
  */
-export function ArtTitle({ name, logo, logos, pending }: { name: string; logo?: string; logos?: string[]; pending?: boolean }) {
+export function ArtTitle({
+  name,
+  logo,
+  logos,
+  pending,
+  decorative,
+}: {
+  name: string;
+  logo?: string;
+  logos?: string[];
+  pending?: boolean;
+  /** Hidden from screen readers when `.card-title` already names the card button. */
+  decorative?: boolean;
+}) {
   return (
     <>
-      <div className="card-art-scrim art-after" />
+      <div className="card-art-scrim art-after" aria-hidden />
       <LogoOrName
         logo={logo}
         logos={logos}
         pending={pending}
         alt={name}
+        decorative={decorative}
         logoClass="card-logo"
-        name={<span className="card-art-title t-title2 art-after">{name}</span>}
+        name={
+          <span className="card-art-title t-title2 art-after" aria-hidden={decorative || undefined}>
+            {name}
+          </span>
+        }
       />
     </>
   );
@@ -151,6 +169,7 @@ export function LogoOrName({
   logos,
   pending = false,
   alt,
+  decorative,
   logoClass,
   name,
 }: {
@@ -158,6 +177,7 @@ export function LogoOrName({
   logos?: string[];
   pending?: boolean;
   alt: string;
+  decorative?: boolean;
   logoClass: string;
   name: ReactElement<HTMLAttributes<HTMLElement>>;
 }) {
@@ -169,15 +189,26 @@ export function LogoOrName({
   );
   const { shown, onError } = useCardArt(sizedLogo);
   const waiting = useNameWait(pending && !sizedLogo, alt);
-  if (shown) return <TitleLogo src={shown} logos={sizedLogos} alt={alt} className={`${logoClass} art-after`} onFail={onError} />;
+  if (shown)
+    return (
+      <TitleLogo
+        src={shown}
+        logos={sizedLogos}
+        alt={decorative ? "" : alt}
+        aria-hidden={decorative || undefined}
+        className={`${logoClass} art-after`}
+        onFail={onError}
+      />
+    );
   return waiting ? cloneElement(name, { "data-name-wait": "" } as HTMLAttributes<HTMLElement>) : name;
 }
 
 /** A stripe along the bottom of the art for how far in you are (0–1). */
 export function ProgressBar({ fraction }: { fraction: number }) {
+  const clamped = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
   return (
     <div className="progress-track">
-      <div className="progress-fill" style={{ transform: `scaleX(${fraction})` }} />
+      <div className="progress-fill" style={{ transform: `scaleX(${clamped})` }} />
     </div>
   );
 }

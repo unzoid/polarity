@@ -86,3 +86,9 @@ export const extraKind = (kind: string) => kind.trim() || "Video";
  * https host (tauri.conf.json `img-src`); a tile whose still doesn't load shows its name and kind instead.
  */
 export const extraStill = (e: Pick<Extra, "key">) => `https://i.ytimg.com/vi/${encodeURIComponent(e.key)}/mqdefault.jpg`;
+
+/** High-resolution YouTube stills to try in order (`hqdefault` first, falling back to `mqdefault`). */
+export const extraStills = (e: Pick<Extra, "key">): string[] => {
+  const id = encodeURIComponent(e.key);
+  return [`https://i.ytimg.com/vi/${id}/hqdefault.jpg`, extraStill(e)];
+};

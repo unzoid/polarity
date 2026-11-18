@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { PosterCard } from "../components/PosterCard";
 import { PosterGrid } from "../components/title/PosterGrid";
 import { Segmented } from "../components/Segmented";
@@ -11,6 +11,21 @@ import type { ContentType, MetaPreview } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { keys } from "../lib/net";
 import { useFormFactor } from "../lib/ui";
+
+const NARROW_DISCOVER_QUERY = "(max-width: 920px)";
+
+function subscribeNarrowDiscover(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const mq = window.matchMedia(NARROW_DISCOVER_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function readNarrowDiscover() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(NARROW_DISCOVER_QUERY).matches
+    : false;
+}
 
 const CATALOGS = [
   { id: "trending", label: "Trending" },
@@ -38,6 +53,7 @@ export function Discover({
   addon?: string;
 }) {
   const phone = useFormFactor().form === "phone";
+  const narrow = useSyncExternalStore(subscribeNarrowDiscover, readNarrowDiscover, () => false);
   const viewing = useViewingLimit();
   const [catalog, setCatalog] = useState(() => (CATALOGS.some((c) => c.id === initialCatalog) ? initialCatalog! : "trending"));
   const [picked, setGenre] = useState(initialGenre);
@@ -70,7 +86,15 @@ export function Discover({
   const all = keepWithinLimit(query.data?.pages.flat() ?? [], viewing);
   // Nothing to play and nothing to show (#337) stays out.
   // Hidden titles too, and watched ones when asked (lib/catalog/browseFilter.ts); the grid's pager fills a short page.
-  const items = useBrowseVisible(useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id)))) ?? [];
+  const visibleItems = useBrowseVisible(useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id))));
+  const items = visibleItems ?? [];
+  const empty =
+    !query.isPending &&
+    !query.isFetchingNextPage &&
+    !query.hasNextPage &&
+    !query.isError &&
+    visibleItems !== undefined &&
+    items.length === 0;
 
   return (
     <div className="scroll">
@@ -95,8 +119,8 @@ export function Discover({
             />
           )}
           {!own &&
-            // Six of them are wider than a phone: there it's a dropdown sharing the row with Genre's (#457, shell.css).
-            (phone ? (
+            // Six of them are wider than a phone or narrow desktop window: there it's a dropdown (#457, shell.css).
+            (phone || narrow ? (
               <Dropdown label="Catalog" value={catalog} onChange={setCatalog} options={CATALOGS.map((c) => ({ value: c.id, label: c.label }))} />
             ) : (
               <Segmented options={CATALOGS} value={catalog} onChange={setCatalog} label="Catalog" />
@@ -108,6 +132,13 @@ export function Discover({
           <PosterCard key={item.id} item={item} />
         ))}
       </PosterGrid>
+      {empty && (
+        <EmptyState action={genre && !own?.genreRequired ? { label: "All Genres", onClick: () => setGenre(undefined) } : undefined}>
+          {genre
+            ? `No ${type === "movie" ? "movies" : "series"} found in ${genre}.`
+            : `No ${type === "movie" ? "movies" : "series"} in this list right now.`}
+        </EmptyState>
+      )}
       {query.isError && (
         <EmptyState>{own ? `${own.addonName} didn't send this list. Try again later.` : "Couldn't load this catalog. Check your connection."}</EmptyState>
       )}

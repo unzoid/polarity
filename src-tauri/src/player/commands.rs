@@ -156,6 +156,9 @@ pub async fn mpv_load(
     if !local && !is_web_url(&url) {
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));
     }
+    if !state.mpv.turns.wanted(owner) {
+        return Ok(());
+    }
     state.mpv.touch();
     state.mpv.ensure(&app, &window, user_config.unwrap_or(false)).await.map_err(CmdError::Player)?;
     let mut options = String::new();
@@ -194,6 +197,21 @@ pub async fn mpv_load(
         // The probe stops by itself once its wait is over.
         _ => None,
     };
+    // Stopped or superseded while loading paused or probing the opening: don't zoom, unpause or show mpv.
+    if !state.mpv.turns.wanted(owner) {
+        {
+            let mut slot = state.mpv.opening.locked();
+            if matches!(*slot, Some(Opening::Probing(l)) if l == load) {
+                *slot = None;
+            }
+        }
+        if state.mpv.turns.may_stop(owner) {
+            state.mpv.set_visible(false).await;
+            let _ = state.mpv.request(json!(["stop"])).await;
+            state.mpv.turns.stopped_by(owner);
+        }
+        return Ok(());
+    }
     if let Some(f) = found {
         if let Ok(osd) = state.mpv.request(json!(["get_property", "osd-dimensions"])).await {
             let int = |k: &str| osd.get(k).and_then(Value::as_i64).filter(|n| *n > 0);
@@ -320,18 +338,17 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
 /// Stop playback but keep mpv alive (idle) for the next title.
 #[tauri::command]
 pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>, owner: Option<u64>) -> Result<(), String> {
-    if state.mpv.conn.lock().await.is_none() {
-        return Ok(());
-    }
     // A player that was left: mpv has its successor's file by now, which isn't its to stop.
     if !state.mpv.turns.may_stop(owner) {
         return Ok(());
     }
+    state.mpv.turns.stopped_by(owner);
+    if state.mpv.conn.lock().await.is_none() {
+        return Ok(());
+    }
     state.mpv.schedule_idle_shutdown(&app);
     state.mpv.set_visible(false).await;
-    let stopped = state.mpv.request(json!(["stop"])).await.map(|_| ());
-    state.mpv.turns.stopped();
-    stopped
+    state.mpv.request(json!(["stop"])).await.map(|_| ())
 }
 
 /// Save the picture on screen (with its subtitles) as a JPEG in Pictures/Polarity, named after `title` and
@@ -347,12 +364,14 @@ pub async fn mpv_screenshot(
     use polar_player::shots::{shot_name, unused_path};
     let dir = app.path().picture_dir().map_err(|e| CmdError::Save(e.to_string()))?.join("Polarity");
     tokio::fs::create_dir_all(&dir).await.map_err(|e| CmdError::Save(e.to_string()))?;
-    let path = unused_path(&dir, &shot_name(&title, at));
     let mpv = &state.mpv;
+    let _guard = mpv.shot_lock.lock().await;
+    let path = unused_path(&dir, &shot_name(&title, at));
     // Full quality for this one; the frosted overlays' snapshots go back to their small files.
     let _ = mpv.request(json!(["set_property", "screenshot-jpeg-quality", 95])).await;
     let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "subtitles"])).await;
     let _ = mpv.request(json!(["set_property", "screenshot-jpeg-quality", 70])).await;
+    drop(_guard);
     taken.map_err(CmdError::Player)?;
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     *mpv.last_shot.locked() = Some(path);
@@ -409,7 +428,11 @@ pub async fn mpv_snapshot(state: State<'_, AppState>) -> Result<String, String> 
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let path = super::shots_dir().join(format!("frame-{}.jpg", NEXT.fetch_add(1, Ordering::Relaxed)));
     let path_str = path.to_string_lossy().to_string();
-    state.mpv.request(json!(["screenshot-to-file", path_str, "video"])).await?;
+    let taken = {
+        let _guard = state.mpv.shot_lock.lock().await;
+        state.mpv.request(json!(["screenshot-to-file", path_str, "video"])).await
+    };
+    taken?;
     let read = tokio::fs::read(&path).await;
     let _ = tokio::fs::remove_file(&path).await;
     let bytes = read.map_err(|e| e.to_string())?;

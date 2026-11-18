@@ -1,4 +1,4 @@
-import { useId, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { useDownload } from "../../lib/library";
 import type { PlayRequest } from "../../lib/playback";
 import type { MetaPreview } from "../../lib/types";
@@ -74,7 +74,7 @@ export function TitleActions({
     </IconButton>,
     !downloadBusy && downloadButton && <span key="download">{downloadButton}</span>,
     item && <TraktRating key="trakt" item={item} />,
-    more,
+    more && <Fragment key="more">{more}</Fragment>,
   ];
 
   return (

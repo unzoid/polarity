@@ -36,8 +36,8 @@ params.delete("logos"); // and #437's every-title-has-a-logo switch
 const secretsPlace = params.get("secretsPlace") ?? "keychain"; // Settings → Account's "On this device"
 params.delete("secretsPlace");
 // `fake.html?account=1`: signed in, with watch parties in this page (account.ts); read by lib/account in dev builds only.
-// `?account=signed-out`: the same account, starting at the sign-in screen.
-if (params.get("account")) (globalThis as { __polarFakeAccount?: unknown }).__polarFakeAccount = fakeAccount;
+// `?account=signed-out`: the same account, starting at the sign-in screen. Without `?account`, stay local even if `.env` names Supabase.
+(globalThis as { __polarFakeAccount?: unknown }).__polarFakeAccount = params.get("account") ? fakeAccount : null;
 if (params.get("account") === "signed-out") startSignedOut();
 params.delete("account");
 params.delete("friends"); // `&friends=1`: the profile starts with Friends on (account.ts)

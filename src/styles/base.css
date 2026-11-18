@@ -16,8 +16,6 @@ body {
   color: var(--text);
   font: 100%/1.5 var(--font);
   font-optical-sizing: auto;
-  /* Inter: l with tail (cv05) and serifed I (cv08) so Il1 never blur together; round quotes (ss03). */
-  font-feature-settings: "cv05", "cv08", "ss03";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
@@ -48,8 +46,17 @@ body {
   font-family: "Twemoji Country Flags", "Segoe UI Variable Display", var(--font);
 }
 
-/* The other app fonts, all variable (weight axis) so every weight the app uses is a real one. Their
-   own features: Inter's character variants (body, above) don't apply to them. */
+/* Inter, bundled with its optical sizes. Its own features: l with tail (cv05) and serifed I (cv08) so Il1
+   never blur together; round quotes (ss03). */
+:root[data-font="inter"] {
+  --font: "Twemoji Country Flags", "Inter Variable", "Inter", system-ui, "Segoe UI Variable Text", sans-serif;
+}
+:root[data-font="inter"] body {
+  font-feature-settings: "cv05", "cv08", "ss03";
+}
+
+/* Instrument Sans (the default, tokens.css) and the other app fonts, all variable (weight axis) so every
+   weight the app uses is a real one. */
 :root[data-font="instrument"] {
   --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, sans-serif;
 }
@@ -208,6 +215,17 @@ input {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+/* Instrument Sans draws its tabular figures as a separate, wider design (a footed 1, looser spacing), so a
+   static number in them reads as another font. Its own figures everywhere, then; only numbers that tick
+   (clocks, timers, progress, steppers) keep the steady widths, so they don't jitter. */
+:root:not([data-font]) .tabular,
+:root[data-font="instrument"] .tabular {
+  font-variant-numeric: normal;
+}
+:root:not([data-font]) :is(.scrubber-time, .player-remaining, .player-sleep, .player-frame-label, .player-hold-speed, .player-step-time, .tv-clock, .sub-stepper-value, .download-row-line, .batch-download-status, .navbar-update, .skip-num),
+:root[data-font="instrument"] :is(.scrubber-time, .player-remaining, .player-sleep, .player-frame-label, .player-hold-speed, .player-step-time, .tv-clock, .sub-stepper-value, .download-row-line, .batch-download-status, .navbar-update, .skip-num) {
+  font-variant-numeric: tabular-nums;
+}
 
 /* --- Pressables: feedback lives on pointer-down, and it's instant. */
 .pressable {
@@ -235,10 +253,30 @@ input {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .icon-swap[data-animate="true"],
-  .episode-watched[data-animate="true"] {
+  :root:not([data-reduce-motion="off"]) :is(.icon-swap[data-animate="true"], .episode-watched[data-animate="true"]) {
     animation-name: fade-in;
   }
+}
+
+/* --- Start-up's one frame of blur shaders (lib/ui/shaderWarmup.ts): paused copies of the blur-in entrances, each
+   frozen at another blur by its delay. Drawn, so the GPU builds their shaders, but with ink too faint to see
+   (not 0, or nothing would be drawn). */
+.shader-warmup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-system);
+  color: rgb(128 128 128 / 0.004);
+  pointer-events: none;
+}
+.shader-warmup > * {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  animation-duration: 1s;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-play-state: paused;
 }
 
 /* --- Images fade in once decoded instead of popping. */
@@ -306,6 +344,9 @@ img[data-logo-pending] {
 img[data-logo-look="silhouette"] {
   filter: brightness(0) invert(1) drop-shadow(0 2px 18px var(--scrim-1));
 }
+img[data-logo-look="silhouette-dark"] {
+  filter: brightness(0) opacity(0.88) drop-shadow(0 2px 14px rgb(255 255 255 / 0.55));
+}
 img[data-logo-look="halo-light"] {
   filter: drop-shadow(0 0 1px rgb(255 255 255 / 0.85)) drop-shadow(0 0 8px rgb(255 255 255 / 0.55));
 }
@@ -314,7 +355,7 @@ img[data-logo-look="halo-dark"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pressable:active {
+  :root:not([data-reduce-motion="off"]) .pressable:active {
     transform: none;
   }
 }
@@ -467,7 +508,7 @@ img[data-logo-look="halo-dark"] {
   user-select: none;
 }
 /* T3 Code's popover: solid, a hairline border with a 1px top highlight, a soft
-   shadow. Opens and closes instantly: it's used from the keyboard, many times a day. */
+   shadow, and a crisp scale+opacity entrance/exit from its trigger. */
 .select-popup {
   min-width: var(--anchor-width);
   border-radius: 10px;
@@ -479,6 +520,18 @@ img[data-logo-look="halo-dark"] {
   font-family: var(--font);
   color: var(--text);
   outline: none;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+.select-popup[data-starting-style],
+.select-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+.select-popup[data-ending-style] {
+  transition-duration: 100ms;
 }
 .select-list {
   max-height: min(var(--available-height), 22rem);
@@ -559,7 +612,7 @@ img[data-logo-look="halo-dark"] {
   box-shadow: 0 0.5rem 1.25rem -0.5rem var(--scrim-2);
 }
 @media (prefers-reduced-motion: reduce) {
-  .select-popup[data-size="large"] {
+  :root:not([data-reduce-motion="off"]) .select-popup {
     transform: none !important;
   }
 }
@@ -607,10 +660,10 @@ img[data-logo-look="halo-dark"] {
   --view-ease: var(--ease-reveal);
 }
 @media (prefers-reduced-motion: reduce) {
-  .fit-height {
+  :root:not([data-reduce-motion="off"]) .fit-height {
     transition: none;
   }
-  [data-slide] {
+  :root:not([data-reduce-motion="off"]) [data-slide] {
     --view-from: 0px !important;
   }
 }

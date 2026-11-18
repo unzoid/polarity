@@ -36,7 +36,7 @@ function useWait(profile: Profile | null) {
 function CheckPin({ request, onDone }: { request: Extract<PinRequest, { kind: "check" }>; onDone: (a: PinAnswer) => void }) {
   const [whose, setWhose] = useState<Profile | null>(request.profiles.length === 1 ? request.profiles[0] : null);
   const [forgot, setForgot] = useState(false);
-  const [wrong, setWrong] = useState(false);
+  const [failures, setFailures] = useState(0);
   const [checking, setChecking] = useState(false);
   const wait = useWait(whose);
 
@@ -70,21 +70,21 @@ function CheckPin({ request, onDone }: { request: Extract<PinRequest, { kind: "c
     const result = await checkPin(whose, pin);
     setChecking(false);
     if (result.ok) return onDone({ profile: whose.id, pin });
-    setWrong(true);
+    setFailures((n) => n + 1);
     wait.refresh();
   };
 
   return (
     <>
       {request.profiles.length > 1 && (
-        <button type="button" className="pin-whose-current pressable" onClick={() => (setWhose(null), setWrong(false))}>
+        <button type="button" className="pin-whose-current pressable" onClick={() => (setWhose(null), setFailures(0))}>
           <Avatar id={whose.avatar} />
           <span>{whose.name}</span>
         </button>
       )}
-      <PinPad label="PIN" onComplete={(pin) => void enter(pin)} disabled={checking || wait.left > 0} />
+      <PinPad label="PIN" failures={failures} onComplete={(pin) => void enter(pin)} disabled={checking || wait.left > 0} />
       <p className="pin-error" role="alert">
-        {wait.left > 0 ? `Too many wrong PINs. ${waitText(wait.left)}` : wrong ? "That PIN isn't right." : ""}
+        {wait.left > 0 ? `Too many wrong PINs. ${waitText(wait.left)}` : failures > 0 ? "That PIN isn't right." : ""}
       </p>
       {request.forgot && (
         <button type="button" className="auth-link" onClick={() => setForgot(true)}>
@@ -97,22 +97,23 @@ function CheckPin({ request, onDone }: { request: Extract<PinRequest, { kind: "c
 
 function NewPin({ onDone }: { onDone: (a: PinAnswer) => void }) {
   const [first, setFirst] = useState<string | null>(null);
-  const [mismatch, setMismatch] = useState(false);
+  const [failures, setFailures] = useState(0);
   return (
     <>
       <p className="pin-text">{first ? "Enter it again." : "Enter a new PIN."}</p>
       <PinPad
         key={first ? "again" : "first"}
         label={first ? "PIN again" : "New PIN"}
+        failures={first ? 0 : failures}
         onComplete={(pin) => {
-          if (!first) return (setFirst(pin), setMismatch(false));
+          if (!first) return setFirst(pin);
           if (pin === first) return onDone({ pin });
           setFirst(null);
-          setMismatch(true);
+          setFailures((n) => n + 1);
         }}
       />
       <p className="pin-error" role="alert">
-        {mismatch ? "Those didn't match. Start again." : ""}
+        {failures > 0 && !first ? "Those didn't match. Start again." : ""}
       </p>
     </>
   );

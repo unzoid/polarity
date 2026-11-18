@@ -93,6 +93,11 @@
   animation-timeline: --detail;
   animation-range: 0 32vh;
 }
+/* When there's no backdrop (or it failed), the blurred poster/cover stands in from the top of the page. */
+.detail-bg:not(:has(.detail-bg-sharp)) .detail-bg-blur[data-loaded="true"] {
+  opacity: 1;
+  animation: none;
+}
 @keyframes detail-ambient {
   to {
     opacity: 1;
@@ -113,6 +118,10 @@
   animation-timeline: --detail;
   animation-range: 0 32vh;
 }
+:root[data-scheme="light"] .detail-bg:not(:has(.detail-bg-sharp))::after {
+  opacity: 0.78;
+  animation: none;
+}
 @keyframes detail-wash {
   to {
     opacity: 0.78;
@@ -122,8 +131,26 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(to top, color-mix(in srgb, var(--bg) 92%, transparent) 0%, color-mix(in srgb, var(--bg) 50%, transparent) 26%, transparent 55%),
-    linear-gradient(to right, color-mix(in srgb, var(--bg) 80%, transparent) 0%, color-mix(in srgb, var(--bg) 40%, transparent) 36%, transparent 62%);
+    linear-gradient(
+      to top,
+      color-mix(in srgb, var(--bg) 95%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 80%, transparent) 10%,
+      color-mix(in srgb, var(--bg) 59%, transparent) 21%,
+      color-mix(in srgb, var(--bg) 37%, transparent) 33%,
+      color-mix(in srgb, var(--bg) 18%, transparent) 45%,
+      color-mix(in srgb, var(--bg) 6%, transparent) 57%,
+      transparent 68%
+    ),
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--bg) 84%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 68%, transparent) 12%,
+      color-mix(in srgb, var(--bg) 48%, transparent) 25%,
+      color-mix(in srgb, var(--bg) 29%, transparent) 38%,
+      color-mix(in srgb, var(--bg) 13%, transparent) 50%,
+      color-mix(in srgb, var(--bg) 4%, transparent) 60%,
+      transparent 70%
+    );
 }
 
 /* --- Fold: what's below the bottom edge goes softly out of focus - the
@@ -486,6 +513,7 @@
   flex-direction: column;
   gap: 0.125rem;
   color: var(--text-2);
+  text-shadow: 0 1px 10px var(--text-halo);
 }
 .detail-credits dt,
 .detail-credits dd {
@@ -635,10 +663,36 @@
   text-shadow: 0 1px 6px var(--scrim-2);
 }
 .episode-card .progress-track {
-  left: auto;
-  width: 34%;
+  left: 10px;
+  right: 10px;
+  bottom: 8px;
+  width: auto;
+}
+.episode-card .card-frame:has(.progress-track) .episode-runtime {
   bottom: 16px;
-  right: 12px;
+}
+.episode-still-play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 38px;
+  height: 38px;
+  padding-left: 2px;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.56);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    inset 0 0 0 1px rgb(255 255 255 / 0.16),
+    0 4px 14px rgb(0 0 0 / 0.35);
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
 }
 .episode-watched {
   position: absolute;
@@ -657,7 +711,7 @@
   position: absolute;
   top: 10px;
   left: 10px;
-  max-width: calc(100% - 20px);
+  max-width: calc(100% - 96px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -673,6 +727,13 @@
 }
 .episode-watched ~ .episode-tag {
   left: 40px;
+  max-width: calc(100% - 126px);
+}
+.episode-card:has(.download-reveal) .episode-tag {
+  max-width: calc(100% - 134px);
+}
+.episode-card:has(.download-reveal) .episode-watched ~ .episode-tag {
+  max-width: calc(100% - 164px);
 }
 .episode-card-text {
   display: flex;
@@ -853,8 +914,22 @@
   font-size: var(--fs-xs);
 }
 .episode-card[data-layout="list"] .progress-track {
-  bottom: 11px;
+  left: 8px;
   right: 8px;
+  bottom: 5px;
+  height: 3px;
+}
+.episode-card[data-layout="list"] .card-frame:has(.progress-track) .episode-runtime {
+  bottom: 13px;
+}
+@media (min-width: 601px) {
+  /* Desktop list mode puts Sources and Download at the row's right end, so the still's top is clear. */
+  .episode-card[data-layout="list"] .episode-tag {
+    max-width: calc(100% - 20px);
+  }
+  .episode-card[data-layout="list"] .episode-watched ~ .episode-tag {
+    max-width: calc(100% - 50px);
+  }
 }
 .episode-card[data-layout="list"] .episode-card-overview {
   -webkit-line-clamp: 2;
@@ -872,12 +947,26 @@
   transform: none;
   outline: none;
 }
+.episode-card[data-layout="list"] .episode-card-main:focus-visible .episode-still-play {
+  opacity: 1;
+  transform: scale(1);
+}
 @media (hover: hover) and (pointer: fine) {
   .episode-card[data-layout="list"] .episode-card-main:not(:disabled):hover {
     background: rgb(var(--ink) / 0.09);
   }
   .episode-card[data-layout="list"] .episode-card-main:hover .card-frame {
     transform: none;
+  }
+  .episode-card[data-layout="list"] .episode-card-main:not(:disabled):hover .episode-still-play {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .episode-still-play {
+    transform: none;
+    transition: none;
   }
 }
 
@@ -1060,13 +1149,17 @@
 .people {
   list-style: none;
   margin: 0;
-  padding: 0 0 0.5rem;
+  padding: 4px 0 0.5rem;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 112px;
   gap: 1.25rem;
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.people::-webkit-scrollbar {
+  display: none;
 }
 .person {
   display: grid;
@@ -1074,6 +1167,7 @@
   align-content: start;
   gap: 0.125rem;
   text-align: center;
+  scroll-snap-align: start;
 }
 .person-photo {
   display: grid;
@@ -1084,8 +1178,12 @@
   overflow: hidden;
   border-radius: var(--r-round);
   background: rgb(var(--ink) / 0.08);
+  box-shadow: inset 0 0 0 1px var(--hairline);
   color: var(--text-2);
   font-weight: 650;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
 }
 .person-photo img {
   width: 100%;
@@ -1285,8 +1383,22 @@
 /* Dark enough at the top for the bar's icons, and into the page's own black at the bottom, where the title sits. */
 :root[data-form="phone"] .detail-bg-scrim {
   background:
-    linear-gradient(to bottom, rgb(0 0 0 / 0.45), transparent 22%),
-    linear-gradient(to top, var(--bg) 0%, rgb(0 0 0 / 0.72) 22%, transparent 52%);
+    linear-gradient(
+      to bottom,
+      rgb(0 0 0 / 0.45) 0%,
+      rgb(0 0 0 / 0.18) 10%,
+      transparent 22%
+    ),
+    linear-gradient(
+      to top,
+      var(--bg) 0%,
+      color-mix(in srgb, var(--bg) 94%, transparent) 9%,
+      color-mix(in srgb, var(--bg) 79%, transparent) 18%,
+      color-mix(in srgb, var(--bg) 56%, transparent) 28%,
+      color-mix(in srgb, var(--bg) 33%, transparent) 38%,
+      color-mix(in srgb, var(--bg) 14%, transparent) 48%,
+      transparent 58%
+    );
 }
 /* Light: the art fades into the near-white page through the page's own colour, on an eased curve (a straight
    ramp shows its ends as edges), not through black: that drew a grey band between the art and the page. The top
@@ -1616,6 +1728,17 @@
   .person-open:hover .person-name {
     text-decoration: underline;
   }
+  .person-open:hover .person-photo {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow:
+      inset 0 0 0 1px var(--hairline-strong),
+      0 8px 20px -6px rgb(0 0 0 / 0.36);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .person-open:hover .person-photo {
+    transform: none;
+  }
 }
 
 /* A name in the Starring / Director line that opens the person's page (NameList.tsx). */
@@ -1644,6 +1767,38 @@
   position: relative;
   padding: 0 0 1rem;
 }
+.extra-play {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: 34px;
+  height: 34px;
+  padding-left: 2px;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.56);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    inset 0 0 0 1px rgb(255 255 255 / 0.16),
+    0 4px 12px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .extras .card:hover .extra-play {
+    background: rgb(0 0 0 / 0.72);
+    transform: scale(1.06);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .extras .card:hover .extra-play {
+    transform: none;
+  }
+}
 .extra-tile {
   position: absolute;
   inset: 0;
@@ -1670,12 +1825,22 @@
 }
 
 /* A person's page (screens/Person.tsx): photo beside name, facts and biography, then their titles. */
+.person-page {
+  position: relative;
+  isolation: isolate;
+}
+.person-head,
+.person-titles {
+  position: relative;
+  z-index: 1;
+}
 .person-head {
   justify-content: flex-start;
   align-items: flex-start;
   gap: 1.75rem;
 }
 .person-head-photo {
+  position: relative;
   flex: none;
   display: grid;
   place-items: center;
@@ -1684,9 +1849,25 @@
   overflow: hidden;
   border-radius: var(--r-card);
   background: var(--fill-3);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px -12px rgb(0 0 0 / 0.32);
   color: var(--text-2);
   font-size: var(--fs-xl);
   font-weight: 650;
+}
+.person-head-photo-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.person-bio-skeleton {
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.person-titles-heading-skeleton {
+  margin: 0 0 0.75rem;
+  padding: 0 var(--gutter) 0 var(--content-start);
 }
 .person-head-photo img {
   width: 100%;

@@ -125,7 +125,8 @@ function paintCrop(el: HTMLCanvasElement, ctx: CanvasRenderingContext2D, src: Ca
     x += n.offsetLeft;
     y += n.offsetTop;
   }
-  const scale = Math.min(player.offsetWidth / srcW, player.offsetHeight / srcH);
+  const fill = player.dataset.fill === "true";
+  const scale = (fill ? Math.max : Math.min)(player.offsetWidth / srcW, player.offsetHeight / srcH);
   const ox = (player.offsetWidth - srcW * scale) / 2;
   const oy = (player.offsetHeight - srcH * scale) / 2;
   // Overdraw by a few blur radii (in the panel's own px) so the edges stay opaque.

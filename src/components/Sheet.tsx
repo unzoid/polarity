@@ -197,7 +197,7 @@ export function Sheet({
                   onClick={() => rest(detent === "medium" ? "large" : "medium")}
                 />
               ) : (
-                <div className="sheet-grabber" aria-hidden />
+                bottom && <div className="sheet-grabber" aria-hidden />
               )}
               <div>
                 <h2 className="t-title2">{title}</h2>

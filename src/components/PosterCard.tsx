@@ -65,6 +65,7 @@ export function LandscapeCard({ item }: { item: MetaPreview }) {
     <Card
       shape="landscape"
       art={item.background ?? item.poster}
+      artFallbacks={item.background && item.poster ? [item.poster] : undefined}
       title={item.name}
       detail={[item.type === "movie" ? "Movie" : "Series", item.genres?.[0], item.releaseInfo].filter(Boolean).join(" · ")}
       tabular={false}
@@ -72,7 +73,7 @@ export function LandscapeCard({ item }: { item: MetaPreview }) {
       {...intent}
       {...cardMenu(item)}
     >
-      <ArtTitle name={item.name} logo={item.logo} />
+      <ArtTitle name={item.name} logo={item.logo} decorative />
     </Card>
   );
 }

@@ -50,7 +50,7 @@ export interface MpvSubOptions {
 
 /** What the app starts mpv with (src-tauri/src/player/mod.rs) and mpv's own defaults for the rest. */
 export const MPV_SUB_DEFAULTS: MpvSubOptions = {
-  fontSize: 42,
+  fontSize: 52,
   scale: 1,
   borderSize: 1.6,
   shadowOffset: 1,
@@ -140,10 +140,10 @@ export const fontSizeForLine = (line: number, extent: number) => line / (extent 
 
 /**
  * The built-in player's cue font size: `::cue` in player.css,
- * `clamp(1.25rem, 2.4vw, 2.25rem) * --sub-scale`.
+ * `clamp(1.5rem, 3vw, 4rem) * --sub-scale`.
  */
 export const cueFontSize = (viewportWidth: number, remPx: number, scale: number) =>
-  Math.min(Math.max(1.25 * remPx, 0.024 * viewportWidth), 2.25 * remPx) * scale;
+  Math.min(Math.max(1.5 * remPx, 0.03 * viewportWidth), 4 * remPx) * scale;
 
 /** `::cue`'s line height, as a multiple of its font size. */
 export const CUE_LINE_HEIGHT = 1.25;

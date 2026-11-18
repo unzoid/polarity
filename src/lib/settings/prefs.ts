@@ -201,7 +201,7 @@ export const TORRENT_UPLOAD_MBPS = 4;
 const DEFAULTS: Prefs = {
   uiSounds: true,
   uiSoundVolume: 0.5,
-  uiSoundPack: "classic",
+  uiSoundPack: "soft",
   controllerAlerts: true,
   suggestTvMode: true,
   padLabels: "auto",

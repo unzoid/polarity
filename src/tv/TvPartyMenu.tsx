@@ -24,7 +24,7 @@ export function TvPartyMenu() {
         <h2 className="tv-heading">Watch Party</h2>
       </header>
       {/* The player panel's two columns: the room, then settings (no link field: no pasting on a remote). */}
-      <div className="tv-party-body">
+      <div className="tv-party-body" data-nav-scroll="center">
         <PartyRoomPane party={party} onGo={close} now />
         <PartySettingsPane party={party} />
       </div>

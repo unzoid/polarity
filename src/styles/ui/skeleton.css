@@ -1,11 +1,29 @@
-/* --- Skeleton (components/ui/Skeleton.tsx): a slow shimmer is the one constant motion we allow. */
+/* --- Skeleton (components/ui/Skeleton.tsx): a GPU-composited specular sweep, never a CPU background repaint. */
 .skeleton {
-  background: linear-gradient(100deg, var(--surface-1) 40%, var(--surface-2) 50%, var(--surface-1) 60%) 0 0 / 300% 100%;
-  animation: shimmer 1.6s linear infinite;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.skeleton.skeleton::after,
+:root[data-form="phone"] .skeleton.card-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: none;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(var(--ink) / 0.055) 50%,
+    transparent 80%
+  );
+  transform: translate3d(-100%, 0, 0);
+  animation: shimmer 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
 }
 @keyframes shimmer {
   to {
-    background-position: -150% 0;
+    transform: translate3d(100%, 0, 0);
   }
 }
 .skeleton-line {
@@ -14,13 +32,19 @@
   border-radius: 4px;
 }
 
-/* A loading shelf out of view holds still: the shimmer repaints on every frame wherever it is (#134). */
-.row[data-offscreen] .skeleton {
-  animation-play-state: paused;
+/* A loading shelf out of view (or a hidden detail skeleton) holds still: 0 running animations (#134). */
+.row[data-offscreen] .skeleton,
+.row[data-offscreen] .skeleton.skeleton::after,
+:root[data-form="phone"] .row[data-offscreen] .skeleton.card-frame::after,
+.detail:not([data-ready="pending"]) .detail-skeleton .skeleton,
+.detail:not([data-ready="pending"]) .detail-skeleton .skeleton.skeleton::after {
+  animation: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton {
-    animation: none;
+  :root:not([data-reduce-motion="off"]) .skeleton,
+  :root:not([data-reduce-motion="off"]) .skeleton.skeleton::after,
+  :root[data-form="phone"]:not([data-reduce-motion="off"]) .skeleton.card-frame::after {
+    animation: none !important;
   }
 }

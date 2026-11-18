@@ -61,10 +61,30 @@
   transition: none;
 }
 :root[data-touch="true"] .player-top {
-  background: linear-gradient(to bottom, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0.3) 55%, transparent);
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.72) 0%,
+    rgb(0 0 0 / 0.61) 14%,
+    rgb(0 0 0 / 0.48) 29%,
+    rgb(0 0 0 / 0.34) 45%,
+    rgb(0 0 0 / 0.21) 61%,
+    rgb(0 0 0 / 0.11) 76%,
+    rgb(0 0 0 / 0.038) 90%,
+    transparent 100%
+  );
 }
 :root[data-touch="true"] .player-bottom {
-  background: linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 55%, transparent);
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.86) 0%,
+    rgb(0 0 0 / 0.75) 14%,
+    rgb(0 0 0 / 0.6) 29%,
+    rgb(0 0 0 / 0.44) 45%,
+    rgb(0 0 0 / 0.28) 61%,
+    rgb(0 0 0 / 0.14) 76%,
+    rgb(0 0 0 / 0.05) 90%,
+    transparent 100%
+  );
 }
 
 /* The focus ring only for focus moved by the keyboard (#329, useKeyboardFocus): never after a click,
@@ -101,8 +121,12 @@
 .player-transport {
   color: var(--text);
 }
-.player-transport > svg {
+.player-transport :is(> svg, > .icon-swap > svg) {
   filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.4));
+}
+/* Optical centring: a right-pointing triangle's visual weight sits slightly left of its bounding box. */
+.player-play-glyph {
+  translate: 3px 0;
 }
 
 .player-top {
@@ -119,7 +143,17 @@
   --bar-top: calc(1rem + var(--safe-top));
   --bar-left: var(--safe-left);
   padding: var(--bar-top) var(--safe-right) 4rem var(--bar-left);
-  background: linear-gradient(to bottom, rgb(0 0 0 / 0.6), transparent);
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.64) 0%,
+    rgb(0 0 0 / 0.55) 14%,
+    rgb(0 0 0 / 0.43) 29%,
+    rgb(0 0 0 / 0.3) 45%,
+    rgb(0 0 0 / 0.19) 61%,
+    rgb(0 0 0 / 0.1) 76%,
+    rgb(0 0 0 / 0.035) 90%,
+    transparent 100%
+  );
   z-index: 2;
 }
 .player-icon {
@@ -354,8 +388,24 @@
   position: absolute;
   inset: auto 0 0 0;
   padding: 5rem max(2.5rem, var(--safe-right)) calc(1.25rem + var(--safe-bottom)) max(2.5rem, var(--safe-left));
-  background: linear-gradient(to top, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.38) 55%, transparent);
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.82) 0%,
+    rgb(0 0 0 / 0.71) 14%,
+    rgb(0 0 0 / 0.57) 29%,
+    rgb(0 0 0 / 0.41) 45%,
+    rgb(0 0 0 / 0.26) 61%,
+    rgb(0 0 0 / 0.13) 76%,
+    rgb(0 0 0 / 0.045) 90%,
+    transparent 100%
+  );
   z-index: 2;
+}
+/* Until the first frame plays, hide the dead 0:00 timeline while keeping Sources, Subtitles & Episodes accessible in .player-actions (#23, #393). */
+.player[data-started="false"] .player-timeline {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 .player-timeline {
   display: flex;
@@ -506,9 +556,12 @@
   width: 72px;
   height: 72px;
 }
-:root[data-form="phone"] .player-transport-main > svg {
+:root[data-form="phone"] .player-transport-main :is(> svg, > .icon-swap > svg) {
   width: 46px;
   height: 46px;
+}
+:root[data-form="phone"] .player-play-glyph {
+  translate: 2px 0;
 }
 :root[data-form="phone"] .skip-arrow {
   width: 46px;
@@ -598,7 +651,7 @@
   left: 50%;
   translate: -50% 0;
   height: auto;
-  padding: 0.875rem 0.5rem 0.875rem 1rem;
+  padding: 0.1875rem 0.5rem 0.1875rem 1rem;
   border-radius: var(--r-pill);
   background: rgb(0 0 0 / 0.62);
   visibility: hidden;
@@ -616,18 +669,67 @@
   -webkit-appearance: none;
   appearance: none;
   width: 88px;
-  height: 4px;
+  height: 28px;
   margin-right: 0.5rem;
+  background: transparent;
+  cursor: pointer;
+  outline-offset: 2px;
+}
+.player-volume input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
   border-radius: var(--r-pill);
   background: linear-gradient(to right, var(--text) var(--value), rgb(255 255 255 / 0.3) var(--value));
-  outline-offset: 6px;
+}
+/* Boosted range (>100%): a subtle tick marks 100% unity gain along the track. */
+.player-volume input[type="range"][data-boost]::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(
+      to right,
+      transparent calc(6px + (100% - 12px) * var(--unity-frac) - 0.75px),
+      rgb(255 255 255 / 0.65) calc(6px + (100% - 12px) * var(--unity-frac) - 0.75px),
+      rgb(255 255 255 / 0.65) calc(6px + (100% - 12px) * var(--unity-frac) + 0.75px),
+      transparent calc(6px + (100% - 12px) * var(--unity-frac) + 0.75px)
+    ),
+    linear-gradient(to right, var(--text) var(--value), rgb(255 255 255 / 0.3) var(--value));
 }
 .player-volume input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
+  margin-top: -4px;
   border-radius: var(--r-round);
   background: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .player-volume input[type="range"]:hover::-webkit-slider-thumb {
+    transform: scale(1.18);
+  }
+}
+.player-volume input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(to right, var(--text) var(--value), rgb(255 255 255 / 0.3) var(--value));
+}
+.player-volume input[type="range"][data-boost]::-moz-range-track {
+  background:
+    linear-gradient(
+      to right,
+      transparent calc(6px + (100% - 12px) * var(--unity-frac) - 0.75px),
+      rgb(255 255 255 / 0.65) calc(6px + (100% - 12px) * var(--unity-frac) - 0.75px),
+      rgb(255 255 255 / 0.65) calc(6px + (100% - 12px) * var(--unity-frac) + 0.75px),
+      transparent calc(6px + (100% - 12px) * var(--unity-frac) + 0.75px)
+    ),
+    linear-gradient(to right, var(--text) var(--value), rgb(255 255 255 / 0.3) var(--value));
+}
+.player-volume input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: var(--r-round);
+  background: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
 }
 
 /* --- Picture in Picture (data-mini, miniWindow.ts): a window as small as 320 × 180. The centre glyphs
@@ -666,9 +768,12 @@
   width: calc(var(--t) * 1.24);
   height: calc(var(--t) * 1.24);
 }
-.player[data-mini] .player-transport-main > svg {
+.player[data-mini] .player-transport-main :is(> svg, > .icon-swap > svg) {
   width: calc(var(--t) * 0.76);
   height: calc(var(--t) * 0.76);
+}
+.player[data-mini] .player-play-glyph {
+  translate: calc(var(--t) * 0.03) 0;
 }
 .player[data-mini] .skip-transport {
   --skip-half: calc(var(--t) / 2);
@@ -691,7 +796,7 @@
 .player-video::cue {
   background: var(--sub-bg, transparent);
   color: var(--sub-color, #fff);
-  font: var(--sub-weight, 600) calc(clamp(1.25rem, 2.4vw, 2.25rem) * var(--sub-scale, 1)) / 1.25 var(--sub-font, var(--font)), var(--font);
+  font: var(--sub-weight, 600) calc(clamp(1.5rem, 3vw, 4rem) * var(--sub-scale, 1)) / 1.25 var(--sub-font, var(--font)), var(--font);
   text-shadow: var(--sub-shadow, 0 0 6px rgb(0 0 0 / 0.9), 0 2px 3px rgb(0 0 0 / 0.8));
 }
 
@@ -856,6 +961,17 @@
   opacity: 1;
   pointer-events: auto;
 }
+/* Touch screens have no hover: keep the source row's (i) visible with a full 44px hit target. */
+:root[data-touch="true"] .options-item-wrap > .options-item {
+  padding-right: 3.25rem;
+}
+:root[data-touch="true"] .options-info {
+  right: 0.25rem;
+  width: var(--hit);
+  height: var(--hit);
+  opacity: 1;
+  pointer-events: auto;
+}
 .options-item[data-rich="true"] {
   align-items: center;
   padding-block: 0.5rem;
@@ -863,6 +979,10 @@
 /* A source checked ahead of time and not ready (#21): dimmed, the detail line says why. */
 .options-item[data-ready="no"] .options-text {
   opacity: 0.5;
+}
+/* Chosen, it sits on the light pill: dimmed as much there, its grey text was hard to read. */
+.options-item[aria-checked="true"][data-ready="no"] .options-text {
+  opacity: 0.8;
 }
 .options-item:disabled {
   opacity: 0.4;
@@ -1008,13 +1128,18 @@ html[data-os="android"] .options-columns {
   }
 }
 
-/* --- Scrubber: a tvOS bar — thick, rounded, no knob at rest. */
+/* --- Scrubber: a tvOS / Netflix tactile bar — rounded, segment markers, spring knob bloom. */
 .scrubber {
   position: relative;
   height: 20px;
   display: flex;
   align-items: center;
   touch-action: none;
+  cursor: pointer;
+}
+/* Touch screens: full 44px (--hit) hit height matching .player-remaining, so .player-timeline doesn't grow or overlap .player-actions. */
+:root[data-touch="true"] .player:not([data-mini]) .scrubber {
+  height: var(--hit);
 }
 .scrubber-track {
   position: relative;
@@ -1024,10 +1149,11 @@ html[data-os="android"] .options-columns {
   background: rgb(255 255 255 / 0.22);
   overflow: hidden;
   /* Grows when engaged. scaleY keeps it composite-only. */
-  transform: scaleY(0.75);
+  transform: scaleY(0.625);
   transition: transform var(--dur-fast) var(--ease-out);
 }
 .scrubber-buffered,
+.scrubber-hover,
 .scrubber-fill {
   position: absolute;
   inset: 0;
@@ -1037,16 +1163,30 @@ html[data-os="android"] .options-columns {
 .scrubber-buffered {
   background: rgb(255 255 255 / 0.28);
 }
+.scrubber-hover {
+  background: rgb(255 255 255 / 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms var(--ease-std);
+}
 .scrubber-fill {
   background: var(--text);
 }
-/* Intro: a faint tint over both the empty and played parts of the bar. */
+/* Segment markers (intro, recap, credits, post-credits): subtle bands across empty and played track alike. */
+.scrubber-segment,
 .scrubber-intro {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: color-mix(in srgb, var(--accent, #6ea8ff) 45%, transparent);
+  background: color-mix(in srgb, var(--accent, #6ea8ff) 48%, transparent);
   pointer-events: none;
+}
+.scrubber-segment[data-kind="recap"] {
+  background: color-mix(in srgb, #64d2ff 45%, transparent);
+}
+.scrubber-segment[data-kind="outro"],
+.scrubber-segment[data-kind="postCredits"] {
+  background: rgb(250 204 21 / 0.42);
 }
 /* Chapter breaks: thin notches cut into the bar. */
 .scrubber-chapter {
@@ -1061,14 +1201,18 @@ html[data-os="android"] .options-columns {
 .scrubber-knob {
   position: absolute;
   left: -7px;
-  top: 3px;
+  top: 50%;
+  margin-top: -7px;
   width: 14px;
   height: 14px;
   border-radius: var(--r-round);
   background: var(--text);
-  box-shadow: 0 1px 6px rgb(0 0 0 / 0.4);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.45);
   opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-std);
+  scale: 0.45;
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    scale 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
   pointer-events: none;
 }
 .scrubber-tip {
@@ -1083,16 +1227,27 @@ html[data-os="android"] .options-columns {
   pointer-events: none;
   transition: opacity 120ms var(--ease-std);
 }
+:root[data-touch="true"] .player:not([data-mini]) .scrubber-tip {
+  bottom: calc(var(--hit) - 6px);
+}
 .scrubber-time {
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--tone-3) 90%, transparent);
+  padding: 0.25rem 0.5625rem;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--tone-3) 92%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 4px 14px rgb(0 0 0 / 0.55);
+  color: var(--text);
   font-weight: 600;
+  white-space: nowrap;
+  max-width: min(22rem, 72vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Hover thumbnail: a tile cut from a Seekr sprite sheet (background-position),
-   scaled to the frame — no decoding, no canvas. */
+   scaled to cue.w / cue.h in Scrubber.tsx — no decoding, no canvas. */
 .scrubber-preview {
-  aspect-ratio: 16 / 9;
   border-radius: var(--r-md);
   overflow: hidden;
   background: color-mix(in srgb, var(--tone-3) 90%, transparent);
@@ -1104,18 +1259,19 @@ html[data-os="android"] .options-columns {
   transform-origin: 0 0;
   background-repeat: no-repeat;
 }
-.scrubber-tip[data-preview="true"] .scrubber-time {
-  background: none;
-  padding: 0;
-  text-shadow: 0 1px 6px rgb(0 0 0 / 0.8);
-}
 /* Hover only where there's a real pointer: a tap would otherwise leave the
    bar grown with a stale time bubble. Touch still gets it while dragging. */
 @media (hover: hover) and (pointer: fine) {
   .scrubber:hover .scrubber-track {
     transform: none;
   }
-  .scrubber:hover .scrubber-knob,
+  .scrubber:hover .scrubber-hover {
+    opacity: 1;
+  }
+  .scrubber:hover .scrubber-knob {
+    opacity: 1;
+    scale: 1;
+  }
   .scrubber:hover .scrubber-tip {
     opacity: 1;
   }
@@ -1123,7 +1279,13 @@ html[data-os="android"] .options-columns {
 .scrubber[data-scrubbing="true"] .scrubber-track {
   transform: none;
 }
-.scrubber[data-scrubbing="true"] .scrubber-knob,
+.scrubber[data-scrubbing="true"] .scrubber-hover {
+  opacity: 0;
+}
+.scrubber[data-scrubbing="true"] .scrubber-knob {
+  opacity: 1;
+  scale: 1.25;
+}
 .scrubber[data-scrubbing="true"] .scrubber-tip {
   opacity: 1;
 }
@@ -1135,6 +1297,16 @@ html[data-os="android"] .options-columns {
   display: grid;
   place-items: center;
   z-index: 1;
+  overflow: hidden;
+}
+.player-status::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 70% at 50% 50%, rgb(0 0 0 / 0.12) 0%, rgb(0 0 0 / 0.58) 72%, rgb(0 0 0 / 0.85) 100%),
+    linear-gradient(to bottom, rgb(0 0 0 / 0.45) 0%, transparent 28%, transparent 70%, rgb(0 0 0 / 0.55) 100%);
+  pointer-events: none;
 }
 .player-status-bg {
   position: absolute;
@@ -1142,11 +1314,25 @@ html[data-os="android"] .options-columns {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(18px) brightness(0.35); /* static — never animated */
+  filter: blur(8px) brightness(0.42);
   transform: scale(1.06);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .player-status-bg {
+    animation: status-bg-settle 8s var(--ease-out) both;
+  }
+}
+@keyframes status-bg-settle {
+  from {
+    transform: scale(1.1);
+  }
+  to {
+    transform: scale(1.04);
+  }
 }
 .player-status-content {
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1207,6 +1393,30 @@ html[data-os="android"] .options-columns {
 .player-casting-hint {
   color: var(--text-2);
 }
+/* Top-centre status pills (Hold for 2x, Watch Party hold, transient notices): coordinated vertical stack so none collide. */
+.player-top-stack {
+  position: absolute;
+  top: calc(4.5rem + var(--safe-top));
+  left: 50%;
+  translate: -50% 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: max-content;
+  max-width: calc(100% - 2rem - var(--safe-left) - var(--safe-right));
+  pointer-events: none;
+}
+.player-top-stack > :is(.player-hold-speed, .party-hold, .player-notice) {
+  position: static;
+  translate: none;
+  max-width: 100%;
+}
+.player-top-stack > .party-hold[data-shown="false"] {
+  position: absolute;
+  top: 0;
+}
 .player-notice {
   position: absolute;
   top: calc(4.5rem + var(--safe-top));
@@ -1221,6 +1431,10 @@ html[data-os="android"] .options-columns {
   padding: 0.5rem 1rem;
   border-radius: var(--r-pill);
   background: var(--surface-float);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 0.75rem 2rem -0.75rem rgb(0 0 0 / 0.6);
   animation: fade-in var(--dur-base) var(--ease-out);
 }
 
@@ -1234,11 +1448,37 @@ html[data-os="android"] .options-columns {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.375rem 0.875rem;
+  padding: 0.375rem 0.875rem 0.375rem 0.75rem;
   border-radius: var(--r-pill);
   background: var(--surface-float);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 0.75rem 2rem -0.75rem rgb(0 0 0 / 0.6);
+  font-weight: 600;
   pointer-events: none;
   animation: fade-in var(--dur-fast) var(--ease-out);
+}
+.player-hold-chevrons {
+  flex: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .player-hold-c1,
+  .player-hold-c2 {
+    animation: hold-chevron-pulse 900ms var(--ease-in-out) infinite;
+  }
+  .player-hold-c2 {
+    animation-delay: 160ms;
+  }
+}
+@keyframes hold-chevron-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* Before the first torrent source on a device plays (#137): over the loading screen, which keeps going behind. */
@@ -1260,9 +1500,11 @@ html[data-os="android"] .options-columns {
   width: min(30rem, 100%);
   padding: 1.5rem;
   border-radius: var(--r-panel);
-  background: var(--surface-popover);
-  backdrop-filter: var(--blur-popover);
-  -webkit-backdrop-filter: var(--blur-popover);
+  background: color-mix(in srgb, var(--tone-3) 96%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 1.5rem 3rem -1rem rgb(0 0 0 / 0.65);
   text-align: left;
 }
 .torrent-notice-card h2,
@@ -1311,12 +1553,15 @@ html[data-os="android"] .options-columns {
   gap: 1.125rem;
   width: min(30rem, 60vw);
   padding: 0.625rem;
-  /* The same dark as the rest of the player's floating UI: no edge, just a
+  /* The same dark as the rest of the player's floating UI, with a 1px specular rim and
      soft shadow to lift it off the picture. Opaque enough to need no blur,
      which would re-filter every video frame (see the chrome's note). */
   border-radius: 1.25rem;
   background: var(--surface-float);
-  box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.09),
+    0 1.5rem 3rem -1rem rgb(0 0 0 / 0.65);
 }
 .next-up-still {
   flex: none;
@@ -1383,7 +1628,7 @@ html[data-os="android"] .options-columns {
   position: relative;
   overflow: hidden;
 }
-/* Autoplay countdown: constant motion, so linear. */
+/* Autoplay countdown: constant motion, so linear; pauses when playback pauses before EOF or a picker opens. */
 .next-up-countdown {
   position: absolute;
   inset: 0;
@@ -1391,10 +1636,46 @@ html[data-os="android"] .options-columns {
   transform-origin: left;
   animation: countdown linear both;
 }
+.next-up-countdown[data-paused="true"],
+.player[data-options="true"] .next-up-countdown {
+  animation-play-state: paused;
+}
 @keyframes countdown {
   from {
     transform: scaleX(0);
   }
+}
+/* Compact (phone portrait / narrow split): span across the bottom above the controls so buttons never clip. */
+:root[data-compact="true"] .next-up {
+  right: max(1rem, var(--safe-right));
+  left: max(1rem, var(--safe-left));
+  bottom: calc(7.75rem + var(--safe-bottom));
+  width: auto;
+  gap: 0.875rem;
+}
+:root[data-compact="true"] .next-up-still {
+  width: 36%;
+  max-width: 9rem;
+  align-self: center;
+}
+:root[data-compact="true"] .next-up-title {
+  font-size: var(--fs-lg);
+}
+/* Phone landscape: sit just above the compact bottom bar (matching .skip-button) so it never covers centre transport. */
+:root[data-form="phone"]:not([data-compact="true"]) .next-up {
+  right: max(1.25rem, var(--safe-right));
+  bottom: calc(6.25rem + max(0.25rem, calc(var(--safe-bottom) - 0.75rem)));
+  width: min(24rem, 54vw);
+  gap: 0.875rem;
+  padding: 0.5rem;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .next-up-still {
+  width: 38%;
+  align-self: center;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .next-up-title {
+  font-size: var(--fs-md);
+  -webkit-line-clamp: 1;
 }
 
 .player-episodes {
@@ -1405,18 +1686,27 @@ html[data-os="android"] .options-columns {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .scrubber-track {
+  :root:not([data-reduce-motion="off"]) .scrubber-track {
     transition: none;
   }
-  .next-up-countdown {
-    animation: none;
+  :root:not([data-reduce-motion="off"]) .scrubber-knob {
+    scale: 1;
+    transition: opacity var(--dur-fast) var(--ease-std);
+  }
+  :root:not([data-reduce-motion="off"]) .scrubber[data-scrubbing="true"] .scrubber-knob {
+    scale: 1;
+  }
+  :root:not([data-reduce-motion="off"]) .next-up-countdown {
+    animation-name: countdown-fade;
   }
   /* Press feedback stays as the hover/press fill; the shrink goes. */
-  .player-transport:active,
-  .player-icon:active,
-  .player-action:active,
-  .sub-stepper button:active:not(:disabled),
-  .sub-reset:active:not(:disabled) {
+  :root:not([data-reduce-motion="off"]) :is(
+    .player-transport:active,
+    .player-icon:active,
+    .player-action:active,
+    .sub-stepper button:active:not(:disabled),
+    .sub-reset:active:not(:disabled)
+  ) {
     transform: none;
   }
 }
@@ -1482,11 +1772,8 @@ html[data-os="android"] .options-columns {
 /* While an options overlay is up, it owns the screen: the chrome steps back. */
 .player[data-options="true"] :is(.player-top, .player-center, .player-bottom, .next-up) {
   opacity: 0;
-  pointer-events: none;
-}
-/* The up-next card's opacity is owned by Motion (inline), so hide it this way. */
-.player[data-options="true"] .next-up {
   visibility: hidden;
+  pointer-events: none;
 }
 
 /* --- mpv engine: mpv draws in the native window *under* the page, so while
@@ -1567,10 +1854,27 @@ html[data-player="mpv"] .main {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  /* One height whether or not a column has a button beside its title (Subtitles' settings), so columns side by
+     side start their rows on one line. */
+  min-height: max(var(--hit, 0px), 34px);
   margin: 0 0 1rem 0.25rem;
+}
+.options-head[data-title-only] {
+  display: none;
 }
 .options-head .options-title {
   margin: 0;
+}
+.options-tabs {
+  display: flex;
+  flex: none;
+}
+.options-tabs .segmented {
+  width: 100%;
+}
+.options-tabs .segmented-option {
+  flex: 1;
+  justify-content: center;
 }
 .source-controls {
   display: flex;
@@ -1654,6 +1958,10 @@ html[data-player="mpv"] .main {
     clip-path: inset(0 100% 0 0);
   }
 }
+/* As the first frame arrives, snap the remaining fill to 100% while the screen dissolves out. */
+.player-status[data-exiting] .load-mark-fill {
+  transition-duration: 280ms;
+}
 .load-mark-text {
   /* Two lines at most: a long name covered the status, the log and the buttons. */
   display: -webkit-box;
@@ -1670,6 +1978,18 @@ html[data-player="mpv"] .main {
   padding-bottom: 0.1em;
   text-align: center;
   color: var(--text);
+}
+.player-status-kicker {
+  margin: -0.25rem 0 0;
+  max-width: min(440px, 78vw);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  opacity: 0.88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .player-status-message {
   margin: 0;
@@ -1804,9 +2124,12 @@ img.load-mark-base[data-logo-look^="halo"] {
   font-weight: 650;
   letter-spacing: -0.005em;
   color: var(--text);
-  /* Same dark as the Up Next card, no blur over the video. */
+  /* Same dark as the Up Next card, with a 1px specular rim and no blur over the video. */
   background: var(--surface-float);
-  box-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
   transition:
     opacity 200ms var(--ease-out),
     transform 200ms var(--ease-out),
@@ -1826,6 +2149,7 @@ img.load-mark-base[data-logo-look^="halo"] {
   .skip-button:hover {
     background: var(--pill-light);
     color: var(--text-on-light);
+    box-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
   }
 }
 .player[data-options="true"] .skip-button {
@@ -1853,13 +2177,13 @@ img.load-mark-base[data-logo-look^="halo"] {
   animation-play-state: paused;
 }
 @media (prefers-reduced-motion: reduce) {
-  .skip-button,
-  .skip-button[data-visible="false"] {
+  :root:not([data-reduce-motion="off"]) .skip-button,
+  :root:not([data-reduce-motion="off"]) .skip-button[data-visible="false"] {
     transform: none;
     transition-property: opacity, background-color, color;
   }
   /* No sweep: the fill brightens in place over the same time, and still ends in the skip. */
-  .skip-countdown {
+  :root:not([data-reduce-motion="off"]) .skip-countdown {
     animation-name: countdown-fade;
   }
 }
@@ -2227,9 +2551,38 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root[data-compact="true"] .options-columns > .options-column:has(.srcf:not(.srcf-tv)) {
   flex: 1 1 0;
 }
+:root[data-compact="true"] .options-overlay[data-tabbed] .options-columns {
+  gap: 1rem;
+}
+:root[data-compact="true"] .options-overlay[data-tabbed] .options-head {
+  justify-content: flex-end;
+  margin-bottom: 0.625rem;
+}
+:root[data-compact="true"] .options-overlay[data-tabbed] .options-columns > .options-column {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+}
 :root[data-compact="true"] .options-close {
   top: calc(0.75rem + var(--safe-top));
   left: 0.75rem;
+}
+/* Compact / phone with SubtitlePreview open: dock the sample in its own bottom strip so it never covers rows above. */
+:root:is([data-form="phone"], [data-compact="true"]) .options-overlay:has(> .sub-preview):not([data-place="beside"]) {
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  padding-bottom: 0;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .options-overlay:has(> .sub-preview):not([data-place="beside"]) > .options-columns {
+  min-height: 0;
+  padding-bottom: 0.5rem;
+}
+:root:is([data-form="phone"], [data-compact="true"]) .options-overlay:not([data-place="beside"]) > .sub-preview {
+  position: relative;
+  bottom: auto;
+  padding: 0.625rem max(1.25rem, var(--safe-right)) calc(0.75rem + var(--safe-bottom)) max(1.25rem, var(--safe-left));
+  border-top: 1px solid var(--hairline);
+  background: rgb(0 0 0 / 0.35);
 }
 /* A phone on its side (#464): centred at up to 80% of a short screen, a panel's heading came up under the
    close button. The panels get the screen under the button's band (its top, its 44px and a gap) instead. */
@@ -2237,8 +2590,14 @@ img.load-mark-base[data-logo-look^="halo"] {
   --options-band: calc(1rem + var(--safe-top) + 44px + 0.5rem);
   padding: var(--options-band) 0 calc(0.75rem + var(--safe-bottom));
 }
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:has(> .sub-preview):not([data-place="beside"]) {
+  padding-bottom: 0;
+}
 :root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column {
   max-height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:has(> .sub-preview):not([data-place="beside"]) .options-column {
+  max-height: 100%;
 }
 :root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column:has(.srcf:not(.srcf-tv)) {
   height: calc(100dvh - var(--options-band) - 0.75rem - var(--safe-bottom));
@@ -2476,12 +2835,12 @@ img.load-mark-base[data-logo-look^="halo"] {
 .episode-rail-viewport:has(.episode-rail-main:focus-visible):not(:hover) .row-paddle .edge-blur i {
   backdrop-filter: none;
 }
-/* Settings → Browsing → Spoilers, as on the title page. */
-:root[data-hide-thumbs="true"] .episode-rail-card[data-unwatched="true"] .episode-rail-still img {
+/* Settings → Browsing → Spoilers, as on the title page: blur unwatched stills and hide unwatched synopses. */
+:root[data-hide-thumbs="true"] :is(.episode-rail-card[data-unwatched="true"] .episode-rail-still, .ep-menu-item[data-unwatched="true"] .ep-menu-still, .next-up-still[data-unwatched="true"], .options-thumb[data-unwatched="true"]) img {
   filter: blur(22px) brightness(0.7);
   transform: scale(1.15);
 }
-:root[data-hide-overviews="true"] .episode-rail-card[data-unwatched="true"] .episode-rail-overview {
+:root[data-hide-overviews="true"] :is(.episode-rail-card[data-unwatched="true"] .episode-rail-overview, .pause-screen[data-unwatched="true"] .pause-screen-overview) {
   display: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2674,7 +3033,10 @@ img.load-mark-base[data-logo-look^="halo"] {
   padding: 0.5rem 0.5rem 0.5rem 1rem;
   border-radius: var(--r-pill);
   background: var(--surface-float);
-  box-shadow: 0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
   color: var(--text);
   animation: fade-in var(--dur-base) var(--ease-out);
 }
@@ -2709,8 +3071,8 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 
 /* --- Pause screen (PauseScreen.tsx): paused and left alone, the frame dims and the details sit bottom-left.
-       It takes no input (pointer-events: none): a click, tap or key reaches the player, which removes it at once.
-       It fades in slowly and leaves without a fade; with reduced motion it simply appears. */
+       It takes no input (pointer-events: none): a click, tap or key reaches the player, which removes it and
+       dissolves it out over 160ms; with reduced motion it appears and clears without movement. */
 .pause-screen {
   position: absolute;
   inset: 0;
@@ -2719,18 +3081,39 @@ img.load-mark-base[data-logo-look^="halo"] {
   align-items: flex-end;
   padding: 0 max(4rem, var(--safe-right)) calc(4.5rem + var(--safe-bottom)) max(4rem, var(--safe-left));
   background:
-    linear-gradient(to right, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0.45) 55%, rgb(0 0 0 / 0.25)),
-    linear-gradient(to top, rgb(0 0 0 / 0.6), transparent 60%);
+    linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.82) 0%,
+      rgb(0 0 0 / 0.72) 18%,
+      rgb(0 0 0 / 0.56) 38%,
+      rgb(0 0 0 / 0.4) 58%,
+      rgb(0 0 0 / 0.28) 78%,
+      rgb(0 0 0 / 0.22) 100%
+    ),
+    linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.72) 0%,
+      rgb(0 0 0 / 0.54) 16%,
+      rgb(0 0 0 / 0.34) 34%,
+      rgb(0 0 0 / 0.16) 52%,
+      rgb(0 0 0 / 0.05) 68%,
+      transparent 82%
+    );
   color: var(--text);
   pointer-events: none;
   animation: fade-in var(--dur-reveal) var(--ease-out);
+  transition: opacity 160ms var(--ease-out);
+}
+.pause-screen[data-leaving] {
+  opacity: 0;
+  animation: none;
 }
 .pause-screen-body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.75rem;
-  max-width: min(40rem, 60vw);
+  max-width: min(42rem, 64vw);
 }
 .pause-screen-logo {
   display: block;
@@ -2742,6 +3125,7 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 .pause-screen-name,
 .pause-screen-episode,
+.pause-screen-kicker,
 .pause-screen-overview {
   margin: 0;
 }
@@ -2760,6 +3144,12 @@ img.load-mark-base[data-logo-look^="halo"] {
   color: var(--text-2);
   margin-right: 0.25rem;
 }
+.pause-screen-kicker {
+  margin-top: -0.25rem;
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0.015em;
+}
 .pause-screen-overview {
   color: var(--text-2);
   display: -webkit-box;
@@ -2767,38 +3157,60 @@ img.load-mark-base[data-logo-look^="halo"] {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Apple TV+ "InSight"-style horizontal cast pills: actor + character name, no frame blur, staggered entrance. */
 .pause-screen-cast {
   display: flex;
-  gap: 1rem;
-  margin: 0.5rem 0 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.375rem 0 0;
   padding: 0;
   list-style: none;
 }
 .pause-screen-person {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 0.125rem;
-  width: 5.5rem;
-  text-align: center;
+  gap: 0.625rem;
+  max-width: 15.5rem;
+  padding: 0.3125rem 0.875rem 0.3125rem 0.3125rem;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--tone-3) 84%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.13),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 0.5rem 1.5rem -0.5rem rgb(0 0 0 / 0.55);
+  text-align: left;
+  animation: insight-pill-in var(--dur-slow) var(--ease-out) calc(var(--i, 0) * 45ms) both;
+}
+@keyframes insight-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 .pause-screen-photo {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 3.75rem;
-  height: 3.75rem;
-  margin-bottom: 0.25rem;
+  width: 2.375rem;
+  height: 2.375rem;
   border-radius: var(--r-round);
   overflow: hidden;
   background: var(--fill-3);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
   color: var(--text-2);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 .pause-screen-photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.pause-screen-person-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.0625rem;
 }
 .pause-screen-person-name,
 .pause-screen-character {
@@ -2810,15 +3222,17 @@ img.load-mark-base[data-logo-look^="halo"] {
 .pause-screen-person-name {
   font-size: var(--fs-sm);
   font-weight: 600;
+  line-height: 1.2;
 }
 .pause-screen-character {
   font-size: var(--fs-xs);
-  color: var(--text-3);
+  color: var(--text-2);
+  line-height: 1.2;
 }
 .tv .pause-screen {
   padding-inline: var(--tv-gutter);
 }
-/* A phone, or a narrow window: tighter, a shorter overview, fewer faces (the row never scrolls sideways). */
+/* A phone, or a narrow window: tighter, a shorter overview, single-row pills (the row never scrolls sideways). */
 :root[data-form="phone"] .pause-screen,
 :root[data-compact="true"] .pause-screen {
   padding: 0 max(1.25rem, var(--safe-right)) calc(2rem + var(--safe-bottom)) max(1.25rem, var(--safe-left));
@@ -2838,13 +3252,22 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 :root[data-form="phone"] .pause-screen-cast,
 :root[data-compact="true"] .pause-screen-cast {
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
+  max-width: 100%;
   overflow: hidden;
 }
 :root[data-form="phone"] .pause-screen-person,
 :root[data-compact="true"] .pause-screen-person {
-  flex: none;
-  width: 4.5rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 11.5rem;
+  padding: 0.25rem 0.6875rem 0.25rem 0.25rem;
+}
+:root[data-form="phone"] .pause-screen-photo,
+:root[data-compact="true"] .pause-screen-photo {
+  width: 2rem;
+  height: 2rem;
 }
 /* A phone on its side: too short for the faces. */
 @media (max-height: 420px) {
@@ -2857,6 +3280,10 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 @media (prefers-reduced-motion: reduce) {
   .pause-screen {
+    animation: none;
+    transition: none;
+  }
+  .pause-screen-person {
     animation: none;
   }
 }
@@ -2874,7 +3301,10 @@ img.load-mark-base[data-logo-look^="halo"] {
   padding: 0.875rem;
   border-radius: var(--r-panel);
   background: var(--surface-float);
-  box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
   animation: fade-in var(--dur-slow) var(--ease-out);
 }
 .player[data-options="true"] .rating-prompt {
@@ -2991,7 +3421,7 @@ img.load-mark-base[data-logo-look^="halo"] {
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
-.player-lock-chip {
+.player-lock .player-lock-chip {
   position: absolute;
   top: calc(1rem + var(--safe-top));
   left: 50%;
@@ -2999,5 +3429,1034 @@ img.load-mark-base[data-logo-look^="halo"] {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+  background: var(--surface-float);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 0.75rem 2rem -0.5rem rgb(0 0 0 / 0.6);
   animation: fade-in var(--dur-fast) var(--ease-out);
+}
+
+/* --- Zero-blur live video invariant: never composite backdrop-filter over playing video or mpv's native surface. */
+.player :is(.btn-glass, .player-lock-chip, .torrent-notice-card) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-player="mpv"] .menu,
+body:has(.player[data-started="true"]) .menu {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--tone-sunk) 96%, transparent);
+}
+
+/* --- Desktop dock (Player.tsx `dock`): what's playing above the timeline, every control in one row under it,
+       and each panel a small menu above its button (OptionsOverlay `dockedTo`). Nothing covers the picture but
+       the menu that's open, so the controls stay up and usable while it is. */
+.player[data-dock] .player-bottom {
+  padding-top: 7rem;
+}
+/* The dock's controls grow with the window (--pz, useDockZoom.ts), so they aren't tiny on a big fullscreen. */
+.player[data-dock] :is(.player-bottom, .player-top) {
+  zoom: var(--pz, 1);
+}
+/* Only the controls hold the controls up and take clicks: the gradient's room and the title above them let the
+   pointer rest on the picture (and a click there plays or pauses). */
+.player[data-dock] .player-bottom {
+  pointer-events: none;
+}
+.player[data-dock]:not([data-chrome="false"]) .player-bottom > :not(.player-title) {
+  pointer-events: auto;
+}
+.player[data-dock][data-options="true"] :is(.player-top, .player-bottom) {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.player-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(44rem, 60%);
+  margin-bottom: 16px;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.5);
+}
+.player-title-episode,
+.player-title-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.player-title-episode {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.72);
+}
+.player-title-name {
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.player-title-format {
+  margin-left: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.5);
+  font-variant-numeric: tabular-nums;
+}
+.player-title-name + .player-title-format {
+  margin-left: 0;
+}
+.player-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px -8px 0;
+}
+.player-dock-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.player-dock .player-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  opacity: 0.82;
+  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.4));
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.player-dock .player-icon:active {
+  transform: scale(0.96);
+}
+@media (hover: hover) and (pointer: fine) {
+  .player-dock .player-icon:hover {
+    opacity: 1;
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+.player-dock .player-icon:is([aria-expanded="true"], [data-popup-open]) {
+  opacity: 1;
+  background: rgb(255 255 255 / 0.14);
+}
+.player-dock .player-volume-slider {
+  height: 48px;
+}
+/* Bigger glyphs than the bar's elsewhere: the dock's buttons are bare icons, as on a streaming player. */
+.player-dock .player-icon > svg,
+.player-dock .player-icon > * > svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* The menu: Apple TV's glass card. The picture behind it is its own frosted copy (VideoBackdrop, a small canvas
+   lined up with the picture: a backdrop-filter has nothing to sample over mpv or a hardware video plane, and over
+   a playing video it would be re-filtered every frame), under a grey tint and a light rim. It grows out of its
+   button and fades; closing reverses it, quicker. */
+.options-overlay[data-place="dock"] {
+  display: block;
+  pointer-events: none;
+  overflow: visible;
+}
+.options-overlay[data-place="dock"] .options-columns {
+  position: absolute;
+  /* Scaled with the dock (--pz, useDockZoom.ts); the placement Player measured is in window pixels, so it's
+     divided back out of the zoom. */
+  zoom: var(--pz, 1);
+  right: calc(var(--dock-right, 40px) / var(--pz, 1));
+  bottom: calc(var(--dock-bottom, 160px) / var(--pz, 1));
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  max-width: calc(100% - (var(--dock-right, 40px) + 16px) / var(--pz, 1));
+  max-height: min(640px, calc(100% - (var(--dock-bottom, 160px) + 80px) / var(--pz, 1)));
+  padding: 8px;
+  border-radius: 24px;
+  /* clip, not hidden: the frosted picture reaches past the card, and a hidden overflow could be scrolled (by a
+     control taking the focus), sliding the columns out of the card. */
+  overflow: clip;
+  isolation: isolate;
+  background: rgb(44 44 50);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.4);
+  pointer-events: auto;
+  transform-origin: calc(100% - var(--dock-origin, 20px) / var(--pz, 1)) 100%;
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 200ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+    filter: none;
+  }
+}
+/* The frosted picture, as big as the player and placed so its picture lines up with the one around the menu. */
+.options-overlay[data-place="dock"] .options-frost {
+  inset: auto;
+  right: calc(-1 * var(--dock-right, 40px));
+  bottom: calc(-1 * var(--dock-bottom, 160px));
+  width: var(--dock-pw, 100vw);
+  height: var(--dock-ph, 100vh);
+  z-index: -2;
+  transform: scale(1.04);
+  filter: blur(10px) saturate(1.6) brightness(0.9);
+}
+/* The tint over it and the light catching the card's edge. */
+.options-overlay[data-place="dock"] .options-columns::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgb(52 52 58 / 0.5);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  pointer-events: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .options-overlay[data-place="dock"] .options-frost {
+    display: none;
+  }
+  .options-overlay[data-place="dock"] .options-columns::after {
+    background: rgb(36 36 40 / 0.97);
+  }
+}
+.options-overlay[data-place="dock"][data-open="false"] .options-columns {
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transition-duration: 140ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .options-overlay[data-place="dock"] .options-columns {
+    transform: none !important;
+    transition-property: opacity;
+  }
+}
+.options-overlay[data-place="dock"] .options-column {
+  width: 248px;
+  max-height: none;
+  min-height: 0;
+  padding: 4px;
+}
+.options-overlay[data-place="dock"] .options-column[data-size="medium"] {
+  width: 320px;
+}
+/* No narrower than the source bar's tightest fit (460px). */
+.options-overlay[data-place="dock"] .options-column[data-size="wide"] {
+  width: 460px;
+}
+/* The episode rail (the row layout): a strip across the window above the timeline, from the left edge to its button. */
+.options-overlay[data-place="dock"] .options-column[data-size="full"] {
+  width: calc((var(--dock-pw, 100vw) - var(--dock-right, 40px) - 56px) / var(--pz, 1));
+}
+.options-overlay[data-place="dock"] .options-column + .options-column {
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid rgb(255 255 255 / 0.14);
+}
+/* Sources keep one height, so filtering the list doesn't move the bar above it. */
+.options-overlay[data-place="dock"] .options-column:has(.srcf:not(.srcf-tv)) {
+  height: 560px;
+  max-height: 100%;
+}
+/* One header height whatever it holds (a title alone, or a title and its settings button), so the rows of
+   columns side by side start on one line. */
+.options-overlay[data-place="dock"] .options-head {
+  height: 32px;
+  gap: 8px;
+  margin: 0 6px 4px;
+}
+.options-overlay[data-place="dock"] .options-head .icon-btn,
+.options-overlay[data-place="dock"] .options-head > button {
+  width: 32px;
+  height: 32px;
+}
+/* Sources: its filter bar is taller than a title, so that header grows with it. */
+.options-overlay[data-place="dock"] .options-head:has(.srcf:not(.srcf-tv)) {
+  height: auto;
+}
+/* A short list beside a wide one (the seasons beside their episodes) takes only the room it needs. */
+.options-overlay[data-place="dock"] .options-column[data-size="narrow"]:has(+ .options-column[data-size="wide"]) {
+  width: 168px;
+}
+/* The source filters as two clean rows: the quality switch edge to edge, its choices sharing the width; then the
+   add-on dropdown filling the row with Filters at its end. */
+.options-overlay[data-place="dock"] .srcf-bar > .segmented {
+  display: flex;
+  flex: 1 1 100%;
+}
+.options-overlay[data-place="dock"] .srcf-bar > .segmented .segmented-item {
+  flex: 1 1 0;
+}
+.options-overlay[data-place="dock"] .srcf-addon {
+  flex: 1 1 0;
+  max-width: none;
+  margin-left: 0;
+}
+.options-overlay[data-place="dock"] .srcf-bar > .srcf-filters {
+  margin-left: auto;
+}
+.options-overlay[data-place="dock"] .options-title {
+  margin: 0;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: rgb(235 235 245 / 0.64);
+}
+/* A title kept for screen readers only, and nothing beside it: no header row at all. */
+.options-overlay[data-place="dock"] .options-head:has(> .options-title[data-hidden]:only-child) {
+  display: none;
+}
+.options-overlay[data-place="dock"] .options-list {
+  gap: 2px;
+  padding: 4px 0 12px;
+  margin: -4px 0 -12px;
+  mask-image: linear-gradient(to bottom, transparent 0, black 4px, black calc(100% - 12px), transparent 100%);
+}
+.options-overlay[data-place="dock"] .options-item {
+  min-height: 40px;
+  gap: 6px;
+  padding: 0 12px 0 6px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  color: rgb(255 255 255 / 0.96);
+}
+.options-overlay[data-place="dock"] .options-item[data-rich="true"] {
+  padding-block: 6px;
+}
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"] {
+  background: transparent;
+  color: rgb(255 255 255 / 0.96);
+  font-weight: 600;
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .options-overlay[data-place="dock"] .options-item:hover {
+    color: rgb(255 255 255 / 0.96);
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+/* The keyboard's row is Apple TV's lit pill. */
+.options-overlay[data-place="dock"] .options-item:focus-visible,
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"]:focus-visible {
+  color: #1d1d1f;
+  background: rgb(245 245 247 / 0.92);
+}
+.options-overlay[data-place="dock"] .options-item:focus-visible :is(.options-detail, .options-badge) {
+  color: rgb(29 29 31 / 0.62);
+}
+.options-overlay[data-place="dock"] .options-check {
+  width: 22px;
+}
+.options-overlay[data-place="dock"] .options-check svg {
+  width: 16px;
+  height: 16px;
+}
+.options-overlay[data-place="dock"] .options-detail {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 1;
+  color: rgb(235 235 245 / 0.64);
+}
+.options-overlay[data-place="dock"] .options-badge,
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"] .options-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  background: rgb(255 255 255 / 0.08);
+}
+.options-overlay[data-place="dock"] .options-thumb {
+  width: 96px;
+  border-radius: 6px;
+}
+.options-overlay[data-place="dock"] .options-group {
+  margin: 12px 8px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgb(235 235 245 / 0.64);
+}
+.options-overlay[data-place="dock"] .options-group:first-child {
+  margin-top: 4px;
+}
+.options-overlay[data-place="dock"] .options-empty {
+  margin: 8px 6px;
+  font-size: 13px;
+}
+
+/* The dock's centre: the seek glyphs show only while a jump made from the keys shows its "+10" (SkipTransport),
+   with or without the rest of the controls; the buffering spinner sits between them. */
+.player[data-dock] .player-center > .skip-transport:not([data-out="true"]) {
+  opacity: 0;
+  pointer-events: none;
+}
+.player[data-dock] .player-center > .skip-transport[data-out="true"] {
+  opacity: 1;
+}
+.player[data-dock] .player-center > .player-center-gap {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  opacity: 1;
+}
+
+/* --- The dock's Episodes (EpisodeMenu.tsx): Netflix's list in the dock's glass card. */
+.options-overlay[data-place="dock"] .options-column:has(.ep-menu) {
+  width: 500px;
+}
+.ep-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ep-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 4px 0 2px;
+  margin-bottom: 4px;
+}
+.ep-menu-back {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  color: rgb(255 255 255 / 0.96);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.ep-menu-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-menu-back + .ep-menu-title {
+  margin-left: 0;
+}
+.ep-menu-item {
+  flex-shrink: 0;
+  border-radius: 16px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.ep-menu-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 88px;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0 16px 0 12px;
+  border-radius: 16px;
+  text-align: left;
+}
+.ep-menu-row:disabled:not([aria-disabled]) {
+  opacity: 0.4;
+}
+.ep-menu-num {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(235 235 245 / 0.64);
+}
+.ep-menu-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ep-menu-bar {
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.22);
+}
+.ep-menu-bar > span {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transform-origin: left;
+}
+/* The one playing, and the one under the pointer or the keyboard, open up. */
+.ep-menu-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms var(--ease-out);
+}
+.ep-menu-more > div {
+  overflow: hidden;
+  min-height: 0;
+}
+.ep-menu-item:is([aria-current="true"], :focus-within) .ep-menu-more {
+  grid-template-rows: 1fr;
+  transition-delay: 0ms;
+}
+/* The seasons, each row the menu's whole width. */
+.ep-menu-seasons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ep-menu-item[aria-current="true"] {
+  background: rgb(255 255 255 / 0.12);
+}
+.ep-menu-item:focus-within:not([aria-current="true"]) {
+  background: rgb(255 255 255 / 0.08);
+}
+/* Under the pointer a row opens only once the pointer rests on it (passing over the list doesn't flap rows open
+   and shut), and closes a moment after it leaves; the keyboard's row opens at once. */
+@media (hover: hover) and (pointer: fine) {
+  .ep-menu-item .ep-menu-more {
+    transition-delay: 120ms;
+  }
+  .ep-menu-item:hover .ep-menu-more {
+    grid-template-rows: 1fr;
+    transition-delay: 260ms;
+  }
+  .ep-menu-item:hover:not([aria-current="true"]) {
+    background: rgb(255 255 255 / 0.08);
+    transition-delay: 120ms;
+  }
+  .ep-menu-back:hover {
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+.ep-menu-row:focus-visible,
+.ep-menu-back:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.ep-menu-body {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 16px 16px 44px;
+}
+.ep-menu-still {
+  position: relative;
+  width: 168px;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.ep-menu-still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ep-menu-now {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgb(0 0 0 / 0.38);
+}
+.ep-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ep-menu-overview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  color: rgb(235 235 245 / 0.64);
+}
+.ep-menu-meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(235 235 245 / 0.4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-menu-more {
+    transition: none;
+  }
+}
+
+/* --- The dock's Playback Speed (SpeedLine.tsx): Netflix's line of stops in the glass card. */
+.options-overlay[data-place="dock"] .options-column:has(.speed-line) {
+  width: 520px;
+}
+.options-overlay[data-place="dock"] .options-value {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.96);
+}
+.speed-line-wrap {
+  padding: 8px 24px 12px;
+}
+.speed-line {
+  position: relative;
+  height: 32px;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 16px;
+}
+.speed-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: rgb(255 255 255 / 0.3);
+}
+.speed-line-stop {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.72);
+}
+.speed-line-rider {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: transform 300ms var(--ease-out);
+}
+.speed-line[data-drag] .speed-line-rider {
+  transition-duration: 120ms;
+}
+.speed-line-knob {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 5px rgb(255 255 255 / 0.28),
+    0 2px 8px rgb(0 0 0 / 0.35);
+}
+.speed-line:focus-visible {
+  outline: none;
+}
+.speed-line:focus-visible .speed-line-knob {
+  box-shadow:
+    0 0 0 5px rgb(255 255 255 / 0.6),
+    0 2px 8px rgb(0 0 0 / 0.35);
+}
+.speed-line-labels {
+  position: relative;
+  height: 24px;
+  margin-top: 8px;
+}
+.speed-line-labels button {
+  position: absolute;
+  top: 0;
+  translate: -50% 0;
+  padding: 2px 4px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: rgb(235 235 245 / 0.64);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.speed-line-labels button[data-on] {
+  color: rgb(255 255 255 / 0.96);
+  font-weight: 700;
+}
+@media (hover: hover) and (pointer: fine) {
+  .speed-line-labels button:hover {
+    color: rgb(255 255 255 / 0.96);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .speed-line-rider {
+    transition: none;
+  }
+}
+
+/* --- Subtitle and audio settings in the dock (SubtitleSettings.tsx, AudioSettings.tsx): the menu's own rows, a
+       label and its control, without the captions (Settings → Subtitles & Audio keeps those). The cog opens them
+       like a page of the menu: they slide in, and the cog becomes a way back at the head's start. */
+.options-overlay[data-place="dock"] .options-column:has(.sub-settings) {
+  width: 340px;
+}
+.options-overlay[data-place="dock"] .options-head > button[aria-pressed="true"] {
+  order: -1;
+  margin-left: -4px;
+}
+.options-overlay[data-place="dock"] .options-head:has(> button[aria-pressed="true"]) {
+  justify-content: flex-start;
+  gap: 4px;
+}
+.options-overlay[data-place="dock"] .options-head > button {
+  border-radius: 50%;
+  color: rgb(255 255 255 / 0.96);
+  background: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .options-overlay[data-place="dock"] .options-head > button:hover {
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+.options-overlay[data-place="dock"] .options-custom:has(> .sub-settings) {
+  animation: dock-page-in 260ms var(--ease-out);
+}
+@keyframes dock-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes dock-page-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .options-overlay[data-place="dock"] .options-custom:has(> .sub-settings) {
+    animation-name: dock-page-fade;
+  }
+}
+.options-overlay[data-place="dock"] .sub-settings {
+  gap: 2px;
+  padding: 0 0 4px;
+}
+.options-overlay[data-place="dock"] .sub-setting {
+  flex-wrap: nowrap;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 6px 4px 10px;
+  border: 0;
+  border-radius: 14px;
+}
+.options-overlay[data-place="dock"] .sub-setting-caption {
+  display: none;
+}
+.options-overlay[data-place="dock"] .sub-setting-label {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  white-space: nowrap;
+}
+.options-overlay[data-place="dock"] .sub-stepper button {
+  width: 28px;
+  height: 28px;
+  background: rgb(255 255 255 / 0.12);
+}
+.options-overlay[data-place="dock"] .sub-stepper-value {
+  min-width: 56px;
+  font-size: 14px;
+}
+/* On/off and the other short choices: one segmented pill, the chosen part lit. */
+.options-overlay[data-place="dock"] .sub-settings .source-chips {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.22);
+}
+.options-overlay[data-place="dock"] .sub-settings .source-chip {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(235 235 245 / 0.72);
+  background: transparent;
+  box-shadow: none;
+}
+.options-overlay[data-place="dock"] .sub-settings .source-chip:is([aria-checked="true"], [aria-pressed="true"]) {
+  color: #1d1d1f;
+  background: rgb(245 245 247 / 0.92);
+}
+@media (hover: hover) and (pointer: fine) {
+  .options-overlay[data-place="dock"] .sub-settings .source-chip:not([aria-checked="true"], [aria-pressed="true"]):hover {
+    color: rgb(255 255 255 / 0.96);
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+.options-overlay[data-place="dock"] .sub-swatches {
+  gap: 6px;
+}
+.options-overlay[data-place="dock"] .sub-swatch {
+  width: 20px;
+  height: 20px;
+}
+.options-overlay[data-place="dock"] .sub-setting .select-trigger {
+  height: 30px;
+  min-width: 0;
+  max-width: 168px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgb(255 255 255 / 0.12);
+}
+.options-overlay[data-place="dock"] .sub-reset {
+  align-self: stretch;
+  justify-content: flex-start;
+  height: 40px;
+  margin: 4px 0 0;
+  padding: 0 10px;
+  border-radius: 14px;
+  font-size: 15px;
+  color: rgb(235 235 245 / 0.72);
+  background: transparent;
+}
+
+/* --- Sources in the dock: the title with the add-on picker and Filters on its line, the picture quality under them
+       the menu's whole width, and any filters that are on under that. */
+.options-overlay[data-place="dock"] .options-head:has(.srcf:not(.srcf-tv)) {
+  flex-wrap: wrap;
+  row-gap: 8px;
+  column-gap: 8px;
+  margin-bottom: 8px;
+}
+.options-overlay[data-place="dock"] .options-head:has(.srcf:not(.srcf-tv)) .options-title {
+  margin-right: auto;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-bar {
+  display: contents;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-addon {
+  order: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 200px;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-bar > .srcf-filters {
+  order: 2;
+  margin-left: 0;
+  height: 32px;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-addon .select-trigger {
+  height: 32px;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-bar > .segmented {
+  order: 3;
+  flex: 1 1 100%;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-bar > span:empty {
+  display: none;
+}
+.options-overlay[data-place="dock"] .options-head .srcf-active {
+  order: 4;
+  flex-basis: 100%;
+}
+
+/* The subtitle preview while their settings are open: over the left half, above the title, clear of the menu and
+   the controls. */
+.options-overlay[data-place="dock"] .sub-preview {
+  left: 40px;
+  right: 50%;
+  bottom: calc(var(--dock-bottom, 160px) + 72px);
+}
+
+/* --- The dock's menus, plainly, in Polarity's colours: a flat panel on the app's accent-tinted near-black with a
+       clear edge and near-square corners, big bold headings, the choices in dim ink and the chosen one in full ink
+       with an accent check. No pills or fills: the pointer just lights a row's text; the keyboard's row gets an
+       accent ring. Columns and groups are set apart by space alone. The player's More menu (.menu-dock) matches. */
+.options-overlay[data-place="dock"] .options-columns {
+  padding: 20px 12px 12px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
+}
+.options-overlay[data-place="dock"] .options-columns::after {
+  content: none;
+}
+.options-overlay[data-place="dock"] .options-column {
+  width: 300px;
+  padding: 0 8px;
+}
+.options-overlay[data-place="dock"] .options-column[data-size="medium"] {
+  width: 380px;
+}
+.options-overlay[data-place="dock"] .options-column[data-size="wide"] {
+  width: 500px;
+}
+.options-overlay[data-place="dock"] .options-column + .options-column {
+  margin-left: 8px;
+  padding-left: 16px;
+  border-left: 0;
+}
+.options-overlay[data-place="dock"] .options-head {
+  height: 40px;
+  margin: 0 8px 8px 12px;
+}
+.options-overlay[data-place="dock"] .options-title {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.options-overlay[data-place="dock"] .options-list {
+  gap: 0;
+}
+.options-overlay[data-place="dock"] .options-item {
+  min-height: 48px;
+  gap: 10px;
+  padding: 0 12px 0 8px;
+  border-radius: 2px;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: rgb(var(--ink-text) / 0.62);
+  background: transparent;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.options-overlay[data-place="dock"] .options-item[data-rich="true"] {
+  padding-block: 8px;
+}
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"] {
+  color: var(--text);
+  font-weight: 500;
+  background: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .options-overlay[data-place="dock"] .options-item:hover {
+    color: var(--text);
+    background: transparent;
+  }
+}
+.options-overlay[data-place="dock"] .options-item:focus-visible,
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"]:focus-visible {
+  color: var(--text);
+  background: transparent;
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
+}
+.options-overlay[data-place="dock"] .options-item:focus-visible :is(.options-detail, .options-badge) {
+  color: rgb(var(--ink-text) / 0.6);
+}
+.options-overlay[data-place="dock"] .options-check {
+  width: 26px;
+  color: var(--accent-hi);
+}
+.options-overlay[data-place="dock"] .options-check svg {
+  width: 22px;
+  height: 22px;
+}
+.options-overlay[data-place="dock"] .options-detail {
+  font-size: 14px;
+  font-weight: 400;
+  color: rgb(var(--ink-text) / 0.45);
+}
+.options-overlay[data-place="dock"] .options-badge,
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"] .options-badge {
+  border-radius: 2px;
+}
+.options-overlay[data-place="dock"] .options-group {
+  margin: 16px 12px 4px 8px;
+  font-size: 14px;
+  color: rgb(var(--ink-text) / 0.5);
+}
+.options-overlay[data-place="dock"] .options-group:first-child {
+  margin-top: 0;
+}
+.options-overlay[data-place="dock"] .options-empty {
+  margin: 8px 12px;
+  font-size: 16px;
+  color: rgb(var(--ink-text) / 0.5);
+}
+/* The episodes, speed and subtitle settings in the same plain panel: near-square corners, no pills. */
+.options-overlay[data-place="dock"] :is(.ep-menu-item, .ep-menu-row, .ep-menu-still, .sub-setting, .sub-reset, .speed-line, .speed-line-labels button) {
+  border-radius: 4px;
+}
+.options-overlay[data-place="dock"] :is(.sub-settings .source-chips, .sub-settings .source-chip, .sub-setting .select-trigger) {
+  border-radius: 2px;
+}
+.options-overlay[data-place="dock"] .ep-menu-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+/* The player's More menu (Player.tsx `moreMenu`, in a portal outside the player): the same panel and rows,
+   scaled with the dock (--pz). */
+.menu.menu-dock {
+  zoom: var(--pz, 1);
+  min-width: 260px;
+  max-width: 400px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
+  color: rgb(var(--ink-text) / 0.62);
+}
+.menu.menu-dock .menu-item {
+  height: 44px;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 2px;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 24px;
+  color: rgb(var(--ink-text) / 0.62);
+}
+.menu.menu-dock .menu-item[data-highlighted],
+:root[data-input="keyboard"] .menu.menu-dock .menu-item[data-highlighted] {
+  color: var(--text);
+  background: transparent;
+}
+:root[data-input="keyboard"] .menu.menu-dock .menu-item[data-highlighted] {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: -2px;
+}
+.menu.menu-dock .menu-check-item {
+  --check-room: 32px;
+}
+.menu.menu-dock .menu-check,
+.menu.menu-dock .menu-check svg {
+  width: 22px;
+  height: 22px;
+  color: var(--accent-hi);
+}
+.menu.menu-dock .menu-meta,
+:root[data-input="keyboard"] .menu.menu-dock .menu-item[data-highlighted] .menu-meta {
+  font-size: 15px;
+  color: rgb(var(--ink-text) / 0.45);
+}
+.menu.menu-dock .menu-sep {
+  display: none;
 }

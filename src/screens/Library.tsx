@@ -213,11 +213,14 @@ function NewPlaylistTile({ onCreate }: { onCreate: (id: string) => void }) {
 function DownloadCard({ d, onOpen }: { d: DownloadRecord; onOpen: () => void }) {
   const play = usePlayDownload();
   const leaving = useLeaving(d.id);
+  const primaryArt = d.thumbnail ?? d.background ?? d.poster;
+  const artFallbacks = [d.background, d.poster].filter((u): u is string => !!u && u !== primaryArt);
   return (
     <Card
       shape="landscape"
       className="download-card"
-      art={d.thumbnail ?? d.background ?? d.poster}
+      art={primaryArt}
+      artFallbacks={artFallbacks}
       fallback={<StillPlaceholder />}
       title={d.name}
       detail={downloadLine(d)}

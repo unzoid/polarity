@@ -26,18 +26,19 @@ function radiusPx(el: HTMLElement, width: number) {
 
 /**
  * Flies `avatar` into the navbar's. A copy flies, fixed to the window and outliving the picker, so
- * neither the picker's scrolling area nor its unmounting cuts it short; the landing spot stays hidden
- * until it arrives. With nowhere to land (the phone's native tabs) or reduced motion, nothing flies:
- * the avatar fades out with the picker.
+ * neither the picker's scrolling area nor its unmounting cuts it short; `:root[data-profile-handoff]`
+ * keeps the destination avatar hidden until landing so it never flashes beforehand. With nowhere to
+ * land (the phone's native tabs) or reduced motion, returns `false` so the avatar fades with the picker.
  */
-export function flyToNavbar(avatar: HTMLElement) {
+export function flyToNavbar(avatar: HTMLElement): boolean {
   const target = document.querySelector<HTMLElement>(TARGET);
-  if (!target || prefersReducedMotion()) return;
+  if (!target || prefersReducedMotion()) return false;
 
   const from = avatar.getBoundingClientRect();
   const to = target.getBoundingClientRect();
   // Measured as laid out, without the chosen tile's scale (its origin is the centre, so the centre holds).
   const size = avatar.offsetWidth;
+  if (!size || !to.width) return false;
   const cx = from.left + from.width / 2;
   const cy = from.top + from.height / 2;
   const dx = to.left + to.width / 2 - cx;
@@ -59,9 +60,9 @@ export function flyToNavbar(avatar: HTMLElement) {
     zIndex: "var(--z-overlay)",
     pointerEvents: "none",
   });
+  document.documentElement.dataset.profileHandoff = "";
   document.body.appendChild(copy);
   avatar.style.visibility = "hidden";
-  target.style.visibility = "hidden";
 
   // A quadratic Bézier from the start (0, 0) through the bend to the landing spot; the scale and the
   // radius go along with it. The timing curve applies to the whole flight, over these points.
@@ -75,9 +76,15 @@ export function flyToNavbar(avatar: HTMLElement) {
     keyframes.push({ offset: t, transform: `translate(${x}px, ${y}px) scale(${s})`, borderRadius: `${r0 + (r1 - r0) * t}px` });
   }
 
+  let landed = false;
   const land = () => {
-    target.style.visibility = "";
+    if (landed) return;
+    landed = true;
+    window.clearTimeout(guard);
+    delete document.documentElement.dataset.profileHandoff;
     copy.remove();
   };
+  const guard = window.setTimeout(land, FLIGHT_MS + 120);
   copy.animate(keyframes, { duration: FLIGHT_MS, easing: cssEase(ease.inOut), fill: "forwards" }).finished.then(land, land);
+  return true;
 }

@@ -68,9 +68,14 @@ export interface TitleRefLike {
 export function useTitleFacts(titles: TitleRefLike[], enabled = true): ReadonlyMap<string, TitleFacts> {
   const now = Date.now();
   const store = keptFacts();
+  const seen = new Set<string>();
   const missing = titles.filter((t) => {
     const k = store.get(t.id);
-    return !k || now - k.at > FRESH;
+    if (k && now - k.at <= FRESH) return false;
+    const key = `${t.type}:${t.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
   const results = useQueries({
     queries: missing.map((t) => ({

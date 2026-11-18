@@ -8,6 +8,8 @@ final class Library: ObservableObject {
     /// `nil` only when the core couldn't open its folder (`startProblem` says why).
     let core: Core?
     let startProblem: String?
+    /// Why the progress file couldn't be read at start (`core.storageProblem()`): progress then stays in memory for this run only.
+    let storageProblem: String?
 
     @Published private(set) var rows: [Row] = []
     @Published private(set) var continueWatching: [Resume] = []
@@ -17,11 +19,14 @@ final class Library: ObservableObject {
 
     init() {
         do {
-            core = try Core(dataDir: Library.dataDir().path)
+            let opened = try Core(dataDir: Library.dataDir().path)
+            core = opened
             startProblem = nil
+            storageProblem = opened.storageProblem()
         } catch {
             core = nil
             startProblem = error.localizedDescription
+            storageProblem = nil
         }
     }
 

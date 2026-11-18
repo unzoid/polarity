@@ -113,7 +113,18 @@ const ROWS: Record<Exclude<CategoryId, "anime">, string[]> = {
     ...(os === "android" ? ["torrentMobileData"] : []),
   ],
   browsing: ["trailerAutoplay", "trailerSound", "showCardRatings", "cardRatingPosition", "viewingLimit", "viewingHideUnrated", "matureContent", "showCalendar", "showContinueWatching", "hideWatched"],
-  tv: ["uiSounds", "uiSoundVolume", "padHints", "padStick", "padPlayerVolume", "controllerAlerts"],
+  tv: [
+    "uiSounds",
+    "uiSoundPack",
+    "uiSoundVolume",
+    "padLabels",
+    "padHints",
+    "padStick",
+    "padStickSensitivity",
+    "padRepeat",
+    "padPlayerVolume",
+    "controllerAlerts",
+  ],
 };
 
 const ANIME_ROWS = ["animeTitles", "animeAudioLanguage", "animeSubtitleLanguage", "animeCardScores", "animeScoreFormat", "animeCardCountdown", "animeSeparateEntries"];
@@ -201,8 +212,8 @@ function Row<T>({
       playSound("edge");
       return;
     }
-    playSound("move");
     onChange(choices[j].value);
+    playSound("move");
   };
 
   const onKeyDown = (e: KeyboardEvent) => {

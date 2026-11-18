@@ -79,6 +79,7 @@ struct Notice: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 1100)
         }
-        .padding(80)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
     }
 }

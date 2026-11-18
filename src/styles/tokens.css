@@ -75,6 +75,7 @@
   --surface-popover: color-mix(in srgb, var(--tone-5) 82%, transparent);
   --surface-float: color-mix(in srgb, var(--tone-3) 88%, transparent);
   --surface-float-glass: color-mix(in srgb, var(--tone-1) 78%, transparent);
+  --menu-highlight: inset 0 1px 0 rgb(255 255 255 / 0.1);
 }
 /* A part that stays dark is built on the theme's own near-black, whatever the scheme: the player (on
    video), Home's featured card and every poster or still's frame (what's drawn on artwork). A frame with no
@@ -107,11 +108,14 @@
   --field-glass: rgb(255 255 255 / 0.82);
   --field-edge: rgb(0 0 0 / 0.12);
   --nav-tint: 78%;
-  /* Glass controls frost white, with a hairline to hold their edge on a pale page. */
+  /* Glass controls frost white, with a specular top edge and hairline to hold their shape on a pale page. */
   --glass-control: rgb(255 255 255 / 0.6);
   --glass-control-hover: rgb(255 255 255 / 0.85);
   --glass-edge: rgb(0 0 0 / 0.08);
-  --glass-highlight: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  --glass-highlight:
+    inset 0 1px 0 rgb(255 255 255 / 0.82),
+    inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  --menu-highlight: inset 0 1px 0 rgb(255 255 255 / 0.82);
   /* On a light page a black ring reads as a drawn border: a hairline and a soft shadow instead. */
   --ring-outer: rgb(0 0 0 / 0.08);
   --shadow-deep: rgb(0 0 0 / 0.22);
@@ -178,15 +182,27 @@
   --glass-edge: rgb(var(--ink) / 0.13);
   --glass-highlight: inset 0 1px 0 rgb(var(--ink) / 0.1);
 }
+.themed.scheme-light {
+  --glass-control: rgb(255 255 255 / 0.6);
+  --glass-control-hover: rgb(255 255 255 / 0.85);
+  --glass-edge: rgb(0 0 0 / 0.08);
+  --glass-highlight:
+    inset 0 1px 0 rgb(255 255 255 / 0.82),
+    inset 0 0 0 1px rgb(0 0 0 / 0.06);
+}
 
 :root {
   /* "Twemoji Country Flags" first: it covers only flag emoji, and only exists where the system draws
-     none (Windows, main.tsx); every other character skips it. */
-  --font: "Twemoji Country Flags", "Inter Variable", "Inter", system-ui, "Segoe UI Variable Text", sans-serif;
+     none (Windows, main.tsx); every other character skips it. Instrument Sans is the app's font; the
+     others are a setting away (base.css, data-font). */
+  --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, "Segoe UI Variable Text", sans-serif;
 
   /* A poster or still's frame before its picture is in: the page's own surface (the frame itself is
      dark-styled, for what's drawn on the picture, so it can't use --surface-1). */
   --frame-bg: var(--surface-1);
+  /* Focus ring around a card's frame on the page: resolved on :root (#f5f5f7 in dark, #1d1d1f in light)
+     before .card-frame rebinds --ink-text. */
+  --page-focus-ring: var(--text);
   /* Progress over artwork and video: always white. */
   --progress: #f5f5f7;
   --danger: #ff6b5e;
@@ -225,9 +241,10 @@
   --scrim-2: rgb(0 0 0 / 0.5);
   --scrim-3: rgb(0 0 0 / 0.7);
 
-  --blur-menu: blur(10px);
+  --blur-menu: blur(24px) saturate(160%);
   --edge-menu: 1px solid var(--fill-3);
   --shadow-menu:
+    var(--menu-highlight),
     0 0 0 1px var(--ring-outer),
     0 24px 64px -16px var(--shadow-deep);
   --blur-popover: blur(40px) saturate(160%);
@@ -256,7 +273,7 @@
      panels never stack on each other, whatever their layer: one is up at a time (lib/party/surface.ts). */
   --z-nav: 20;
   --z-player: 30;
-  --z-toast: 30; /* same layer as the player today; ui-components §5.2 plans 35 */
+  --z-toast: 35;
   --z-sheet: 40;
   --z-overlay: 50;
   --z-popover: 60;
@@ -354,7 +371,7 @@
 
 /* Settings → Appearance → Reduce motion: "On" regardless of Windows. Motion's
    springs follow via <MotionConfig>; this covers CSS transitions and keyframes. */
-:root[data-reduce-motion="on"] *,
+:root[data-reduce-motion="on"] *:not(.skip-countdown, .next-up-countdown),
 :root[data-reduce-motion="on"] *::before,
 :root[data-reduce-motion="on"] *::after {
   animation-duration: 1ms !important;
@@ -362,12 +379,20 @@
   transition-duration: 1ms !important;
   scroll-behavior: auto !important;
 }
+/* Functional player countdowns keep their real seconds so auto-skip / Next Up
+   still wait for the viewer; they brighten in place instead of sweeping. */
+:root[data-reduce-motion="on"] :is(.skip-countdown, .next-up-countdown) {
+  animation-name: countdown-fade !important;
+}
 /* Except what says work is going on: the spinner's bars and the update dot only
    fade (no movement), and stopped after one turn they read as stuck. */
 :root[data-reduce-motion="on"] .spinner-bar,
 :root[data-reduce-motion="on"] .navbar-update[data-busy] .navbar-update-dot {
   animation-duration: 1.2s !important;
   animation-iteration-count: infinite !important;
+}
+:root[data-reduce-motion="on"] .hero-dot-fill {
+  animation: none !important;
 }
 
 /* Settings → Browsing → Spoilers: unwatched episodes keep their stills and
@@ -390,13 +415,17 @@
   .scheme-dark,
   .player,
   .hero-card,
-  .card-frame {
+  .card-frame:not(.frame-page) {
     --glass: var(--tone-4);
     --glass-heavy: var(--tone-3);
     --glass-control: color-mix(in srgb, rgb(var(--ink)) 22%, var(--tone-0));
     --glass-control-hover: color-mix(in srgb, rgb(var(--ink)) 28%, var(--tone-0));
+    --surface-menu: var(--tone-sunk);
+    --surface-popover: var(--tone-4);
     --blur-glass: none;
     --blur-control: none;
+    --blur-menu: none;
+    --blur-popover: none;
   }
 }
 
@@ -407,7 +436,7 @@
   .scheme-dark,
   .player,
   .hero-card,
-  .card-frame {
+  .card-frame:not(.frame-page) {
     --text-2: rgb(var(--ink-text) / 0.88);
     --text-3: rgb(var(--ink-text) / 0.72);
     --hairline: rgb(var(--ink) / 0.3);
