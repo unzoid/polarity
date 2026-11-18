@@ -1,12 +1,14 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { setPinAsker, type PinAnswer, type PinRequest } from "../../lib/account/unlock";
+import { lazyNamed } from "../../lib/ui";
 import { useDismiss } from "../../lib/ui/dismiss";
 import { useTvMode } from "../../tv/tvMode";
 import { Avatar } from "../Avatar";
 import { Lock } from "../icons";
 import { Button } from "../ui/Button";
-import { PinFlow } from "./PinFlow";
+
+const PinFlow = lazyNamed(() => import("./PinFlow"), "PinFlow");
 
 type Pending = { id: number; request: PinRequest; resolve: (a: PinAnswer) => void };
 let asked = 0;
@@ -65,7 +67,9 @@ export function PinHost() {
             <>
               <Dialog.Title className="party-dialog-title">{request.title}</Dialog.Title>
               {request.text && <Dialog.Description className="party-dialog-text pin-dialog-text">{request.text}</Dialog.Description>}
-              <PinFlow key={pending?.id} request={request} onDone={finish} />
+              <Suspense fallback={null}>
+                <PinFlow key={pending?.id} request={request} onDone={finish} />
+              </Suspense>
             </>
           )}
           <Dialog.Close render={<Button size="block" variant="plain" className="pin-cancel" />}>Cancel</Dialog.Close>

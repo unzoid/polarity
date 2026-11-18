@@ -69,7 +69,7 @@ pub async fn library_export(
 /// The anime links of a Polarity export, with their times (`Space::import_links`): a newer
 /// decision here stays. Imported before the library and progress, so titles land under the ids
 /// the links lead to. Answers how many were added.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn anime_links_import(state: State<'_, AppState>, links: Vec<AnimeLink>) -> Result<usize> {
     let mut added = 0;
     state.persist_now(|d| added = d.space_mut().import_links(links))?;

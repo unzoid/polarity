@@ -6,7 +6,7 @@ import { isAnimePreview, useEntryShown, type EntryAt } from "../lib/anime";
 import { episodeCode, formatRemaining } from "../lib/format";
 import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
 import { useNavigation } from "../lib/router";
-import { useArtGate, useCardIntent } from "../lib/ui";
+import { cardArtUrl, detailBackdropUrl, useArtGate, useCardIntent } from "../lib/ui";
 import { useBrowseShelf, useListable, type Shape, type Shelf } from "../lib/catalog";
 import type { MetaPreview, Progress } from "../lib/types";
 import { Facts, StageProvider, TvStage, titleFacts, useStage, useStageSeed, useStagedTitle, type StageEntry } from "./TvStage";
@@ -27,7 +27,7 @@ const ShelvesLayout = createContext(false);
  * A title on a rail. Focus is the selection, as on any TV: the card lifts,
  * the stage above shows the title, and Enter / A opens it.
  */
-export function TvCard({
+export const TvCard = memo(function TvCard({
   item: stored,
   shape,
   artFallbacks,
@@ -79,7 +79,7 @@ export function TvCard({
   const el = useRef<HTMLButtonElement>(null);
   const intent = useCardIntent(() => {
     if (!localOnly) prefetchMeta(item.type, item.id);
-    preloadImage(item.background);
+    preloadImage(detailBackdropUrl(item.background));
   }, INTENT_MS);
   // Show on the stage until something is focused, if this is the page's first title.
   useEffect(() => {
@@ -87,10 +87,14 @@ export function TvCard({
     // Again once a placeholder title (a playlist entry still loading) fills in, or better art arrives.
   }, [item.id, onStage.name, onStage.background, onStage.logo, stagePending]);
   // Art that won't load falls back to the title, not an empty frame; better art arriving gets a fresh try.
-  const preferred = look === "poster" ? (item.poster ?? item.background) : (item.background ?? item.poster);
+  const preferred = cardArtUrl(look === "poster" ? (item.poster ?? item.background) : (item.background ?? item.poster), look);
+  const sizedFallbacks = useMemo(
+    () => artFallbacks?.map((u) => cardArtUrl(u, look)).filter((u): u is string => !!u),
+    [artFallbacks, look],
+  );
   const { shown: art, onError: onArtError } = useCardArt(preferred);
   // The logo and name wait for the art (#173).
-  const gate = useArtGate(art, artFallbacks);
+  const gate = useArtGate(art, sizedFallbacks);
   // An anime shown by its entry opens that entry (TvAnimeDetail takes it on to the title's page with just its episodes).
   const open = onOpen ?? (() => navigate(shownEntry ? { name: "anime-detail", id: shownEntry.anilist } : { name: "detail", type: item.type, id: item.id, preview: item }));
 
@@ -126,7 +130,7 @@ export function TvCard({
     >
       <span className="tv-card-frame" {...gate}>
         {art ? (
-          <Img src={art} fallbacks={artFallbacks} alt="" className="tv-card-img" onFail={onArtError} />
+          <Img src={art} fallbacks={sizedFallbacks} alt="" className="tv-card-img" onFail={onArtError} />
         ) : (
           <span className="tv-card-fallback">{item.name}</span>
         )}
@@ -144,7 +148,7 @@ export function TvCard({
       {look === "poster" && <CardRating rating={item.imdbRating} />}
     </button>
   );
-}
+});
 
 /**
  * A shelves card opened out (focused): the title's backdrop and logo across the wider frame, over its poster.
@@ -154,7 +158,7 @@ function WideArt({ item, awake, localOnly }: { item: MetaPreview; awake: boolean
   const meta = useMeta(item.type, item.id, awake && !item.logo && !localOnly && !isAnimePreview(item.id));
   const logo = item.logo ?? meta.data?.logo ?? undefined;
   const logos = item.logos ?? meta.data?.logos;
-  const art = item.background ?? item.poster;
+  const art = cardArtUrl(item.background ?? item.poster, "landscape");
   return (
     <span className="tv-card-wide" aria-hidden>
       {awake && art && <Img src={art} alt="" className="tv-card-img" />}
@@ -376,16 +380,18 @@ const BrowseRow = memo(function BrowseRow({ row, near }: { row: RailRow; near: b
  * navbar; the focused row sits at the top with its focused title's details under it (ShelvesLayout).
  */
 export function TvBrowse({ rows, layout = "stage" }: { rows: RailRow[]; layout?: "stage" | "shelves" }) {
-  const [focusRow, setFocusRow] = useState(0);
+  const [maxRow, setMaxRow] = useState(0);
   const onFocus = (e: FocusEvent<HTMLDivElement>) => {
     const row = (e.target as HTMLElement).closest<HTMLElement>("[data-row]");
-    if (row) setFocusRow(Number(row.dataset.row));
+    if (!row) return;
+    const idx = Number(row.dataset.row);
+    setMaxRow((m) => (idx > m ? idx : m));
   };
   const rails = (
     <div className="tv-rails" data-nav-scroll="start" onFocus={onFocus}>
       {rows.map((r, i) => (
         <div key={r.key} data-row={i}>
-          <BrowseRow row={r} near={i <= focusRow + LOOKAHEAD} />
+          <BrowseRow row={r} near={i <= maxRow + LOOKAHEAD} />
         </div>
       ))}
     </div>

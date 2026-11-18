@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { cardArtUrl } from "../lib/ui";
 import { AnimeCard } from "../components/anime/AnimeCard";
 import { PosterCard } from "../components/PosterCard";
 import { Shelf } from "../components/title/Shelf";
@@ -190,7 +191,7 @@ const TILE_HUES: Record<string, [number, number]> = {
  */
 function MovieGenreTile({ genre }: { genre: string }) {
   const { data, isPending } = useGenreRow("movie", genre);
-  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} pending={isPending} />;
+  return <GenreTile genre={genre} image={cardArtUrl(data?.find((m) => m.background)?.background, "landscape")} pending={isPending} />;
 }
 
 /**
@@ -235,14 +236,19 @@ function useGenreRow(type: ContentType, genre: string, enabled = true) {
 function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const deferred = useDeferredValue(query);
-  const { animeEnabled } = usePrefs();
-  const { navigate } = useNavigation();
 
-  // Keystrokes update the field instantly; the network waits for a pause.
+  // Keystrokes update the field instantly; the network and result shelves wait for a pause.
   useEffect(() => {
     const t = window.setTimeout(() => setQuery(text), 180);
     return () => window.clearTimeout(t);
   }, [text]);
+
+  return <ResultsBody query={deferred} />;
+}
+
+const ResultsBody = memo(function ResultsBody({ query: deferred }: { query: string }) {
+  const { animeEnabled } = usePrefs();
+  const { navigate } = useNavigation();
 
   const { data } = useSearch(deferred);
   const hasQuery = deferred.length >= searchMinLength(deferred);
@@ -293,7 +299,7 @@ function Results({ text }: { text: string }) {
       {nothing && <EmptyState>Nothing found for “{deferred}”.</EmptyState>}
     </>
   );
-}
+});
 
 function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   const { data } = useGenreRow(type, genre);

@@ -333,7 +333,7 @@ pub const LOCAL_SPACE: &str = "local";
 /// differently. 0 = files from before the field existed.
 pub const VERSION: u32 = 1;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Data {
     /// [`VERSION`] of the build that last wrote the file.
@@ -462,14 +462,12 @@ impl Store {
         &self.path
     }
 
-    /// The file's contents as they should be now, secrets still in: the saver hands them to
-    /// the keychain outside the lock, then writes it compact (the file is rewritten whole, and
-    /// indenting only made that bigger).
-    pub fn snapshot(&self) -> Result<serde_json::Value, String> {
+    /// Clones the in-memory store data under the lock so JSON Value construction happens outside it.
+    pub fn clone_data(&self) -> Result<Data, String> {
         if let Some(problem) = &self.problem {
             return Err(format!("not saved: {problem}"));
         }
-        serde_json::to_value(&self.data).map_err(|e| e.to_string())
+        Ok(self.data.clone())
     }
 }
 

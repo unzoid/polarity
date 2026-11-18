@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useAccount } from "../../lib/account";
-import { friends, setFriendsOpen, useFriends, useWatching } from "../../lib/friends";
+import { friends, setFriendsOpen, useFriends, useFriendsOpen, useWatching } from "../../lib/friends";
 import { joinParty, useParty, usePartySurface } from "../../lib/party";
-import { usePresence } from "../../lib/ui";
+import { lazyNamed, usePresence } from "../../lib/ui";
 import { useTvMode } from "../../tv/tvMode";
 import { Avatar } from "../Avatar";
 import { Close } from "../icons";
 import { Button, IconButton } from "../ui/Button";
 import { TOAST_OUT_MS, Toast } from "../ui/Toast";
-import { FriendsPanel } from "./FriendsPanel";
+
+const FriendsPanel = lazyNamed(() => import("./FriendsPanel"), "FriendsPanel");
 
 /**
  * Friends (#135) for the profile in use: starts the friends store on it (which reads from the
@@ -28,9 +29,16 @@ export function FriendsHost() {
   useEffect(() => friends.setShown({ party: code, watching }), [code, watching]);
 
   const tv = useTvMode();
+  const open = useFriendsOpen();
+  const [everOpened, setEverOpened] = useState(open);
+  if (open && !everOpened) setEverOpened(true);
   return (
     <>
-      {!tv && <FriendsPanel />}
+      {!tv && everOpened && (
+        <Suspense fallback={null}>
+          <FriendsPanel />
+        </Suspense>
+      )}
       <InviteToast tv={tv} />
     </>
   );

@@ -57,22 +57,30 @@ export function TvHome() {
   const watched = useMemo(() => new Set((watching ?? []).map((p) => p.metaId)), [watching]);
   const addonRows = useHomeCatalogs();
 
-  const rows: RailRow[] = [
-    { key: "continue", render: () => <TvContinueRail /> },
-    { key: "trending", render: () => <TvItemsRail title="Trending Now" items={picks} shape="poster" /> },
-    ...addonRows.map((c) => ({ key: `addon:${catalogKey(c)}`, render: (near: boolean) => <TvAddonRail catalog={c} enabled={near} /> })),
-    ...shelves.map((shelf, i) => ({
-      key: shelfKey(shelf).join("/"),
-      render: (near: boolean) => (
-        <TvShelfRail
-          shelf={shelf}
-          enabled={near}
-          // Recommendations also skip what you're already watching.
-          exclude={shelf.kind === "because" ? new Set([...shownAbove[i], ...watched]) : shownAbove[i]}
-        />
-      ),
-    })),
-  ];
+  const continueRow = useMemo<RailRow>(() => ({ key: "continue", render: () => <TvContinueRail /> }), []);
+  const trendingRow = useMemo<RailRow>(
+    () => ({ key: "trending", render: () => <TvItemsRail title="Trending Now" items={picks} shape="poster" /> }),
+    [picks],
+  );
+  const addonRailRows = useMemo<RailRow[]>(
+    () => addonRows.map((c) => ({ key: `addon:${catalogKey(c)}`, render: (near: boolean) => <TvAddonRail catalog={c} enabled={near} /> })),
+    [addonRows],
+  );
+  const shelfRows = useMemo<RailRow[]>(
+    () =>
+      shelves.map((shelf, i) => {
+        const exclude = shelf.kind === "because" ? new Set([...shownAbove[i], ...watched]) : shownAbove[i];
+        return {
+          key: shelfKey(shelf).join("/"),
+          render: (near: boolean) => <TvShelfRail shelf={shelf} enabled={near} exclude={exclude} />,
+        };
+      }),
+    [shelves, shownAbove, watched],
+  );
+  const rows = useMemo<RailRow[]>(
+    () => [continueRow, trendingRow, ...addonRailRows, ...shelfRows],
+    [continueRow, trendingRow, addonRailRows, shelfRows],
+  );
   return <TvBrowse rows={rows} />;
 }
 
@@ -105,14 +113,18 @@ export function TvDiscover({ type }: { type: ContentType }) {
     return [...catalogs, ...genres];
   }, [type]);
   const shownAbove = useShownAbove(shelves, NO_TITLES);
-  const addonRows = useHomeCatalogs().filter((c) => c.type === type);
-  const rows: RailRow[] = [
-    ...shelves.map((shelf, i) => ({
-      key: shelfKey(shelf).join("/"),
-      render: (near: boolean) => <TvShelfRail shelf={shelf} enabled={near} exclude={shownAbove[i]} />,
-    })),
-    ...addonRows.map((c) => ({ key: `addon:${catalogKey(c)}`, render: (near: boolean) => <TvAddonRail catalog={c} enabled={near} /> })),
-  ];
+  const allAddonRows = useHomeCatalogs();
+  const addonRows = useMemo(() => allAddonRows.filter((c) => c.type === type), [allAddonRows, type]);
+  const rows = useMemo<RailRow[]>(
+    () => [
+      ...shelves.map((shelf, i) => ({
+        key: shelfKey(shelf).join("/"),
+        render: (near: boolean) => <TvShelfRail shelf={shelf} enabled={near} exclude={shownAbove[i]} />,
+      })),
+      ...addonRows.map((c) => ({ key: `addon:${catalogKey(c)}`, render: (near: boolean) => <TvAddonRail catalog={c} enabled={near} /> })),
+    ],
+    [shelves, shownAbove, addonRows],
+  );
   return <TvBrowse rows={rows} />;
 }
 

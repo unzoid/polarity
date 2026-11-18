@@ -24,9 +24,9 @@ export function glideTarget(el: HTMLElement, axis: "x" | "y"): number | undefine
 }
 
 /** Glides `el`'s scroll position on one axis to `target` (instant with reduced motion). */
-export function glideScroll(el: HTMLElement, axis: "x" | "y", target: number) {
+export function glideScroll(el: HTMLElement, axis: "x" | "y", target: number, knownMax?: number) {
   const prop = axis === "x" ? "scrollLeft" : "scrollTop";
-  const max = axis === "x" ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight;
+  const max = knownMax ?? (axis === "x" ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight);
   const to = Math.max(0, Math.min(target, max));
   const state = glides.get(el) ?? {};
   glides.set(el, state);

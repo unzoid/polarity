@@ -1,5 +1,5 @@
-import { cloneElement, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type Ref } from "react";
-import { useArtGate, useNameWait } from "../../lib/ui";
+import { cloneElement, useMemo, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type Ref } from "react";
+import { cardArtUrl, cardLogoUrl, useArtGate, useNameWait } from "../../lib/ui";
 import { Img } from "../Img";
 import { TitleLogo } from "../TitleLogo";
 import { Skeleton } from "../ui/Skeleton";
@@ -59,11 +59,16 @@ export function Card({
   ref,
   ...root
 }: CardProps) {
-  const gate = useArtGate(art, artFallbacks);
+  const sizedArtUrl = cardArtUrl(art, shape);
+  const sizedFallbacks = useMemo(
+    () => artFallbacks?.map((u) => cardArtUrl(u, shape)).filter((u): u is string => !!u),
+    [artFallbacks, shape],
+  );
+  const gate = useArtGate(sizedArtUrl, sizedFallbacks);
   const body = (
     <>
       <div className={frameClass ? `card-frame ${frameClass}` : "card-frame"} {...gate}>
-        <CardArt src={art} fallbacks={artFallbacks} fallback={fallback} />
+        <CardArt src={sizedArtUrl} fallbacks={sizedFallbacks} fallback={fallback} />
         {children}
         {actions}
       </div>
@@ -110,7 +115,7 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
   const { shown, onError } = useCardArt(src);
   return (
     <>
-      {shown && <Img src={shown} fallbacks={fallbacks} alt="" className="card-img" onFail={onError} />}
+      {shown && <Img src={shown} fallbacks={fallbacks} alt="" fetchPriority="low" className="card-img" onFail={onError} />}
       {!shown && fallback}
     </>
   );
@@ -156,9 +161,15 @@ export function LogoOrName({
   logoClass: string;
   name: ReactElement<HTMLAttributes<HTMLElement>>;
 }) {
-  const { shown, onError } = useCardArt(logo);
-  const waiting = useNameWait(pending && !logo, alt);
-  if (shown) return <TitleLogo src={shown} logos={logos} alt={alt} className={`${logoClass} art-after`} onFail={onError} />;
+  const isCardLogo = logoClass === "card-logo" || logoClass === "tv-card-logo";
+  const sizedLogo = isCardLogo ? cardLogoUrl(logo) : logo;
+  const sizedLogos = useMemo(
+    () => (isCardLogo ? logos?.map((u) => cardLogoUrl(u) ?? u) : logos),
+    [isCardLogo, logos],
+  );
+  const { shown, onError } = useCardArt(sizedLogo);
+  const waiting = useNameWait(pending && !sizedLogo, alt);
+  if (shown) return <TitleLogo src={shown} logos={sizedLogos} alt={alt} className={`${logoClass} art-after`} onFail={onError} />;
   return waiting ? cloneElement(name, { "data-name-wait": "" } as HTMLAttributes<HTMLElement>) : name;
 }
 

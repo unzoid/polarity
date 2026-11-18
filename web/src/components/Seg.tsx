@@ -6,7 +6,13 @@ import { createEffect, For, onCleanup, onMount } from "solid-js";
  * clipped to the selected button (see `.seg-active` in styles.css). The clip
  * follows the button's box, so it also works when the row wraps on phones.
  */
-export function Seg(props: { label: string; items: string[]; value: number; onChange: (i: number) => void }) {
+export function Seg(props: {
+  label: string;
+  items: string[];
+  value: number;
+  onChange: (i: number) => void;
+  onHover?: (i: number) => void;
+}) {
   let root!: HTMLDivElement;
   let copy!: HTMLDivElement;
   const buttons: HTMLButtonElement[] = [];
@@ -21,7 +27,6 @@ export function Seg(props: { label: string; items: string[]; value: number; onCh
 
   createEffect(place);
   onMount(() => {
-    place();
     const ro = new ResizeObserver(place);
     ro.observe(root);
     onCleanup(() => ro.disconnect());
@@ -36,6 +41,8 @@ export function Seg(props: { label: string; items: string[]; value: number; onCh
             type="button"
             class="seg-item"
             aria-pressed={i() === props.value}
+            onPointerEnter={() => props.onHover?.(i())}
+            onFocus={() => props.onHover?.(i())}
             onClick={() => {
               // The first position lands instantly; from the first pick on,
               // changes slide (the attribute and the new clip apply together).

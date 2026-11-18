@@ -43,7 +43,7 @@ export function Row({
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && !placed && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
-  });
+  }, [children, placed]);
 
   // Resuming a title moves it to the front of Continue Watching; the shelf kept
   // its scroll offset, which now shows whatever took the title's old place.

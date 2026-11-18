@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play } from "../components/icons";
@@ -19,7 +19,7 @@ import {
   useRecommend,
   useSettings,
 } from "../lib/net";
-import { prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
+import { heroBackdropUrl, prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
 import { useNavigation } from "../lib/router";
 import {
   catalogKey,
@@ -104,6 +104,17 @@ const ADVANCE_MS = 9000;
  * for reduced motion. The art cross-fades rather than slides: a full-screen
  * slide is a vestibular trigger and an abrupt cut is a brightness jump.
  */
+function subscribeUltrawide(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const mq = window.matchMedia("(min-aspect-ratio: 2/1)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function isUltrawide() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-aspect-ratio: 2/1)").matches;
+}
+
 export function HeroCarousel({
   items,
   index,
@@ -121,12 +132,16 @@ export function HeroCarousel({
 }) {
   const { navigate } = useNavigation();
   const phone = useFormFactor().form === "phone";
+  const ultrawide = useSyncExternalStore(subscribeUltrawide, isUltrawide, () => false);
   const [paused, setPaused] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const count = items?.length ?? 0;
-  const item = items?.[index];
+  const rawItem = items?.[index];
+  const bgOf = useCallback((u?: string) => heroBackdropUrl(u, phone), [phone]);
+  const item = useMemo(() => (rawItem ? { ...rawItem, background: bgOf(rawItem.background) } : undefined), [rawItem, bgOf]);
   // The logo or name waits for the current backdrop (#173).
   const gate = useArtGate(item?.background);
+  const gateReady = gate["data-art"] === "ready";
   const gateRef = gate.ref;
   const heroRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -135,6 +150,12 @@ export function HeroCarousel({
     },
     [gateRef],
   );
+
+  // Only mount slides that are active, were shown, or have been warmed ahead so hidden slides don't contend at t=0.
+  const [warmed, setWarmed] = useState<ReadonlySet<number>>(() => new Set([index]));
+  useEffect(() => {
+    setWarmed((prev) => (prev.has(index) ? prev : new Set(prev).add(index)));
+  }, [index]);
 
   const { data: settings } = useSettings();
   const rotate = settings?.heroAutoplay ?? true;
@@ -150,10 +171,23 @@ export function HeroCarousel({
     return () => window.clearInterval(t);
   }, [index, count, paused, rotate, setIndex]);
 
-  // Decode the next backdrop ahead of time so the cross-fade never waits.
+  // Decode the next backdrop ahead of time once the current slide is in (after a short settle window),
+  // so slide 0 never competes with slide 1 at initial load yet the cross-fade never waits.
+  const [nextWarmed, setNextWarmed] = useState(false);
   useEffect(() => {
-    if (items && count) preloadImage(items[(index + 1) % count].background);
-  }, [items, index, count]);
+    setNextWarmed(false);
+  }, [index]);
+  useEffect(() => {
+    if (!items || count < 2 || !gateReady) return;
+    const nextIdx = (index + 1) % count;
+    const t = window.setTimeout(() => {
+      const nextBg = bgOf(items[nextIdx]?.background);
+      preloadImage(nextBg);
+      setNextWarmed(true);
+      setWarmed((prev) => (prev.has(nextIdx) ? prev : new Set(prev).add(nextIdx)));
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [items, index, count, gateReady, bgOf]);
 
   // A sideways swipe on touch steps through the titles, as the arrows do.
   const swiped = useRef(false);
@@ -171,13 +205,18 @@ export function HeroCarousel({
     onClick: () => navigate({ name: "detail", type: item.type, id: item.id, preview: item }),
     onContextMenu: cardMenu(item).onContextMenu,
   };
+  const nextBg = nextWarmed ? bgOf(items[(index + 1) % count]?.background) : undefined;
+  const prevItem = items[(index - 1 + count) % count];
+  const nextItem = items[(index + 1) % count];
 
   return (
     <section className="hero" aria-roledescription="carousel">
       {/* The page around the card takes on a dark shade of the art's colour, as Netflix's, fading down the window. */}
-      <HeroGlow src={item.background} next={items[(index + 1) % count]?.background} area={phone ? "middle" : "whole"} />
+      <HeroGlow src={item.background} next={nextBg} area={phone ? "middle" : "whole"} />
       <div className="hero-stage">
-      {count > 1 && <HeroPeek item={items[(index - 1 + count) % count]} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />}
+      {ultrawide && count > 1 && prevItem && (
+        <HeroPeek item={{ ...prevItem, background: bgOf(prevItem.background) }} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />
+      )}
       <div
         className="hero-card"
         ref={heroRef}
@@ -197,16 +236,19 @@ export function HeroCarousel({
         onContextMenu={h.onContextMenu}
       >
         <div className="hero-art">
-          {items.map((it, i) => (
-            <Img
-              key={it.id}
-              src={it.background}
-              alt=""
-              loading={i === 0 ? "eager" : "lazy"}
-              className="hero-backdrop"
-              data-current={i === index}
-            />
-          ))}
+          {items.map((it, i) =>
+            i === index || warmed.has(i) ? (
+              <Img
+                key={it.id}
+                src={bgOf(it.background)}
+                alt=""
+                loading={i === index ? "eager" : "lazy"}
+                fetchPriority={i === index ? "high" : undefined}
+                className="hero-backdrop"
+                data-current={i === index}
+              />
+            ) : null,
+          )}
         </div>
         <div className="hero-scrim" />
 
@@ -244,7 +286,9 @@ export function HeroCarousel({
           </div>
         )}
       </div>
-      {count > 1 && <HeroPeek item={items[(index + 1) % count]} side="next" onClick={() => setIndex((index + 1) % count)} />}
+      {ultrawide && count > 1 && nextItem && (
+        <HeroPeek item={{ ...nextItem, background: bgOf(nextItem.background) }} side="next" onClick={() => setIndex((index + 1) % count)} />
+      )}
       </div>
     </section>
   );

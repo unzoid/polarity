@@ -524,7 +524,7 @@ fn file_for(dir: &Path, req: &DownloadRequest, url: &str, others: &[String]) -> 
 
 type Shared<'a> = State<'a, Arc<Downloads>>;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn downloads_list(downloads: Shared<'_>) -> Vec<Download> {
     let mut items = downloads.inner.locked().items.clone();
     items.sort_by_key(|i| std::cmp::Reverse(i.added_at));

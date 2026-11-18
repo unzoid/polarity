@@ -44,6 +44,9 @@ pub struct Tmdb {
     limit: Semaphore,
     /// Per TMDB id: its IMDb id (none: left out of lists) and title logo.
     lookups: TtlCache<(char, u64), Lookup>,
+    /// Reverse index (`(kind, imdb_id)` → `tmdb_id`), filled by `lookup` and `find` so opening a
+    /// catalog card or fetching recommendations skips an extra `/find/{imdb_id}` round-trip.
+    imdb_ids: TtlCache<(char, String), u64>,
     /// One growing list per catalog (type, id, genre), so a page asked for by
     /// `skip` is a slice of the same sequence whatever the earlier pages held.
     runs: TtlCache<String, Arc<Mutex<Run>>>,
@@ -75,6 +78,7 @@ impl Tmdb {
             language: language.unwrap_or_else(|| "en-US".into()),
             limit: Semaphore::new(IN_FLIGHT),
             lookups: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
+            imdb_ids: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
             runs: TtlCache::new(Duration::from_secs(60 * 60), 256),
         }
     }
@@ -195,9 +199,15 @@ impl Tmdb {
     }
 
     async fn find(&self, ty: &str, imdb_id: &str) -> Result<u64> {
+        let key = (ty.chars().next().unwrap_or('m'), imdb_id.to_owned());
+        if let Some(hit) = self.imdb_ids.get(&key) {
+            return Ok(hit);
+        }
         let found: Value = self.get(&format!("/find/{imdb_id}"), &[("external_source", "imdb_id")]).await?;
         let bucket = if ty == "series" { "tv_results" } else { "movie_results" };
-        found[bucket][0]["id"].as_u64().ok_or(IndexError::NotFound)
+        let id = found[bucket][0]["id"].as_u64().ok_or(IndexError::NotFound)?;
+        self.imdb_ids.insert(key, id);
+        Ok(id)
     }
 
     /// A search, narrowed to titles released in `year` (any region's release
@@ -251,6 +261,9 @@ impl Tmdb {
             logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
             certification: pick_certification(ty, &d, &self.region()),
         };
+        if let Some(imdb) = &found.imdb_id {
+            self.imdb_ids.insert((key.0, imdb.clone()), tmdb_id);
+        }
         self.lookups.insert(key, found.clone());
         Ok(found)
     }
@@ -272,8 +285,12 @@ impl Tmdb {
             )
             .await?;
 
-        let videos = if ty == "series" { self.episodes(tmdb_id, imdb_id, &d).await? } else { Vec::new() };
-        let logos = self.logos(kind, tmdb_id, &d).await;
+        let (videos, logos) = if ty == "series" {
+            let (v, l) = futures::join!(self.episodes(tmdb_id, imdb_id, &d), self.logos(kind, tmdb_id, &d));
+            (v?, l)
+        } else {
+            (Vec::new(), self.logos(kind, tmdb_id, &d).await)
+        };
         let mut meta = detail_to_meta(ty, imdb_id, &d, videos, logos);
         meta.preview.certification = pick_certification(ty, &d, &self.region());
         Ok(meta)

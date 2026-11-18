@@ -1488,11 +1488,12 @@ export const SETTINGS: SettingDef[] = [
   { id: "pickedTracks", page: "about", title: "Picked tracks", keywords: "remembered audio subtitles subtitle delay per source clear forget" },
 ];
 
-const BY_ID = new Map(SETTINGS.map((d) => [d.id, d]));
+let byId: Map<string, SettingDef> | undefined;
 
 /** The entry with this id; throws on a typo, so a wrong id fails at once rather than drawing nothing. */
 export function settingDef(id: string): SettingDef {
-  const def = BY_ID.get(id);
+  byId ??= new Map(SETTINGS.map((d) => [d.id, d]));
+  const def = byId.get(id);
   if (!def) throw new Error(`No setting "${id}" in lib/settings/schema.ts`);
   return def;
 }

@@ -17,19 +17,40 @@ type Index = Record<string, { at: number; size: number }>;
 
 const storage = (): Storage | undefined => (typeof localStorage === "undefined" ? undefined : localStorage);
 
+let cachedStorage: Storage | undefined;
+let cachedRaw: string | null | undefined;
+let cachedIndex: Index = {};
+let reconciled = false;
+
 function readIndex(s: Storage): Index {
+  const rawStr = s.getItem(INDEX);
+  if (rawStr === null) {
+    cachedStorage = s;
+    cachedRaw = null;
+    cachedIndex = {};
+    reconciled = true;
+    return {};
+  }
+  if (s === cachedStorage && rawStr === cachedRaw) {
+    return { ...cachedIndex };
+  }
   let raw: unknown;
   try {
-    raw = JSON.parse(s.getItem(INDEX) ?? "{}");
+    raw = JSON.parse(rawStr);
   } catch {
     raw = undefined;
   }
   const index: Index = {};
-  if (!isRecord(raw)) return index;
-  for (const [k, v] of Object.entries(raw)) {
-    if (isRecord(v) && typeof v.at === "number" && typeof v.size === "number") index[k] = { at: v.at, size: v.size };
+  if (isRecord(raw)) {
+    for (const [k, v] of Object.entries(raw)) {
+      if (isRecord(v) && typeof v.at === "number" && typeof v.size === "number") index[k] = { at: v.at, size: v.size };
+    }
   }
-  return index;
+  cachedStorage = s;
+  cachedRaw = rawStr;
+  cachedIndex = index;
+  reconciled = false;
+  return { ...index };
 }
 
 /** What was kept under `key`, if it's younger than `maxAge` ms. */
@@ -54,8 +75,11 @@ export function writeCached(key: string, data: unknown, now = Date.now()) {
   if (value.length > BUDGET / 4) return;
   const index = readIndex(s);
   delete index[key];
-  // Entries whose item went missing (cleared storage) don't count.
-  for (const k of Object.keys(index)) if (s.getItem(PREFIX + k) === null) delete index[k];
+  // Entries whose item went missing (cleared storage) don't count — checked once per cold index load rather than copying MBs on every write.
+  if (!reconciled) {
+    for (const k of Object.keys(index)) if (s.getItem(PREFIX + k) === null) delete index[k];
+    reconciled = true;
+  }
   let total = Object.values(index).reduce((n, e) => n + e.size, 0) + value.length;
   const oldest = Object.entries(index).sort((a, b) => a[1].at - b[1].at);
   const drop = () => {
@@ -77,9 +101,14 @@ export function writeCached(key: string, data: unknown, now = Date.now()) {
     }
   }
   try {
-    s.setItem(INDEX, JSON.stringify(index));
+    const serialized = JSON.stringify(index);
+    s.setItem(INDEX, serialized);
+    cachedStorage = s;
+    cachedRaw = serialized;
+    cachedIndex = { ...index };
   } catch {
     // The entries themselves are still readable; the index is rebuilt as they're written again.
+    cachedRaw = undefined;
   }
 }
 
@@ -89,6 +118,9 @@ export function clearCached() {
   if (!s) return;
   for (const k of Object.keys(readIndex(s))) s.removeItem(PREFIX + k);
   s.removeItem(INDEX);
+  cachedRaw = null;
+  cachedIndex = {};
+  reconciled = true;
 }
 
 /** Roughly how many bytes are kept here (two a character, as webviews store them). */

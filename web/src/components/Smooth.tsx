@@ -24,8 +24,13 @@ export function Smooth(props: Props) {
 
   onMount(() => {
     if (!supportsPathClip) return;
-    // offsetWidth/Height ignore transforms, so the outline stays correct while the box is scaled.
-    const ro = new ResizeObserver(() => setD(squirclePath(el.offsetWidth, el.offsetHeight, props.radius, props.smoothing)));
+    // borderBoxSize (and offsetWidth/Height) ignore transforms, so the outline stays correct while scaled.
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0]?.borderBoxSize?.[0];
+      const w = box ? Math.round(box.inlineSize) : el.offsetWidth;
+      const h = box ? Math.round(box.blockSize) : el.offsetHeight;
+      setD(squirclePath(w, h, props.radius, props.smoothing));
+    });
     ro.observe(el);
     onCleanup(() => ro.disconnect());
   });

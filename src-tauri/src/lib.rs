@@ -117,11 +117,12 @@ const SAVE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 /// there), moves its keys and add-on links into the keychain and writes it outside it.
 fn store_saver(store: Arc<Mutex<store::Store>>, vault: Arc<Mutex<keychain::Vault>>) -> Saver {
     Saver::spawn(SAVE_DELAY, move || {
-        let (path, mut file) = {
+        let (path, data) = {
             // A panic elsewhere mid-change still leaves data worth keeping.
             let store = store.locked();
-            (store.path().to_owned(), store.snapshot()?)
+            (store.path().to_owned(), store.clone_data()?)
         };
+        let mut file = serde_json::to_value(&data).map_err(|e| e.to_string())?;
         keychain::take_secrets(&vault, &mut file);
         let bytes = serde_json::to_vec(&file).map_err(|e| e.to_string())?;
         write_atomic(&path, &bytes).map_err(|e| {
