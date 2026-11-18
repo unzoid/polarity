@@ -154,17 +154,86 @@ struct Index {
     skipped: usize,
 }
 
+/// Splits a JSON array byte slice into zero-copy slices per top-level element, or `None` if not a valid array wrapper.
+fn json_array_elements(bytes: &[u8]) -> Option<Vec<&[u8]>> {
+    let trimmed = bytes.trim_ascii();
+    if trimmed.first() != Some(&b'[') || trimmed.last() != Some(&b']') {
+        return None;
+    }
+    let inner = trimmed[1..trimmed.len() - 1].trim_ascii();
+    if inner.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut out = Vec::with_capacity(inner.len() / 160 + 1);
+    let mut depth = 0usize;
+    let mut in_str = false;
+    let mut escape = false;
+    let mut start = 0usize;
+    for (i, &b) in inner.iter().enumerate() {
+        if in_str {
+            if escape {
+                escape = false;
+            } else if b == b'\\' {
+                escape = true;
+            } else if b == b'"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_str = true,
+            b'{' | b'[' => depth += 1,
+            b'}' | b']' => {
+                if depth == 0 {
+                    return None;
+                }
+                depth -= 1;
+            }
+            b',' if depth == 0 => {
+                let slice = inner[start..i].trim_ascii();
+                if slice.is_empty() {
+                    return None;
+                }
+                out.push(slice);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if in_str || depth != 0 {
+        return None;
+    }
+    let tail = inner[start..].trim_ascii();
+    if tail.is_empty() {
+        return None;
+    }
+    out.push(tail);
+    Some(out)
+}
+
 impl Index {
     /// Entries that don't parse are skipped, so one odd entry can't cost
     /// the rest, and counted in a warning, so a change of format can't
     /// empty the index unnoticed. `None` if the file isn't a JSON list at all.
     fn parse(bytes: &[u8]) -> Option<Self> {
-        let list: Vec<serde_json::Value> = serde_json::from_slice(bytes).ok()?;
-        let mut index = Index::default();
-        for v in list {
-            let Ok(raw) = serde_json::from_value::<Raw>(v) else {
-                index.skipped += 1;
-                continue;
+        let slices = json_array_elements(bytes)?;
+        let cap = slices.len();
+        let mut index = Index {
+            entries: Vec::with_capacity(cap),
+            anilist: HashMap::with_capacity(cap),
+            mal: HashMap::with_capacity(cap),
+            kitsu: HashMap::with_capacity(cap),
+            imdb: HashMap::with_capacity(cap / 2),
+            skipped: 0,
+        };
+        for elem in slices {
+            let raw = match serde_json::from_slice::<Raw>(elem) {
+                Ok(r) => r,
+                Err(_) => {
+                    serde_json::from_slice::<serde::de::IgnoredAny>(elem).ok()?;
+                    index.skipped += 1;
+                    continue;
+                }
             };
             let m = AnimeMapping::from(raw);
             let i = index.entries.len();

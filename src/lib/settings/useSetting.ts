@@ -32,6 +32,8 @@ export function useSetting(id: string): { def: SettingDef; value: Value | undefi
  * place switches it everywhere, and it's remembered.
  */
 export function useEpisodeLayout(): [EpisodeLayout, (layout: EpisodeLayout) => void] {
-  const { value, set } = useSetting("episodeLayout");
-  return [value === "list" ? "list" : "row", set];
+  const { data } = useSettings();
+  const update = useUpdateSettings();
+  const value = data?.episodeLayout === "list" ? "list" : "row";
+  return [value, (episodeLayout: EpisodeLayout) => update.mutate({ episodeLayout })];
 }

@@ -36,7 +36,7 @@ import {
 } from "../lib/anime";
 import { useMeta, useProgressOf } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { useFoldSnap, useFormFactor, usePageTogether } from "../lib/ui";
+import { detailBackdropUrl, useFoldSnap, useFormFactor, usePageTogether } from "../lib/ui";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
 import { DetailArt } from "../components/DetailArt";
 
@@ -123,7 +123,6 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   // covers the whole franchise and its trailer is the base title's, so only on that entry.
   const root = useRef<HTMLDivElement>(null);
   const onTop = usePageOnTop(root);
-  const [scrolledAway, setScrolledAway] = useState(false);
   const bigTrailer = !!useTrailerOpen();
   // What the hero finds is kept with the entry it's for, so an answer for the entry it showed before doesn't count.
   const heroId = source.hero;
@@ -140,7 +139,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const franchiseImdb = first && kept.current?.first === first.id ? kept.current.imdb : resolved;
   // A grouped page's trailer is the base title's on every tab, as its top is (#327).
   const trailerId = found ? (firstKnown ? franchiseImdb : undefined) : firstEntry ? imdb : undefined;
-  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, { active: onTop, paused: scrolledAway || bigTrailer });
+  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, { active: onTop, paused: bigTrailer, scroller });
   const { data: meta, isLoading: metaLoading } = useMeta(
     first?.format === "MOVIE" ? "movie" : "series",
     franchiseImdb ?? "",
@@ -160,11 +159,12 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
       <DetailPending />
     );
 
-  const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
+  const rawArt = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
+  const art = { ...rawArt, background: detailBackdropUrl(rawArt.background, phone) ?? rawArt.background };
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };
   const backdrop = (
     <DetailArt src={art.background}>
-      <Img src={art.background} alt="" loading="eager" className="detail-bg-sharp" />
+      <Img src={art.background} alt="" loading="eager" fetchPriority="high" className="detail-bg-sharp" />
       {trailer.node}
       <Img src={art.background} alt="" loading="eager" className="detail-bg-blur" />
       <div className="detail-bg-scrim" />
@@ -188,7 +188,6 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
       <div
         className="scroll detail-scroll"
         ref={scroller}
-        onScroll={(e) => setScrolledAway(e.currentTarget.scrollTop > e.currentTarget.clientHeight * 0.25)}
       >
         {phone && backdrop}
         {heroFranchise && base ? (

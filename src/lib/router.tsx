@@ -108,11 +108,11 @@ export function RouterProvider({ children, initial, keepSections = false }: { ch
     return () => window.removeEventListener("mouseup", onMouse);
   }, [back]);
 
-  const value = useMemo(
-    () => ({ stack, kept, current: stack[stack.length - 1].route, navigate, tab, replace, back }),
-    [stack, kept, navigate, tab, replace, back],
-  );
   const actions = useMemo(() => ({ navigate, tab, replace, back }), [navigate, tab, replace, back]);
+  const value = useMemo(
+    () => ({ stack, kept, current: stack[stack.length - 1].route, ...actions }),
+    [stack, kept, actions],
+  );
   return (
     <ActionsContext.Provider value={actions}>
       <RouterContext.Provider value={value}>{children}</RouterContext.Provider>

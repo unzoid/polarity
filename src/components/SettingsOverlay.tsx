@@ -1,3 +1,5 @@
+import "../styles/settings-overlay.css";
+import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
 import { Avatar } from "./Avatar";

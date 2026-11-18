@@ -14,9 +14,24 @@ import { ErrorBoundary } from "./ui/ErrorBoundary";
 /** How long the player layer takes to fade back to the page (matches player.css). */
 export const PLAYER_EXIT_MS = 260;
 
-/** Its own chunk, fetched once the app is idle so pressing Play never waits on it. */
+/** Its own chunk, fetched once the app is idle (on fast connections) or when Detail/Play is reached so pressing Play never waits on it. */
 const Player = lazyNamed(() => import("../screens/Player"), "Player");
-export const preloadPlayer = () => whenIdle(() => void Player.preload());
+export const preloadPlayerNow = () => void Player.preload().catch(() => {});
+export const preloadPlayer = () => {
+  const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } }) : undefined;
+  const c = nav?.connection;
+  if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) {
+    return () => {};
+  }
+  let cancelIdle: (() => void) | undefined;
+  const later = window.setTimeout(() => {
+    cancelIdle = whenIdle(() => void Player.preload().catch(() => {}), 5000);
+  }, 4000);
+  return () => {
+    window.clearTimeout(later);
+    cancelIdle?.();
+  };
+};
 
 type PlayerRoute = Extract<Route, { name: "player" }>;
 

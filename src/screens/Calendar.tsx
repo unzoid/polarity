@@ -5,6 +5,7 @@ import { byDay, dayLabel, useCalendar, type CalendarEntry } from "../lib/catalog
 import { useNavigation } from "../lib/router";
 import { episodeEntry } from "../lib/library";
 import { ownEpisodeName } from "../lib/format";
+import { cardArtUrl } from "../lib/ui";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Skeleton } from "../components/ui/Skeleton";
 
@@ -78,7 +79,11 @@ function CalendarItem({ entry: { show, video } }: { entry: CalendarEntry }) {
     >
       <span className="calendar-art">
         {/* An episode still to air has no still yet (its link 404s): the show's art, and that too when a still fails. */}
-        <Img src={aired(video) ? video.thumbnail : undefined} fallbacks={[show.background, show.poster]} alt="" />
+        <Img
+          src={aired(video) ? cardArtUrl(video.thumbnail, "landscape") : undefined}
+          fallbacks={[cardArtUrl(show.background, "landscape"), cardArtUrl(show.poster, "poster")]}
+          alt=""
+        />
       </span>
       <span className="calendar-text">
         <span className="calendar-show">{show.name}</span>

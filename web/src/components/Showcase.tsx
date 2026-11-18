@@ -47,7 +47,20 @@ const scenes: {
 /** The dark band under the hero: a heading, then one screenshot at a time, picked with a toggle. */
 export function Showcase() {
   const [current, setCurrent] = createSignal(0);
+  const [loaded, setLoaded] = createSignal<Set<number>>(new Set([0]));
   const scene = () => scenes[current()];
+  const warm = (idx: number) => {
+    if (loaded().has(idx)) return;
+    setLoaded((prev) => {
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
+  };
+  const select = (idx: number) => {
+    warm(idx);
+    setCurrent(idx);
+  };
 
   return (
     <section id="showcase" class="band px-gutter pt-16 pb-[72px] md:pt-[88px] md:pb-24">
@@ -58,7 +71,7 @@ export function Showcase() {
 
       <figure class="mt-12 md:mt-16">
         <figcaption class="grid gap-5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center md:gap-10">
-          <Seg label="Screenshot" items={scenes.map((s) => s.label)} value={current()} onChange={setCurrent} />
+          <Seg label="Screenshot" items={scenes.map((s) => s.label)} value={current()} onChange={select} onHover={warm} />
           <p class="max-w-[36em] text-[17px]">
             {scene().body}
             <Show when={scene().note}>{(n) => <Ref n={n()} />}</Show>
@@ -73,11 +86,13 @@ export function Showcase() {
           <For each={scenes}>
             {(s, i) => (
               <img
-                src={s.img.src}
+                src={loaded().has(i()) ? s.img.src : undefined}
                 alt={s.img.alt}
                 width={s.img.w}
                 height={s.img.h}
-                loading={i() === 0 ? "eager" : "lazy"}
+                loading="lazy"
+                decoding="async"
+                fetchpriority={i() === 0 ? "low" : undefined}
                 aria-hidden={i() !== current()}
                 class="absolute inset-0 size-full object-cover object-top transition-opacity duration-500 ease-[var(--ease-out-strong)]"
                 classList={{ "opacity-0": i() !== current() }}

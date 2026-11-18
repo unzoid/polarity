@@ -32,12 +32,63 @@ const anime = (anilist: number): TitlePage => ({ kind: "anime", anilist });
 
 /** Remembered answers: id → [AniList id or 0 for "not an anime", when asked (ms)]. */
 type Remembered = Record<string, [number, number]>;
+let memStorage: PageLookup["storage"];
+let memRaw: string | null | undefined;
+let memParsed: Remembered = {};
+
 function remembered(storage: PageLookup["storage"]): Remembered {
-  const v = storedJson(storage, STORAGE);
-  return isRecord(v) ? (v as Remembered) : {};
+  if (!storage) return {};
+  try {
+    const raw = storage.getItem(STORAGE);
+    if (storage === memStorage && raw === memRaw) return memParsed;
+    const v = storedJson(storage, STORAGE);
+    memStorage = storage;
+    memRaw = raw;
+    memParsed = isRecord(v) ? (v as Remembered) : {};
+    return memParsed;
+  } catch {
+    const v = storedJson(storage, STORAGE);
+    return isRecord(v) ? (v as Remembered) : {};
+  }
 }
 
 const isAnimated = (item: Pick<MetaPreview, "genres">) => !!item.genres?.some((g) => /^anim(e|ation)$/i.test(g));
+
+function linkedAnimeOf(links: readonly AnimeLink[], id: string, kitsu: number | undefined): AnimeLink | undefined {
+  let best: AnimeLink | undefined;
+  for (const k of links) {
+    if (k.canonical === id || (kitsu !== undefined && k.kitsu === kitsu)) {
+      if (!best || k.anilist < best.anilist) best = k;
+    }
+  }
+  return best;
+}
+
+/**
+ * Synchronous fast-path when `links` are already cached in memory: settles non-animated titles,
+ * linked anime and remembered answers in 0ms without awaiting IPC or rendering a skeleton frame.
+ */
+export function syncTitlePage(
+  id: string,
+  preview: MetaPreview | undefined,
+  opts: { animeEnabled: boolean; links: readonly AnimeLink[] | undefined; storage: PageLookup["storage"]; now: number },
+): TitlePage | undefined {
+  if (!opts.animeEnabled) return TITLE;
+  const anilistPrefix = id.match(/^anilist:(\d+)$/);
+  if (anilistPrefix) return anime(Number(anilistPrefix[1]));
+  const kitsu = Number(id.match(/^kitsu:(\d+)$/)?.[1]) || undefined;
+  if (!kitsu && !id.startsWith("tt")) return TITLE;
+  if (!opts.links) return undefined;
+
+  const linked = linkedAnimeOf(opts.links, id, kitsu);
+  if (linked) return anime(linked.anilist);
+
+  const known = remembered(opts.storage)[id];
+  if (known && (known[0] > 0 || opts.now - known[1] < NOT_ANIME_FOR)) return known[0] > 0 ? anime(known[0]) : TITLE;
+
+  if (!kitsu && preview?.genres?.length && !isAnimated(preview)) return TITLE;
+  return undefined;
+}
 
 /** The page for `id`. Never throws: anything that fails opens the title as it is. */
 export async function titlePage(type: ContentType, id: string, preview: MetaPreview | undefined, l: PageLookup): Promise<TitlePage> {
@@ -49,12 +100,11 @@ export async function titlePage(type: ContentType, id: string, preview: MetaPrev
 
   // The entry the user opened before (the oldest AniList entry: one IMDb id covers every season).
   const links = await l.links().catch(() => [] as AnimeLink[]);
-  const linked = links
-    .filter((k) => k.canonical === id || (kitsu !== undefined && k.kitsu === kitsu))
-    .sort((a, b) => a.anilist - b.anilist)[0];
+  const linked = linkedAnimeOf(links, id, kitsu);
   if (linked) return anime(linked.anilist);
 
-  const known = remembered(l.storage)[id];
+  const memo = remembered(l.storage);
+  const known = memo[id];
   if (known && (known[0] > 0 || l.now() - known[1] < NOT_ANIME_FOR)) return known[0] > 0 ? anime(known[0]) : TITLE;
 
   try {
@@ -66,7 +116,13 @@ export async function titlePage(type: ContentType, id: string, preview: MetaPrev
       const year = Number(item.releaseInfo?.match(/\d{4}/)?.[0]) || undefined;
       found = await l.anilistForImdb(id, { type: item.type, name: item.name, year });
     }
-    storeLocal(STORAGE, JSON.stringify({ ...remembered(l.storage), [id]: [found ?? 0, l.now()] }), l.storage);
+    const next = { ...remembered(l.storage), [id]: [found ?? 0, l.now()] as [number, number] };
+    const serialized = JSON.stringify(next);
+    storeLocal(STORAGE, serialized, l.storage);
+    if (l.storage === memStorage) {
+      memRaw = serialized;
+      memParsed = next;
+    }
     return found ? anime(found) : TITLE;
   } catch {
     return TITLE;

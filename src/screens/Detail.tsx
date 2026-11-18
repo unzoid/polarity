@@ -3,7 +3,7 @@ import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
 import { ExtrasShelf } from "../components/title/ExtrasShelf";
 import { personIds } from "../lib/catalog";
-import { useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
+import { detailBackdropUrl, sizedArt, useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
 import { useEpisodeLayout } from "../lib/settings";
@@ -32,6 +32,7 @@ import { SimklPanel } from "../components/title/SimklPanel";
 import { HiddenTitleNote, HideTitleButton } from "../components/title/HiddenTitleControls";
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
+import { preloadPlayerNow } from "../components/PlayerLayer";
 import { DetailArt } from "../components/DetailArt";
 import { errorMessage } from "../lib/errors";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
@@ -43,30 +44,42 @@ import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
  * ambient backdrop (scroll-driven CSS — no JS on scroll).
  */
 export function Detail({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
+  useEffect(() => preloadPlayerNow(), []);
   const { data: meta, isError, error } = useMeta(type, id);
   // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
   const verdict = useTitleVerdict(meta ?? preview, !!meta || isError);
+  // A phone's page scrolls as one: the art sits at its top and leaves with it (detail.css), instead
+  // of staying behind the page as on a big screen.
+  const phone = useFormFactor().form === "phone";
   // Render instantly from the catalog preview; fill in when full meta arrives.
-  const shown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
+  const rawShown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
+  const shown = useMemo(
+    () =>
+      rawShown
+        ? {
+            ...rawShown,
+            background: detailBackdropUrl(rawShown.background, phone),
+            poster: sizedArt(rawShown.poster, "w342"),
+          }
+        : undefined,
+    [rawShown, phone],
+  );
 
   // The trailer behind the page: only while it's the page on top, and paused
   // once you've scrolled down to read or a sheet or the big trailer is open.
   const root = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const onTop = usePageOnTop(root);
-  const [scrolledAway, setScrolledAway] = useState(false);
   const [sheets, setSheets] = useState(0);
   const onSheet = useCallback((open: boolean) => setSheets((n) => Math.max(0, n + (open ? 1 : -1))), []);
   const bigTrailer = !!useTrailerOpen();
   const trailer = useBackdropTrailer(id, {
     active: onTop && verdict === "show",
-    paused: scrolledAway || sheets > 0 || bigTrailer,
+    paused: sheets > 0 || bigTrailer,
+    scroller,
   });
 
-  const scroller = useRef<HTMLDivElement>(null);
   useFoldSnap(scroller, !!shown);
-  // A phone's page scrolls as one: the art sits at its top and leaves with it (detail.css), instead
-  // of staying behind the page as on a big screen.
-  const phone = useFormFactor().form === "phone";
   // On a phone the page comes in whole: its outline until the details, the art (placed on its subject) and the
   // logo are all there, then everything at once (detail.css).
   const together = usePageTogether(!!meta || isError);
@@ -77,7 +90,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
 
   const art = (
     <DetailArt src={shown.background}>
-      <Img src={shown.background} alt="" loading="eager" className="detail-bg-sharp" />
+      <Img src={shown.background} alt="" loading="eager" fetchPriority="high" className="detail-bg-sharp" />
       {trailer.node}
       {/* No backdrop (or it fails): the poster, blurred, rather than plain black. */}
       <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
@@ -101,7 +114,6 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
       <div
         className="scroll detail-scroll"
         ref={scroller}
-        onScroll={(e) => setScrolledAway(e.currentTarget.scrollTop > e.currentTarget.clientHeight * 0.25)}
       >
         {phone && art}
         <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />

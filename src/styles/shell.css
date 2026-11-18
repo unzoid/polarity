@@ -35,6 +35,10 @@
   visibility: hidden;
   content-visibility: hidden;
 }
+.page[data-active="false"]:not([data-motion]):not([data-drag]):not([data-under-player="true"]) *,
+.tv-page[data-active="false"]:not([data-under-player="true"]) * {
+  animation-play-state: paused !important;
+}
 /* The page the player returns to stays rendered (only not painted), so it's back in the
    first frame: no black frame, no entrance played again (test report 1, item 6). */
 .page[data-under-player="true"],
@@ -347,16 +351,23 @@
   z-index: -1;
   --edge-shown: 0;
 }
-.edge-blur.navbar-fade::before,
-.edge-blur.navbar-fade i {
-  transition: opacity var(--dur-base) var(--ease-std);
-}
-/* Black under the white tabs in dark mode; the near-white page, stronger, under the dark ones in light. */
 .edge-blur.navbar-fade::before {
+  transition: opacity var(--dur-base) var(--ease-std);
   background: linear-gradient(to top, transparent, color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent) 70%);
+}
+/* Like .row-paddle (#134), drop the 6 masked backdrop-filter surfaces once faded out at the top of the page. */
+.edge-blur.navbar-fade i {
+  backdrop-filter: none;
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    backdrop-filter 0s linear var(--dur-base);
 }
 .navbar[data-scrolled="true"] .navbar-fade {
   --edge-shown: 1;
+}
+.navbar[data-scrolled="true"] .edge-blur.navbar-fade i {
+  backdrop-filter: var(--edge-filter);
+  transition: opacity var(--dur-base) var(--ease-std);
 }
 /* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
    the stacked blurs. Six masked blurs taken again on every frame of a scroll are more than a phone's web view
@@ -1184,4 +1195,30 @@ html[data-os="mac"]:has(.app.tv) body,
 html[data-os="mac"]:has(.app.tv) body::after {
   border-radius: 0;
   box-shadow: none;
+}
+
+/* Playback host layer (PlayerLayer.tsx): kept in shell.css so the transition layer is styled before Player's chunk loads. */
+.player-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-player);
+  transition: opacity var(--dur-slow) var(--ease-std);
+  @starting-style {
+    opacity: 0;
+  }
+}
+.player-limit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+.player-layer[data-leaving="true"] {
+  opacity: 0;
+  transition-duration: 260ms; /* PLAYER_EXIT_MS */
+}
+html[data-player="mpv"] .app[data-player-leaving="true"] .main {
+  visibility: visible;
+  background: var(--bg);
 }

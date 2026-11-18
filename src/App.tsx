@@ -9,13 +9,21 @@ import { useSettings } from "./lib/net";
 import { rootTab, RouterProvider, useRouter, type Entry, type Route } from "./lib/router";
 import { focusSearch } from "./lib/catalog";
 import { Home } from "./screens/Home";
-import { Discover } from "./screens/Discover";
-import { Library, LibraryCollection, LibraryPlaylist } from "./screens/Library";
-import { Calendar } from "./screens/Calendar";
-import { Search } from "./screens/Search";
-import { Detail } from "./screens/Detail";
-import { Person } from "./screens/Person";
-import { Anime, AnimeBrowse, AnimeSchedule } from "./screens/Anime";
+import {
+  LazyAnime,
+  LazyAnimeBrowse,
+  LazyAnimeDetail,
+  LazyAnimeSchedule,
+  LazyCalendar,
+  LazyDetail,
+  LazyDiscover,
+  LazyLibrary,
+  LazyLibraryCollection,
+  LazyLibraryPlaylist,
+  LazyPerson,
+  LazySearch,
+  preloadRoute,
+} from "./screens/lazyScreens";
 import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
 import { ControllerToast } from "./tv/TvChrome";
@@ -39,6 +47,7 @@ import {
   watchCardTaps,
   useSystemBack,
   watchInputModality,
+  whenIdle,
 } from "./lib/ui";
 import { PROFILES_EXIT_MS } from "./screens/account/profileHandoff";
 import { CardMenuHost } from "./components/CardMenu";
@@ -68,7 +77,6 @@ import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "
 // Chunks of their own, loaded the first time they're drawn: most sessions never
 // see the sign-in screens, TV mode, Settings or an anime page (the player is in
 // PlayerLayer, preloaded once the app is idle).
-const AnimeDetail = lazyNamed(() => import("./screens/AnimeDetail"), "AnimeDetail");
 const AuthScreen = lazyNamed(() => import("./screens/account/AuthScreen"), "AuthScreen");
 const OnboardingScreen = lazyNamed(() => import("./screens/account/OnboardingScreen"), "OnboardingScreen");
 const ProfilesScreen = lazyNamed(() => import("./screens/account/ProfilesScreen"), "ProfilesScreen");
@@ -81,35 +89,75 @@ const Screen = memo(function Screen({ route }: { route: Route }) {
     case "home":
       return <Home />;
     case "discover":
-      return <Discover type={route.type} catalog={route.catalog} genre={route.genre} addon={route.addon} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyDiscover type={route.type} catalog={route.catalog} genre={route.genre} addon={route.addon} />
+        </Suspense>
+      );
     case "library":
-      return <Library />;
+      return (
+        <Suspense fallback={null}>
+          <LazyLibrary />
+        </Suspense>
+      );
     case "library-collection":
-      return <LibraryCollection view={route.view} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyLibraryCollection view={route.view} />
+        </Suspense>
+      );
     case "playlist":
-      return <LibraryPlaylist id={route.id} fresh={!!route.fresh} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyLibraryPlaylist id={route.id} fresh={!!route.fresh} />
+        </Suspense>
+      );
     case "calendar":
-      return <Calendar />;
+      return (
+        <Suspense fallback={null}>
+          <LazyCalendar />
+        </Suspense>
+      );
     case "search":
-      return <Search />;
+      return (
+        <Suspense fallback={null}>
+          <LazySearch />
+        </Suspense>
+      );
     case "settings":
       return <SettingsRoute page={route.page} />;
     case "detail":
       return <TitleRoute type={route.type} id={route.id} preview={route.preview} episode={route.episode} />;
     case "anime":
-      return <Anime />;
+      return (
+        <Suspense fallback={null}>
+          <LazyAnime />
+        </Suspense>
+      );
     case "anime-detail":
       return (
         <Suspense fallback={null}>
-          <AnimeDetail id={route.id} preview={route.preview} />
+          <LazyAnimeDetail id={route.id} preview={route.preview} />
         </Suspense>
       );
     case "anime-schedule":
-      return <AnimeSchedule />;
+      return (
+        <Suspense fallback={null}>
+          <LazyAnimeSchedule />
+        </Suspense>
+      );
     case "anime-browse":
-      return <AnimeBrowse />;
+      return (
+        <Suspense fallback={null}>
+          <LazyAnimeBrowse />
+        </Suspense>
+      );
     case "person":
-      return <Person id={route.id} name={route.title} />;
+      return (
+        <Suspense fallback={null}>
+          <LazyPerson id={route.id} name={route.title} />
+        </Suspense>
+      );
     case "player":
       return null; // rendered as a full-window layer below
   }
@@ -137,10 +185,14 @@ function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: str
   if (page.kind === "anime")
     return (
       <Suspense fallback={loading}>
-        <AnimeDetail id={page.anilist} />
+        <LazyAnimeDetail id={page.anilist} />
       </Suspense>
     );
-  return <Detail type={type} id={id} preview={preview} episode={episode} />;
+  return (
+    <Suspense fallback={loading}>
+      <LazyDetail type={type} id={id} preview={preview} episode={episode} />
+    </Suspense>
+  );
 }
 
 /**
@@ -218,15 +270,18 @@ function GateScreen() {
     case "profiles":
       return null;
     case "guest":
-    case "ready":
+    case "ready": {
       // Each profile starts on its start page with its own navigation. Wait
       // for settings (a local read) so it doesn't open on Home and then jump.
       if (!isFetched) return shell;
+      const initial = startRoute(settings?.startPage);
+      preloadRoute(initial);
       return (
-        <RouterProvider key={profile?.id ?? "guest"} initial={[startRoute(settings?.startPage)]} keepSections={phone}>
+        <RouterProvider key={profile?.id ?? "guest"} initial={[initial]} keepSections={phone}>
           <MainApp />
         </RouterProvider>
       );
+    }
   }
 }
 
@@ -402,6 +457,7 @@ function DesktopApp() {
   // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
   useEffect(watchInputModality, []);
   useEffect(watchCardTaps, []);
+  useEffect(() => whenIdle(() => void LazyDetail.preload().catch(() => {}), 2500), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -564,13 +620,23 @@ function LazySettingsOverlay() {
   const { open } = useSettingsOverlay();
   const [opened, setOpened] = useState(open);
   if (open && !opened) setOpened(true);
-  // Fetched once the app has settled, so the first Settings opens as quickly as the rest.
-  useEffect(() => {
-    const later = window.setTimeout(() => void import("./components/SettingsOverlay").catch(() => {}), 2000);
-    return () => window.clearTimeout(later);
-  }, []);
   // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
   const phone = useFormFactor().form === "phone";
+  // Fetched once the app has genuinely settled (skipping phones and metered/slow connections), so initial load never competes with it.
+  useEffect(() => {
+    if (phone) return;
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
+    const c = nav.connection;
+    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    let cancelIdle: (() => void) | undefined;
+    const later = window.setTimeout(() => {
+      cancelIdle = whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 5000);
+    }, 5000);
+    return () => {
+      window.clearTimeout(later);
+      cancelIdle?.();
+    };
+  }, [phone]);
   if (!opened || phone) return null;
   return (
     <Suspense fallback={null}>

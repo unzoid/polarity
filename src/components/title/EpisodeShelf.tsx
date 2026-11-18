@@ -147,7 +147,24 @@ function useShelfWindow(shelf: React.RefObject<HTMLDivElement | null>, list: str
       // A row's slots come near sideways, inside its scroller; a list's as the page scrolls.
       row ? { root: root.querySelector(".row-scroller"), rootMargin: "0px 100%" } : { root: root.closest(".scroll"), rootMargin: "100% 0px" },
     );
-    for (const slot of root.querySelectorAll(".episode-slot")) io.observe(slot);
+    // Observe the window boundaries plus stride checkpoints (for fast scrollbar jumps) rather than 1,000+ slots.
+    const watch = new Set<number>();
+    if (from > 0) {
+      watch.add(from - 1);
+      for (let i = 0; i < from - 1; i += AHEAD) watch.add(i);
+    }
+    if (to < count) {
+      watch.add(to);
+      for (let i = to + AHEAD; i < count; i += AHEAD) watch.add(i);
+      watch.add(count - 1);
+    }
+    const track = row ? root.querySelector(".row-scroller") : root;
+    if (track) {
+      for (const idx of watch) {
+        const slot = track.children[idx];
+        if (slot?.hasAttribute("data-slot")) io.observe(slot);
+      }
+    }
     return () => io.disconnect();
     // `grow` is new each render; what it reads is in these.
     // eslint-disable-next-line react-hooks/exhaustive-deps

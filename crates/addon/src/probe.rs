@@ -11,10 +11,26 @@
 //! CDN links often carry account tokens or the add-on's config there.
 
 use std::net::IpAddr;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use reqwest::{header, StatusCode, Url};
 use serde::Serialize;
+
+/// Shared probe client so readiness checks and playback probes reuse TLS state and connection pools.
+static HTTP: LazyLock<Option<reqwest::Client>> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .user_agent("mpv")
+        // Followed by hand, so each hop can be reported.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .ok()
+});
+
+pub(crate) fn shared_client() -> Option<reqwest::Client> {
+    HTTP.clone()
+}
 
 /// One step of the probe, as it happens.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -184,14 +200,7 @@ impl Probe {
 
     /// [`Probe::run`] without the shortcut for servers on this machine (tests serve from one).
     async fn check(&self, start: Url, on: &mut impl FnMut(ProbeEvent)) -> Result<String, String> {
-        let Ok(http) = reqwest::Client::builder()
-            .connect_timeout(self.connect_timeout)
-            .timeout(self.timeout)
-            .user_agent("mpv")
-            // Followed by hand, so each hop can be reported.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-        else {
+        let Some(http) = shared_client() else {
             return Ok(start.into());
         };
 
@@ -222,8 +231,8 @@ impl Probe {
                 let Some(left) = until.checked_duration_since(sent).filter(|d| !d.is_zero()) else {
                     return late(&url, on);
                 };
-                let mut req =
-                    http.get(url.clone()).header(header::RANGE, "bytes=0-1023").timeout(left.min(self.timeout));
+                let req_timeout = left.min(self.timeout).min(self.connect_timeout.max(self.timeout));
+                let mut req = http.get(url.clone()).header(header::RANGE, "bytes=0-1023").timeout(req_timeout);
                 for (k, v) in &self.headers {
                     req = req.header(k.as_str(), v.as_str());
                 }

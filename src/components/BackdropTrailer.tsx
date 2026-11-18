@@ -20,7 +20,10 @@ const DELAY_MS = 4000;
  * page on top, the player open) removes it; `paused` (scrolled down to the
  * episodes, a sheet open) pauses it behind the art.
  */
-export function useBackdropTrailer(imdbId: string | undefined, { active, paused = false }: { active: boolean; paused?: boolean }) {
+export function useBackdropTrailer(
+  imdbId: string | undefined,
+  { active, paused = false, scroller }: { active: boolean; paused?: boolean; scroller?: RefObject<HTMLElement | null> },
+) {
   const { data: settings } = useSettings();
   const allowed = (settings?.trailerAutoplay ?? true) && !prefersReducedMotion();
   const fileUrl = useFileTrailer(imdbId, allowed).data?.url;
@@ -29,13 +32,34 @@ export function useBackdropTrailer(imdbId: string | undefined, { active, paused 
   const [mounted, setMounted] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [scrolledAway, setScrolledAway] = useState(false);
   const [muted, setMuted] = useState(!(settings?.trailerSound ?? false));
   // A different title starts over.
   useEffect(() => {
     setEnded(false);
     setPlaying(false);
     setMounted(false);
+    setScrolledAway(false);
   }, [fileUrl]);
+
+  // Only watch scroll position once a backdrop trailer is actually mounted, so scrolling Detail never re-renders the page.
+  useEffect(() => {
+    const el = scroller?.current;
+    if (!mounted || !el) return;
+    let last = el.scrollTop > el.clientHeight * 0.25;
+    setScrolledAway(last);
+    const onScroll = () => {
+      const next = el.scrollTop > el.clientHeight * 0.25;
+      if (next !== last) {
+        last = next;
+        setScrolledAway(next);
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [mounted, scroller]);
+
+  const effectivePaused = paused || scrolledAway;
 
   // Wait a moment on the page; leaving it removes the player (and its sound).
   useEffect(() => {
@@ -60,8 +84,8 @@ export function useBackdropTrailer(imdbId: string | undefined, { active, paused 
 
   useEffect(() => {
     const v = video.current;
-    if (mounted && v) void (paused ? v.pause() : v.play().catch(() => {}));
-  }, [paused, mounted]);
+    if (mounted && v) void (effectivePaused ? v.pause() : v.play().catch(() => {}));
+  }, [effectivePaused, mounted]);
 
   const finish = () => {
     setPlaying(false);
@@ -73,7 +97,7 @@ export function useBackdropTrailer(imdbId: string | undefined, { active, paused 
     setMuted(!muted);
   };
 
-  const visible = mounted && playing && !paused;
+  const visible = mounted && playing && !effectivePaused;
   const node =
     mounted && fileUrl ? (
       <div className="backdrop-trailer" data-visible={visible} aria-hidden>

@@ -51,16 +51,16 @@ body {
 /* The other app fonts, all variable (weight axis) so every weight the app uses is a real one. Their
    own features: Inter's character variants (body, above) don't apply to them. */
 :root[data-font="instrument"] {
-  --font: "Twemoji Country Flags", "Instrument Sans Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, sans-serif;
 }
 :root[data-font="hanken"] {
-  --font: "Twemoji Country Flags", "Hanken Grotesk Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Hanken Grotesk Variable", system-ui, sans-serif;
 }
 :root[data-font="onest"] {
-  --font: "Twemoji Country Flags", "Onest Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Onest Variable", system-ui, sans-serif;
 }
 :root[data-font="mona"] {
-  --font: "Twemoji Country Flags", "Mona Sans Variable", "Inter Variable", system-ui, sans-serif;
+  --font: "Twemoji Country Flags", "Mona Sans Variable", system-ui, sans-serif;
 }
 :root:is([data-font="instrument"], [data-font="hanken"], [data-font="onest"], [data-font="mona"]) body {
   font-feature-settings: normal;

@@ -1,3 +1,4 @@
+import "../styles/player.css";
 import { useQuery } from "@tanstack/react-query";
 import {
   Captions,
@@ -2010,14 +2011,14 @@ export function Player({
         onPointerLeave={() => (overControls.current = false)}
       >
         <div className="player-timeline">
-          <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} onSeek={seekTo} />
+          <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} active={chromeVisible && !options} onSeek={seekTo} />
           {sleep.left != null && (
             <span className="player-sleep tabular" role="timer" aria-label={`Sleep timer: ${sleepLabel(sleep.left)} left`}>
               <Moon size={16} />
               {sleepLabel(sleep.left)}
             </span>
           )}
-          <PlayerClock media={media} display={timeDisplay} rate={inParty ? 1 : playRate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} />
+          <PlayerClock media={media} display={timeDisplay} rate={inParty ? 1 : playRate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} active={chromeVisible && !options} />
         </div>
         <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
           {!party && (

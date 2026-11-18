@@ -1504,39 +1504,6 @@ html[data-player="mpv"] .main {
   background: transparent;
 }
 
-/* --- Entering and leaving playback: one cross-fade per visit, on the layer
-       that holds the player (episode/source switches remount inside it and
-       don't fade). In 300ms; out a touch faster, so the page is back quickly.
-       A plain ease, not a strong ease-out: a full-screen cross-fade that lands
-       in the first few frames reads as a cut. */
-.player-layer {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-player);
-  transition: opacity var(--dur-slow) var(--ease-std);
-  @starting-style {
-    opacity: 0;
-  }
-}
-/* A title over the profile's viewing limit, started from outside its page (PlayerLayer.tsx PlayGate). */
-.player-limit {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: var(--bg);
-}
-.player-layer[data-leaving="true"] {
-  opacity: 0;
-  transition-duration: 260ms; /* PLAYER_EXIT_MS */
-}
-/* mpv's picture lives under the page, and mpv stops as the player goes, so a page
-   fading in over it would rise out of black: the page is simply there again, and the
-   player's controls fade off it (test report 1, item 6). */
-html[data-player="mpv"] .app[data-player-leaving="true"] .main {
-  visibility: visible;
-  background: var(--bg);
-}
 .player-status {
   background: #000;
 }

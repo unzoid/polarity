@@ -194,6 +194,6 @@ if (typeof window !== "undefined") {
   const wake = () => void syncList();
   window.addEventListener("focus", wake);
   window.addEventListener("online", wake);
-  // The device's own list until a profile starts (setListSpace).
-  void syncList(true);
+  // The device's own list until a profile starts (setListSpace), deferred past initial render.
+  window.setTimeout(() => void syncList(true), 2000);
 }

@@ -1,3 +1,4 @@
+import "../../styles/player.css";
 import { isMac } from "../../lib/platform";
 import { OPEN_DYSLEXIC } from "../../lib/settings";
 import { Minus, Plus, Reset } from "../icons";

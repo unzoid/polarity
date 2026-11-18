@@ -3,6 +3,7 @@
 
 export * from "./artFocus";
 export * from "./artGate";
+export * from "./artSize";
 export * from "./cardGhost";
 export * from "./cardIntent";
 export * from "./cardMotion";

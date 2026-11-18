@@ -14,7 +14,15 @@ type Button = { label: string; href: () => string };
 
 /** Links to the title's IMDb and TMDB pages, on the sites that only say which title it is that way. */
 function databaseLinks(): string[] {
-  if (!/(^|\.)(trakt\.tv|letterboxd\.com)$/.test(location.hostname)) return [];
+  const h = location.hostname.replace(/^(www|m)\./, "");
+  const p = location.pathname;
+  if (h === "trakt.tv" || h === "app.trakt.tv") {
+    if (!/^\/(movies|shows)\/[^/]+\/?$/.test(p)) return [];
+  } else if (h === "letterboxd.com") {
+    if (!/^\/film\/[^/]+\/?$/.test(p)) return [];
+  } else {
+    return [];
+  }
   return [...document.querySelectorAll<HTMLAnchorElement>('a[href*="imdb.com/title/"], a[href*="themoviedb.org/"]')].slice(0, 50).map((a) => a.href);
 }
 
@@ -67,13 +75,30 @@ root.querySelector("button")!.addEventListener("click", () => {
 function update() {
   if (hiddenOn !== null && hiddenOn !== location.href) hiddenOn = null;
   button = hiddenOn === null && !document.fullscreenElement ? buttonHere() : null;
-  if (!button) return host.remove();
-  link.textContent = button.label;
-  link.href = button.href();
+  if (!button) {
+    if (host.isConnected) host.remove();
+    return;
+  }
+  if (link.textContent !== button.label) link.textContent = button.label;
+  const nextHref = button.href();
+  if (link.getAttribute("href") !== nextHref) link.href = nextHref;
   if (!host.isConnected) document.documentElement.append(host);
 }
 
-update();
-setInterval(update, 1000);
+let timer: ReturnType<typeof setInterval> | null = null;
+function syncPolling() {
+  if (document.hidden) {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  } else if (timer === null) {
+    update();
+    timer = setInterval(update, 1000);
+  }
+}
+
+syncPolling();
+document.addEventListener("visibilitychange", syncPolling);
 for (const event of ["popstate", "yt-navigate-finish"]) window.addEventListener(event, update);
 document.addEventListener("fullscreenchange", update);

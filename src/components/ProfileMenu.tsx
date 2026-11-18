@@ -18,13 +18,11 @@ import { friendsAvailable, setFriendsOpen, useFriends } from "../lib/friends";
 import { useRouter, useNavigation } from "../lib/router";
 import { useAccount } from "../lib/account";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
-import { FriendsBody } from "./friends/FriendsPanel";
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
 import { lazyNamed, useFormFactor } from "../lib/ui";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
-import { ProfileEditSheet } from "./ProfileEditSheet";
 import { useGuard } from "./profileLock/useGuard";
 import { Avatar } from "./Avatar";
 import { Sheet } from "./Sheet";
@@ -35,6 +33,8 @@ import { warnFailed } from "../lib/errors";
 
 /** Settings, as the profile sheet's next view on a phone: loaded when it's first opened, as the window is (App.tsx). */
 const SettingsOverlay = lazyNamed(() => import("./SettingsOverlay"), "SettingsOverlay");
+const ProfileEditSheet = lazyNamed(() => import("./ProfileEditSheet"), "ProfileEditSheet");
+const FriendsBody = lazyNamed(() => import("./friends/FriendsPanel"), "FriendsBody");
 
 /** Used for the template profile when nobody's signed in. */
 const GUEST_AVATAR = "guest";
@@ -245,7 +245,13 @@ function ProfilePopover({ name, avatar, me, email, status, profiles, manage, gro
                   </button>
                   <strong>{VIEW_TITLES[view]}</strong>
                 </div>
-                {view === "friends" ? <FriendsBody inDialog={false} /> : me && <JoinView me={me} done={done} />}
+                {view === "friends" ? (
+                  <Suspense fallback={null}>
+                    <FriendsBody inDialog={false} />
+                  </Suspense>
+                ) : (
+                  me && <JoinView me={me} done={done} />
+                )}
               </>
             )}
           </div>
@@ -385,7 +391,11 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
       {bar && createPortal(
       <Sheet open={open} onClose={shut} title={title} full>
         <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
-          {view === "friends" && <FriendsBody inDialog={false} />}
+          {view === "friends" && (
+            <Suspense fallback={null}>
+              <FriendsBody inDialog={false} />
+            </Suspense>
+          )}
           {view === "join" && me && <JoinView me={me} done={done} />}
           {view === "settings" && (
             <Suspense
@@ -398,7 +408,11 @@ function ProfileSheet({ name, avatar, me, email, status, profiles, manage, group
               <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
             </Suspense>
           )}
-          {view === "edit" && editing && <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />}
+          {view === "edit" && editing && (
+            <Suspense fallback={null}>
+              <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />
+            </Suspense>
+          )}
           {view === "list" && (
             <ProfileList
               name={name}

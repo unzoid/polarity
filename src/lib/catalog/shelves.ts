@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
-import { getViewingLimit, keepWithinLimit, useViewingLimit } from "./viewingLimit";
+import { catalogBound, getViewingLimit, keepWithinLimit, useViewingLimit } from "./viewingLimit";
 import { api } from "../api";
 import { keys, useCatalog, useContinueWatching, useLibrary } from "../net/queries";
 import type { ContentType, MetaPreview, Progress } from "../types";
@@ -134,11 +134,17 @@ export function useShownAbove(shelves: Shelf[], top: MetaPreview[]) {
 
 /** Featured titles: a mix of trending series and movies that have full art. */
 export function useFeatured() {
+  const qc = useQueryClient();
   const viewing = useViewingLimit();
   return useQuery({
     queryKey: keys.featured,
     queryFn: async () => {
-      const [series, movies] = await Promise.all([api.catalog("series", "trending"), api.catalog("movie", "trending")]);
+      const fetchTrending = (type: ContentType) =>
+        qc.fetchQuery({
+          queryKey: keys.catalog(type, "trending", undefined),
+          queryFn: () => api.catalog(type, "trending", 0, undefined, catalogBound(type)),
+        });
+      const [series, movies] = await Promise.all([fetchTrending("series"), fetchTrending("movie")]);
       // Within the profile's viewing limit as it is now; `select` below keeps up when it changes.
       const limit = getViewingLimit();
       const pick = (list: MetaPreview[]) => keepWithinLimit(list, limit).filter((m) => m.background && m.description).slice(0, 4);

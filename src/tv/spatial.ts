@@ -55,8 +55,49 @@ function navigableAt(el: HTMLElement, r: DOMRect) {
   return el.checkVisibility({ visibilityProperty: true });
 }
 
+/** Like navigableAt when candidates were already collected outside `[inert]` subtrees. */
+function navigableInActiveTree(el: HTMLElement, r: DOMRect) {
+  if ((el as HTMLButtonElement).disabled || el.tabIndex < 0) return false;
+  if (!r.width || !r.height) return false;
+  return el.checkVisibility({ visibilityProperty: true });
+}
+
+/**
+ * Collects focusable elements inside `root` while skipping `[inert]` subtrees (such as background
+ * `.tv-page[inert]` screens stacked under a Detail page) in O(1) per inert container.
+ */
+function focusablesIn(root: ParentNode): HTMLElement[] {
+  if (root instanceof Element && root.closest("[inert]")) return [];
+  if (!root.querySelector("[inert]")) {
+    const list = root.querySelectorAll(FOCUSABLE);
+    const out: HTMLElement[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const el = list[i];
+      if (el instanceof HTMLElement) out.push(el);
+    }
+    return out;
+  }
+  const out: HTMLElement[] = [];
+  const collect = (node: Element) => {
+    if (node.hasAttribute("inert")) return;
+    if (node instanceof HTMLElement && node.matches(FOCUSABLE)) out.push(node);
+    if (!node.querySelector("[inert]")) {
+      const list = node.querySelectorAll(FOCUSABLE);
+      for (let i = 0; i < list.length; i++) {
+        const el = list[i];
+        if (el instanceof HTMLElement) out.push(el);
+      }
+      return;
+    }
+    for (let c = node.firstElementChild; c; c = c.nextElementSibling) collect(c);
+  };
+  if (root instanceof Element) collect(root);
+  else for (let c = root.firstElementChild; c; c = c.nextElementSibling) collect(c);
+  return out;
+}
+
 export function navigables(root: ParentNode): HTMLElement[] {
-  return [...root.querySelectorAll(FOCUSABLE)].filter(isNavigable);
+  return focusablesIn(root).filter((el) => navigableInActiveTree(el, el.getBoundingClientRect()));
 }
 
 /** The innermost visible scope: an open panel or menu beats the shell. */
@@ -154,6 +195,12 @@ function score(a: DOMRect, b: DOMRect, dir: Dir) {
  * checked for being navigable only when it's the best yet, #36).
  */
 export function nearest(from: HTMLElement, candidates: HTMLElement[], dir: Dir, accept?: (el: HTMLElement, box: DOMRect) => boolean) {
+  const boxes = new Map<Element, DOMRect>();
+  const boxOf = (el: Element) => {
+    let r = boxes.get(el);
+    if (!r) boxes.set(el, (r = el.getBoundingClientRect()));
+    return r;
+  };
   const horizontal = dir === "left" || dir === "right";
   const group = horizontal ? null : from.closest("[data-nav-group]");
   if (group) {
@@ -161,28 +208,38 @@ export function nearest(from: HTMLElement, candidates: HTMLElement[], dir: Dir, 
       from,
       candidates.filter((c) => group.contains(c)),
       dir,
+      boxOf,
       accept,
     );
     if (inside) return inside;
   }
-  return nearestOf(from, candidates, dir, accept);
+  return nearestOf(from, candidates, dir, boxOf, accept);
 }
 
 function nearestOf(
   from: HTMLElement,
   candidates: HTMLElement[],
   dir: Dir,
+  boxOf: (el: Element) => DOMRect,
   accept?: (el: HTMLElement, box: DOMRect) => boolean,
 ): HTMLElement | null {
-  const a = from.getBoundingClientRect();
+  const a = boxOf(from);
   const horizontal = dir === "left" || dir === "right";
   // At the end of a shelf (or the navbar), left/right stops — it never jumps to another row.
   const inRail = horizontal && !!from.closest("[data-nav-rail], [data-nav-lock-x]");
+  const fromRow = inRail ? from.closest("[data-nav-row]") : null;
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
   for (const el of candidates) {
     if (el === from || el.contains(from) || from.contains(el)) continue;
-    const b = el.getBoundingClientRect();
+    if (inRail) {
+      const row = el.closest("[data-nav-row]");
+      if (row && row !== fromRow && !row.contains(from)) {
+        const rr = boxOf(row);
+        if (rr.width > 0 && rr.height > 0 && gap(a.top, a.bottom, rr.top - 24, rr.bottom + 24) > 0) continue;
+      }
+    }
+    const b = boxOf(el);
     if (inRail && gap(a.top, a.bottom, b.top, b.bottom) > 0) continue;
     const s = score(a, b, dir);
     if (s < bestScore && (!accept || accept(el, b))) {
@@ -190,7 +247,7 @@ function nearestOf(
       best = el;
     }
   }
-  return horizontal || !best ? best : adjacentRow(from, best, candidates, dir, accept);
+  return horizontal || !best ? best : adjacentRow(from, best, candidates, dir, boxOf, accept);
 }
 
 /**
@@ -204,13 +261,14 @@ function adjacentRow(
   best: HTMLElement,
   candidates: HTMLElement[],
   dir: Dir,
+  boxOf: (el: Element) => DOMRect,
   accept?: (el: HTMLElement, box: DOMRect) => boolean,
 ): HTMLElement | null {
   const bestRow = best.closest("[data-nav-row]");
   if (!bestRow || bestRow.contains(from)) return best;
-  const a = from.getBoundingClientRect();
+  const a = boxOf(from);
   const distance = (row: Element) => {
-    const r = row.getBoundingClientRect();
+    const r = boxOf(row);
     if (dir === "down") return r.top >= (a.top + a.bottom) / 2 ? r.top - a.bottom : Infinity;
     return r.bottom <= (a.top + a.bottom) / 2 ? a.top - r.bottom : Infinity;
   };
@@ -228,7 +286,7 @@ function adjacentRow(
   }
   const rows = [...nearer.values()].filter((r) => r !== null).sort((x, y) => x.distance - y.distance);
   for (const row of rows) {
-    const hit = nearestOf(from, row.cards, dir, accept);
+    const hit = nearestOf(from, row.cards, dir, boxOf, accept);
     if (hit) return hit;
   }
   return best;
@@ -266,8 +324,8 @@ export function move(dir: Dir): boolean {
   }
   // Each control's box is read once, and only a would-be winner is checked further: on a page of
   // shelves that's hundreds of controls, every step of a held direction (#36).
-  const all = [...scope.querySelectorAll(FOCUSABLE)].filter((el): el is HTMLElement => el instanceof HTMLElement);
-  const target = nearest(current, all, dir, navigableAt);
+  const all = focusablesIn(scope);
+  const target = nearest(current, all, dir, navigableInActiveTree);
   if (!target) return false;
   focusEl(resolveEntry(current, target));
   return true;
@@ -299,6 +357,14 @@ export function refocusNear(place: DOMRect) {
 
 /** Focus without the browser's jump-scroll, then glide it into place. */
 export function focusEl(el: HTMLElement, smooth = true) {
+  // Outside Library's `layout="shelves"` (where `.tv-shelf-info` toggles `display: none` on `:focus-within`),
+  // read layout offsets BEFORE `el.focus()` dirties `:focus`/`:has()` styles, avoiding a second synchronous reflow.
+  if (!el.closest('.tv-browse[data-layout="shelves"]')) {
+    const plan = planReveal(el);
+    el.focus({ preventScroll: true });
+    applyReveal(plan, smooth);
+    return;
+  }
   el.focus({ preventScroll: true });
   reveal(el, smooth);
 }
@@ -323,23 +389,26 @@ function offsetWithin(el: HTMLElement, ancestor: HTMLElement) {
   return { left, top };
 }
 
-/** Bring a newly focused control into place: pinned in its shelf, its row where the screen wants it. */
-export function reveal(el: HTMLElement, smooth = true) {
-  // Smooth: our own glide (follow.ts), which a held direction keeps heading on instead of restarting.
-  const scrollTo = (box: HTMLElement, axis: "x" | "y", to: number) => {
-    if (smooth) glideScroll(box, axis, to);
-    else box[axis === "x" ? "scrollLeft" : "scrollTop"] = to;
-  };
+type RevealStep = { box: HTMLElement; axis: "x" | "y"; to: number; max: number };
 
+function planReveal(el: HTMLElement): RevealStep[] {
+  const steps: RevealStep[] = [];
   const rail = el.closest<HTMLElement>("[data-nav-rail]");
   if (rail) {
     const card = [...rail.children].find((c) => c.contains(el)) as HTMLElement | undefined;
     const start = parseFloat(getComputedStyle(rail).scrollPaddingInlineStart) || 0;
-    if (card) scrollTo(rail, "x", offsetWithin(card, rail).left - start);
+    if (card) {
+      steps.push({
+        box: rail,
+        axis: "x",
+        to: offsetWithin(card, rail).left - start,
+        max: rail.scrollWidth - rail.clientWidth,
+      });
+    }
   }
 
   const scroller = el.closest<HTMLElement>("[data-nav-scroll]");
-  if (!scroller) return;
+  if (!scroller) return steps;
   const row = el.closest<HTMLElement>("[data-nav-row]");
   const target = row && scroller.contains(row) ? row : el;
   const { top } = offsetWithin(target, scroller);
@@ -360,10 +429,29 @@ export function reveal(el: HTMLElement, smooth = true) {
       const s = scroller.scrollTop;
       if (top - padTop < s) next = top - padTop;
       else if (top + h + padBottom > s + view) next = top + h + padBottom - view;
-      else return;
+      else return steps;
     }
   }
-  scrollTo(scroller, "y", Math.max(0, next));
+  steps.push({
+    box: scroller,
+    axis: "y",
+    to: Math.max(0, next),
+    max: scroller.scrollHeight - scroller.clientHeight,
+  });
+  return steps;
+}
+
+function applyReveal(steps: RevealStep[], smooth: boolean) {
+  for (const s of steps) {
+    if (smooth) glideScroll(s.box, s.axis, s.to, s.max);
+    else s.box[s.axis === "x" ? "scrollLeft" : "scrollTop"] = Math.max(0, Math.min(s.to, s.max));
+  }
+}
+
+/** Bring a newly focused control into place: pinned in its shelf, its row where the screen wants it. */
+export function reveal(el: HTMLElement, smooth = true) {
+  // Smooth: our own glide (follow.ts), which a held direction keeps heading on instead of restarting.
+  applyReveal(planReveal(el), smooth);
 }
 
 /**

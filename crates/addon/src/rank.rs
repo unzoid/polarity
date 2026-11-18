@@ -6,7 +6,7 @@
 
 use std::sync::LazyLock;
 
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use serde::Serialize;
 
 use crate::episode::{file_episode_for, WantedEpisode};
@@ -60,11 +60,22 @@ static CAM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\b(CAM|CAMRIP|HD
 
 pub fn parse_quality(stream: &Stream) -> StreamQuality {
     // The file's name (`behaviorHints.filename`) says what the rows may leave out.
-    let text = [stream.name.as_deref(), stream.title.as_deref(), stream.description.as_deref(), file_name(stream)]
+    let hint_name = file_name(stream);
+    let cap = [stream.name.as_deref(), stream.title.as_deref(), stream.description.as_deref(), hint_name]
         .into_iter()
         .flatten()
-        .collect::<Vec<_>>()
-        .join(" ");
+        .map(|s| s.len() + 1)
+        .sum();
+    let mut text = String::with_capacity(cap);
+    for part in [stream.name.as_deref(), stream.title.as_deref(), stream.description.as_deref(), hint_name]
+        .into_iter()
+        .flatten()
+    {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        text.push_str(part);
+    }
 
     let resolution = RES.captures(&text).map(|c| match c[1].to_ascii_lowercase().as_str() {
         "2160p" | "4k" | "uhd" => 2160,
@@ -108,7 +119,7 @@ pub fn parse_quality(stream: &Stream) -> StreamQuality {
         low_quality_source: CAM.is_match(&text),
         direct: stream.url.is_some(),
         languages: languages(&text),
-        tags: TAGS.iter().filter(|(_, re)| re.is_match(&text)).map(|(tag, _)| *tag).collect(),
+        tags: TAG_SET.matches(&text).into_iter().map(|i| TAG_NAMES[i]).collect(),
         source: release_source(stream),
     }
 }
@@ -156,26 +167,27 @@ fn group_of(release: &str) -> Option<String> {
         })
 }
 
-/// Release tags, in the order they're shown.
-static TAGS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new(|| {
-    [
-        ("HDR10+", r"(?i)\bHDR10(\+|plus)"),
-        ("Remux", r"(?i)\bremux\b"),
-        ("Atmos", r"(?i)\batmos\b"),
-        ("DTS:X", r"(?i)\bDTS[:\-. ]?X\b"),
-        ("TrueHD", r"(?i)\btrue\s?hd\b"),
-        ("DTS-HD", r"(?i)\bDTS[\-. ]?HD\b"),
-        ("7.1", r"\b7[ .]1\b"),
-        ("5.1", r"\b5[ .]1\b"),
-        ("10-bit", r"(?i)\b10[\-. ]?bit\b"),
-        ("IMAX", r"(?i)\bIMAX\b"),
-        ("3D", r"(?i)\b3D\b"),
-        ("BluRay", r"(?i)\b(blu[\-. ]?ray|bdrip|brrip|bd|bdremux)\b"),
-        ("WEB-DL", r"(?i:\bweb[\-. ]?(dl|rip)\b)|\bWEB\b"),
-    ]
-    .into_iter()
-    .map(|(tag, re)| (tag, Regex::new(re).unwrap()))
-    .collect()
+/// Release tags, in the order they're shown, matched together in one automaton pass.
+const TAG_NAMES: &[&str] = &[
+    "HDR10+", "Remux", "Atmos", "DTS:X", "TrueHD", "DTS-HD", "7.1", "5.1", "10-bit", "IMAX", "3D", "BluRay", "WEB-DL",
+];
+static TAG_SET: LazyLock<RegexSet> = LazyLock::new(|| {
+    RegexSet::new([
+        r"(?i)\bHDR10(\+|plus)",
+        r"(?i)\bremux\b",
+        r"(?i)\batmos\b",
+        r"(?i)\bDTS[:\-. ]?X\b",
+        r"(?i)\btrue\s?hd\b",
+        r"(?i)\bDTS[\-. ]?HD\b",
+        r"\b7[ .]1\b",
+        r"\b5[ .]1\b",
+        r"(?i)\b10[\-. ]?bit\b",
+        r"(?i)\bIMAX\b",
+        r"(?i)\b3D\b",
+        r"(?i)\b(blu[\-. ]?ray|bdrip|brrip|bd|bdremux)\b",
+        r"(?i:\bweb[\-. ]?(dl|rip)\b)|\bWEB\b",
+    ])
+    .unwrap()
 });
 
 /// Language codes as release names write them (whole words, any case), and
@@ -430,15 +442,10 @@ pub struct Asked {
     pub stream: Stream,
 }
 
-/// [`rank_streams_filtered`] for the answers to an episode's requests: each
-/// source keeps the id it was asked by, and a file that names another episode
-/// than `wanted` goes after every other source.
-pub fn rank_asked(
-    streams: impl IntoIterator<Item = Asked>,
-    filter: &StreamFilter,
-    wanted: Option<&WantedEpisode>,
-) -> (Vec<RankedStream>, usize) {
-    let mut ranked: Vec<RankedStream> = streams
+/// Parses quality and episode information once for a batch of [`Asked`] streams so incremental
+/// add-on partial updates don't re-run regex parsing on already-arrived add-ons.
+pub fn prepare_asked(streams: impl IntoIterator<Item = Asked>, wanted: Option<&WantedEpisode>) -> Vec<RankedStream> {
+    streams
         .into_iter()
         .filter(|a| a.stream.url.is_some() || a.stream.info_hash.is_some() || a.stream.yt_id.is_some())
         .map(|Asked { addon, request, stream }| {
@@ -454,11 +461,15 @@ pub fn rank_asked(
                 stream,
             }
         })
-        .collect();
+        .collect()
+}
+
+/// Ranks, deduplicates and filters pre-parsed [`RankedStream`] entries.
+pub fn rank_prepared(mut ranked: Vec<RankedStream>, filter: &StreamFilter) -> (Vec<RankedStream>, usize) {
     // Another episode's files last; the copy kept of a file found twice is then the right episode's.
     ranked.sort_by(|a, b| a.other_episode.cmp(&b.other_episode).then(listing_order(&a.quality, &b.quality)));
 
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = std::collections::HashSet::with_capacity(ranked.len());
     ranked.retain(|r| match (&r.stream.url, &r.stream.info_hash) {
         (Some(url), _) => seen.insert(url.clone()),
         // The same file of the same torrent, from any add-on.
@@ -467,7 +478,7 @@ pub fn rank_asked(
     });
     // The same file from the same add-on under another link (asked by two ids for one episode):
     // its row would read the same twice. Only rows that say what the file is (a title) count.
-    let mut rows = std::collections::HashSet::new();
+    let mut rows = std::collections::HashSet::with_capacity(ranked.len());
     ranked.retain(|r| {
         let Some(title) = r.stream.title.as_deref().or(r.stream.description.as_deref()) else { return true };
         rows.insert((r.addon.clone(), r.stream.name.clone(), title.to_owned()))
@@ -477,6 +488,17 @@ pub fn rank_asked(
     ranked.retain(|r| filter.allows(&r.stream, &r.quality));
     let hidden = before - ranked.len();
     (ranked, hidden)
+}
+
+/// [`rank_streams_filtered`] for the answers to an episode's requests: each
+/// source keeps the id it was asked by, and a file that names another episode
+/// than `wanted` goes after every other source.
+pub fn rank_asked(
+    streams: impl IntoIterator<Item = Asked>,
+    filter: &StreamFilter,
+    wanted: Option<&WantedEpisode>,
+) -> (Vec<RankedStream>, usize) {
+    rank_prepared(prepare_asked(streams, wanted), filter)
 }
 
 #[cfg(test)]

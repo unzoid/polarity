@@ -7,7 +7,7 @@ import { kindFacts } from "../lib/format";
 import { api } from "../lib/api";
 import { isAnimePreview } from "../lib/anime";
 import { keys } from "../lib/net";
-import { markImageBroken, markImageLoaded, useArtGate } from "../lib/ui";
+import { detailBackdropUrl, markImageBroken, markImageLoaded, useArtGate } from "../lib/ui";
 import type { MetaPreview } from "../lib/types";
 
 /**
@@ -111,16 +111,17 @@ export function useStagedTitle(entry: StageEntry | null) {
 
 export function TvStage({ entry }: { entry: StageEntry | null }) {
   const { shown, loading } = useStagedTitle(entry);
+  const bg = detailBackdropUrl(shown?.background, false);
   // The logo or name waits for the backdrop (#173).
-  const gate = useArtGate(shown?.background);
+  const gate = useArtGate(bg);
 
   return (
     <div className="tv-stage">
-      <TvAmbient src={shown?.background} />
-      <TvBackdrop src={shown?.background} className="tv-stage-art" />
+      <TvAmbient src={bg} />
+      <TvBackdrop src={bg} className="tv-stage-art" />
       {shown && (
         <div key={shown.id} className="tv-stage-info" aria-live="polite" {...gate}>
-          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-stage" pending={loading || !!entry?.pending} />
+          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={bg} look="tv-stage" pending={loading || !!entry?.pending} />
           {entry?.kicker && <p className="tv-stage-kicker">{entry.kicker}</p>}
           <Facts facts={titleFacts(shown)} />
           {shown.description && <p className="tv-stage-description">{shown.description}</p>}
