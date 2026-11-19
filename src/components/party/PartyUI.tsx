@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ease, usePresence } from "../../lib/ui";
 import { anchorOf, nativeDialogsAvailable, shareNatively } from "../../lib/platform";
 import { warnFailed } from "../../lib/errors";
@@ -32,29 +32,38 @@ type Me = Pick<Member, "name" | "avatar">;
 
 /** Not in a party: start one on what's playing, or join a friend's. */
 /** Without `onStart` (a file on this device, #204) a party can't start here, and it says why. */
-export function PartyStart({ onStart, me }: { onStart?: () => void; me: Me }) {
+/** `link`: Watch a Link's form, as the panel's last way in (the player's, outside TV mode). */
+export function PartyStart({ onStart, me, link }: { onStart?: () => void; me: Me; link?: ReactNode }) {
   return (
-    <div className="party-pane">
-      {onStart ? (
-        <>
-          <p className="party-lede">
-            Watch in sync with friends. Everyone plays from their own sources; pausing, seeking and changing episodes
-            happen for the whole room.
-          </p>
-          <Button variant="primary" className="party-start" onClick={onStart}>
-            <WatchParty size={18} /> Start a Watch Party
-          </Button>
-        </>
-      ) : (
+    <div className="party-pane party-start-pane">
+      <div className="party-start-head">
+        <span className="party-start-mark" aria-hidden>
+          <WatchParty size={24} />
+        </span>
+        <h3 className="party-start-title">Watch Party</h3>
         <p className="party-lede">
-          This file is on your device, so it can't be shared with a watch party. A party could only follow along if
-          everyone opened the same file on their own device.
+          {onStart
+            ? "Everyone plays from their own sources. Pausing, seeking and changing episodes happen for the whole room."
+            : "This file is on your device, so a party can't follow it: everyone would need the same file on theirs."}
         </p>
+      </div>
+      {onStart && (
+        <Button variant="primary" className="party-start" onClick={onStart}>
+          Start a Watch Party
+        </Button>
       )}
       <div className="party-or" aria-hidden>
-        <span>or join one</span>
+        <span>or join with a code</span>
       </div>
-      <JoinForm me={me} />
+      <JoinForm me={me} slots />
+      {link && (
+        <>
+          <div className="party-or" aria-hidden>
+            <span>or watch a link</span>
+          </div>
+          {link}
+        </>
+      )}
     </div>
   );
 }
@@ -134,7 +143,8 @@ export function PartyInvite({ party, leave = true, autoFocus }: { party: PartySt
     <div className="party-pane party-swap">
       <span className="party-kicker">Party code</span>
       <PartyCode party={party} />
-      <p className="party-lede">{roomTrouble(party) ?? "Friends join from their profile menu with this code."}</p>
+      {/* The player's panel says nothing when all is well: the code and Copy Invite say it. */}
+      {(roomTrouble(party) ?? leave) && <p className="party-lede">{roomTrouble(party) ?? "Friends join from their profile menu with this code."}</p>}
       <div className="party-buttons">
         {/* In the menu, going back to the stream is the main action. */}
         {nativeDialogsAvailable ? (
@@ -371,28 +381,48 @@ export function KnockNote() {
   );
 }
 
-/** A code field that joins as soon as the code is complete. */
-export function JoinForm({ me, onJoined }: { me: Me; onJoined?: () => void }) {
+/**
+ * A code field that joins as soon as the code is complete. `slots`: drawn as the six tiles a party code is shown in
+ * (PartyCode), filling as you type, over the real field (which keeps typing, pasting and the keyboard as they are).
+ */
+export function JoinForm({ me, onJoined, slots = false }: { me: Me; onJoined?: () => void; slots?: boolean }) {
   const { code, change, submit, busy, error } = useJoinParty(me, onJoined);
+  const input = (
+    <input
+      className={slots ? "party-join-input party-slots-input tabular" : "party-join-input tabular"}
+      aria-label="Party code"
+      placeholder={slots ? undefined : "Party code"}
+      autoComplete="off"
+      spellCheck={false}
+      maxLength={CODE_LENGTH + 8} // room for pasted spaces and dashes
+      value={code}
+      data-invalid={!!error}
+      onChange={(e) => change(e.target.value)}
+    />
+  );
   return (
     <form
       className="party-join"
+      data-slots={slots || undefined}
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <input
-        className="party-join-input tabular"
-        aria-label="Party code"
-        placeholder="Party code"
-        autoComplete="off"
-        spellCheck={false}
-        maxLength={CODE_LENGTH + 8} // room for pasted spaces and dashes
-        value={code}
-        data-invalid={!!error}
-        onChange={(e) => change(e.target.value)}
-      />
+      {slots ? (
+        <label className="party-slots" data-invalid={!!error || undefined}>
+          {input}
+          <span className="party-slots-row tabular" aria-hidden>
+            {Array.from({ length: CODE_LENGTH }, (_, i) => (
+              <span key={i} data-filled={!!code[i] || undefined} data-next={i === Math.min(code.length, CODE_LENGTH - 1) || undefined}>
+                {code[i] ?? ""}
+              </span>
+            ))}
+          </span>
+        </label>
+      ) : (
+        input
+      )}
       <Button variant="glass" className="party-join-btn" type="submit" disabled={busy || !code} aria-busy={busy}>
         <BusyLabel busy={busy}>Join</BusyLabel>
       </Button>

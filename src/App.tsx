@@ -56,7 +56,7 @@ import { TrailerHost } from "./components/Trailer";
 import { OpenFilesHost } from "./components/OpenFiles";
 import { UpdateToast, WhatsNewSheet } from "./components/Updates";
 import { startUpdateChecks } from "./lib/updater";
-import { appWindow, guardTaps, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
+import { appWindow, guardTaps, isDesktop, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
 import { PartyHost } from "./components/party/PartyHost";
 import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
@@ -324,8 +324,28 @@ function MainApp() {
   }, [inAnime, animeEnabled, tab]);
 
   useEffect(() => {
-    void appWindow.setZoom(uiScale > 0 ? uiScale : 1).catch(() => {});
+    const zoom = uiScale > 0 ? uiScale : 1;
+    void appWindow.setZoom(zoom).catch(() => {});
+    // The page's zoom, for what has to stay put on screen whatever it is: room for macOS's traffic lights (shell.css).
+    document.documentElement.style.setProperty("--ui-zoom", String(zoom));
   }, [uiScale]);
+
+  // Fullscreen, on the root: macOS hides the traffic lights then, so the bars stop making room for them (shell.css).
+  useEffect(() => {
+    if (!isDesktop) return;
+    const root = document.documentElement;
+    const read = () =>
+      void appWindow
+        .isFullscreen()
+        .then((fs) => {
+          if (fs) root.dataset.fullscreen = "";
+          else delete root.dataset.fullscreen;
+        })
+        .catch(() => {});
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
 
   // Look for a new version shortly after launch, then every few hours (TV mode too).
   useEffect(() => startUpdateChecks(), []);

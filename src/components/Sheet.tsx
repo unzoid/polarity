@@ -1,5 +1,6 @@
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, type PanInfo } from "motion/react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { os } from "../lib/platform";
 import { type Detent, ease, mediumOffset, missMargin, prefersReducedMotion, project, restingDetent, springs, useFormFactor, useLayer } from "../lib/ui";
 
@@ -112,12 +113,12 @@ export function Sheet({
     onClose();
   };
 
-  // A new detent moves the sheet through `animate` below; the same one again (a drag let go near it) springs back here.
+  // Hand off the finger's exact release velocity into the spring whether switching detents or returning to the same one.
   const rest = (to: Detent, velocity = 0) => {
-    if (to !== detent) return setDetent(to);
     const target = to === "large" ? 0 : stops.medium;
     if (prefersReducedMotion()) y.set(target);
     else animate(y, target, { ...spring, velocity });
+    if (to !== detent) setDetent(to);
   };
 
   useLayoutEffect(() => {
@@ -140,11 +141,14 @@ export function Sheet({
     const size = (bottom ? panel.current?.offsetHeight : panel.current?.offsetWidth) ?? 400;
     const landing = bottom ? info.offset.y + project(info.velocity.y) : info.offset.x + project(info.velocity.x);
     if (landing > size / 2) onClose();
+    else if (!prefersReducedMotion()) {
+      animate(bottom ? y : x, 0, { ...spring, velocity: bottom ? info.velocity.y : info.velocity.x });
+    }
   };
   const medium = detents && detent === "medium";
   const away = detents ? { y: stops.height, opacity: fade } : bottom ? { y: "100%", opacity: fade } : { x: "100%", opacity: fade };
 
-  return (
+  const content = (
     <AnimatePresence>
       {open && (
         <>
@@ -218,4 +222,6 @@ export function Sheet({
       )}
     </AnimatePresence>
   );
+
+  return typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }

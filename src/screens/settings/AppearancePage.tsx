@@ -10,6 +10,11 @@ export function AppearancePage() {
     <>
       <ThemePicker />
 
+      <Card title="Title Pages">
+        <SettingRow id="pageBackdrop" />
+        {prefs.pageBackdrop && <SettingRow id="pageBackdropIntensity" />}
+      </Card>
+
       <Card title="Size">
         <NumberRow
           setting="uiScale"

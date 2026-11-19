@@ -7,8 +7,8 @@ import { personIds } from "../lib/catalog";
 import { detailBackdropUrl, sizedArt, useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
-import { useEpisodeLayout } from "../lib/settings";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEpisodeLayout, usePrefs } from "../lib/settings";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type BackdropTrailerHandle, useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
 import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
@@ -34,7 +34,8 @@ import { HiddenTitleNote, HideTitleButton } from "../components/title/HiddenTitl
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
 import { preloadPlayerNow } from "../components/PlayerLayer";
-import { DetailArt } from "../components/DetailArt";
+import { DetailArt, DetailFade } from "../components/DetailArt";
+import { useDarkHero, useShowDarkHero } from "../components/title/darkHero";
 import { errorMessage } from "../lib/errors";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 
@@ -52,6 +53,10 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   // A phone's page scrolls as one: the art sits at its top and leaves with it (detail.css), instead
   // of staying behind the page as on a big screen.
   const phone = useFormFactor().form === "phone";
+  const { pageBackdrop, pageBackdropIntensity } = usePrefs();
+  const bgIntensity = Math.min(1, Math.max(0.1, pageBackdropIntensity / 100));
+  const pinnedBackdrop = !phone && pageBackdrop;
+  const darkHero = useDarkHero();
   // Render instantly from the catalog preview; fill in when full meta arrives.
   const rawShown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
   const shown = useMemo(
@@ -80,10 +85,12 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
     scroller,
   });
 
-  useFoldSnap(scroller, !!shown);
+  useFoldSnap(scroller, !!shown && pageBackdrop);
   // On a phone the page comes in whole: its outline until the details, the art (placed on its subject) and the
   // logo are all there, then everything at once (detail.css).
   const together = usePageTogether(!!meta || isError);
+  const top = useRef<HTMLDivElement>(null);
+  useShowDarkHero(darkHero && onTop && !!shown, top);
 
   if (verdict === "hide") return <EmptyState>{LIMIT_NOTICE}</EmptyState>;
   if (isError && !shown) return <EmptyState>Couldn't load this title: {errorMessage(error)}</EmptyState>;
@@ -95,9 +102,11 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
       {trailer.node}
       {/* No backdrop (or it fails): the poster, blurred, rather than plain black. */}
       <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
+      {!pinnedBackdrop && <DetailFade />}
       <div className="detail-bg-scrim" />
     </DetailArt>
   );
+  const hero = <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />;
 
   return (
     <div
@@ -108,16 +117,33 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
       }}
       data-trailer={trailer.visible}
       data-type={type}
+      data-page-backdrop={pageBackdrop ? "on" : "off"}
       data-ready={phone ? together.state : undefined}
+      style={{ "--detail-bg-intensity": String(bgIntensity) } as CSSProperties}
     >
       {phone && <DetailSkeleton />}
-      {!phone && art}
+      {phone && pageBackdrop && (
+        <div className="detail-bg-ambient" aria-hidden>
+          <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
+        </div>
+      )}
+      {pinnedBackdrop && art}
       <div
         className="scroll detail-scroll"
         ref={scroller}
       >
-        {phone && art}
-        <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />
+        {/* The art and the hero share one box, so the art is always as tall as the hero (detail.css). */}
+        {darkHero ? (
+          <div className="detail-top scheme-dark" ref={top}>
+            {art}
+            {hero}
+          </div>
+        ) : (
+          <>
+            {!pinnedBackdrop && art}
+            {hero}
+          </>
+        )}
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
         {meta && <ExtrasShelf meta={meta} />}
         {type === "movie" && meta && (
@@ -127,8 +153,8 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
           </section>
         )}
       </div>
-      {/* Teases what's below the fold; clears as you scroll. */}
-      <EdgeBlur className="detail-fold" />
+      {/* Teases what's below the fold in ambient backdrop mode; clears as you scroll. */}
+      {pinnedBackdrop && <EdgeBlur className="detail-fold" />}
     </div>
   );
 }

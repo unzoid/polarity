@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, Edit, Lock, Plus } from "../../components/icons";
-import { useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/ui/Button";
 import { TextField } from "../../components/ui/TextField";
@@ -10,6 +10,7 @@ import { errorMessage } from "../../lib/errors";
 import { prefersReducedMotion } from "../../lib/ui";
 import { AccountShell } from "./AccountShell";
 import { flyToNavbar } from "./profileHandoff";
+import { preloadRoute } from "../lazyScreens";
 import { useGuard } from "../../components/profileLock/useGuard";
 import { ProfileLockRows } from "../../components/profileLock/ProfileLockRows";
 import { isTvMode } from "../../tv/tvMode";
@@ -42,27 +43,39 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
   const guard = useGuard();
   const chosenArt = useRef<HTMLSpanElement>(null);
   const flown = useRef(false);
+  const [handoffGo, setHandoffGo] = useState(false);
   const managing = view.name === "manage";
+
+  // Warm the Home chunk while on "Who's watching?" so first-boot handoff doesn't stall on module loading.
+  useEffect(() => {
+    preloadRoute({ name: "home" });
+  }, []);
 
   useLayoutEffect(() => {
     if (!leaving) {
       flown.current = false;
+      setHandoffGo(false);
       return;
     }
     const avatar = chosenArt.current?.querySelector<HTMLElement>(".avatar");
-    if (!avatar || flown.current || prefersReducedMotion()) return;
-    document.documentElement.dataset.profileHandoff = "";
-    if (flyToNavbar(avatar)) {
-      flown.current = true;
+    if (!avatar || flown.current || prefersReducedMotion()) {
+      setHandoffGo(true);
       return;
     }
-    // 1-rAF fallback when <Suspense> hasn't committed the destination navbar avatar yet.
-    const frame = requestAnimationFrame(() => {
-      if (flyToNavbar(avatar)) flown.current = true;
-      else delete document.documentElement.dataset.profileHandoff;
+    document.documentElement.dataset.profileHandoff = "";
+    // Let MainApp + Home finish their first-boot mount & paint before starting the 500ms flight and fade,
+    // so frame 0 isn't eaten by initial layout.
+    let f2 = 0;
+    const f1 = requestAnimationFrame(() => {
+      f2 = requestAnimationFrame(() => {
+        setHandoffGo(true);
+        if (flyToNavbar(avatar)) flown.current = true;
+        else delete document.documentElement.dataset.profileHandoff;
+      });
     });
     return () => {
-      cancelAnimationFrame(frame);
+      cancelAnimationFrame(f1);
+      cancelAnimationFrame(f2);
       if (!flown.current) delete document.documentElement.dataset.profileHandoff;
     };
   }, [leaving]);
@@ -98,6 +111,7 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
   return (
     <AccountShell
       leaving={leaving}
+      handoffGo={handoffGo}
       header={
         <button className="account-bar-link" onClick={() => void account.signOut()}>
           Sign Out

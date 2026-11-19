@@ -32,6 +32,7 @@ import { MenuItem, MenuPopup, MenuRoot, MenuTrigger } from "./ui/Menu";
 import { useNativeTabs } from "./NativeTabs";
 import { useNativeBack } from "./NativeBack";
 import { BackButton } from "./BackButton";
+import { useUnderDarkHero } from "./title/darkHero";
 import { backHistory, type NavLink } from "../lib/navTabs";
 import { preloadRoute } from "../screens/lazyScreens";
 
@@ -77,6 +78,8 @@ export function NavBar() {
     for (let i = 0; i < Math.min(steps, stack.length - 1); i++) back();
   });
   const scrolled = useActivePageScrolled(stack[stack.length - 1]?.key);
+  // Over a title page's dark hero the bar is dark too, in either scheme, until the hero has scrolled out from under it.
+  const onDarkHero = useUnderDarkHero();
   const { data: settings } = useSettings();
   const { animeEnabled, showTvButton } = usePrefs();
   const showCalendar = !!settings?.showCalendar;
@@ -93,7 +96,7 @@ export function NavBar() {
   useSearchTab(phone);
 
   return (
-    <header className="navbar" data-scrolled={scrolled} data-tauri-drag-region>
+    <header className={onDarkHero ? "navbar scheme-dark" : "navbar"} data-scrolled={scrolled} data-tauri-drag-region>
       <EdgeBlur className="navbar-fade" edge="top" />
       {/* Always takes its place, so the brand and tabs never shift when it appears. */}
       <BackButton

@@ -55,7 +55,15 @@ const deepLinks: string[] = [];
   void emit("deep-link");
 };
 
+/**
+ * The system keychain (src-tauri/src/keychain.rs), kept in this tab's session storage so that, like the real one,
+ * it outlives a reload. Without it a value moved into the "keychain" was dropped, and a reload lost it.
+ */
+const KEYCHAIN = "fake.keychain.";
 const commands: Record<string, (a: Args) => unknown> = {
+  keychain_get: (a) => sessionStorage.getItem(KEYCHAIN + String(a.name)),
+  keychain_set: (a) => void sessionStorage.setItem(KEYCHAIN + String(a.name), String(a.value)),
+  keychain_delete: (a) => void sessionStorage.removeItem(KEYCHAIN + String(a.name)),
   store_problem: () => null,
   secrets_place: () => secretsPlace,
   settings_get: () => ({ ...settings, metadataSource: "TMDB" }),

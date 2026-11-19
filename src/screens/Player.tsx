@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Captions,
   Cast,
-  ChevronLeft,
   Close,
   Episodes,
   ExitFullscreen,
@@ -73,6 +72,7 @@ import { downloadedStream, episodeState, isLocalFile, nextVideo, previousVideo, 
 import { nextInOrder, previousInOrder, shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
 import { Scrubber } from "../components/player/Scrubber";
+import { VideoBackdrop } from "../components/player/VideoBackdrop";
 import { useSource } from "../components/player/useSource";
 import { useSourceRecord, useThroughput } from "../components/player/useSourceRecord";
 import { SkipButton, useSkipSegments } from "../components/player/SkipSegments";
@@ -1495,7 +1495,12 @@ export function Player({
   // Zoomed only past 1× (player.css data-zoomed): at 1× nothing carries a zoom, which WebKit doesn't treat as a no-op.
   const zoomed = dock && dockZoom > 1;
   const dockMenu = dock
-    ? { className: zoomed ? "scheme-dark menu-dock menu-dock-zoomed" : "scheme-dark menu-dock", style: zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined }
+    ? {
+        className: zoomed ? "scheme-dark menu-dock menu-dock-zoomed" : "scheme-dark menu-dock",
+        style: zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined,
+        // The same smoked glass as the dock's panels: a frosted copy of the picture behind the menu.
+        backdrop: <VideoBackdrop media={media} className="options-frost" crop cropSize={[192, 168]} fade />,
+      }
     : {};
   const barFit = useBarFit(
     topBar,
@@ -1539,23 +1544,21 @@ export function Player({
                 ),
               },
             ]
-          : [{ title: "Watch Party", size: "medium" as const, options: [], onSelect: () => {}, content: <PartyStart me={profile!} onStart={local ? undefined : startHere} /> }]),
-        // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
-        ...(party || tv
-          ? []
           : [
               {
-                title: "Watch a Link",
+                // One column, headed by the pane itself: its own heading says what it is.
+                title: "Watch Party",
+                titleHidden: true,
                 size: "medium" as const,
                 options: [],
                 onSelect: () => {},
                 content: (
-                  <div className="party-pane">
-                    <p className="party-lede">
-                      Start a party on a YouTube video, or a video file or stream from the web. Everyone's app opens the link itself, after seeing it.
-                    </p>
-                    <LinkForm me={profile!} onDone={() => setOptions(null)} />
-                  </div>
+                  <PartyStart
+                    me={profile!}
+                    onStart={local ? undefined : startHere}
+                    // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
+                    link={tv ? undefined : <LinkForm me={profile!} onDone={() => setOptions(null)} />}
+                  />
                 ),
               },
             ]),
@@ -1726,7 +1729,13 @@ export function Player({
       )}
       {/* Chromecast (#443): the TVs on the network, and back to this computer. */}
       {chromecast.available && (
-        <MenuRoot modal={false} onOpenChange={setMoreOpen}>
+        <MenuRoot
+          modal={false}
+          onOpenChange={(next) => {
+            setMoreOpen(next);
+            if (next) setOptions(null);
+          }}
+        >
           <MenuTrigger
             className={iconButtonClass("player")}
             aria-label="Cast to a TV"
@@ -1735,7 +1744,7 @@ export function Player({
           >
             <Cast size={22} />
           </MenuTrigger>
-          <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="Cast to a TV" {...dockMenu}>
+          <MenuPopup sideOffset={dock ? 12 : 6} align="end" collisionPadding={12} aria-label="Cast to a TV" {...dockMenu}>
             {chromecast.devices.map((d) => (
               <MenuCheckItem
                 key={d.id}
@@ -1752,12 +1761,18 @@ export function Player({
     </>
   );
   const moreMenu = (more || dock || watchLog || moreItems) && (
-    <MenuRoot modal={false} onOpenChange={setMoreOpen}>
+    <MenuRoot
+      modal={false}
+      onOpenChange={(next) => {
+        setMoreOpen(next);
+        if (next) setOptions(null);
+      }}
+    >
       <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More" data-panel="more">
         <More size={22} />
       </MenuTrigger>
       <MenuPopup
-        sideOffset={6}
+        sideOffset={dock ? 12 : 6}
         align="end"
         collisionPadding={12}
         aria-label="More"
@@ -2161,14 +2176,9 @@ export function Player({
       <div className="player-bottom" {...controlHover}>
         {dock && (
           <div className="player-title">
-            {current && (
-              <span className="player-title-episode">
-                {heading}
-                {playingFormat && <span className="player-title-format">{playingFormat}</span>}
-              </span>
-            )}
+            {/* Just the episode and the title: the picture and sound format isn't repeated here. */}
+            {current && <span className="player-title-episode">{heading}</span>}
             <span className="player-title-name">{current ? title : heading}</span>
-            {!current && playingFormat && <span className="player-title-format">{playingFormat}</span>}
           </div>
         )}
         <div className="player-timeline" inert={!started || undefined}>
@@ -2380,15 +2390,22 @@ export function Player({
             // Delay and the sound options are mpv's.
             header:
               engine === "mpv" && !castingAway ? (
-                <IconButton
-                  variant="panel"
-                  aria-pressed={audioSettingsOpen}
-                  label={dock && audioSettingsOpen ? "Back to audio tracks" : "Audio settings"}
-                  title={dock && audioSettingsOpen ? "Back" : "Audio settings"}
-                  onClick={() => setAudioSettingsOpen((v) => !v)}
-                >
-                  {dock && audioSettingsOpen ? <ChevronLeft size={18} strokeWidth={2.4} /> : <Cog size={19} strokeWidth={2.1} />}
-                </IconButton>
+                dock ? (
+                  // The dock: the list and its settings as two sides of one switch, either a click away.
+                  <Segmented
+                    label="Audio view"
+                    value={audioSettingsOpen ? 1 : 0}
+                    onChange={(v) => setAudioSettingsOpen(v === 1)}
+                    options={[
+                      { id: 0, label: "Tracks" },
+                      { id: 1, label: "Sound" },
+                    ]}
+                  />
+                ) : (
+                  <IconButton variant="panel" aria-pressed={audioSettingsOpen} label="Audio settings" title="Audio settings" onClick={() => setAudioSettingsOpen((v) => !v)}>
+                    <Cog size={19} strokeWidth={2.1} />
+                  </IconButton>
+                )
               ) : undefined,
             content: audioSettingsOpen ? <AudioSettings delay={audioDelay} onDelay={changeAudioDelay} /> : undefined,
             value: tracks.audio.length ? tracks.audioId : "default",
@@ -2398,15 +2415,19 @@ export function Player({
           {
             title: "Subtitles",
             size: subSettingsOpen ? "medium" : "narrow",
-            header: (
-              <IconButton
-                variant="panel"
-                aria-pressed={subSettingsOpen}
-                label={dock && subSettingsOpen ? "Back to subtitles" : "Subtitle settings"}
-                title={dock && subSettingsOpen ? "Back" : "Subtitle settings"}
-                onClick={() => setSubSettingsOpen((v) => !v)}
-              >
-                {dock && subSettingsOpen ? <ChevronLeft size={18} strokeWidth={2.4} /> : <Cog size={19} strokeWidth={2.1} />}
+            header: dock ? (
+              <Segmented
+                label="Subtitles view"
+                value={subSettingsOpen ? 1 : 0}
+                onChange={(v) => setSubSettingsOpen(v === 1)}
+                options={[
+                  { id: 0, label: "Tracks" },
+                  { id: 1, label: "Style" },
+                ]}
+              />
+            ) : (
+              <IconButton variant="panel" aria-pressed={subSettingsOpen} label="Subtitle settings" title="Subtitle settings" onClick={() => setSubSettingsOpen((v) => !v)}>
+                <Cog size={19} strokeWidth={2.1} />
               </IconButton>
             ),
             content: subSettingsOpen ? (
@@ -2418,6 +2439,7 @@ export function Player({
                 onStepLine={engine === "mpv" && !castingAway ? (by) => void stepLine(by) : undefined}
                 second={engine === "mpv" && !castingAway ? { on: secondSubtitles, onChange: (on) => setPrefs({ secondSubtitles: on }) } : undefined}
                 canPosition={engine === "mpv"}
+                look={dock ? "studio" : "rows"}
               />
             ) : undefined,
             value: tracks.subId,

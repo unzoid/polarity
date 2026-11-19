@@ -114,8 +114,15 @@ function tokenRgb(el: Element, name: string): [number, number, number] {
   return [r / 255, g / 255, b / 255];
 }
 
-export function FlutedGlow({ className }: { className?: string }) {
+export function FlutedGlow({ className, paused = false }: { className?: string; paused?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
+  const pausedRef = useRef(paused);
+  const reschedule = useRef<(() => void) | null>(null);
+  pausedRef.current = paused;
+
+  useEffect(() => {
+    reschedule.current?.();
+  }, [paused]);
 
   useEffect(() => {
     const el = box.current!;
@@ -176,7 +183,7 @@ export function FlutedGlow({ className }: { className?: string }) {
       schedule();
     };
     const schedule = () => {
-      if (prefersReducedMotion()) {
+      if (prefersReducedMotion() || pausedRef.current) {
         if (raf) {
           cancelAnimationFrame(raf);
           raf = 0;
@@ -190,6 +197,7 @@ export function FlutedGlow({ className }: { className?: string }) {
       }
       raf = requestAnimationFrame(frame);
     };
+    reschedule.current = schedule;
 
     const resize = new ResizeObserver(() => {
       const dpr = Math.min(devicePixelRatio || 1, 1.5);
@@ -229,6 +237,7 @@ export function FlutedGlow({ className }: { className?: string }) {
     canvas.addEventListener("webglcontextlost", onLost);
 
     return () => {
+      reschedule.current = null;
       cancelAnimationFrame(raf);
       resize.disconnect();
       themed.disconnect();

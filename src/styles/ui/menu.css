@@ -1,32 +1,28 @@
-/* --- Menu (components/ui/Menu.tsx): the navbar dropdowns' surface (tokens.css --surface-menu: near-black,
-   a subtle blur, the settings window's border), so a right-click menu and the party and profile menus are
-   one family. Compact rows are 32px at 14px type, room enough to read and hit; roomy rows are taller, with
-   room for an avatar (the navbar's "More"). */
-/* Like the player's menus (player.css): a flat panel on the theme's near-black with a clear edge and
-   near-square corners, the rows in dim ink that light up under the pointer, no fills or pills. */
+/* --- Menu (components/ui/Menu.tsx): native macOS Tahoe floating NSMenu — warm-neutral/charcoal
+   surface, 3-layer AppKit outline (inner specular rim + 1px keyline + diffused shadow), continuous
+   squircle corners concentric with full-pill 27px rows, and Apple HIG 13px desktop typography. */
 .menu {
-  padding: 6px;
-  border: 1px solid rgb(var(--ink) / 0.2);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+  padding: 5px;
+  border: 0;
+  border-radius: 15px;
+  corner-shape: superellipse(1.45);
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-menu);
   -webkit-font-smoothing: antialiased;
-  color: rgb(var(--ink-text) / 0.62);
+  color: var(--text);
   outline: none;
   transform-origin: var(--transform-origin);
   transition:
-    opacity 140ms var(--ease-out),
+    opacity 120ms var(--ease-out),
     transform 140ms var(--ease-out);
 }
 .menu[data-starting-style],
 .menu[data-ending-style] {
   opacity: 0;
-  transform: scale(0.97);
+  transform: scale(0.97) translateY(-2px);
 }
 .menu[data-ending-style] {
-  transition-duration: 100ms;
+  transition-duration: 90ms;
 }
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-reduce-motion="off"]) .menu {
@@ -34,45 +30,62 @@
   }
 }
 .menu-compact {
-  min-width: 220px;
-  max-width: 360px;
+  min-width: 216px;
+  max-width: 320px;
   font-family: var(--font);
-  letter-spacing: 0;
+  letter-spacing: -0.008em;
 }
 .menu-roomy {
-  min-width: 240px;
+  min-width: 236px;
 }
-/* The title as a section header: small, bold, secondary. */
+/* Quiet Title Case header with inset hairline separator matching .menu-sep. */
 .menu-head {
+  position: relative;
   display: grid;
-  padding: 6px 12px 6px;
+  gap: 1px;
+  padding: 5px 10px 7px;
+  margin-bottom: 4px;
+}
+.menu-head::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 1px;
+  background: rgb(var(--ink) / 0.08);
 }
 .menu-head :is(strong, span) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  line-height: 16px;
 }
 .menu-head strong {
-  font-weight: 700;
-  color: rgb(var(--ink-text) / 0.5);
+  font-size: 12.5px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  color: var(--text);
 }
 .menu-head span {
-  color: rgb(var(--ink-text) / 0.35);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-3);
 }
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  height: 32px;
-  padding: 0 10px 0 12px;
-  border-radius: 2px;
-  font-size: var(--fs-md);
-  font-weight: 400;
-  line-height: 18px;
-  color: rgb(var(--ink-text) / 0.62);
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.008em;
+  line-height: 16px;
+  color: var(--text);
   text-align: left;
   cursor: default;
   outline: none;
@@ -87,53 +100,63 @@
 }
 .menu-item > svg {
   flex: none;
-  width: 16px;
-  height: 16px;
-  color: rgb(var(--ink-text) / 0.7);
+  width: 14px;
+  height: 14px;
+  color: rgb(var(--ink-text) / 0.65);
 }
-.menu-item[data-highlighted] > svg {
+.menu-item[data-highlighted] > svg,
+.menu-item[data-popup-open] > svg {
   color: inherit;
 }
-/* Under the mouse a soft fill: the pointer already says where you are, a solid colour row following it
-   is loud. From the keyboard (data-input, lib/ui/inputModality.ts) the accent, so the row you'd pick with
-   Enter can't be missed. No transition either way: the highlight follows the hand at once. */
+/* Native macOS Tahoe menu highlight: crisp full-pill selection on hover and keyboard focus. */
 .menu-item[data-highlighted],
 .menu-item[data-popup-open] {
-  background: transparent;
-  color: var(--text);
+  background: var(--selection-bg);
+  color: var(--accent-fg);
 }
 :root[data-input="keyboard"] .menu-item[data-highlighted] {
-  background: transparent;
-  color: var(--text);
-  outline: 2px solid var(--accent-hi);
-  outline-offset: -2px;
+  background: var(--selection-bg);
+  color: var(--accent-fg);
 }
 .menu-item[data-disabled] {
-  color: rgb(var(--ink-text) / 0.25);
+  color: rgb(var(--ink-text) / 0.3);
 }
 .menu-item > .menu-chevron {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   margin-left: auto;
+  color: var(--text-3);
+}
+.menu-item[data-highlighted] > .menu-chevron,
+.menu-item[data-popup-open] > .menu-chevron {
+  color: inherit;
 }
 .menu-check,
 .menu-check svg {
   display: grid;
   place-items: center;
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
+}
+.menu-check {
+  color: var(--accent);
+}
+.menu-item[data-highlighted] .menu-check,
+.menu-item[data-popup-open] .menu-check,
+:root[data-input="keyboard"] .menu-item[data-highlighted] .menu-check {
+  color: var(--accent-fg);
 }
 /* A check row (MenuCheckItem): unchecked, the label sits where the check would be, so it lines up with
    the rows around it; checking slides it over to make room while the check fades in (and back). Only
    transform and opacity move, so the row's layout never changes. The slide is the check's width plus
    the row's gap. */
 .menu-check-item {
-  --check-room: 26px;
+  --check-room: 22px;
 }
 .menu-check-item .menu-check {
   opacity: 0;
-  transform: scale(0.9);
+  transform: scale(0.85);
   transition:
     opacity var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
@@ -156,16 +179,34 @@
 }
 .menu-meta {
   margin-left: auto;
-  color: rgb(var(--ink-text) / 0.5);
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5.5px;
+  corner-shape: superellipse(1.45);
+  background: rgb(var(--ink) / 0.035);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink) / 0.14),
+    0 0.5px 0 rgb(0 0 0 / 0.08);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-3);
 }
+.menu-item[data-highlighted] .menu-meta,
+.menu-item[data-popup-open] .menu-meta,
 :root[data-input="keyboard"] .menu-item[data-highlighted] .menu-meta {
-  color: rgb(var(--ink-text) / 0.5);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-fg) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-fg) 14%, transparent);
+  color: var(--accent-fg);
 }
-/* Groups are set apart by space, not a rule. */
 .menu-sep {
-  height: 0;
+  height: 1px;
   margin: 4px 10px;
-  background: none;
+  background: rgb(var(--ink) / 0.08);
 }
 .menu-sep:first-child,
 .menu-sep + .menu-sep {
@@ -176,25 +217,27 @@
 .menu-roomy-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
   width: 100%;
-  padding: 0.5rem 0.625rem;
-  border-radius: 2px;
-  font-size: var(--fs-md);
-  color: rgb(var(--ink-text) / 0.62);
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.008em;
+  color: var(--text);
   cursor: default;
   outline: none;
   user-select: none;
 }
 .menu-roomy-item[data-highlighted] {
-  background: transparent;
-  color: var(--text);
+  background: var(--selection-bg);
+  color: var(--accent-fg);
 }
 :root[data-input="keyboard"] .menu-roomy-item[data-highlighted] {
-  background: transparent;
-  color: var(--text);
-  outline: 2px solid var(--accent-hi);
-  outline-offset: -2px;
+  background: var(--selection-bg);
+  color: var(--accent-fg);
 }
 .menu-roomy-item .avatar {
   width: 26px;

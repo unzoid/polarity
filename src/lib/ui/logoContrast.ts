@@ -84,6 +84,8 @@ function weightedMedian(values: number[], weight: number[], total: number) {
 export const LOGO_SPOTS = {
   hero: { x0: 0.03, y0: 0.45, x1: 0.4, y1: 0.8, scrim: 0.5 },
   detail: { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7, onPage: true },
+  /** A big screen's title page with Show page background off: its hero is dark in either scheme (title/darkHero.ts). */
+  "detail-dark": { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7 },
   "tv-stage": { x0: 0.03, y0: 0.5, x1: 0.35, y1: 0.85, scrim: 0.8 },
   "tv-detail": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
   "tv-panel": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },

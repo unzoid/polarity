@@ -767,6 +767,24 @@ export const SETTINGS: SettingDef[] = [
       { value: "off", label: "Off" },
     ]),
   },
+  {
+    id: "pageBackdrop",
+    page: "appearance",
+    title: "Show page background",
+    caption: "Keep a blurred backdrop behind title pages as you scroll. Off: clean solid background below the hero.",
+    keywords: "background backdrop blur detail title page ambient solid black white",
+    bind: p("pageBackdrop"),
+    control: toggle,
+  },
+  {
+    id: "pageBackdropIntensity",
+    page: "appearance",
+    title: "Background intensity",
+    caption: "How strongly the blurred artwork shows behind the scrolled page",
+    keywords: "background backdrop intensity opacity strength dim blur title page",
+    bind: p("pageBackdropIntensity"),
+    control: { kind: "number", min: 10, max: 100, step: 5, unit: "%" },
+  },
 
   // Browsing
   { id: "startPage", page: "browsing", title: "Open the app on", keywords: "start page startup home library" },

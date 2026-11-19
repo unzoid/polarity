@@ -33,15 +33,12 @@ body:has(.downloads-selectbar) .toast-stack {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  max-width: calc(100vw - max(2rem, var(--safe-left) + var(--safe-right)));
   padding: 0.375rem 0.375rem 0.375rem 1rem;
+  border: var(--edge-menu);
   border-radius: var(--r-pill);
-  background: var(--glass-heavy);
-  -webkit-backdrop-filter: var(--blur-glass);
-  backdrop-filter: var(--blur-glass);
-  box-shadow:
-    var(--glass-highlight),
-    0 0 0 1px var(--glass-edge),
-    0 18px 40px -16px var(--shadow-deep);
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-menu);
   font-size: 0.9rem;
   /* Rises from the edge it sits on. Transitions, not keyframes: a toast that
      comes back while leaving (the same failure again) turns round where it is

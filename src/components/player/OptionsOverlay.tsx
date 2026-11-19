@@ -109,6 +109,17 @@ export function OptionsOverlay({
   }, [open]);
   const clampedTab = tabbed ? Math.min(tabIndex, columns.length - 1) : 0;
   const visibleColumns = tabbed ? [columns[clampedTab]] : columns;
+  // A column that turns between its list and its own page (a track list and its settings) slides that way: the page
+  // in from the right, the list back from the left. Nothing slides as the menu opens: it has its own entrance.
+  const views = useRef(new Map<string, { custom: boolean; turn?: "in" | "back" }>());
+  if (!open) views.current.clear();
+  const turnOf = (col: OptionColumn) => {
+    const custom = !!col.content;
+    const prev = views.current.get(col.title);
+    const turn = prev && prev.custom !== custom ? (custom ? "in" : "back") : prev?.turn;
+    views.current.set(col.title, { custom, turn });
+    return turn;
+  };
 
   /** A press that may become a click outside the panel. */
   const press = useRef<{ id: number; x: number; y: number } | null>(null);
@@ -193,6 +204,16 @@ export function OptionsOverlay({
       root.current?.querySelector<HTMLElement>('.options-column [aria-checked="true"]');
     (chosen ?? root.current)?.focus({ preventScroll: true });
   }, [open, mounted]);
+
+  // A list back from its settings page starts at the current choice again, as it did when the menu opened.
+  const pages = columns.map((c) => (c.content ? 1 : 0)).join("");
+  useEffect(() => {
+    if (!open || !mounted) return;
+    root.current?.querySelectorAll<HTMLElement>('.options-column[data-turn="back"] [aria-checked="true"]').forEach((el) => {
+      const list = el.closest<HTMLElement>(".options-list");
+      if (list) list.scrollTop = topIn(list, el) - list.clientHeight / 2 + el.offsetHeight / 2;
+    });
+  }, [open, mounted, pages]);
 
   // When switching compact tabs, scroll the newly visible column's current selection into view.
   useEffect(() => {
@@ -282,6 +303,10 @@ export function OptionsOverlay({
         </IconButton>
       )}
       <div className="options-columns" data-count={visibleColumns.length}>
+        {/* Docked: the menu is a pane of frosted glass over the picture: a blurred copy of just the part of the frame
+            behind it (VideoBackdrop's crop), so its colour follows the scene. mpv's native picture can't be
+            backdrop-filtered; the copy works for both engines. Until it has a frame, the solid surface shows. */}
+        {docked && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} className="options-frost" crop cropSize={FROST_SIZE} fade />}
         {tabbed && (
           <div className="options-tabs">
             <Segmented
@@ -293,7 +318,7 @@ export function OptionsOverlay({
           </div>
         )}
         {visibleColumns.map((col, c) => (
-          <section key={col.title} className="options-column" data-column={tabbed ? clampedTab : c} data-size={col.size ?? "narrow"}>
+          <section key={col.title} className="options-column" data-column={tabbed ? clampedTab : c} data-size={col.size ?? "narrow"} data-turn={turnOf(col)}>
             <div className="options-head" data-title-only={(!col.header && tabbed) || undefined}>
               <h2 className="options-title" data-hidden={col.titleHidden || tabbed || undefined}>
                 {col.title}
@@ -301,11 +326,13 @@ export function OptionsOverlay({
               {col.header}
             </div>
             {col.content ? (
-              <div className="options-list options-custom">{col.content}</div>
+              <div key="custom" className="options-list options-custom">
+                {col.content}
+              </div>
             ) : (
               <>
                 {col.options.length === 0 && col.empty && <p className="options-empty">{col.empty}</p>}
-                <div role="radiogroup" aria-label={col.title} className="options-list">
+                <div key="list" role="radiogroup" aria-label={col.title} className="options-list">
                   {col.options.map((o) => (
                     <Fragment key={o.id}>
                       {o.heading && <p className="options-group">{o.heading}</p>}
@@ -323,6 +350,13 @@ export function OptionsOverlay({
   );
 }
 
+/**
+ * The docked menu's frosted copy of the picture: small (it's blurred to nothing anyway), about a menu's shape, but
+ * not under Chromium's size for a GPU canvas (about 128×129): below it, every frame of the video is read back from
+ * the GPU to draw it, which held the copy to a few frames a second.
+ */
+const FROST_SIZE = [192, 168] as const;
+
 /** The least room between a docked menu and the player's edges (px), and between it and the timeline. */
 const DOCK_EDGE = 16;
 const DOCK_GAP = 12;
@@ -331,7 +365,7 @@ const DOCK_GAP = 12;
 const OPEN_POPUP = ".select-popup:not([data-closed]), .srcf-popover:not([data-closed]), .source-info, .tv-source-menu";
 const TEXT_INPUT = 'input:not([type]), input[type="text"], input[type="url"], input[type="search"], textarea';
 const ITEM_SELECTOR = '.options-item:not(:disabled), .options-custom :is(button, input:not([type="hidden"]), select, .sub-swatch-custom):not(:disabled)';
-const HGROUP_SELECTOR = ".sub-stepper, .sub-swatches, .source-chips, .party-buttons, .party-join, .party-member-actions";
+const HGROUP_SELECTOR = ".sub-stepper, .sub-swatches, .sub-split, .sub-tiles, .source-chips, .party-buttons, .party-join, .party-member-actions";
 /** A press that travels further than this (px) is a drag or a scroll, not a click. */
 const CLICK_SLOP = 10;
 

@@ -1,7 +1,8 @@
 import "../../styles/player.css";
 import { isMac } from "../../lib/platform";
 import { OPEN_DYSLEXIC } from "../../lib/settings";
-import { Minus, Plus, Reset } from "../icons";
+import { ChevronLeft, ChevronRight, Minus, Plus, Reset } from "../icons";
+import { Switch } from "../ui/Switch";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { SubtitleStyle } from "../../lib/types";
 import { isMpv, type MediaLike, type MpvMedia } from "./mpvMedia";
@@ -237,6 +238,7 @@ export function SubtitleSettings({
   onStepLine,
   second,
   canPosition,
+  look = "rows",
 }: {
   style: SubtitleStyle;
   onChange: (patch: Partial<SubtitleStyle>) => void;
@@ -249,8 +251,23 @@ export function SubtitleSettings({
   second?: { on: boolean; onChange: (on: boolean) => void };
   /** Delay and position need the mpv engine. */
   canPosition: boolean;
+  /** "rows": a labelled row per setting (Settings, TV). "studio": grouped, with live samples (the player's dock menu). */
+  look?: "rows" | "studio";
 }) {
   const isDefault = isDefaultStyle(style) && !delay;
+  if (look === "studio")
+    return (
+      <SubtitleStudio
+        style={style}
+        onChange={onChange}
+        delay={delay}
+        onDelay={onDelay}
+        onStepLine={onStepLine}
+        second={second}
+        canPosition={canPosition}
+        isDefault={isDefault}
+      />
+    );
   return (
     <div className="sub-settings">
       {canPosition && onDelay && delay !== undefined && (
@@ -326,6 +343,184 @@ export function SubtitleSettings({
         <Chips value={style.background} options={BACKGROUNDS} onChange={(background) => onChange({ background })} />
       </Setting>
       <button
+        className="sub-reset"
+        disabled={isDefault}
+        onClick={() => {
+          onChange(DEFAULT_SUBTITLE_STYLE);
+          onDelay?.(0);
+        }}
+      >
+        <Reset size={15} strokeWidth={2.25} /> Reset to default
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The dock menu's subtitle settings, grouped by what they're for rather than one row each: timing; the text (font,
+ * then size, lift and opacity as three small dials side by side, then its colour); and its edge, where each outline
+ * and background choice is a tile showing "Aa" drawn that way in the current font and colours, over a mid-tone
+ * scene so the difference reads. The real line on the picture (SubtitlePreview) stays the full preview.
+ */
+function SubtitleStudio({
+  style: saved,
+  onChange,
+  delay,
+  onDelay,
+  onStepLine,
+  second,
+  canPosition,
+  isDefault,
+}: {
+  style: SubtitleStyle;
+  onChange: (patch: Partial<SubtitleStyle>) => void;
+  delay?: number;
+  onDelay?: (seconds: number) => void;
+  onStepLine?: (by: 1 | -1) => void;
+  second?: { on: boolean; onChange: (on: boolean) => void };
+  canPosition: boolean;
+  isDefault: boolean;
+}) {
+  const style = complete(saved);
+  const fromSubtitles = keepsReleaseFont(saved);
+  const sample = {
+    ...fontVars(style.font),
+    "--sample-color": hexToRgb(style.color, style.opacity),
+    "--sample-edge": hexToRgb(style.outlineColor, style.opacity),
+  } as CSSProperties;
+  const timing = canPosition && onDelay && delay !== undefined;
+  return (
+    <div className="sub-settings sub-studio" style={sample}>
+      {(timing || onStepLine || second) && (
+        <section className="sub-group" aria-label="Timing">
+          <h3 className="sub-group-title">Timing</h3>
+          {timing && (
+            <div className="sub-line">
+              <span className="sub-line-label">
+                Delay
+                <span className="sub-line-hint">{delay === 0 ? "In sync" : delay! > 0 ? "Later" : "Earlier"}</span>
+              </span>
+              <Stepper
+                value={delay!}
+                step={0.1}
+                min={-30}
+                max={30}
+                format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}s`}
+                onChange={onDelay!}
+                label="Delay"
+              />
+            </div>
+          )}
+          {onStepLine && (
+            <div className="sub-split" role="group" aria-label="Match a line" title="Show the line you just heard now">
+              <button type="button" onClick={() => onStepLine(-1)}>
+                <ChevronLeft size={16} strokeWidth={2.4} /> Previous line
+              </button>
+              <button type="button" onClick={() => onStepLine(1)}>
+                Next line <ChevronRight size={16} strokeWidth={2.4} />
+              </button>
+            </div>
+          )}
+          {second && (
+            <label className="sub-line sub-toggle">
+              <span className="sub-line-label">
+                Second subtitle
+                <span className="sub-line-hint">At the top of the picture</span>
+              </span>
+              <Switch checked={second.on} onChange={second.onChange} />
+            </label>
+          )}
+        </section>
+      )}
+
+      <section className="sub-group" aria-label="Text">
+        <h3 className="sub-group-title">Text</h3>
+        <div className="sub-line">
+          <span className="sub-line-label">
+            Font
+            {fromSubtitles && <span className="sub-line-hint">Styled tracks keep theirs</span>}
+          </span>
+          <Dropdown
+            label="Subtitle font"
+            value={fromSubtitles ? FROM_SUBTITLES : style.font}
+            options={FONTS}
+            onChange={(font) => onChange(font === FROM_SUBTITLES ? { font: DEFAULT_FONT, fontFromSubtitles: true } : { font, fontFromSubtitles: false })}
+          />
+        </div>
+        <div className="sub-dials" data-count={canPosition ? 3 : 2}>
+          <div className="sub-dial">
+            <span className="sub-dial-label">Size</span>
+            <Stepper value={style.size} step={10} min={50} max={200} format={(v) => `${v}%`} onChange={(size) => onChange({ size })} label="Size" />
+          </div>
+          {canPosition && (
+            <div className="sub-dial">
+              <span className="sub-dial-label">Lift</span>
+              <Stepper value={style.raise} step={2} min={0} max={40} format={(v) => (v === 0 ? "0" : `+${v}%`)} onChange={(raise) => onChange({ raise })} label="Position" />
+            </div>
+          )}
+          <div className="sub-dial">
+            <span className="sub-dial-label">Opacity</span>
+            <Stepper value={style.opacity} step={10} min={20} max={100} format={(v) => `${v}%`} onChange={(opacity) => onChange({ opacity })} label="Opacity" />
+          </div>
+        </div>
+        <div className="sub-line">
+          <span className="sub-line-label">Color</span>
+          <Swatches value={style.color} options={TEXT_COLORS} onChange={(color) => onChange({ color })} />
+        </div>
+      </section>
+
+      <section className="sub-group" aria-label="Edge">
+        <div className="sub-group-head">
+          <h3 className="sub-group-title">Outline</h3>
+          {style.outline !== "none" && <Swatches value={style.outlineColor} options={OUTLINE_COLORS} onChange={(outlineColor) => onChange({ outlineColor })} />}
+        </div>
+        <div className="sub-tiles" role="radiogroup" aria-label="Outline">
+          {OUTLINES.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={style.outline === o.value}
+              className="sub-tile"
+              onClick={() => onChange({ outline: o.value })}
+            >
+              <span className="sub-tile-scene" aria-hidden>
+                <span className="sub-tile-sample" style={{ "--sample-stroke": `${OUTLINE_PX[o.value] * 1.4}px` } as CSSProperties}>
+                  Aa
+                </span>
+              </span>
+              <span className="sub-tile-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+        <h3 className="sub-group-title">Background</h3>
+        <div className="sub-tiles" role="radiogroup" aria-label="Background">
+          {BACKGROUNDS.map((b) => (
+            <button
+              key={b.value}
+              type="button"
+              role="radio"
+              aria-checked={style.background === b.value}
+              className="sub-tile"
+              onClick={() => onChange({ background: b.value })}
+            >
+              <span className="sub-tile-scene" aria-hidden>
+                <span
+                  className="sub-tile-sample"
+                  data-box={b.value > 0 || undefined}
+                  style={{ "--sample-stroke": `${OUTLINE_PX[style.outline] * 1.4}px`, "--sample-box": `rgb(0 0 0 / ${b.value / 100})` } as CSSProperties}
+                >
+                  Aa
+                </span>
+              </span>
+              <span className="sub-tile-label">{b.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <button
+        type="button"
         className="sub-reset"
         disabled={isDefault}
         onClick={() => {

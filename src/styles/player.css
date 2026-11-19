@@ -619,7 +619,8 @@
   padding-bottom: var(--bar-bottom);
 }
 :root[data-form="phone"] .player-action {
-  height: 38px;
+  min-height: 44px;
+  min-width: 44px;
 }
 :root[data-form="phone"] .skip-button {
   right: max(1.25rem, var(--safe-right));
@@ -939,7 +940,6 @@
   transform: translateY(-50%);
   transition: opacity var(--dur-fast) var(--ease-std);
 }
-.options-info:hover,
 .options-info:focus-visible {
   color: #fff;
   background: rgb(255 255 255 / 0.16);
@@ -948,10 +948,17 @@
 .options-item[aria-checked="true"] + .options-info {
   color: var(--text-on-light);
 }
-.options-item[aria-checked="true"] + .options-info:is(:hover, :focus-visible) {
+.options-item[aria-checked="true"] + .options-info:focus-visible {
   background: rgb(0 0 0 / 0.1);
 }
 @media (hover: hover) and (pointer: fine) {
+  .options-info:hover {
+    color: #fff;
+    background: rgb(255 255 255 / 0.16);
+  }
+  .options-item[aria-checked="true"] + .options-info:hover {
+    background: rgb(0 0 0 / 0.1);
+  }
   .options-item-wrap:hover .options-info {
     opacity: 1;
     pointer-events: auto;
@@ -1206,13 +1213,15 @@ html[data-os="android"] .options-columns {
   width: 14px;
   height: 14px;
   border-radius: var(--r-round);
-  background: var(--text);
-  box-shadow: 0 1px 6px rgb(0 0 0 / 0.45);
+  background: #fff;
+  box-shadow:
+    0 1px 4px rgb(0 0 0 / 0.45),
+    0 0 0 0.5px rgb(0 0 0 / 0.25);
   opacity: 0;
   scale: 0.45;
   transition:
     opacity var(--dur-fast) var(--ease-std),
-    scale 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    scale 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
   pointer-events: none;
 }
 .scrubber-tip {
@@ -1231,13 +1240,12 @@ html[data-os="android"] .options-columns {
   bottom: calc(var(--hit) - 6px);
 }
 .scrubber-time {
-  padding: 0.25rem 0.5625rem;
+  padding: 0.25rem 0.6875rem;
   border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--tone-3) 92%, transparent);
+  background: var(--dock-surface);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    inset 0 0 0 1px rgb(255 255 255 / 0.1),
-    0 4px 14px rgb(0 0 0 / 0.55);
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 8px 20px -4px rgb(0 0 0 / 0.55);
   color: var(--text);
   font-weight: 600;
   white-space: nowrap;
@@ -1430,11 +1438,10 @@ html[data-os="android"] .options-columns {
   text-align: center;
   padding: 0.5rem 1rem;
   border-radius: var(--r-pill);
-  background: var(--surface-float);
+  background: var(--dock-surface);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    0 0.75rem 2rem -0.75rem rgb(0 0 0 / 0.6);
+    0 0 0 1px rgb(255 255 255 / 0.11),
+    0 12px 28px -6px rgb(0 0 0 / 0.55);
   animation: fade-in var(--dur-base) var(--ease-out);
 }
 
@@ -1450,11 +1457,10 @@ html[data-os="android"] .options-columns {
   gap: 0.375rem;
   padding: 0.375rem 0.875rem 0.375rem 0.75rem;
   border-radius: var(--r-pill);
-  background: var(--surface-float);
+  background: var(--dock-surface);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    inset 0 0 0 1px rgb(255 255 255 / 0.08),
-    0 0.75rem 2rem -0.75rem rgb(0 0 0 / 0.6);
+    0 0 0 1px rgb(255 255 255 / 0.11),
+    0 12px 28px -6px rgb(0 0 0 / 0.55);
   font-weight: 600;
   pointer-events: none;
   animation: fade-in var(--dur-fast) var(--ease-out);
@@ -1556,12 +1562,9 @@ html[data-os="android"] .options-columns {
   /* The same dark as the rest of the player's floating UI, with a 1px specular rim and
      soft shadow to lift it off the picture. Opaque enough to need no blur,
      which would re-filter every video frame (see the chrome's note). */
-  border-radius: 1.25rem;
-  background: var(--surface-float);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    inset 0 0 0 1px rgb(255 255 255 / 0.09),
-    0 1.5rem 3rem -1rem rgb(0 0 0 / 0.65);
+  border-radius: 20px;
+  background: var(--dock-surface);
+  box-shadow: var(--dock-shadow);
 }
 .next-up-still {
   flex: none;
@@ -1741,11 +1744,11 @@ html[data-os="android"] .options-columns {
 }
 .options-columns {
   transition:
-    transform 340ms var(--ease-reveal),
-    filter 340ms var(--ease-reveal);
+    transform 280ms var(--ease-out),
+    opacity 220ms var(--ease-out);
   @starting-style {
-    transform: translateY(8px);
-    filter: blur(4px);
+    transform: translateY(10px) scale(0.985);
+    opacity: 0;
   }
 }
 /* Opened from a key: no materialize (Player.tsx optionsByKey). */
@@ -1758,14 +1761,15 @@ html[data-os="android"] .options-columns {
   transition-duration: var(--dur-fast);
 }
 .options-overlay[data-open="false"] .options-columns {
-  transform: translateY(4px);
+  transform: translateY(4px) scale(0.99);
   transition-duration: var(--dur-fast);
 }
 /* Reduced motion: a plain cross-fade — the columns don't rise. The frosted
    copy's fade stays (it isn't movement). */
 @media (prefers-reduced-motion: reduce) {
-  .options-columns {
-    transition: none;
+  :root:not([data-reduce-motion="off"]) .options-columns {
+    transition: opacity var(--dur-fast) var(--ease-std);
+    transform: none !important;
   }
 }
 
@@ -2125,11 +2129,10 @@ img.load-mark-base[data-logo-look^="halo"] {
   letter-spacing: -0.005em;
   color: var(--text);
   /* Same dark as the Up Next card, with a 1px specular rim and no blur over the video. */
-  background: var(--surface-float);
+  background: var(--dock-surface);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16),
-    inset 0 0 0 1px rgb(255 255 255 / 0.1),
-    0 1rem 2.5rem -0.75rem rgb(0 0 0 / 0.6);
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 14px 32px -6px rgb(0 0 0 / 0.55);
   transition:
     opacity 200ms var(--ease-out),
     transform 200ms var(--ease-out),
@@ -3483,7 +3486,7 @@ body:has(.player[data-started="true"]) .menu {
   gap: 4px;
   max-width: min(44rem, 60%);
   margin-bottom: 16px;
-  text-shadow: 0 1px 12px rgb(0 0 0 / 0.5);
+  text-shadow: 0 2px 14px rgb(0 0 0 / 0.55);
 }
 .player-title-episode,
 .player-title-name {
@@ -3493,7 +3496,10 @@ body:has(.player[data-started="true"]) .menu {
   text-overflow: ellipsis;
 }
 .player-title-episode {
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
   line-height: 20px;
   font-weight: 500;
   color: rgb(255 255 255 / 0.72);
@@ -3501,26 +3507,34 @@ body:has(.player[data-started="true"]) .menu {
 .player-title-name {
   font-size: 28px;
   line-height: 32px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 .player-title-format {
-  margin-left: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: rgb(255 255 255 / 0.5);
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(255 255 255 / 0.76);
   font-variant-numeric: tabular-nums;
+  width: fit-content;
 }
 .player-title-name + .player-title-format {
-  margin-left: 0;
+  margin-top: 2px;
 }
 .player-dock {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: 8px -8px 0;
+  margin: 10px -8px 0;
 }
 .player-dock-group {
   display: flex;
@@ -3529,43 +3543,42 @@ body:has(.player[data-started="true"]) .menu {
   min-width: 0;
 }
 .player-dock .player-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  opacity: 0.82;
-  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.4));
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-pill);
+  opacity: 0.88;
+  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.45));
   transition:
     background-color var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast) var(--ease-out),
     transform var(--dur-press) var(--ease-out);
 }
 .player-dock .player-icon:active {
-  transform: scale(0.96);
+  transform: scale(0.93);
 }
 @media (hover: hover) and (pointer: fine) {
   .player-dock .player-icon:hover {
     opacity: 1;
-    background: rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.12);
   }
 }
 .player-dock .player-icon:is([aria-expanded="true"], [data-popup-open]) {
   opacity: 1;
-  background: rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.2);
 }
 .player-dock .player-volume-slider {
-  height: 48px;
+  height: 44px;
 }
-/* Bigger glyphs than the bar's elsewhere: the dock's buttons are bare icons, as on a streaming player. */
+/* Crisp streaming-player glyph size in the dock bar. */
 .player-dock .player-icon > svg,
 .player-dock .player-icon > * > svg {
-  width: 28px;
-  height: 28px;
+  width: 23px;
+  height: 23px;
 }
 
-/* The menu: Apple TV's glass card. The picture behind it is its own frosted copy (VideoBackdrop, a small canvas
-   lined up with the picture: a backdrop-filter has nothing to sample over mpv or a hardware video plane, and over
-   a playing video it would be re-filtered every frame), under a grey tint and a light rim. It grows out of its
-   button and fades; closing reverses it, quicker. */
+/* The dock's menus: a pane of smoked glass over the picture. Its body is a heavily blurred copy of the frame right
+   behind it (.options-frost, OptionsOverlay.tsx), deepened and smoked so white type reads on any scene, with a
+   faint sheen along the top edge and a hairline rim; the solid surface stands in until the copy has a frame. */
 .options-overlay[data-place="dock"] {
   display: block;
   pointer-events: none;
@@ -3582,61 +3595,88 @@ body:has(.player[data-started="true"]) .menu {
   gap: 0;
   max-width: calc(100% - (var(--dock-right, 40px) + 16px) / var(--pz, 1));
   max-height: min(640px, calc(100% - (var(--dock-bottom, 160px) + 80px) / var(--pz, 1)));
-  padding: 8px;
+  padding: 10px;
   border-radius: 24px;
-  /* clip, not hidden: the frosted picture reaches past the card, and a hidden overflow could be scrolled (by a
-     control taking the focus), sliding the columns out of the card. */
+  corner-shape: superellipse(1.45);
   overflow: clip;
   isolation: isolate;
-  background: rgb(44 44 50);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 0.4);
+  background: var(--dock-surface);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 0 0 1px rgb(0 0 0 / 0.42),
+    0 24px 60px -12px rgb(0 0 0 / 0.62),
+    0 8px 20px -6px rgb(0 0 0 / 0.4);
   pointer-events: auto;
   transform-origin: calc(100% - var(--dock-origin, 20px) / var(--pz, 1)) 100%;
   transition:
-    opacity 180ms var(--ease-out),
-    transform 200ms var(--ease-out);
+    opacity 140ms var(--ease-out),
+    transform 170ms var(--ease-out);
   @starting-style {
     opacity: 0;
-    transform: translateY(6px) scale(0.98);
+    transform: translateY(6px) scale(0.97);
     filter: none;
   }
 }
-/* The frosted picture, as big as the player and placed so its picture lines up with the one around the menu. */
+/* The frosted copy fills the pane; it fades in over the solid surface once it has a frame. */
 .options-overlay[data-place="dock"] .options-frost {
-  inset: auto;
-  right: calc(-1 * var(--dock-right, 40px));
-  bottom: calc(-1 * var(--dock-bottom, 160px));
-  width: var(--dock-pw, 100vw);
-  height: var(--dock-ph, 100vh);
+  inset: 0;
   z-index: -2;
+  width: 100%;
+  height: 100%;
   transform: scale(1.04);
-  filter: blur(10px) saturate(1.6) brightness(0.9);
+  filter: blur(10px) saturate(135%) brightness(0.8);
+  opacity: 0;
+  transition: opacity 260ms var(--ease-std);
 }
-/* The tint over it and the light catching the card's edge. */
+.options-overlay[data-place="dock"] .options-frost[data-ready] {
+  opacity: 1;
+}
+/* Its two canvases (VideoBackdrop `fade`), stacked: each new frame fades in over the last. */
+.video-backdrop-pair {
+  display: block;
+  isolation: isolate;
+}
+.video-backdrop-pair > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* Smoke over the frost, a touch deeper toward the bottom where the rows end, a fine grain against banding, and a
+   sheen at the top edge where light would catch the glass. */
+.options-overlay[data-place="dock"] .options-columns::before,
 .options-overlay[data-place="dock"] .options-columns::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
-  border-radius: inherit;
-  background: rgb(52 52 58 / 0.5);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.3),
-    inset 0 0 0 1px rgb(255 255 255 / 0.12);
   pointer-events: none;
+  /* Square: the pane's own clip shapes them, so they follow its superellipse corners exactly (a radius of their
+     own is a plain circle, which left a lighter sliver between it and the rim in each corner). */
+}
+.options-overlay[data-place="dock"] .options-columns::before {
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.07), transparent 72px),
+    linear-gradient(to bottom, rgb(10 10 12 / 0.5), rgb(10 10 12 / 0.64));
+}
+.options-overlay[data-place="dock"] .options-columns::after {
+  opacity: 0.1;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
 }
 @media (prefers-reduced-transparency: reduce) {
   .options-overlay[data-place="dock"] .options-frost {
     display: none;
   }
-  .options-overlay[data-place="dock"] .options-columns::after {
-    background: rgb(36 36 40 / 0.97);
+  .options-overlay[data-place="dock"] .options-columns {
+    background: var(--tone-2);
   }
 }
 .options-overlay[data-place="dock"][data-open="false"] .options-columns {
   opacity: 0;
-  transform: translateY(4px) scale(0.98);
-  transition-duration: 140ms;
+  transform: translateY(4px) scale(0.97);
+  transition-duration: 110ms;
 }
 @media (prefers-reduced-motion: reduce) {
   .options-overlay[data-place="dock"] .options-columns {
@@ -3648,48 +3688,59 @@ body:has(.player[data-started="true"]) .menu {
   width: 248px;
   max-height: none;
   min-height: 0;
-  padding: 4px;
+  padding: 2px 4px;
 }
 .options-overlay[data-place="dock"] .options-column[data-size="medium"] {
-  width: 320px;
+  width: 336px;
 }
 /* No narrower than the source bar's tightest fit (460px). */
 .options-overlay[data-place="dock"] .options-column[data-size="wide"] {
-  width: 460px;
+  width: 472px;
 }
 /* The episode rail (the row layout): a strip across the window above the timeline, from the left edge to its button. */
 .options-overlay[data-place="dock"] .options-column[data-size="full"] {
   width: calc((var(--dock-pw, 100vw) - var(--dock-right, 40px) - 56px) / var(--pz, 1));
 }
+/* Columns side by side are two panes in the glass: a faint well behind each after the first, no rule between. Its
+   list ends inside it (clipped there, with room under the last row) rather than running on under its rim. */
 .options-overlay[data-place="dock"] .options-column + .options-column {
-  margin-left: 4px;
-  padding-left: 8px;
-  border-left: 1px solid rgb(255 255 255 / 0.14);
+  margin-left: 8px;
+  padding-left: 4px;
+  padding-bottom: 6px;
+  border-radius: 16px;
+  corner-shape: superellipse(1.45);
+  overflow: clip;
+  background: rgb(0 0 0 / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.05);
+}
+.options-overlay[data-place="dock"] .options-column + .options-column .options-list {
+  margin-bottom: 0;
 }
 /* Sources keep one height, so filtering the list doesn't move the bar above it. */
 .options-overlay[data-place="dock"] .options-column:has(.srcf:not(.srcf-tv)) {
-  height: 560px;
+  height: 548px;
   max-height: 100%;
 }
 /* One header height whatever it holds (a title alone, or a title and its settings button), so the rows of
    columns side by side start on one line. */
 .options-overlay[data-place="dock"] .options-head {
-  height: 32px;
+  height: 34px;
   gap: 8px;
-  margin: 0 6px 4px;
+  margin: 0 4px 4px 12px;
 }
 .options-overlay[data-place="dock"] .options-head .icon-btn,
 .options-overlay[data-place="dock"] .options-head > button {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
 }
 /* Sources: its filter bar is taller than a title, so that header grows with it. */
 .options-overlay[data-place="dock"] .options-head:has(.srcf:not(.srcf-tv)) {
   height: auto;
+  margin-left: 6px;
 }
 /* A short list beside a wide one (the seasons beside their episodes) takes only the room it needs. */
 .options-overlay[data-place="dock"] .options-column[data-size="narrow"]:has(+ .options-column[data-size="wide"]) {
-  width: 168px;
+  width: 172px;
 }
 /* The source filters as two clean rows: the quality switch edge to edge, its choices sharing the width; then the
    add-on dropdown filling the row with Filters at its end. */
@@ -3710,11 +3761,11 @@ body:has(.player[data-started="true"]) .menu {
 }
 .options-overlay[data-place="dock"] .options-title {
   margin: 0;
-  font-size: 13px;
-  line-height: 16px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: rgb(235 235 245 / 0.64);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 650;
+  letter-spacing: -0.006em;
+  color: rgb(255 255 255 / 0.94);
 }
 /* A title kept for screen readers only, and nothing beside it: no header row at all. */
 .options-overlay[data-place="dock"] .options-head:has(> .options-title[data-hidden]:only-child) {
@@ -3727,80 +3778,130 @@ body:has(.player[data-started="true"]) .menu {
   mask-image: linear-gradient(to bottom, transparent 0, black 4px, black calc(100% - 12px), transparent 100%);
 }
 .options-overlay[data-place="dock"] .options-item {
-  min-height: 40px;
-  gap: 6px;
-  padding: 0 12px 0 6px;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 600;
+  min-height: 32px;
+  gap: 8px;
+  padding: 0 10px 0 9px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  font-size: 13.5px;
+  font-weight: 450;
   letter-spacing: -0.008em;
-  color: rgb(255 255 255 / 0.96);
+  color: rgb(255 255 255 / 0.92);
+  cursor: default;
 }
 .options-overlay[data-place="dock"] .options-item[data-rich="true"] {
-  padding-block: 6px;
+  border-radius: 11px;
+  corner-shape: superellipse(1.45);
+  padding-block: 7px;
+}
+/* The choice in force: lit glass (a brighter pane with a rim), its check in the accent. Hovering only lifts a row
+   a little, so moving across the list doesn't flash a solid colour over the picture. */
+.options-overlay[data-place="dock"] .options-item {
+  transition:
+    background-color 140ms var(--ease-std),
+    color 140ms var(--ease-std);
 }
 .options-overlay[data-place="dock"] .options-item[aria-checked="true"] {
-  background: transparent;
-  color: rgb(255 255 255 / 0.96);
+  background: rgb(255 255 255 / 0.13);
+  color: #fff;
   font-weight: 600;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"] .options-check {
+  color: var(--accent-hi);
+}
+.options-overlay[data-place="dock"] .options-item[aria-checked="true"] .options-detail {
+  color: rgb(235 235 245 / 0.66);
 }
 @media (hover: hover) and (pointer: fine) {
   .options-overlay[data-place="dock"] .options-item:hover {
-    color: rgb(255 255 255 / 0.96);
-    background: rgb(255 255 255 / 0.1);
+    color: #fff;
+    background: rgb(255 255 255 / 0.08);
+  }
+  .options-overlay[data-place="dock"] .options-item[aria-checked="true"]:hover {
+    background: rgb(255 255 255 / 0.16);
   }
 }
-/* The keyboard's row is Apple TV's lit pill. */
+/* Keyboard selection: the accent, as a ring, so the lit choice under it still shows. */
 .options-overlay[data-place="dock"] .options-item:focus-visible,
 .options-overlay[data-place="dock"] .options-item[aria-checked="true"]:focus-visible {
-  color: #1d1d1f;
-  background: rgb(245 245 247 / 0.92);
+  color: #fff;
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--accent-hi);
+  outline: none;
 }
-.options-overlay[data-place="dock"] .options-item:focus-visible :is(.options-detail, .options-badge) {
-  color: rgb(29 29 31 / 0.62);
+/* A track from an add-on (a narrow list, no picture): its language, and the add-on after it on the same line,
+   quieter, rather than a second line under every row. */
+.options-overlay[data-place="dock"] .options-column[data-size="narrow"] .options-item[data-rich="true"]:not(:has(.options-thumb)) {
+  min-height: 32px;
+  padding-block: 0;
+}
+.options-overlay[data-place="dock"] .options-column[data-size="narrow"] .options-item[data-rich="true"]:not(:has(.options-thumb)) .options-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.options-overlay[data-place="dock"] .options-column[data-size="narrow"] .options-item[data-rich="true"]:not(:has(.options-thumb)) .options-label {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.options-overlay[data-place="dock"] .options-column[data-size="narrow"] .options-item[data-rich="true"]:not(:has(.options-thumb)) .options-detail {
+  flex: 0 3 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgb(235 235 245 / 0.44);
+}
+.options-overlay[data-place="dock"] .options-column[data-size="narrow"]:has(.options-item[data-rich="true"]) {
+  width: 300px;
 }
 .options-overlay[data-place="dock"] .options-check {
-  width: 22px;
+  width: 20px;
+  color: var(--accent-hi);
 }
 .options-overlay[data-place="dock"] .options-check svg {
   width: 16px;
   height: 16px;
 }
 .options-overlay[data-place="dock"] .options-detail {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 450;
   opacity: 1;
-  color: rgb(235 235 245 / 0.64);
+  color: rgb(235 235 245 / 0.56);
 }
 .options-overlay[data-place="dock"] .options-badge,
 .options-overlay[data-place="dock"] .options-item[aria-checked="true"] .options-badge {
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   text-transform: none;
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.1);
 }
 .options-overlay[data-place="dock"] .options-thumb {
   width: 96px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 .options-overlay[data-place="dock"] .options-group {
-  margin: 12px 8px 4px;
-  font-size: 13px;
-  font-weight: 600;
+  margin: 12px 12px 4px;
+  font-size: 12.5px;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
-  color: rgb(235 235 245 / 0.64);
+  color: rgb(255 255 255 / 0.48);
 }
 .options-overlay[data-place="dock"] .options-group:first-child {
   margin-top: 4px;
 }
 .options-overlay[data-place="dock"] .options-empty {
-  margin: 8px 6px;
-  font-size: 13px;
+  margin: 8px 12px;
+  font-size: 13.5px;
+  color: rgb(235 235 245 / 0.56);
 }
 
 /* The dock's centre: the seek glyphs show only while a jump made from the keys shows its "+10" (SkipTransport),
@@ -3926,7 +4027,8 @@ body:has(.player[data-started="true"]) .menu {
   gap: 2px;
 }
 .ep-menu-item[aria-current="true"] {
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
 }
 .ep-menu-item:focus-within:not([aria-current="true"]) {
   background: rgb(255 255 255 / 0.08);
@@ -3942,23 +4044,23 @@ body:has(.player[data-started="true"]) .menu {
     transition-delay: 260ms;
   }
   .ep-menu-item:hover:not([aria-current="true"]) {
-    background: rgb(255 255 255 / 0.08);
+    background: rgb(255 255 255 / 0.07);
     transition-delay: 120ms;
   }
   .ep-menu-back:hover {
-    background: rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.12);
   }
 }
 .ep-menu-row:focus-visible,
 .ep-menu-back:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--accent-hi);
   outline-offset: -2px;
 }
 .ep-menu-body {
   display: grid;
   grid-template-columns: 168px minmax(0, 1fr);
-  gap: 16px;
-  padding: 0 16px 16px 44px;
+  gap: 14px;
+  padding: 0 16px 14px 44px;
 }
 .ep-menu-still {
   position: relative;
@@ -3967,7 +4069,9 @@ body:has(.player[data-started="true"]) .menu {
   border-radius: 10px;
   overflow: hidden;
   background: rgb(255 255 255 / 0.08);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 6px 16px -4px rgb(0 0 0 / 0.45);
 }
 .ep-menu-still img {
   width: 100%;
@@ -3976,12 +4080,18 @@ body:has(.player[data-started="true"]) .menu {
 }
 .ep-menu-now {
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  font-weight: 700;
-  background: rgb(0 0 0 / 0.38);
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 650;
+  color: #fff;
+  background: rgb(18 18 22 / 0.88);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14);
 }
 .ep-menu-text {
   display: flex;
@@ -4010,105 +4120,119 @@ body:has(.player[data-started="true"]) .menu {
   }
 }
 
-/* --- The dock's Playback Speed (SpeedLine.tsx): Netflix's line of stops in the glass card. */
+/* --- The dock's Playback Speed (SpeedLine.tsx): crisp native macOS stop slider. */
 .options-overlay[data-place="dock"] .options-column:has(.speed-line) {
   width: 520px;
 }
 .options-overlay[data-place="dock"] .options-value {
   margin-left: auto;
-  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.1);
+  font-size: 12.5px;
   font-weight: 600;
-  color: rgb(255 255 255 / 0.96);
+  color: #fff;
 }
+/* A thick recessed pill with a faint dot per speed; the accent fill runs from its left end to just past the chosen
+   stop, and the white knob sits inside the fill's rounded end. The labels ride above their stops. */
 .speed-line-wrap {
-  padding: 8px 24px 12px;
+  padding: 4px 14px 12px;
 }
 .speed-line {
   position: relative;
-  height: 32px;
+  height: calc(var(--speed-inset, 16px) * 2);
   cursor: pointer;
   touch-action: none;
-  border-radius: 16px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.3);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
 }
-.speed-line::before {
-  content: "";
+.speed-line-fill {
   position: absolute;
   left: 0;
-  right: 0;
-  top: 50%;
-  height: 2px;
-  margin-top: -1px;
-  border-radius: 1px;
-  background: rgb(255 255 255 / 0.3);
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, var(--accent-hi), var(--accent));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+  pointer-events: none;
+  transition: width 260ms var(--ease-out);
+}
+.speed-line[data-drag] .speed-line-fill {
+  transition-duration: 90ms;
 }
 .speed-line-stop {
   position: absolute;
   top: 50%;
-  width: 8px;
-  height: 8px;
-  margin: -4px 0 0 -4px;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
   border-radius: 50%;
-  background: rgb(255 255 255 / 0.72);
+  background: rgb(255 255 255 / 0.32);
 }
 .speed-line-rider {
   position: absolute;
-  inset: 0;
+  inset: 0 var(--speed-inset, 16px);
   pointer-events: none;
-  transition: transform 300ms var(--ease-out);
+  transition: transform 260ms var(--ease-out);
 }
 .speed-line[data-drag] .speed-line-rider {
-  transition-duration: 120ms;
+  transition-duration: 90ms;
 }
 .speed-line-knob {
   position: absolute;
   left: 0;
   top: 50%;
-  width: 24px;
-  height: 24px;
-  margin: -12px 0 0 -12px;
+  width: calc(var(--speed-inset, 16px) * 2 - 8px);
+  height: calc(var(--speed-inset, 16px) * 2 - 8px);
+  translate: -50% -50%;
   border-radius: 50%;
   background: #fff;
-  box-shadow:
-    0 0 0 5px rgb(255 255 255 / 0.28),
-    0 2px 8px rgb(0 0 0 / 0.35);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  transition: scale var(--dur-fast) var(--ease-out);
+}
+.speed-line[data-drag] .speed-line-knob {
+  scale: 0.9;
 }
 .speed-line:focus-visible {
   outline: none;
-}
-.speed-line:focus-visible .speed-line-knob {
   box-shadow:
-    0 0 0 5px rgb(255 255 255 / 0.6),
-    0 2px 8px rgb(0 0 0 / 0.35);
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 0 0 2px var(--accent-hi);
 }
 .speed-line-labels {
   position: relative;
   height: 24px;
-  margin-top: 8px;
+  margin-bottom: 8px;
 }
 .speed-line-labels button {
   position: absolute;
   top: 0;
   translate: -50% 0;
-  padding: 2px 4px;
-  border-radius: 6px;
-  font-size: 13px;
+  padding: 3px 6px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: rgb(235 235 245 / 0.64);
-  transition: color var(--dur-fast) var(--ease-out);
+  color: rgb(235 235 245 / 0.6);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
 .speed-line-labels button[data-on] {
-  color: rgb(255 255 255 / 0.96);
+  color: #fff;
   font-weight: 700;
 }
 @media (hover: hover) and (pointer: fine) {
   .speed-line-labels button:hover {
-    color: rgb(255 255 255 / 0.96);
+    color: #fff;
+    background: rgb(255 255 255 / 0.1);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .speed-line-rider {
+  .speed-line-rider,
+  .speed-line-fill {
     transition: none;
   }
 }
@@ -4137,13 +4261,26 @@ body:has(.player[data-started="true"]) .menu {
     background: rgb(255 255 255 / 0.1);
   }
 }
-.options-overlay[data-place="dock"] .options-custom:has(> .sub-settings) {
-  animation: dock-page-in 260ms var(--ease-out);
+/* Turning between a list and its settings (OptionsOverlay data-turn): the page comes in from the right, the list
+   back from the left, each coming into focus as it settles, so the two read as sides of one surface. */
+.options-overlay[data-place="dock"] .options-column[data-turn="in"] > .options-custom {
+  animation: dock-page-in 320ms var(--ease-out);
+}
+.options-overlay[data-place="dock"] .options-column[data-turn="back"] > .options-list:not(.options-custom) {
+  animation: dock-page-back 320ms var(--ease-out);
 }
 @keyframes dock-page-in {
   from {
     opacity: 0;
-    transform: translateX(16px);
+    transform: translateX(28px);
+    filter: blur(3px);
+  }
+}
+@keyframes dock-page-back {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+    filter: blur(3px);
   }
 }
 @keyframes dock-page-fade {
@@ -4152,9 +4289,34 @@ body:has(.player[data-started="true"]) .menu {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .options-overlay[data-place="dock"] .options-custom:has(> .sub-settings) {
+  .options-overlay[data-place="dock"] .options-column[data-turn] > .options-list {
     animation-name: dock-page-fade;
   }
+}
+/* The header's Tracks | Style switch (Player.tsx): a small recessed capsule, the side shown lit. */
+.options-overlay[data-place="dock"] .options-head > .segmented {
+  margin-left: auto;
+  background: rgb(0 0 0 / 0.26);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.options-overlay[data-place="dock"] .options-head > .segmented .segmented-item {
+  height: 24px;
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: rgb(235 235 245 / 0.62);
+}
+.options-overlay[data-place="dock"] .options-head > .segmented .segmented-active {
+  background: rgb(255 255 255 / 0.18);
+  box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.22);
+}
+.options-overlay[data-place="dock"] .options-head > .segmented .segmented-active .segmented-item {
+  color: #fff;
+}
+/* A column widening for its settings (and back) grows from the menu's right edge instead of jumping. */
+.options-overlay[data-place="dock"] .options-column {
+  transition: width 300ms var(--ease-out);
 }
 .options-overlay[data-place="dock"] .sub-settings {
   gap: 2px;
@@ -4243,13 +4405,279 @@ body:has(.player[data-started="true"]) .menu {
   background: transparent;
 }
 
+/* --- The subtitle studio (SubtitleSettings look="studio"): three groups, each a well in the glass with a small
+       heading; inside, lines (label and control), the three dials side by side, and tiles that show their choice. */
+.options-overlay[data-place="dock"] .options-column:has(.sub-studio) {
+  width: 372px;
+}
+.options-overlay[data-place="dock"] .sub-studio {
+  gap: 10px;
+  padding: 2px 2px 6px;
+}
+.sub-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: 16px;
+  corner-shape: superellipse(1.45);
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.sub-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+.sub-group-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(235 235 245 / 0.5);
+}
+.sub-group > .sub-group-title:not(:first-child) {
+  margin-top: 4px;
+}
+.sub-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+}
+.sub-line-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  color: rgb(255 255 255 / 0.94);
+}
+.sub-line-hint {
+  font-size: 11.5px;
+  font-weight: 450;
+  color: rgb(235 235 245 / 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sub-toggle {
+  cursor: pointer;
+}
+.sub-studio .sub-stepper {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.24);
+}
+.options-overlay[data-place="dock"] .sub-studio .sub-stepper button {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.9);
+}
+.options-overlay[data-place="dock"] .sub-studio .sub-stepper-value {
+  min-width: 52px;
+  font-size: 13.5px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .options-overlay[data-place="dock"] .sub-studio .sub-stepper button:not(:disabled):hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+}
+.sub-studio .select-trigger {
+  height: 30px;
+  min-width: 0;
+  max-width: 172px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgb(0 0 0 / 0.24);
+}
+/* Previous line | Next line: one split capsule, the whole width. */
+.sub-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.24);
+}
+.sub-split button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.88);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
+}
+.sub-split button:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sub-split button:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+}
+/* Size, Lift, Opacity: three dials side by side, the name above, the value between − and +. */
+.sub-dials {
+  display: grid;
+  grid-template-columns: repeat(var(--dials, 3), minmax(0, 1fr));
+  gap: 6px;
+}
+.sub-dials[data-count="2"] {
+  --dials: 2;
+}
+.sub-dial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px 6px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.2);
+}
+.sub-dial-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgb(235 235 245 / 0.56);
+}
+.sub-dial .sub-stepper {
+  width: 100%;
+  justify-content: space-between;
+  padding: 0;
+  background: none;
+}
+.options-overlay[data-place="dock"] .sub-dial .sub-stepper button {
+  width: 24px;
+  height: 24px;
+  background: rgb(255 255 255 / 0.08);
+}
+.options-overlay[data-place="dock"] .sub-dial .sub-stepper-value {
+  min-width: 0;
+  flex: 1;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.sub-studio .sub-swatches {
+  gap: 7px;
+}
+.sub-studio .sub-swatch {
+  width: 20px;
+  height: 20px;
+}
+.sub-studio .sub-swatch[aria-checked="true"] {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 0 0 2px rgb(20 20 22),
+    0 0 0 3.5px #fff;
+}
+/* Outline and background: a tile per choice showing "Aa" drawn that way in the current font and colours, over a
+   mid-tone scene (where a bare line is hardest to read), so you pick by what you see. */
+.sub-tiles {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+}
+.sub-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 3px 3px 6px;
+  border-radius: 13px;
+  corner-shape: superellipse(1.45);
+  background: rgb(0 0 0 / 0.2);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
+}
+.sub-tile:active {
+  transform: scale(0.97);
+}
+.sub-tile[aria-checked="true"] {
+  background: rgb(255 255 255 / 0.14);
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.85);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sub-tile:not([aria-checked="true"]):hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+}
+.sub-tile:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent-hi);
+}
+.sub-tile-scene {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 30% 20%, rgb(214 196 160 / 0.9), transparent 60%),
+    linear-gradient(135deg, rgb(150 160 172), rgb(96 104 118));
+}
+.sub-tile-sample {
+  font-family: var(--sub-font, "Segoe UI Semibold"), "Segoe UI", var(--font);
+  font-weight: var(--sub-weight, 600);
+  font-size: 21px;
+  line-height: 1.1;
+  color: var(--sample-color, #fff);
+  -webkit-text-stroke: var(--sample-stroke, 0px) var(--sample-edge, #000);
+  paint-order: stroke fill;
+}
+.sub-tile-sample[data-box] {
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--sample-box);
+}
+.sub-tile-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: rgb(235 235 245 / 0.72);
+}
+.sub-tile[aria-checked="true"] .sub-tile-label {
+  color: #fff;
+}
+.options-overlay[data-place="dock"] .sub-studio .sub-reset {
+  align-self: center;
+  justify-content: center;
+  height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .options-overlay[data-place="dock"] .sub-studio .sub-reset:not(:disabled):hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+}
+
 /* --- Sources in the dock: the title with the add-on picker and Filters on its line, the picture quality under them
        the menu's whole width, and any filters that are on under that. */
 .options-overlay[data-place="dock"] .options-head:has(.srcf:not(.srcf-tv)) {
   flex-wrap: wrap;
   row-gap: 8px;
   column-gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 .options-overlay[data-place="dock"] .options-head:has(.srcf:not(.srcf-tv)) .options-title {
   margin-right: auto;
@@ -4291,178 +4719,119 @@ body:has(.player[data-started="true"]) .menu {
   bottom: calc(var(--dock-bottom, 160px) + 72px);
 }
 
-/* --- The dock's menus, plainly, in Polarity's colours: a flat panel on the app's accent-tinted near-black with a
-       clear edge and near-square corners, big bold headings, the choices in dim ink and the chosen one in full ink
-       with an accent check. No pills or fills: the pointer just lights a row's text; the keyboard's row gets an
-       accent ring. Columns and groups are set apart by space alone. The player's More menu (.menu-dock) matches. */
-.options-overlay[data-place="dock"] .options-columns {
-  padding: 20px 12px 12px;
-  border: 1px solid rgb(255 255 255 / 0.2);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
-}
-.options-overlay[data-place="dock"] .options-columns::after {
-  content: none;
-}
-.options-overlay[data-place="dock"] .options-column {
-  width: 300px;
-  padding: 0 8px;
-}
-.options-overlay[data-place="dock"] .options-column[data-size="medium"] {
-  width: 380px;
-}
-.options-overlay[data-place="dock"] .options-column[data-size="wide"] {
-  width: 500px;
-}
-.options-overlay[data-place="dock"] .options-column + .options-column {
-  margin-left: 8px;
-  padding-left: 16px;
-  border-left: 0;
-}
-.options-overlay[data-place="dock"] .options-head {
-  height: 40px;
-  margin: 0 8px 8px 12px;
-}
-.options-overlay[data-place="dock"] .options-title {
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: var(--text);
-}
-.options-overlay[data-place="dock"] .options-list {
-  gap: 0;
-}
-.options-overlay[data-place="dock"] .options-item {
-  min-height: 48px;
-  gap: 10px;
-  padding: 0 12px 0 8px;
-  border-radius: 2px;
-  font-size: 18px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: rgb(var(--ink-text) / 0.62);
-  background: transparent;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-.options-overlay[data-place="dock"] .options-item[data-rich="true"] {
-  padding-block: 8px;
-}
-.options-overlay[data-place="dock"] .options-item[aria-checked="true"] {
-  color: var(--text);
-  font-weight: 500;
-  background: transparent;
-}
-@media (hover: hover) and (pointer: fine) {
-  .options-overlay[data-place="dock"] .options-item:hover {
-    color: var(--text);
-    background: transparent;
-  }
-}
-.options-overlay[data-place="dock"] .options-item:focus-visible,
-.options-overlay[data-place="dock"] .options-item[aria-checked="true"]:focus-visible {
-  color: var(--text);
-  background: transparent;
-  outline: 2px solid var(--accent-hi);
-  outline-offset: -2px;
-}
-.options-overlay[data-place="dock"] .options-item:focus-visible :is(.options-detail, .options-badge) {
-  color: rgb(var(--ink-text) / 0.6);
-}
-.options-overlay[data-place="dock"] .options-check {
-  width: 26px;
-  color: var(--accent-hi);
-}
-.options-overlay[data-place="dock"] .options-check svg {
-  width: 22px;
-  height: 22px;
-}
-.options-overlay[data-place="dock"] .options-detail {
-  font-size: 14px;
-  font-weight: 400;
-  color: rgb(var(--ink-text) / 0.45);
-}
-.options-overlay[data-place="dock"] .options-badge,
-.options-overlay[data-place="dock"] .options-item[aria-checked="true"] .options-badge {
-  border-radius: 2px;
-}
-.options-overlay[data-place="dock"] .options-group {
-  margin: 16px 12px 4px 8px;
-  font-size: 14px;
-  color: rgb(var(--ink-text) / 0.5);
-}
-.options-overlay[data-place="dock"] .options-group:first-child {
-  margin-top: 0;
-}
-.options-overlay[data-place="dock"] .options-empty {
-  margin: 8px 12px;
-  font-size: 16px;
-  color: rgb(var(--ink-text) / 0.5);
-}
-/* The episodes, speed and subtitle settings in the same plain panel: near-square corners, no pills. */
-.options-overlay[data-place="dock"] :is(.ep-menu-item, .ep-menu-row, .ep-menu-still, .sub-setting, .sub-reset, .speed-line, .speed-line-labels button) {
-  border-radius: 4px;
-}
-.options-overlay[data-place="dock"] :is(.sub-settings .source-chips, .sub-settings .source-chip, .sub-setting .select-trigger) {
-  border-radius: 2px;
-}
-.options-overlay[data-place="dock"] .ep-menu-title {
-  font-size: 20px;
-  line-height: 28px;
-  font-weight: 700;
-}
-
-/* The player's More menu (Player.tsx `moreMenu`, in a portal outside the player): the same panel and rows,
-   scaled with the dock (--pz). */
+/* The player's More and Cast menus (Player.tsx, in a portal outside the player): the same smoked glass as the dock's
+   panels (a frosted copy of the picture behind them, smoke, sheen, grain and a hairline rim), with rows that lift on
+   hover rather than flooding with the accent, and keycaps for their shortcuts. */
 .menu.menu-dock-zoomed {
   zoom: var(--pz, 1);
 }
 .menu.menu-dock {
-  min-width: 260px;
-  max-width: 400px;
-  padding: 8px;
-  border: 1px solid rgb(255 255 255 / 0.2);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.55);
-  color: rgb(var(--ink-text) / 0.62);
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  min-width: 232px;
+  max-width: 340px;
+  padding: 6px;
+  border: 0;
+  border-radius: 20px;
+  corner-shape: superellipse(1.45);
+  background: var(--dock-surface);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 0 0 1px rgb(0 0 0 / 0.42),
+    0 24px 60px -12px rgb(0 0 0 / 0.62),
+    0 8px 20px -6px rgb(0 0 0 / 0.4);
+  color: rgb(255 255 255 / 0.92);
+}
+.menu.menu-dock .options-frost {
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  transform: scale(1.06);
+  filter: blur(10px) saturate(135%) brightness(0.8);
+  opacity: 0;
+  transition: opacity 260ms var(--ease-std);
+}
+.menu.menu-dock .options-frost[data-ready] {
+  opacity: 1;
+}
+.menu.menu-dock::before,
+.menu.menu-dock::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.menu.menu-dock::before {
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.07), transparent 56px),
+    linear-gradient(to bottom, rgb(10 10 12 / 0.5), rgb(10 10 12 / 0.64));
+}
+.menu.menu-dock::after {
+  opacity: 0.1;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
 }
 .menu.menu-dock .menu-item {
-  height: 44px;
-  gap: 10px;
-  padding: 0 12px;
-  border-radius: 2px;
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 24px;
-  color: rgb(var(--ink-text) / 0.62);
+  height: 32px;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  font-size: 13.5px;
+  font-weight: 450;
+  letter-spacing: -0.008em;
+  line-height: 16px;
+  color: rgb(255 255 255 / 0.92);
+  cursor: default;
+  transition:
+    background-color 140ms var(--ease-std),
+    color 140ms var(--ease-std);
 }
 .menu.menu-dock .menu-item[data-highlighted],
-:root[data-input="keyboard"] .menu.menu-dock .menu-item[data-highlighted] {
-  color: var(--text);
-  background: transparent;
+.menu.menu-dock .menu-item[data-popup-open] {
+  color: #fff;
+  background: rgb(255 255 255 / 0.1);
+  outline: none;
 }
 :root[data-input="keyboard"] .menu.menu-dock .menu-item[data-highlighted] {
-  outline: 2px solid var(--accent-hi);
-  outline-offset: -2px;
+  color: #fff;
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--accent-hi);
+  outline: none;
 }
 .menu.menu-dock .menu-check-item {
-  --check-room: 32px;
+  --check-room: 22px;
 }
 .menu.menu-dock .menu-check,
 .menu.menu-dock .menu-check svg {
-  width: 22px;
-  height: 22px;
+  width: 14px;
+  height: 14px;
   color: var(--accent-hi);
 }
-.menu.menu-dock .menu-meta,
-:root[data-input="keyboard"] .menu.menu-dock .menu-item[data-highlighted] .menu-meta {
-  font-size: 15px;
-  color: rgb(var(--ink-text) / 0.45);
+.menu.menu-dock .menu-meta {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5.5px;
+  corner-shape: superellipse(1.45);
+  background: rgb(255 255 255 / 0.05);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.16),
+    0 0.5px 0 rgb(0 0 0 / 0.3);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.65);
+}
+.menu.menu-dock .menu-item[data-highlighted] .menu-meta {
+  color: rgb(255 255 255 / 0.85);
 }
 .menu.menu-dock .menu-sep {
-  display: none;
+  height: 1px;
+  margin: 4px 10px;
+  background: rgb(255 255 255 / 0.09);
 }

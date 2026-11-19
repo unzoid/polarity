@@ -437,17 +437,50 @@
   position: absolute;
   inset: 0 0 -32px 0;
   z-index: -2;
-  /* Black in dark mode; the page's near-white in light mode, so the bar's dark text reads over the art. */
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--tone-sunk) 46%, transparent) 0%,
-    color-mix(in srgb, var(--tone-sunk) 32%, transparent) 26%,
-    color-mix(in srgb, var(--tone-sunk) 16%, transparent) 54%,
-    color-mix(in srgb, var(--tone-sunk) 5%, transparent) 78%,
-    transparent 100%
-  );
+  /* Black in dark mode; the page's near-white in light mode, so the bar's dark text reads over the art. A flat colour
+     faded by a mask (not a gradient of colours), so a change of scheme under it (a title page's dark hero scrolling
+     away, NavBar.tsx) cross-fades instead of snapping. */
+  background-color: color-mix(in srgb, var(--tone-sunk) 46%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.7) 26%, rgb(0 0 0 / 0.35) 54%, rgb(0 0 0 / 0.11) 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.7) 26%, rgb(0 0 0 / 0.35) 54%, rgb(0 0 0 / 0.11) 78%, transparent 100%);
   pointer-events: none;
-  transition: opacity var(--dur-slow) var(--ease-std);
+  transition:
+    opacity var(--dur-slow) var(--ease-std),
+    background-color 360ms var(--ease-std);
+}
+/* Light mode over dark artwork needs a stronger top white wash + subtle text halo so dark navbar labels
+   and icons remain effortlessly readable. Over a title page's dark hero (.scheme-dark, NavBar.tsx) the bar stays dark. */
+:root[data-scheme="light"] .navbar:not(.scheme-dark)::before {
+  background-color: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 34%, rgb(0 0 0 / 0.48) 64%, rgb(0 0 0 / 0.16) 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 34%, rgb(0 0 0 / 0.48) 64%, rgb(0 0 0 / 0.16) 84%, transparent 100%);
+}
+:root[data-scheme="light"] .navbar:not([data-scrolled="true"], .scheme-dark) :is(.navbar-brand, .navbar-link, .navbar-icon, .navbar-back, .win-btn) {
+  filter: drop-shadow(0 1px 4px rgb(255 255 255 / 0.72));
+}
+/* The bar's ink eases between schemes with its tint (above), rather than flipping in one frame. Added to each
+   control's own transitions: theirs stay as they are. */
+.navbar :is(.navbar-brand, .navbar-back) {
+  transition-property: transform, opacity, margin-left, color, filter, background-color;
+  transition-duration: var(--dur-press), var(--dur-fast), var(--dur-base), 360ms, 360ms, var(--dur-fast);
+  transition-timing-function: var(--ease-out), var(--ease-std), var(--ease-out), var(--ease-std), var(--ease-std), var(--ease-std);
+}
+.navbar .navbar-icon {
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std),
+    color 360ms var(--ease-std),
+    filter 360ms var(--ease-std);
+}
+.navbar .navbar-link {
+  transition:
+    color var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std),
+    filter 360ms var(--ease-std);
+}
+.navbar .wordmark {
+  transition: filter 360ms var(--ease-std);
 }
 /* Once scrolled, the frosted edge-blur takes over; over Home's HeroGlow there's no art to shade, so don't veil the glow. */
 .navbar[data-scrolled="true"]::before,
@@ -466,15 +499,13 @@
   --edge-shown: 0;
 }
 .edge-blur.navbar-fade::before {
-  transition: opacity var(--dur-base) var(--ease-std);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent) 0%,
-    color-mix(in srgb, var(--tone-sunk) calc(var(--nav-tint) * 0.82), transparent) 38%,
-    color-mix(in srgb, var(--tone-sunk) calc(var(--nav-tint) * 0.42), transparent) 68%,
-    color-mix(in srgb, var(--tone-sunk) calc(var(--nav-tint) * 0.12), transparent) 88%,
-    transparent 100%
-  );
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    background-color 360ms var(--ease-std);
+  /* A flat tint faded by a mask, so it cross-fades between schemes (above). */
+  background: color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 38%, rgb(0 0 0 / 0.42) 68%, rgb(0 0 0 / 0.12) 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 38%, rgb(0 0 0 / 0.42) 68%, rgb(0 0 0 / 0.12) 88%, transparent 100%);
 }
 /* Like .row-paddle (#134), drop the 6 masked backdrop-filter surfaces once faded out at the top of the page. */
 .edge-blur.navbar-fade i {
@@ -502,6 +533,8 @@
 /* Light, as Netflix's is: mostly the page itself, blurred and a little more vivid, under a thin grey veil
    (about rgb(48 48 48 / 0.37) in dark mode), rather than a near-black bar. */
 :root[data-form="phone"] .edge-blur.navbar-fade::before {
+  -webkit-mask-image: none;
+  mask-image: none;
   background: color-mix(in srgb, var(--tone-sunk) 30%, rgb(var(--ink) / 0.1));
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   backdrop-filter: blur(24px) saturate(180%);
@@ -548,6 +581,9 @@
   align-items: center;
   gap: 0.25rem;
   min-width: 0;
+  /* Room for .navbar-active-pill's outer ring and drop shadow so overflow: hidden never clips them. */
+  padding: 4px 2px;
+  margin: -4px -2px;
   overflow: hidden;
 }
 /* Out of room: kept in the layout's measurements, but not drawn or clickable. */
@@ -563,22 +599,32 @@
 .navbar-links::-webkit-scrollbar {
   display: none;
 }
-/* Sliding active pill: glides smoothly between tabs; suppressed on first measure and resize. */
+/* Sliding active pill: crisp native macOS toolbar capsule; glides smoothly between tabs. */
 .navbar-active-pill {
   position: absolute;
   left: 0;
   top: 0;
   z-index: 0;
   border-radius: var(--r-pill);
-  background: rgb(var(--ink) / 0.2);
-  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.12);
+  background: rgb(255 255 255 / 0.13);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.14),
+    0 0 0 0.5px rgb(0 0 0 / 0.25);
   pointer-events: none;
   opacity: 0;
   transition:
     transform var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
     width var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
     height var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
-    opacity var(--dur-fast) var(--ease-std);
+    opacity var(--dur-fast) var(--ease-std),
+    background-color 360ms var(--ease-std),
+    box-shadow 360ms var(--ease-std);
+}
+:root[data-scheme="light"] .navbar:not(.scheme-dark) .navbar-active-pill {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.1),
+    0 1px 2.5px rgb(0 0 0 / 0.08);
 }
 .navbar-active-pill[data-shown="true"] {
   opacity: 1;
@@ -739,11 +785,13 @@ html[data-os="mac"] {
 @media (hover: hover) and (pointer: fine) {
   .navbar-link:not([aria-current="page"]):hover {
     color: var(--text);
+    background: var(--fill-2);
+  }
+  .navbar-icon:hover {
     background: var(--fill-3);
   }
-  .navbar-icon:hover,
-  .navbar-search-icon:hover {
-    opacity: 0.75;
+  .navbar-search:not([data-open="true"]) .navbar-search-icon:hover {
+    background: var(--fill-3);
   }
 }
 
@@ -776,16 +824,28 @@ html[data-os="mac"] {
 .navbar-search[data-open="true"] {
   margin-left: 0;
   clip-path: inset(0 round 20px);
-  /* Dark glass on a dark page, frosted white on a light one: it sits over whatever scrolls under the bar. */
-  background: var(--field-glass);
-  -webkit-backdrop-filter: var(--blur-control);
-  backdrop-filter: var(--blur-control);
-  box-shadow: inset 0 0 0 1px var(--field-edge);
+  /* Crisp solid native macOS recessed search pill (never lets hero glow bleed through). */
+  background: color-mix(in srgb, var(--tone-3) 82%, #242428);
+  box-shadow:
+    inset 0 0.5px 1px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+:root[data-scheme="light"] .navbar:not(.scheme-dark) .navbar-search[data-open="true"] {
+  background: #efeff2;
+  box-shadow:
+    inset 0 0.5px 1.5px rgb(0 0 0 / 0.08),
+    inset 0 0 0 1px rgb(0 0 0 / 0.09);
 }
 .navbar-search[data-open="true"]:focus-within {
   box-shadow:
-    inset 0 0 0 1px var(--accent),
-    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    inset 0 0.5px 1px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+}
+:root[data-scheme="light"] .navbar:not(.scheme-dark) .navbar-search[data-open="true"]:focus-within {
+  background: #ececf0;
+  box-shadow:
+    inset 0 0.5px 1.5px rgb(0 0 0 / 0.1),
+    inset 0 0 0 1px rgb(0 0 0 / 0.14);
 }
 .navbar-search-icon {
   position: absolute;
@@ -796,10 +856,12 @@ html[data-os="mac"] {
   place-items: center;
   width: 40px;
   height: 40px;
+  border-radius: var(--r-round);
   color: var(--text);
   transform: translateX(calc(var(--search-w) - 40px));
   transition:
     transform var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-std),
     opacity var(--dur-fast) var(--ease-std);
 }
 .navbar-search[data-open="true"] .navbar-search-icon {
@@ -944,9 +1006,21 @@ html[data-os="mac"] {
   padding: 0 0.25rem var(--safe-bottom);
   justify-content: space-around;
   gap: 0;
-  background: var(--glass-heavy);
-  backdrop-filter: var(--blur-glass);
+  background: color-mix(in srgb, var(--tone-sunk) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
   box-shadow: inset 0 1px 0 var(--hairline);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-form="phone"] .navbar-links {
+    background: var(--tone-sunk);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+:root[data-form="phone"][data-scheme="light"] .navbar-active-pill {
+  background: rgb(0 0 0 / 0.08);
+  box-shadow: none;
 }
 :root[data-form="phone"] .navbar-link {
   height: 44px;
@@ -1075,10 +1149,24 @@ html[data-os="mac"] {
 :root[data-form="phone"] .discover-controls:has(> .select-trigger:nth-of-type(3)) > .select-trigger:first-of-type {
   flex-basis: 100%;
 }
-/* Touch: the bar's icons grow to a finger's size. */
+/* Touch: the bar's icons, segmented controls and toolbar pickers grow to finger-friendly heights. */
 :root[data-touch="true"] .navbar-icon {
   min-width: var(--hit);
   min-height: var(--hit);
+}
+:root[data-touch="true"] .segmented:not([data-variant="large"]) .segmented-item {
+  height: 36px;
+  font-size: 14px;
+}
+:root[data-touch="true"] :is(
+  .discover-controls,
+  .library-toolbar,
+  .library-filters,
+  .downloads-toolbar,
+  .seasons-picker
+) .select-trigger:not([data-size="large"]) {
+  min-height: var(--hit);
+  font-size: 15px;
 }
 
 .window-controls {
@@ -1134,39 +1222,61 @@ html[data-os="mac"] {
 .segmented {
   position: relative;
   display: inline-flex;
-  padding: 0.1875rem;
+  padding: 2px;
   border-radius: var(--r-pill);
-  background: var(--glass);
-  backdrop-filter: var(--blur-control);
-  box-shadow: 0 0 0 1px var(--glass-edge);
+  background: var(--well-bg);
+  box-shadow: var(--well-shadow);
   flex: none;
 }
 .segmented-item {
   position: relative;
-  min-width: 2.75rem;
-  height: 2rem;
-  padding: 0 1rem;
+  min-width: 2.5rem;
+  height: 1.75rem;
+  padding: 0 0.875rem;
   border-radius: var(--r-pill);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
   color: var(--text-2);
   white-space: nowrap;
   display: grid;
   place-items: center;
+  cursor: default;
   transition: color var(--dur-fast) var(--ease-std);
 }
 .segmented-active {
   position: absolute;
-  inset: 0.1875rem;
+  inset: 2px;
   display: flex;
   pointer-events: none;
-  background: var(--pill-light);
+  background: rgb(255 255 255 / 0.2);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.22),
+    0 1px 3px rgb(0 0 0 / 0.35);
   border-radius: var(--r-pill);
   transition: clip-path var(--dur-base) var(--ease-in-out);
+}
+:root[data-scheme="light"] .segmented:not([data-variant="large"]) .segmented-active {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.08),
+    0 1px 3px rgb(0 0 0 / 0.12);
 }
 .segmented-active[data-instant="true"] {
   transition: none;
 }
 .segmented-active .segmented-item {
+  color: #fff;
+  font-weight: 550;
+}
+:root[data-scheme="light"] .segmented:not([data-variant="large"]) .segmented-active .segmented-item {
+  color: var(--text);
+}
+.segmented[data-variant="large"] .segmented-active {
+  background: var(--pill-light);
+  box-shadow: none;
+}
+.segmented[data-variant="large"] .segmented-active .segmented-item {
   color: var(--text-on-light);
 }
 @media (hover: hover) and (pointer: fine) {
@@ -1208,41 +1318,41 @@ html[data-os="mac"] {
   pointer-events: none;
 }
 /* The wordmark is a white picture (navbar, sign-in, profiles): in light mode it's drawn in the text's
-   near-black. By its class, not its file name: a build inlines the small picture as a data: URL. */
-:root[data-scheme="light"] .wordmark {
+   near-black (white again in a part kept dark). By its class, not its file name: a build inlines the small picture
+   as a data: URL. */
+:root[data-scheme="light"] .wordmark:not(.scheme-dark *) {
   filter: brightness(0) opacity(0.88);
 }
 
-/* Under the empty search field: genres to start from (NavBar SearchSuggestions). */
+/* Under the empty search field: native macOS Tahoe floating panel — 3-layer AppKit rim,
+   20px continuous squircle corners, quiet Title Case headings, and full-pill 28px recent rows. */
 .search-suggest {
   position: fixed;
   z-index: var(--z-popover);
-  width: min(440px, calc(100vw - 2rem));
-  padding: 1rem;
+  width: min(420px, calc(100vw - 2rem));
+  padding: 10px 12px 12px;
   display: grid;
-  gap: 0.625rem;
-  /* The menus' panel (ui/menu.css): flat near-black, a clear edge, near-square corners. */
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--tone-sunk) 97%, transparent);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  border: 1px solid rgb(var(--ink) / 0.2);
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+  gap: 8px;
+  border: 0;
+  border-radius: 18px;
+  corner-shape: superellipse(1.45);
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-menu);
   transform-origin: top right;
-  animation: search-suggest-in var(--dur-fast) var(--ease-out);
+  animation: search-suggest-in 140ms var(--ease-out);
   transition:
-    opacity 150ms var(--ease-out),
-    transform 150ms var(--ease-out);
+    opacity 120ms var(--ease-out),
+    transform 130ms var(--ease-out);
 }
 .search-suggest[data-leaving] {
   opacity: 0;
-  transform: translateY(-4px) scale(0.98);
+  transform: translateY(-4px) scale(0.97);
   pointer-events: none;
 }
 @keyframes search-suggest-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-4px) scale(0.97);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1254,20 +1364,27 @@ html[data-os="mac"] {
   }
 }
 .search-suggest-title {
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  color: var(--text);
+  padding-inline: 2px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-3);
+  letter-spacing: -0.004em;
 }
 .search-suggest .genre-chip {
-  height: 28px;
-  padding: 0 0.75rem;
+  height: 27px;
+  padding: 0 11px;
+  border: 0;
+  background: var(--bezel-bg);
+  box-shadow: var(--bezel-shadow);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .search-suggest .genre-chip[data-highlighted="true"] {
-  background: var(--pill-light);
-  color: var(--text-on-light);
-  border-color: transparent;
+  background: var(--selection-bg);
+  box-shadow: none;
+  color: var(--accent-fg);
 }
-/* Recent searches: full-width rows above the genre chips. */
+/* Recent searches: full-pill macOS rows above the genre chips. */
 .search-suggest-head {
   display: flex;
   align-items: baseline;
@@ -1277,34 +1394,34 @@ html[data-os="mac"] {
   font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-3);
-  transition: color 150ms var(--ease-std);
+  transition: color 130ms var(--ease-out);
 }
 .search-recent {
   display: grid;
-  margin: -0.25rem -0.5rem 0.25rem;
+  gap: 1px;
+  margin: -2px -5px 2px;
 }
 .search-recent-item {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  height: 34px;
-  padding: 0 0.5rem;
-  border-radius: 2px;
-  color: rgb(var(--ink-text) / 0.62);
-  font-size: var(--fs-md);
-  font-weight: 500;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.008em;
   text-align: left;
-  transition:
-    background-color 150ms var(--ease-std),
-    color 150ms var(--ease-std);
+  cursor: default;
 }
 .search-recent-item[data-highlighted="true"] {
-  color: var(--text);
-  outline: 2px solid var(--accent-hi);
-  outline-offset: -2px;
+  background: var(--selection-bg);
+  color: var(--accent-fg);
 }
 .search-recent-item[data-highlighted="true"] > svg {
-  color: var(--text-2);
+  color: inherit;
 }
 .search-recent-item > span {
   min-width: 0;
@@ -1314,11 +1431,17 @@ html[data-os="mac"] {
 }
 .search-recent-item > svg {
   flex: none;
+  width: 14px;
+  height: 14px;
   color: var(--text-3);
 }
 @media (hover: hover) and (pointer: fine) {
   .search-recent-item:hover {
-    color: var(--text);
+    background: var(--selection-bg);
+    color: var(--accent-fg);
+  }
+  .search-recent-item:hover > svg {
+    color: inherit;
   }
   .search-suggest-clear:hover {
     color: var(--text);
@@ -1352,29 +1475,47 @@ html[data-os="mac"] {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-/* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
+/* A page toolbar's pickers: native macOS bezel pop-up pills matching the segmented control's height. */
 .discover-controls .select-trigger,
 .library-toolbar .select-trigger,
 .library-filters .select-trigger,
 .downloads-toolbar .select-trigger,
 .seasons-picker .select-trigger:not([data-size="large"]) {
   width: auto;
-  min-width: 9.5rem;
-  min-height: 38px;
-  padding: 0 0.75rem 0 1rem;
+  min-width: 8.5rem;
+  min-height: 32px;
+  padding: 0 0.625rem 0 0.875rem;
   border: 0;
   border-radius: var(--r-pill);
-  background: var(--glass);
-  backdrop-filter: var(--blur-control);
-  box-shadow: 0 0 0 1px var(--glass-edge);
-  font-weight: 600;
+  background: var(--bezel-bg);
+  box-shadow: var(--bezel-shadow);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
 }
 
 /* --- macOS: the window keeps its traffic lights (tauri.macos.conf.json puts
-       them at 20px from the left, centred in the navbar), so the bars that
-       start at the top left begin after them. */
+       them at 20px from the left, centred on the navbar's 76px row), so the
+       bars that start at the top left begin after them.
+       The lights sit at a fixed place on screen, but Settings → Interface
+       size zooms the page (--ui-zoom, App.tsx): the room kept for them and
+       the rows they line up with are divided back out of the zoom, so at any
+       size the bar keeps clear of them and its row stays centred on them. In
+       fullscreen macOS hides them, and nothing makes room. */
 html[data-os="mac"] {
-  --traffic-lights: 88px;
+  --traffic-lights: calc(88px / var(--ui-zoom, 1));
+}
+html[data-os="mac"][data-fullscreen] {
+  --traffic-lights: 0px;
+}
+/* The row the lights are centred on: 76 screen px whatever the zoom. Back (here, and the player's, which stands
+   where the navbar's does) is centred on it. */
+html[data-os="mac"]:not([data-fullscreen]) {
+  --mac-row: max(calc(76px / var(--ui-zoom, 1)), 44px);
+  --back-top: calc((var(--mac-row) - var(--back-box)) / 2);
+}
+html[data-os="mac"]:not([data-fullscreen]) .navbar {
+  height: var(--mac-row);
 }
 /* The window is transparent (mpv draws under the page), which costs it the
    native rounded corners and edge: draw them. */
@@ -1396,8 +1537,7 @@ html[data-os="mac"] .account-bar {
 }
 html[data-os="mac"] .player-top {
   --bar-left: var(--traffic-lights);
-}
-html[data-os="mac"] .options-close {
+}html[data-os="mac"] .options-close {
   left: var(--traffic-lights);
 }
 /* TV mode is fullscreen: square, edge to edge. */

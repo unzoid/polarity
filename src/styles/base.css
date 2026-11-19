@@ -4,6 +4,11 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
 html,
 body,
 #root {
@@ -12,6 +17,7 @@ body,
 }
 
 body {
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--text);
   font: 100%/1.5 var(--font);
@@ -118,12 +124,19 @@ button {
   border: 0;
   padding: 0;
   cursor: pointer;
+  touch-action: manipulation;
 }
 button:disabled {
   cursor: default;
 }
-/* Anything you can click shows the hand, like the web. */
-:is(a[href], summary, [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="option"], [role="tab"], [role="radio"], [role="switch"], [role="slider"], select, input:is([type="checkbox"], [type="radio"], [type="range"], [type="color"]), label:has(> input:is([type="checkbox"], [type="radio"]))):not(:disabled, [aria-disabled="true"]) {
+a[href],
+[role="button"],
+[role="tab"],
+[role="switch"] {
+  touch-action: manipulation;
+}
+/* Native desktop feel: links show the hand; menus, options, tabs and switches keep the system arrow. */
+:is(a[href], summary, [role="slider"]):not(:disabled, [aria-disabled="true"]) {
   cursor: pointer;
 }
 
@@ -507,36 +520,34 @@ img[data-logo-look="halo-dark"] {
   z-index: var(--z-dropdown);
   user-select: none;
 }
-/* T3 Code's popover: solid, a hairline border with a 1px top highlight, a soft
-   shadow, and a crisp scale+opacity entrance/exit from its trigger. */
+/* Native macOS Tahoe dropdown popover: 3-layer AppKit rim, concentric squircle corners, 13px rows. */
 .select-popup {
   min-width: var(--anchor-width);
-  border-radius: 10px;
-  border: 1px solid var(--fill-3);
-  background: var(--tone-1);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--ink) / 0.05),
-    0 12px 32px -12px var(--scrim-3);
+  border: 0;
+  border-radius: 15px;
+  corner-shape: superellipse(1.45);
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-menu);
   font-family: var(--font);
   color: var(--text);
   outline: none;
   transform-origin: var(--transform-origin);
   transition:
-    opacity 140ms var(--ease-out),
+    opacity 120ms var(--ease-out),
     transform 140ms var(--ease-out);
 }
 .select-popup[data-starting-style],
 .select-popup[data-ending-style] {
   opacity: 0;
-  transform: scale(0.97);
+  transform: scale(0.97) translateY(-2px);
 }
 .select-popup[data-ending-style] {
-  transition-duration: 100ms;
+  transition-duration: 90ms;
 }
 .select-list {
   max-height: min(var(--available-height), 22rem);
   overflow-y: auto;
-  padding: 0.25rem;
+  padding: 5px;
   outline: none;
   /* Scrolls by wheel, keys and drag; a bar inside a menu is just clutter. */
   scrollbar-width: none;
@@ -548,11 +559,14 @@ img[data-logo-look="halo-dark"] {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-height: 1.75rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--r-xs);
-  font-size: var(--fs-md);
-  cursor: pointer;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.008em;
+  cursor: default;
   outline: none;
 }
 /* The season picker is the TV options menu (.tv-card-menu): a frosted glass
@@ -617,7 +631,8 @@ img[data-logo-look="halo-dark"] {
   }
 }
 .select-item[data-highlighted] {
-  background: rgb(var(--ink) / 0.07);
+  background: var(--selection-bg);
+  color: var(--accent-fg);
 }
 .select-item[data-selected] {
   font-weight: 600;
@@ -629,7 +644,10 @@ img[data-logo-look="halo-dark"] {
 .select-item-check {
   display: grid;
   flex: none;
-  opacity: 0.85;
+  color: var(--accent);
+}
+.select-item[data-highlighted] .select-item-check {
+  color: var(--accent-fg);
 }
 
 /* A panel with views (components/ViewStack.tsx: the profile menu, the party menu). Between views its height

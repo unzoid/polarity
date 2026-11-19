@@ -19,30 +19,35 @@
   padding: calc(var(--nav-h) + 0.75rem) var(--gutter) 0 var(--content-start);
 }
 .hero {
-  --hero-h: clamp(420px, 68vh, 760px);
+  --hero-h: clamp(420px, 68svh, 760px);
 }
 .hero-card {
   position: relative;
   height: var(--hero-h);
   border-radius: var(--r-panel);
+  corner-shape: superellipse(1.45);
   overflow: hidden;
   isolation: isolate;
   cursor: pointer;
   /* Up and down still scroll the page; sideways is the card's swipe. */
   touch-action: pan-y;
+  /* Continuous touch drag follow (useHeroSwipe) with smooth spring-like settle back to center. */
+  transform: translate3d(var(--hero-drag-x, 0px), 0, 0);
+  transition: transform 280ms var(--ease-out);
   /* A fine light outline, as Netflix's card has; no drop shadow in dark mode, which read as a vignette on the coloured page. */
   box-shadow: 0 0 0 1px rgb(var(--ink) / 0.16);
 }
-/* Inner specular glass rim along the top edge and frame. */
+.hero-card[data-dragging] {
+  transition: none;
+}
+/* Crisp native hairline framing the hero card. */
 .hero-card::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 3;
   border-radius: inherit;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.2),
-    inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
   pointer-events: none;
 }
 :root[data-scheme="light"] .hero-card {
@@ -293,6 +298,18 @@
   gap: 0.75rem;
   margin-top: 0.75rem;
 }
+/* Clean matte circular buttons beside the primary CTA on hero artwork (no blurry glass). */
+.hero-actions .btn.btn-icon,
+.hero-steps .btn.btn-icon {
+  background: rgb(28 28 32 / 0.72);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+}
+@media (hover: hover) and (pointer: fine) {
+  .hero-actions .btn.btn-icon:hover,
+  .hero-steps .btn.btn-icon:hover {
+    background: rgb(44 44 48 / 0.88);
+  }
+}
 /* Previous and next, side by side at the card's corner (test report 1, item 15). */
 .hero-steps {
   position: absolute;
@@ -328,10 +345,10 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 5px 6px;
+  padding: 6px 8px;
   border-radius: var(--r-pill);
-  background: rgb(0 0 0 / 0.25);
-  backdrop-filter: var(--blur-control);
+  background: rgb(18 18 20 / 0.68);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
   pointer-events: auto;
 }
 .hero-dot {
@@ -376,9 +393,13 @@
   animation: dot-fill linear both;
 }
 .hero-dot-fill[data-paused="true"],
-.hero-card:hover .hero-dot-fill,
 .hero-card:focus-within .hero-dot-fill {
   animation-play-state: paused;
+}
+@media (hover: hover) and (pointer: fine) {
+  .hero-card:hover .hero-dot-fill {
+    animation-play-state: paused;
+  }
 }
 /* A whole pill sliding in from the left under the clip, so its right end stays round (#33); not scaleX,
    which would squash the end flat, and not a clip-path, which the browser redraws on the main thread on
@@ -643,12 +664,26 @@
 .row-paddle svg {
   position: relative;
   opacity: var(--edge-shown);
+  /* Drifts in from its edge as it shows, settling with the blur behind it. */
+  translate: calc((1 - var(--edge-shown)) * var(--paddle-drift, 6px)) 0;
   /* Bright art behind the edge (a sky, a white cover) would swallow a bare
      white chevron. */
   filter: drop-shadow(0 1px 3px var(--scrim-3));
   transition:
-    opacity var(--dur-fast) var(--ease-std),
+    opacity 220ms var(--ease-std),
+    translate 220ms var(--ease-std),
     transform var(--dur-press) var(--ease-out);
+}
+.row-paddle[data-dir="prev"] {
+  --paddle-drift: -6px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .row-viewport:hover .row-paddle svg {
+    transition:
+      opacity 340ms var(--ease-out),
+      translate 420ms var(--ease-out),
+      transform var(--dur-press) var(--ease-out);
+  }
 }
 :root[data-scheme="light"] .row-paddle svg {
   filter: drop-shadow(0 1px 3px rgb(255 255 255 / 0.72));
@@ -675,21 +710,28 @@
    compositor layer even when transparent, and a long page has two edges of
    four layers per shelf: hundreds, laid out again on every scrolled frame. The
    blur goes once the fade-out has finished, and comes at once with the fade-in. */
+/* Comes in slower than it goes, on an ease-out, so the edge softens into focus rather than switching on. */
 .row-paddle .edge-blur i {
   backdrop-filter: none;
   transition:
-    opacity var(--dur-fast) var(--ease-std),
-    backdrop-filter 0s linear var(--dur-fast);
+    opacity 240ms var(--ease-std),
+    backdrop-filter 0s linear 240ms;
+}
+.row-paddle .edge-blur::before {
+  transition: opacity 240ms var(--ease-std);
 }
 @media (hover: hover) and (pointer: fine) {
   .row-viewport:hover .row-paddle .edge-blur i {
     backdrop-filter: var(--edge-filter);
-    transition: opacity var(--dur-fast) var(--ease-std);
+    transition: opacity 380ms var(--ease-out);
+  }
+  .row-viewport:hover .row-paddle .edge-blur::before {
+    transition: opacity 380ms var(--ease-out);
   }
 }
 .row-viewport:has(:focus-visible) .row-paddle .edge-blur i {
   backdrop-filter: var(--edge-filter);
-  transition: opacity var(--dur-fast) var(--ease-std);
+  transition: opacity 380ms var(--ease-out);
 }
 .row-viewport[data-start="true"] .row-paddle[data-dir="prev"] .edge-blur i,
 .row-viewport[data-end="true"] .row-paddle[data-dir="next"] .edge-blur i,
@@ -761,6 +803,7 @@
      image in it) collapsed to nothing on macOS. */
   width: 100%;
   border-radius: var(--r-card);
+  corner-shape: superellipse(1.45);
   background: var(--frame-bg);
   transition: transform var(--dur-base) var(--ease-out);
 }
@@ -846,21 +889,34 @@
 .card-play {
   position: absolute;
   inset: 0;
+  z-index: 2;
   margin: auto;
-  width: 48px;
-  height: 48px;
-  padding-left: 2px;
+  width: 50px;
+  height: 50px;
+  padding-left: 3px;
   border-radius: var(--r-pill);
   display: grid;
   place-items: center;
-  background: var(--glass-control);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
-  backdrop-filter: var(--blur-control);
+  background: rgb(24 24 28 / 0.84);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.16),
+    0 6px 18px -4px rgb(0 0 0 / 0.5);
   opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-std), transform var(--dur-press) var(--ease-out);
+  transform: scale(0.92);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-std);
   border: 0;
   color: inherit;
-  pointer-events: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+@media (hover: hover) and (pointer: fine) {
+  .card-play:hover {
+    background: rgb(24 24 28 / 0.96);
+    transform: scale(1.06);
+  }
 }
 :root[data-touch="true"] .card-play,
 .card-play:focus-visible {
@@ -963,9 +1019,12 @@
     z-index: 1;
     transform: scale(1.04);
   }
-  .card:hover .card-frame::before,
+  .card:hover .card-frame::before {
+    opacity: 1;
+  }
   .card:hover .card-play {
     opacity: 1;
+    transform: scale(1);
   }
   .card:hover:active .card-frame {
     transform: scale(1.01);
@@ -1094,7 +1153,7 @@
     bottom: auto;
   }
   .home .hero {
-    --hero-h: clamp(420px, 68vh, 640px);
+    --hero-h: clamp(420px, 68svh, 640px);
   }
   .home .hero-logo {
     max-height: 112px;
@@ -1229,8 +1288,7 @@
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: calc(var(--nav-h) * 0.6) var(--gutter) var(--gutter);
-  background: rgb(0 0 0 / 0.78);
-  backdrop-filter: blur(14px);
+  background: rgb(0 0 0 / 0.82);
   animation: trailer-in var(--dur-base) var(--ease-out);
 }
 @keyframes trailer-in {

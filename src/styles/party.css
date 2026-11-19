@@ -514,7 +514,7 @@
 .party-popover {
   --fit-dur: var(--dur-base);
   width: min(22rem, calc(100vw - 1.5rem));
-  max-height: min(42rem, calc(100vh - 5rem));
+  max-height: min(42rem, calc(100dvh - 5rem));
   overflow-y: auto;
   overscroll-behavior: contain;
   /* The menus' surface (tokens.css --surface-menu). */
@@ -660,9 +660,15 @@
     color var(--dur-fast) var(--ease-out),
     transform var(--dur-press) var(--ease-out);
 }
-.party-code-copy:is(:hover, :focus-visible) {
+.party-code-copy:focus-visible {
   background: var(--fill-3);
   color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .party-code-copy:hover {
+    background: var(--fill-3);
+    color: var(--text);
+  }
 }
 .party-code-copy:active {
   transform: scale(0.94);
@@ -689,8 +695,14 @@
   text-align: left;
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-.party-menu-row:is(:hover, :focus-visible) {
+.party-menu-row:focus-visible,
+.party-menu-row:active {
   background: var(--fill-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .party-menu-row:hover {
+    background: var(--fill-2);
+  }
 }
 .party-menu-row > svg:first-child {
   flex: none;
@@ -723,9 +735,16 @@
   color: var(--text-2);
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-.party-menu-back:is(:hover, :focus-visible) {
+.party-menu-back:focus-visible,
+.party-menu-back:active {
   background: var(--fill-2);
   color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .party-menu-back:hover {
+    background: var(--fill-2);
+    color: var(--text);
+  }
 }
 .party-menu-group {
   display: flex;
@@ -912,4 +931,232 @@ body:has(.player[data-started="true"]) :is(.party-link-card, .party-popover) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: color-mix(in srgb, var(--tone-3) 96%, transparent);
+}
+
+/* --- Starting a party (PartyStart): one centred column. The party's mark over its name and one line on how it
+       works; Start the whole width; then joining by code in six tiles (the way a code is shown once you're in,
+       .party-code), and putting a link on. */
+.party-start-pane {
+  align-items: stretch;
+  gap: 0.875rem;
+  padding: 0.5rem 0.375rem 0.25rem;
+}
+.party-start-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+  text-align: center;
+}
+.party-start-mark {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.375rem;
+  border-radius: 32%;
+  corner-shape: superellipse(1.45);
+  color: #fff;
+  background: radial-gradient(120% 120% at 28% 18%, color-mix(in srgb, var(--accent-hi) 82%, white), var(--accent) 62%, color-mix(in srgb, var(--accent) 70%, black));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.32),
+    0 10px 26px -8px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+.party-start-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+}
+.party-start-head > .party-lede {
+  max-width: 30ch;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.party-start-pane .party-start {
+  justify-content: center;
+  margin-top: 0;
+}
+.party-start-pane > .party-or {
+  margin: 0.25rem 0 -0.125rem;
+}
+/* Copy Party Log | End Party: two even buttons side by side, smaller than the panel's main actions. */
+.party-buttons.party-buttons-pair {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 0.5rem;
+}
+.party-buttons-pair > .btn {
+  height: 2.375rem;
+  padding: 0 0.75rem;
+  font-size: var(--fs-sm);
+  justify-content: center;
+}
+
+/* The code in six tiles: the real field lies over them, unseen, so typing, pasting and the keys work as ever; the
+   next tile to fill is ringed, with a caret, while it has focus. */
+.party-join[data-slots] {
+  align-items: start;
+}
+.party-slots {
+  position: relative;
+  display: block;
+  min-width: 0;
+  cursor: text;
+}
+.party-join-input.party-slots-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  letter-spacing: 0;
+}
+.party-slots-input::selection {
+  background: transparent;
+}
+.party-slots-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.375rem;
+}
+.party-slots-row > span {
+  display: grid;
+  place-items: center;
+  height: 2.75rem;
+  border-radius: var(--r-md);
+  background: rgb(var(--ink) / 0.05);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  font-size: 1.25rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+.party-slots-row > span[data-filled] {
+  background: rgb(var(--ink) / 0.1);
+}
+.party-slots:focus-within .party-slots-row > span[data-next] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.party-slots:focus-within .party-slots-row > span[data-next]:not([data-filled])::after {
+  content: "";
+  width: 2px;
+  height: 1.25rem;
+  border-radius: 1px;
+  background: var(--accent-hi);
+  animation: party-caret 1.05s steps(1) infinite;
+}
+@keyframes party-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.party-slots[data-invalid] .party-slots-row > span {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.party-join[data-slots] .party-join-btn {
+  height: 2.75rem;
+}
+
+/* --- The Watch Party panel in the player's dock: the code as raised keys, who's here as rows in a well, and every
+       switch in one grouped list (a hairline between rows) instead of loose lines down the column. */
+.options-overlay[data-place="dock"] .options-column:has(.party-start-pane) {
+  width: 360px;
+}
+.options-overlay[data-place="dock"] .options-column:has(.party-column) .options-custom {
+  padding: 2px 6px 8px;
+}
+.options-overlay[data-place="dock"] .options-column + .options-column:has(.party-column) .options-custom {
+  padding: 2px 8px 8px 6px;
+}
+.options-overlay[data-place="dock"] .party-code > span {
+  width: 2.875rem;
+  height: 3.375rem;
+  border-radius: 12px;
+  font-size: 1.625rem;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.06));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    0 6px 14px -6px rgb(0 0 0 / 0.6);
+}
+.options-overlay[data-place="dock"] .party-column > section + section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top-color: rgb(255 255 255 / 0.07);
+}
+.options-overlay[data-place="dock"] .party-column > section:has(> .party-switch) {
+  gap: 0;
+  margin-top: 0;
+  padding: 2px 14px;
+  border: 0;
+  border-radius: 16px;
+  corner-shape: superellipse(1.45);
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.options-overlay[data-place="dock"] .party-column > section:has(> .party-switch) + section {
+  border-top: 0;
+}
+.options-overlay[data-place="dock"] .party-switch {
+  padding: 11px 0;
+}
+.options-overlay[data-place="dock"] .party-switch + .party-switch {
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+}
+.options-overlay[data-place="dock"] .party-switch-text > span:first-child {
+  font-size: 14px;
+  font-weight: 600;
+}
+.options-overlay[data-place="dock"] .party-switch-caption {
+  font-size: 12px;
+  color: rgb(235 235 245 / 0.5);
+}
+.options-overlay[data-place="dock"] .party-column .party-members {
+  margin: 0;
+  gap: 4px;
+}
+.options-overlay[data-place="dock"] .party-member {
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.05);
+}
+.options-overlay[data-place="dock"] .party-kicker {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(235 235 245 / 0.5);
+}
+/* Watch a Link: a recessed capsule field with its button beside it, both round. */
+.options-overlay[data-place="dock"] .party-link {
+  gap: 0.5rem;
+}
+.options-overlay[data-place="dock"] .party-link .party-join-input {
+  height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.26);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  font-size: 13.5px;
+  transition: box-shadow var(--dur-fast) var(--ease-std);
+}
+.options-overlay[data-place="dock"] .party-link .party-join-input:focus {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.options-overlay[data-place="dock"] .party-link .party-join-input[data-invalid="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+.options-overlay[data-place="dock"] .party-link .party-join-btn {
+  height: 2.5rem;
+  border-radius: 999px;
 }

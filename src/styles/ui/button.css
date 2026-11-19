@@ -27,31 +27,30 @@
 .btn svg {
   flex: none;
 }
-/* Primary: the light pill ("▶ Resume S2, E3"). One per screen. */
+/* Primary: solid crisp high-contrast pill ("▶ Resume S2, E3"). One per screen. */
 .btn-primary {
   background: var(--pill-light);
   color: var(--text-on-light);
   padding-left: 1.25rem;
+  box-shadow: 0 2px 10px -2px rgb(0 0 0 / 0.28);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
-/* Secondary: glass. Round when it holds a single icon. */
+/* Secondary: clean solid matte surface with crisp hairline border (no murky web blur). */
 .btn-glass {
   background: var(--glass-control);
-  backdrop-filter: var(--blur-control);
   box-shadow: var(--glass-highlight);
 }
-/* Icon-only buttons: just the glyph at rest — no fill, no blur, no edge. A faint
-   circle appears on hover/press. The glyph gets a tight halo in the scheme's own (dark under white glyphs,
-   light under dark ones) so it stays legible over artwork; on the plain page it doesn't show, where the wide
-   black shadow it had read as a smudge. (Doubled selector beats .btn-glass regardless of order.) */
+/* Icon-only buttons: clean glyph at rest, crisp circle on hover/press. */
 .btn.btn-icon {
   width: 46px;
   padding: 0;
   background: transparent;
-  backdrop-filter: none;
   box-shadow: none;
   transition:
     transform var(--dur-press) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-std);
+    background-color var(--dur-fast) var(--ease-out);
 }
 .btn.btn-icon svg {
   filter: drop-shadow(0 1px 1.5px var(--text-halo));
@@ -67,7 +66,7 @@
     background: var(--glass-control-hover);
   }
   .btn.btn-icon:hover {
-    background: var(--fill-4);
+    background: var(--fill-3);
   }
 }
 

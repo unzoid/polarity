@@ -12,19 +12,28 @@ export function AccountShell({
   header,
   plain = false,
   leaving = false,
+  handoffGo = false,
 }: {
   children: ReactNode;
   header?: ReactNode;
   plain?: boolean;
   /** On its way out over the app, which is already drawn underneath (see App's Gate). */
   leaving?: boolean;
+  /** Set one frame after leaving once the app underneath has committed, so the fade doesn't race first-boot layout. */
+  handoffGo?: boolean;
 }) {
   const tv = useTvMode();
   useTvArrows(tv && !leaving);
 
   return (
-    <div className="account-shell" data-plain={plain || undefined} data-leaving={leaving || undefined} data-nav-scope={tv || undefined}>
-      {!plain && <FlutedGlow className="account-glow" />}
+    <div
+      className="account-shell"
+      data-plain={plain || undefined}
+      data-leaving={leaving || undefined}
+      data-handoff-go={handoffGo || undefined}
+      data-nav-scope={tv || undefined}
+    >
+      {!plain && <FlutedGlow className="account-glow" paused={leaving} />}
       <header className="account-bar" data-tauri-drag-region>
         {/* Plain (sign-in): the mark sits over the form instead. */}
         <span className="account-brand" data-tauri-drag-region>

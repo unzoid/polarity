@@ -20,7 +20,7 @@ import {
   useRecommend,
   useSettings,
 } from "../lib/net";
-import { heroBackdropUrl, prefersReducedMotion, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
+import { heroBackdropUrl, prefersReducedMotion, rubberband, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
 import { useNavigation } from "../lib/router";
 import {
   catalogKey,
@@ -263,8 +263,12 @@ export function HeroCarousel({
         className="hero-card"
         ref={heroRef}
         data-art={gate["data-art"]}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
+        onPointerEnter={(e) => {
+          if (e.pointerType !== "touch") setHovered(true);
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType !== "touch") setHovered(false);
+        }}
         onFocusCapture={() => setFocused(true)}
         onBlurCapture={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
@@ -363,26 +367,65 @@ const SWIPE_VELOCITY = 0.3;
  * the title.
  */
 function useHeroSwipe(enabled: boolean, step: (dir: 1 | -1) => void, swiped: React.RefObject<boolean>) {
-  const start = useRef<{ id: number; x: number; y: number; t: number } | null>(null);
+  const start = useRef<{ id: number; x: number; y: number; lastX: number; lastT: number; vx: number; tracking: boolean } | null>(null);
   if (!enabled) return {};
+  const reset = (el: HTMLElement | null) => {
+    if (!el) return;
+    delete el.dataset.dragging;
+    el.style.removeProperty("--hero-drag-x");
+  };
   return {
-    onPointerDown: (e: React.PointerEvent) => {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
       swiped.current = false;
       if (e.pointerType !== "touch" || !e.isPrimary) return;
-      start.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp };
+      start.current = { id: e.pointerId, x: e.clientX, y: e.clientY, lastX: e.clientX, lastT: e.timeStamp, vx: 0, tracking: false };
     },
-    onPointerUp: (e: React.PointerEvent) => {
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const s = start.current;
+      if (!s || s.id !== e.pointerId) return;
+      const dx = e.clientX - s.x;
+      const dy = e.clientY - s.y;
+      if (!s.tracking) {
+        if (Math.abs(dx) < SWIPE_MIN_PX) return;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          start.current = null;
+          return;
+        }
+        s.tracking = true;
+        swiped.current = true;
+        if (!prefersReducedMotion()) e.currentTarget.dataset.dragging = "";
+      }
+      const dt = e.timeStamp - s.lastT;
+      if (dt > 0) {
+        const inst = (e.clientX - s.lastX) / dt;
+        s.vx = s.vx === 0 ? inst : inst * 0.65 + s.vx * 0.35;
+        s.lastX = e.clientX;
+        s.lastT = e.timeStamp;
+      }
+      if (!prefersReducedMotion()) {
+        const w = e.currentTarget.offsetWidth || 360;
+        const follow = rubberband(dx, w, 0.28);
+        e.currentTarget.style.setProperty("--hero-drag-x", `${follow.toFixed(1)}px`);
+      }
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => {
       const s = start.current;
       start.current = null;
+      reset(e.currentTarget);
       if (!s || s.id !== e.pointerId) return;
       const dx = e.clientX - s.x;
       if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(e.clientY - s.y)) return;
       swiped.current = true;
-      const velocity = Math.abs(dx) / Math.max(1, e.timeStamp - s.t);
-      if (Math.abs(dx) >= SWIPE_DISTANCE_PX || velocity > SWIPE_VELOCITY) step(dx < 0 ? 1 : -1);
+      const stale = e.timeStamp - s.lastT > 80;
+      const vx = stale ? 0 : s.vx;
+      const avgV = Math.abs(dx) / Math.max(1, e.timeStamp - s.lastT || 1);
+      const speed = Math.abs(vx) > 0 ? Math.abs(vx) : avgV;
+      const reversed = vx !== 0 && Math.sign(vx) !== Math.sign(dx) && Math.abs(vx) > SWIPE_VELOCITY;
+      if (!reversed && (Math.abs(dx) >= SWIPE_DISTANCE_PX || speed > SWIPE_VELOCITY)) step(dx < 0 ? 1 : -1);
     },
-    onPointerCancel: () => {
+    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => {
       start.current = null;
+      reset(e.currentTarget);
     },
   };
 }
@@ -527,7 +570,8 @@ function ContinueRow() {
 }
 
 /**
- * Single-focus Continue Watching card: clicking resumes straight away (the title's page is in the context menu).
+ * Continue Watching card: clicking the play button resumes straight away; clicking
+ * anywhere else on the card opens the title's page.
  * With seasons as separate shows, an anime shows the entry the episode is part of (#22).
  */
 function ContinueCard({ progress: p }: { progress: Progress }) {
@@ -536,6 +580,7 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
   const { item, entry, opens } = useEntryShown(stored, p.videoId);
   // Which page it opens on is known before the menu is used (mostly a stored anime link: no network).
   useEffect(() => prefetchTitlePage(p.type, opens), [p.type, opens]);
+  const open = () => navigate({ name: "detail", type: p.type, id: opens, preview: opens === item.id ? item : undefined });
   // The player goes on with the saved source only while the add-ons still offer it (#394).
   const resume = () => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId });
   const fraction = p.duration ? p.position / p.duration : 0;
@@ -562,14 +607,24 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
       title={captionTitle}
       // Always shown: it's what you're watching, not a description.
       keepCaption
-      onClick={resume}
+      onClick={open}
+      actions={
+        <button
+          type="button"
+          className="card-play"
+          aria-label={`Resume ${item.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            resume();
+          }}
+        >
+          <Play size={20} fill="currentColor" />
+        </button>
+      }
       {...cardMenu(stored, p)}
     >
       {/* The logo names the show; an entry of it goes by its own name. */}
       <ArtTitle name={item.name} logo={entry ? undefined : logo} pending={!entry && meta.isLoading} />
-      <span className="card-play" aria-hidden>
-        <Play size={20} fill="currentColor" />
-      </span>
       {/* Where you are, on the picture like Apple TV's: a bar and the time left, over a gradient (#38). */}
       <div className="card-resume">
         <ProgressBar fraction={fraction} />
