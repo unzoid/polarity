@@ -22,7 +22,6 @@ struct LicencesView: View {
                 ForEach(packages, id: \.self) { file in link(file) }
             }
         }
-        .padding(.horizontal, 80)
         .navigationTitle("Licences")
         .navigationDestination(for: URL.self) { file in
             LicenceText(file: file)
@@ -65,7 +64,7 @@ private struct LicenceText: View {
                         .focusable()
                 }
             }
-            .padding(80)
+            .padding(.vertical, 24)
         }
         .navigationTitle(file.lastPathComponent)
     }

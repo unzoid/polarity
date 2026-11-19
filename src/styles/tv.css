@@ -246,16 +246,65 @@
     linear-gradient(to top, transparent, #000 45%);
   mask-composite: intersect;
 }
+/* Multi-stop radial and linear reading scrims so bright snow/sky art and trailers keep 10-foot WCAG contrast. */
+.tv-stage::before,
+.tv-detail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+/* The stage's scrim runs on past the stage, under the rails, and fades out there: ended at the stage's edge it
+   drew a hard line across the screen where the rails begin. */
+.tv-stage::before {
+  bottom: calc(-1 * var(--tv-scrim-tail, 24vh));
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--tv-scrim-tail, 24vh) - 2rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--tv-scrim-tail, 24vh) - 2rem), transparent 100%);
+  background:
+    radial-gradient(ellipse 58% 70% at 16% 62%, rgb(0 0 0 / 0.68) 0%, rgb(0 0 0 / 0.44) 42%, rgb(0 0 0 / 0.16) 72%, transparent 100%),
+    linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.62) 0%,
+      rgb(0 0 0 / 0.52) 18%,
+      rgb(0 0 0 / 0.34) 34%,
+      rgb(0 0 0 / 0.14) 48%,
+      transparent 62%
+    );
+}
+.tv-detail::before {
+  background:
+    radial-gradient(ellipse 56% 85% at 18% 52%, rgb(0 0 0 / 0.74) 0%, rgb(0 0 0 / 0.48) 45%, rgb(0 0 0 / 0.18) 74%, transparent 100%),
+    linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.72) 0%,
+      rgb(0 0 0 / 0.6) 20%,
+      rgb(0 0 0 / 0.38) 36%,
+      rgb(0 0 0 / 0.15) 50%,
+      transparent 65%
+    );
+}
 .tv-stage-info {
   position: absolute;
+  z-index: 2;
   left: var(--tv-gutter);
   bottom: 2.25rem;
   width: min(42vw, 36rem);
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  /* Re-keyed on every settled focus move: a plain fade. The art's cross-fade is the motion here. */
-  animation: fade-in var(--dur-fast) var(--ease-out);
+  text-shadow:
+    0 1px 3px rgb(0 0 0 / 0.75),
+    0 2px 14px rgb(0 0 0 / 0.55);
+}
+.tv-stage-info[data-art="ready"] {
+  animation: tv-stage-in 240ms var(--ease-out);
+}
+@keyframes tv-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 .tv-stage-logo {
   width: auto;
@@ -304,11 +353,14 @@
   font-size: 0.95rem;
   font-weight: 600;
 }
-/* The age rating's box (AgeRatingBadge), sized to the facts line from across the room. */
+/* The age rating's box (AgeRatingBadge) and format badges, sized to the facts line from across the room. */
 .tv-facts .format-badge {
   height: 1.35em;
   padding: 0 0.35em;
   font-size: 0.75em;
+}
+.tv-facts .format-badge[data-long] {
+  font-size: 0.68em;
 }
 .tv-facts > span::before {
   content: "•";
@@ -316,6 +368,10 @@
   width: var(--tv-fact-gap);
   text-align: center;
   color: var(--text-3);
+}
+.tv-facts > .format-badges::before {
+  flex: none;
+  margin-right: -0.3125rem;
 }
 .imdb-badge {
   display: inline-flex;
@@ -337,6 +393,7 @@
   color: #000;
   font-weight: 900;
   letter-spacing: -0.02em;
+  text-shadow: none;
 }
 /* The score sits on whatever's behind it, just past the mark. */
 .imdb-badge-score {
@@ -360,10 +417,16 @@
   overflow: hidden;
   text-wrap: pretty;
 }
+/* Reserve the synopsis height while metadata loads so bottom-anchored logos don't jump up when it arrives. */
+.tv-stage-description[data-loading] {
+  min-height: calc(1.45em * 3);
+}
 
 /* --- Rails: the focused one always sits just under the stage ---------------- */
 .tv-rails {
   position: absolute;
+  /* Above the stage's scrim (which runs on under them), so it never shades the cards or cuts the top row's title. */
+  z-index: 2;
   inset: calc(var(--tv-stage-h) - 1rem) 0 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -371,6 +434,7 @@
   /* The focused row stops just clear of the fade along the top edge. No
      spare room past the last row: the list ends where its content does, so
      the last few rows settle lower instead of scrolling into empty space. */
+  padding-top: 0.5rem;
   padding-bottom: 2rem;
   scroll-padding-top: 0.5rem;
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 1rem);
@@ -408,9 +472,16 @@
   padding: 1.5rem var(--tv-gutter) 1.6rem;
   scroll-padding-inline-start: var(--tv-gutter);
 }
+/* Outside a stage (Search, Person), focused posters reveal a 1-line caption underneath; make room below. */
+.tv-rail-track:has(.tv-card-caption) {
+  padding-bottom: 3.1rem;
+}
 /* IMDb badges sit just under the posters; the rail makes room for them. */
 .tv[data-card-ratings="true"]:not([data-rating-position="poster"]) .tv-rail-track:has(.card-rating) {
   padding-bottom: 3.4rem;
+}
+.tv[data-card-ratings="true"]:not([data-rating-position="poster"]) .tv-rail-track:has(.tv-card-caption):has(.card-rating) {
+  padding-bottom: 4.5rem;
 }
 .app.tv[data-card-ratings="true"] .card-rating[data-placement="below"] {
   position: absolute;
@@ -419,6 +490,9 @@
   min-height: 0;
   padding: 0;
   font-size: 0.85rem;
+}
+.app.tv[data-card-ratings="true"]:not([data-rating-position="poster"]) .tv-card:has(.tv-card-caption):is(:focus, [data-menu-open]) .card-rating[data-placement="below"] {
+  top: calc(100% + 2.05rem);
 }
 .app.tv[data-card-ratings="true"] .card-rating[data-placement="poster"] {
   top: 0.6rem;
@@ -460,6 +534,23 @@
   background: var(--surface-2);
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.05);
 }
+/* Angled specular glass rim and sheen across the lifted card's artwork (tvOS lockup feel). */
+.tv-card-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.18) 0%, rgb(255 255 255 / 0.05) 32%, transparent 56%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.28),
+    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.tv-card:not(.tv-genre):is(:focus, [data-menu-open]) .tv-card-frame::after {
+  opacity: 1;
+}
 /* The lifted card's shadow, faded in on a layer of its own: transitioning the
    frame's blurred box-shadow repainted two cards on every move. */
 .tv-card::before {
@@ -495,14 +586,50 @@
   z-index: 1;
   transform: scale(var(--tv-lift));
 }
+.tv-card:focus:active {
+  transform: scale(1.02);
+  transition-duration: var(--dur-press, 90ms);
+}
 .tv-card:is(:focus, [data-menu-open])::after {
   opacity: 1;
 }
+/* Floating 1-line title revealed below focused posters on screens without a stage (Search, Person). */
+.tv-card-caption {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  left: -0.5rem;
+  right: -0.5rem;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.75);
+  opacity: 0;
+  transform: translateY(0.25rem);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.tv-card:is(:focus, [data-menu-open]) .tv-card-caption {
+  opacity: 1;
+  transform: none;
+}
 /* A held direction (tv/held.ts): focus moves faster than the lift and the ring
    can finish, so they jump with it instead and the ring is always whole. */
-:root[data-nav-held] :is(.tv-card, .tv-rail, .tv-key, .tv-pill, .tv-nav-tab),
+:root[data-nav-held] :is(.tv-card, .tv-rail, .tv-key, .tv-pill, .tv-nav-tab, .tv-season, .tv-episode-main, .tv-settings-row, .tv-card-menu-item, .menu-item, .menu-roomy-item),
 :root[data-nav-held] .tv-card::before,
-:root[data-nav-held] .tv-card::after {
+:root[data-nav-held] .tv-card::after,
+:root[data-nav-held] .tv-card-frame::after,
+:root[data-nav-held] .tv-card-caption,
+:root[data-nav-held] .tv-card-menu-item::before,
+:root[data-nav-held] .menu-item::before,
+:root[data-nav-held] .menu-roomy-item::before,
+:root[data-nav-held] .tv .person-photo {
   transition-duration: 0ms;
 }
 .tv-card-scrim {
@@ -601,12 +728,13 @@
   font-weight: 700;
 }
 .tv-browse[data-layout="shelves"] .tv-rail-track {
-  /* No lift here, only the ring, so less room above and below. */
+  /* No lift here, only the ring, so less room above and below; trailing room so the last card's wide frame never clips. */
   padding-block: 1rem;
+  padding-inline-end: calc(var(--tv-gutter) + var(--shelf-wide) - var(--shelf-w));
 }
 .tv-browse[data-layout="shelves"] .tv-card {
   --tv-card-w: var(--shelf-w);
-  --tv-card-reach: calc(var(--shelf-wide) - var(--shelf-w));
+  --tv-card-reach: calc(var(--shelf-wide) - var(--shelf-w) + var(--tv-ring-gap) + var(--tv-ring));
   aspect-ratio: 2 / 3;
 }
 .tv-browse[data-layout="shelves"] .tv-card:is(:focus, [data-menu-open]),
@@ -654,7 +782,9 @@
 .tv-card:is(:focus, [data-menu-open]) .tv-card-wide {
   opacity: 1;
 }
-:root[data-nav-held] .tv-browse[data-layout="shelves"] :is(.tv-card-frame, .tv-card-wide) {
+:root[data-nav-held] .tv-browse[data-layout="shelves"] :is(.tv-card-frame, .tv-card-wide),
+:root[data-nav-held] .tv-browse[data-layout="shelves"] .tv-card::before,
+:root[data-nav-held] .tv-browse[data-layout="shelves"] .tv-card::after {
   transition-duration: 0ms;
 }
 /* The focused title's details, under its row (after the cards, though first in the markup). */
@@ -738,10 +868,13 @@
 
 /* Recent searches, under the keyboard. */
 .tv-recent {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
   margin-top: 0.75rem;
 }
 .tv-recent-head {
@@ -833,7 +966,14 @@
     transform var(--dur-fast) var(--ease-out);
 }
 .tv-key-wide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   font-size: 0.95rem;
+}
+.tv-key-wide .pad-glyph {
+  font-size: 0.78em;
 }
 .tv-key svg {
   width: 1.3rem;
@@ -903,12 +1043,16 @@
 }
 .tv-detail-body {
   position: absolute;
+  z-index: 2;
   inset: 0 auto 0 var(--tv-gutter);
   width: min(40vw, 36rem);
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 0.8rem;
+  text-shadow:
+    0 1px 3px rgb(0 0 0 / 0.75),
+    0 2px 14px rgb(0 0 0 / 0.55);
   animation: hero-content-in var(--dur-reveal) var(--ease-reveal);
 }
 .tv-detail-logo {
@@ -997,6 +1141,7 @@
   outline: none;
   background: var(--pill-light);
   color: var(--text-on-light);
+  text-shadow: none;
   transform: scale(1.04);
 }
 .tv-pill:disabled {
@@ -1035,6 +1180,7 @@
   outline: none;
   background: var(--pill-light);
   color: var(--text-on-light);
+  text-shadow: none;
   /* No scale: a transformed button would hold its label (absolutely placed against the row) to itself. */
 }
 .tv-quick[aria-pressed="true"]:not(:focus) {
@@ -1166,6 +1312,9 @@
 }
 
 /* --- Panels (episodes, sources) over the title page ------------------------------------ */
+.tv-panel-slot {
+  display: contents;
+}
 .tv-panel {
   position: absolute;
   inset: 0;
@@ -1174,9 +1323,19 @@
   backdrop-filter: blur(32px) saturate(140%);
   animation: tv-panel-in 280ms var(--ease-out);
 }
+.tv-panel-slot[data-leaving] .tv-panel {
+  pointer-events: none;
+  animation: tv-panel-out 160ms var(--ease-in, ease-in) forwards;
+}
 @keyframes tv-panel-in {
   from {
     opacity: 0;
+  }
+}
+@keyframes tv-panel-out {
+  to {
+    opacity: 0;
+    transform: scale(0.985);
   }
 }
 .tv-panel-logo {
@@ -1446,16 +1605,60 @@
   width: min(88rem, 100%);
   outline: none;
 }
+.tv-details-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.85rem 1.1rem;
+  margin: 0 -1.1rem 1rem;
+  border-radius: 0.9rem;
+  outline: none;
+  transition: background-color var(--dur-fast) var(--ease-std);
+}
+.tv-details-lead:focus {
+  outline: none;
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 0 0 var(--tv-ring) rgb(255 255 255 / 0.85);
+}
+.tv-details .score-row {
+  font-size: 1.05rem;
+  gap: 0.5rem 1.4rem;
+}
 .tv-details .details {
   padding-top: 0.5rem;
   border-top: 0;
 }
-.tv-details .people {
+.tv .people {
+  position: relative;
   grid-auto-columns: 9rem;
+  padding: 0.75rem 0.75rem 1rem;
+  margin: -0.75rem -0.75rem -0.5rem;
+  scroll-padding-inline-start: 0.75rem;
+  scrollbar-width: none;
 }
-.tv-details .person-photo {
+.tv .person-open {
+  outline: none;
+  border-radius: 0.85rem;
+}
+.tv .person-photo {
   width: 7.5rem;
   height: 7.5rem;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-std);
+}
+.tv .person-open:focus {
+  outline: none;
+}
+.tv .person-open:focus .person-photo {
+  transform: scale(var(--tv-lift));
+  box-shadow:
+    0 0 0 var(--tv-ring-gap) var(--tone-sunk, #000),
+    0 0 0 calc(var(--tv-ring-gap) + var(--tv-ring)) #fff,
+    0 1rem 2rem -0.75rem rgb(0 0 0 / 0.8);
+}
+.tv .person-open:focus .person-name {
+  color: var(--text);
 }
 /* Add to Playlist: one row per playlist, ticked if the title is in it. */
 .tv-playlist-list {
@@ -1965,7 +2168,7 @@
   padding-inline: 1.25rem;
 }
 /* On a light surface the glyph inverts. */
-:is(.btn-primary, .skip-button:focus) .pad-glyph {
+:is(.btn-primary, .skip-button:focus, .tv-key:focus) .pad-glyph {
   background: rgb(0 0 0 / 0.82);
   color: #fff;
 }
@@ -1977,6 +2180,10 @@
   z-index: var(--z-sheet);
   background: var(--scrim-2);
   animation: fade-in var(--dur-base) var(--ease-std);
+}
+.tv-menu-layer[data-leaving] {
+  pointer-events: none;
+  animation: tv-fade-out 160ms var(--ease-in, ease-in) forwards;
 }
 .tv-menu {
   position: absolute;
@@ -1991,9 +2198,22 @@
   box-shadow: 1px 0 0 var(--hairline);
   animation: tv-menu-in 240ms var(--ease-drawer);
 }
+.tv-menu-layer[data-leaving] .tv-menu {
+  animation: tv-menu-out 160ms var(--ease-in, ease-in) forwards;
+}
 @keyframes tv-menu-in {
   from {
     transform: translateX(-100%);
+  }
+}
+@keyframes tv-menu-out {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes tv-fade-out {
+  to {
+    opacity: 0;
   }
 }
 .tv-menu-me {
@@ -2104,6 +2324,24 @@
 .tv-card-menu-layer[data-dim] {
   background: var(--scrim-1);
   animation: fade-in 200ms var(--ease-std);
+}
+.tv-card-menu-layer[data-leaving] {
+  pointer-events: none;
+}
+.tv-card-menu-layer[data-dim][data-leaving] {
+  animation: tv-fade-out 160ms var(--ease-in, ease-in) forwards;
+}
+.tv-card-menu-layer[data-leaving] .tv-card-menu {
+  animation: tv-card-menu-out 160ms var(--ease-in, ease-in) forwards;
+}
+.tv-card-menu-layer[data-leaving] .tv-panel {
+  animation: tv-panel-out 160ms var(--ease-in, ease-in) forwards;
+}
+@keyframes tv-card-menu-out {
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
 }
 /* The one TV menu look. A popup menu anywhere in TV mode (components/ui/Menu.tsx: the player's More, Cast)
    is drawn as this menu too, so each rule names both. */
@@ -2291,6 +2529,7 @@
   border-radius: 1em;
   background: rgb(255 255 255 / 0.9);
   color: #111;
+  text-shadow: none;
   font-size: 0.85em;
   font-weight: 800;
   line-height: 1;
@@ -2300,12 +2539,11 @@
   font-size: 0.72em;
 }
 
-/* Mouse users get a way out: shown only while the pointer is in use. */
-.tv-exit {
+/* Mouse users get a way out (and back from pushed pages): shown only while the pointer is in use. */
+.tv-exit,
+.tv-back {
   position: absolute;
   z-index: var(--z-sheet);
-  right: var(--tv-gutter);
-  bottom: 1.25rem;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -2324,7 +2562,16 @@
     opacity var(--dur-base) var(--ease-std),
     background-color var(--dur-fast) var(--ease-std);
 }
-.tv-exit svg {
+.tv-exit {
+  right: var(--tv-gutter);
+  bottom: 1.25rem;
+}
+.tv-back {
+  left: var(--tv-gutter);
+  top: 1.65rem;
+}
+.tv-exit svg,
+.tv-back svg {
   width: 1.2rem;
   height: 1.2rem;
 }
@@ -2333,14 +2580,15 @@
   font-size: var(--fs-xs);
   color: var(--text-3);
 }
-.app.tv[data-cursor="shown"] .tv-exit {
+.app.tv[data-cursor="shown"] :is(.tv-exit, .tv-back) {
   opacity: 1;
   pointer-events: auto;
 }
 .app.tv[data-cursor="shown"] .tv-hints {
   opacity: 0;
 }
-.tv-exit:hover {
+.tv-exit:hover,
+.tv-back:hover {
   background: rgb(255 255 255 / 0.16);
 }
 
@@ -2351,9 +2599,16 @@
   :root[data-tv="true"] .menu {
     animation-name: fade-in;
   }
+  .tv-menu-layer[data-leaving] .tv-menu,
+  .tv-card-menu-layer[data-leaving] .tv-card-menu,
+  .tv-panel-slot[data-leaving] .tv-panel {
+    animation-name: tv-fade-out;
+  }
   .tv-card:is(:focus, [data-menu-open]),
+  .tv-card:focus:active,
   .tv-rail-track .tv-card:is(:focus, [data-menu-open]) ~ .tv-card,
   .tv-rail-track .tv-card:has(~ .tv-card:is(:focus, [data-menu-open])),
+  .tv .person-open:focus .person-photo,
   .tv-pill:focus,
   .tv-key:focus,
   .tv-nav-tab:focus,
@@ -2362,6 +2617,7 @@
     transform: none;
   }
   .tv-stage-info,
+  .tv-stage-info[data-art="ready"],
   .tv-detail-body {
     animation: none;
   }
@@ -2436,6 +2692,7 @@
 }
 /* Two columns side by side, like the player's panel: the room | settings. */
 .tv-party-body {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
@@ -2443,8 +2700,13 @@
   width: min(88rem, 100%);
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
   padding: 0.5rem 0.5rem 3rem;
   font-size: var(--fs-xl);
+}
+.tv-friends-list {
+  position: relative;
+  scrollbar-width: none;
 }
 
 /* --- Calendar: a week as a TV guide, a column per day, today marked ------- */
@@ -2513,6 +2775,7 @@
 
 /* Seven equal columns, hairlines between; the week scrolls as one when a day is full. */
 .tv-cal-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: start;
@@ -2936,6 +3199,7 @@
 /* A person's page (TvPerson.tsx): photo, name, facts and biography, then their titles as rails. */
 .tv-person {
   padding: 4rem 0 4rem;
+  scroll-padding-top: 2.5rem;
 }
 .tv-person-head {
   display: flex;

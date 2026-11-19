@@ -28,6 +28,7 @@ export * from "./pageMotion";
 export * from "./presence";
 export * from "./reducedMotion";
 export * from "./score";
+export * from "./shaderWarmup";
 export * from "./shelfScroll";
 export * from "./systemBack";
 export * from "./together";

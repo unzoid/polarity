@@ -64,7 +64,7 @@ export function TvFriendsPanel() {
       ) : !friendsList.length && !state.invites.length ? (
         <p className="tv-friends-empty">No friends yet. Share your code, or add a friend by theirs on a computer or phone.</p>
       ) : (
-        <div className="tv-friends-list">
+        <div className="tv-friends-list" data-nav-scroll="center">
           {state.invites.map((i) => (
             <button key={`invite-${i.id}`} className="tv-friend" data-online onClick={() => join(i.party, i.id)}>
               <Avatar id={i.avatar} className="tv-friend-face" />

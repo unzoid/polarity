@@ -8,17 +8,17 @@ import { prefersReducedMotion } from "./reducedMotion";
 const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", "calendar", "search"];
 
 /**
- * How long a change's pages keep their motion, and a couple of frames to spare: another section's slide
- * (shell.css --page-tab), a page replaced in place (--page-fade), a page pushed or taken off (--page-in), a title's
- * page out of its card (cardMotion.ts, which starts two frames before this clock does) and back into it (which
- * starts with it).
+ * How long a change's pages keep their motion, and a couple of frames to spare: crisp settle budgets on
+ * desktop & tablet (shell.css --desk-*) vs full-screen slides and card morphs on phone (--page-*, cardMotion.ts).
  */
-const SETTLE = { tab: 420, fade: 220, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS + 40 };
+const PHONE_SETTLE = { tab: 420, fade: 220, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS + 40 };
+const DESKTOP_SETTLE = { tab: 210, fade: 190, push: 240 };
 
-function settleOf(m: PageMotion) {
-  if (m.card) return m.dir === 1 ? SETTLE.cardOpen : SETTLE.cardClose;
-  if (m.tab) return SETTLE.tab;
-  return m.dir === 0 ? SETTLE.fade : SETTLE.push;
+function settleOf(m: PageMotion, phone: boolean) {
+  if (m.card) return m.dir === 1 ? PHONE_SETTLE.cardOpen : PHONE_SETTLE.cardClose;
+  const s = phone ? PHONE_SETTLE : DESKTOP_SETTLE;
+  if (m.tab) return s.tab;
+  return m.dir === 0 ? s.fade : s.push;
 }
 
 /** A card's place on the screen, in CSS pixels, and the picture on it. */
@@ -99,29 +99,29 @@ export function cardMotionVars(card: CardRect, width: number, height: number): R
   return { "--card-r": `${(8 * width) / card.w}px / ${(8 * height) / card.h}px` };
 }
 
-let skipNext = false;
+const SKIP_FRESH = 500;
+let skipNextAt = -Infinity;
 
 /** The next page change plays no motion: the pages are already where it would take them (pageDrag.ts). */
 export function skipNextPageMotion() {
-  skipNext = true;
+  skipNextAt = performance.now();
 }
 
 type Seen = { top?: Entry; keys: number[]; root?: TabRoute; motion?: PageMotion };
 
 /**
- * Pages on a phone change as whole screens, so a change reads as one gesture. Whichever page is on top (the new
- * one pushed, or the old one going) is opaque and moves; the one under it holds still. A page pushed comes in from
- * the right and goes back out to it; another section crossfades in place, quickly, as Netflix's tabs do.
+ * Coordinates two-page transitions across desktop, tablet and phone (shell.css). Whichever page is on top (the new
+ * one pushed, or the old one going) is opaque and moves; card-rect origin morphs (`origins`) are strictly phone-only.
  */
-export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | undefined {
+export function usePageMotion(pages: Entry[], enabled: boolean, phone = false): PageMotion | undefined {
   const top = pages[pages.length - 1];
   const [seen, setSeen] = useState<Seen>(() => ({ top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined }));
   let now = seen;
   if (top?.key !== seen.top?.key) {
     now = { top, keys: pages.map((e) => e.key), root: pages[0]?.route as TabRoute | undefined };
-    const skip = skipNext;
-    skipNext = false;
-    if (enabled && top && seen.top && !skip) now.motion = motionOf(seen, seen.top, top, pages);
+    const skip = performance.now() - skipNextAt < SKIP_FRESH || (!phone && prefersReducedMotion());
+    skipNextAt = -Infinity;
+    if (enabled && top && seen.top && !skip) now.motion = motionOf(seen, seen.top, top, pages, phone);
     setSeen(now); // during render: this render already draws the change with its motion
   }
 
@@ -140,7 +140,7 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
     const start = () => {
       if (!live) return;
       setGone(seen);
-      timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), settleOf(motion));
+      timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), settleOf(motion, phone));
     };
     frame = requestAnimationFrame(() => (frame = requestAnimationFrame(start)));
     return () => {
@@ -148,25 +148,28 @@ export function usePageMotion(pages: Entry[], enabled: boolean): PageMotion | un
       cancelAnimationFrame(frame);
       window.clearTimeout(timer);
     };
-  }, [seen]);
+  }, [seen, phone]);
 
   return now.motion && { ...now.motion, go: gone === now };
 }
 
-function motionOf(seen: Seen, prev: Entry, top: Entry, pages: Entry[]): PageMotion {
+function motionOf(seen: Seen, prev: Entry, top: Entry, pages: Entry[], phone: boolean): PageMotion {
   const base = { enter: top.key, leave: prev.key };
   // Pushed: the page that was on top is still there, under the new one.
   if (pages.some((e) => e.key === prev.key)) {
     for (const key of origins.keys()) if (!pages.some((e) => e.key === key)) origins.delete(key);
-    const from = tapped && performance.now() - tapped.at < TAP_FRESH && isTitlePage(top) && !prefersReducedMotion() ? tapped.rect : undefined;
+    const from =
+      phone && tapped && performance.now() - tapped.at < TAP_FRESH && isTitlePage(top) && !prefersReducedMotion()
+        ? tapped.rect
+        : undefined;
     if (from) origins.set(top.key, from);
     return { ...base, dir: 1, card: from };
   }
   // Back: the page now on top was under the one that's gone.
   if (seen.keys.includes(top.key))
-    return { ...base, dir: -1, leaving: prev, card: prefersReducedMotion() ? undefined : origins.get(prev.key) };
-  // Another section: the pages slide across as one strip, towards it along the tab bar. A page replaced in place
-  // (or a section with no place on the bar): a crossfade.
+    return { ...base, dir: -1, leaving: prev, card: phone && !prefersReducedMotion() ? origins.get(prev.key) : undefined };
+  // Another section: the pages slide across as one strip on phone (or asymmetric directional dissolve on desktop/tablet).
+  // A page replaced in place (or a section with no place on the bar): a crossfade.
   const from = seen.root ? ORDER.indexOf(tabId(seen.root)) : -1;
   const to = ORDER.indexOf(tabId(pages[0].route as TabRoute));
   if (pages.length === 1 && from >= 0 && to >= 0 && from !== to) return { ...base, dir: to > from ? 1 : -1, leaving: prev, tab: true };

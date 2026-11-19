@@ -187,6 +187,11 @@ export interface Prefs {
   hideWatched: boolean;
   /** Titles hidden from browsing: JSON (lib/library/hiddenTitles.ts). */
   hiddenTitles: string;
+
+  /** Title pages: keep a soft blurred backdrop behind the scrolled page. Off: progressive blur at the hero edge into a solid page background. */
+  pageBackdrop: boolean;
+  /** Title pages, when pageBackdrop is on: how strongly the blurred artwork shows behind the scrolled page (10..100). */
+  pageBackdropIntensity: number;
 }
 
 /**
@@ -201,7 +206,7 @@ export const TORRENT_UPLOAD_MBPS = 4;
 const DEFAULTS: Prefs = {
   uiSounds: true,
   uiSoundVolume: 0.5,
-  uiSoundPack: "classic",
+  uiSoundPack: "soft",
   controllerAlerts: true,
   suggestTvMode: true,
   padLabels: "auto",
@@ -279,6 +284,8 @@ const DEFAULTS: Prefs = {
   addonCatalogsHome: "",
   hideWatched: false,
   hiddenTitles: "",
+  pageBackdrop: true,
+  pageBackdropIntensity: 60,
 };
 
 const STORAGE = "polar.prefs";
@@ -352,6 +359,8 @@ export const SYNCED_PREFS = [
   "addonCatalogsHome",
   "hideWatched",
   "hiddenTitles",
+  "pageBackdrop",
+  "pageBackdropIntensity",
 ] as const satisfies readonly (keyof Prefs)[];
 
 export function setPrefs(patch: Partial<Prefs>, { quiet = false } = {}) {

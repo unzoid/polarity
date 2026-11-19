@@ -108,7 +108,14 @@ export const Fire =icon(S24.FireIcon, S20.FireIcon, S16.FireIcon);
 export const Watched = icon(S24.CheckCircleIcon, S20.CheckCircleIcon, S16.CheckCircleIcon);
 export const Users = icon(S24.UsersIcon, S20.UsersIcon, S16.UsersIcon);
 export const WatchParty = icon(S24.UserGroupIcon, S20.UserGroupIcon, S16.UserGroupIcon);
-export const Volume = icon(S24.SpeakerWaveIcon, S20.SpeakerWaveIcon, S16.SpeakerWaveIcon);
+export const Volume = icon(S24.SpeakerWaveIcon, S20.SpeakerWaveIcon, S16.SpeakerWaveIcon);
+export const PlayCircle = icon(S24.PlayCircleIcon, S20.PlayCircleIcon, S16.PlayCircleIcon);
+export const Clock = icon(S24.ClockIcon, S20.ClockIcon, S16.ClockIcon);
+export const DownloadCircle = icon(S24.ArrowDownCircleIcon, S20.ArrowDownCircleIcon, S16.ArrowDownCircleIcon);
+export const Adjustments = icon(S24.AdjustmentsHorizontalIcon, S20.AdjustmentsHorizontalIcon, S16.AdjustmentsHorizontalIcon);
+export const Globe = icon(S24.GlobeAltIcon, S20.GlobeAltIcon, S16.GlobeAltIcon);
+export const PaintBrush = icon(S24.PaintBrushIcon, S20.PaintBrushIcon, S16.PaintBrushIcon);
+export const Home = icon(S24.HomeIcon, S20.HomeIcon, S16.HomeIcon);
 export const VolumeMuted = icon(S24.SpeakerXMarkIcon, S20.SpeakerXMarkIcon, S16.SpeakerXMarkIcon);
 // The screen's brightness (the player's swipe on the left half).
 export const Brightness = icon(S24.SunIcon, S20.SunIcon, S16.SunIcon);

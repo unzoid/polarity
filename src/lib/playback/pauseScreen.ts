@@ -6,6 +6,8 @@ import type { Meta, Person } from "../types";
  * playing, its overview and its main cast. It comes this long after the controls have hidden.
  */
 export const PAUSE_SCREEN_AFTER_MS = 3000;
+/** How long the pause screen takes to fade out when playback resumes or input wakes the player. */
+export const PAUSE_SCREEN_EXIT_MS = 160;
 /** The most cast members it lists. */
 export const PAUSE_SCREEN_CAST = 6;
 
@@ -62,6 +64,8 @@ export interface PauseDetails {
   logos?: string[];
   /** An episode's code and title ("S1, E2", "The Second One"). */
   episode?: { code: string; title: string };
+  /** Year, certification and primary genres ("2024 · TV-MA · Drama"). */
+  facts?: string;
   overview?: string;
   cast: Person[];
 }
@@ -71,7 +75,10 @@ export function pauseDetails(meta: Meta | undefined, videoId: string): PauseDeta
   if (!meta?.name) return undefined;
   const video = meta.videos?.find((v) => v.id === videoId);
   const episode = video && video.season != null && video.episode != null ? { code: episodeCode(video.season, video.episode), title: video.title } : undefined;
+  const year = video?.released?.slice(0, 4) || meta.releaseInfo?.trim();
+  const genres = meta.genres?.filter(Boolean).slice(0, 2).join(", ");
+  const facts = [year, meta.certification?.trim(), genres].filter(Boolean).join(" · ") || undefined;
   const overview = (video?.overview || meta.description || "").trim() || undefined;
   const cast = (meta.people ?? []).filter((p) => p.name?.trim()).slice(0, PAUSE_SCREEN_CAST);
-  return { name: meta.name, logo: meta.logo, logos: meta.logos, episode, overview, cast };
+  return { name: meta.name, logo: meta.logo, logos: meta.logos, episode, facts, overview, cast };
 }

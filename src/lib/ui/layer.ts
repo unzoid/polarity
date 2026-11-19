@@ -45,6 +45,8 @@ function visible(el: HTMLElement) {
   return el.offsetParent !== null || getComputedStyle(el).position === "fixed";
 }
 
+const PORTALLED_POPUP = "[data-floating-ui-portal], [data-base-ui-portal], .select-positioner, .menu-positioner, .popover-positioner";
+
 function onTab(e: KeyboardEvent) {
   if (e.key !== "Tab" || e.defaultPrevented) return;
   const root = traps[traps.length - 1]?.root.current;
@@ -52,7 +54,9 @@ function onTab(e: KeyboardEvent) {
   const items = [...root.querySelectorAll<HTMLElement>(TABBABLE)].filter(visible);
   const active = document.activeElement;
   const inside = !!active && root.contains(active);
-  const outside = !inside && !!active && active !== document.body && active !== document.documentElement;
+  // Only leave focus alone outside `root` when it is inside a portalled menu/select/popover — never when a
+  // forgiveMisses click around a sheet landed focus on `.page` or `.player` behind the modal.
+  const outside = !inside && !!active && !!active.closest(PORTALLED_POPUP);
   const target = trapTarget(items.length, active ? items.indexOf(active as HTMLElement) : -1, e.shiftKey, inside, outside);
   if (target === null) return;
   e.preventDefault();

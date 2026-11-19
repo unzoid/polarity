@@ -48,6 +48,7 @@ export function EpisodeCard({
   const intent = useCardIntent(() => openable && prefetchStreams("series", v.id), 150);
 
   const label = inProgress && p ? formatRemaining(p.position, p.duration) : shortRuntime(runtime);
+  const episodeTitle = v.title?.trim() || `Episode ${number}`;
   // The check pops in when an episode becomes watched while you're looking (marked, or finished), never on mount.
   const wasWatched = useRef(watched);
   const checkIn = useRef(false);
@@ -82,6 +83,11 @@ export function EpisodeCard({
             }
           />
           <div className="card-art-scrim" />
+          {layout === "list" && openable && (
+            <span className="episode-still-play" aria-hidden>
+              <Play size={18} fill="currentColor" />
+            </span>
+          )}
           {released && label && (
             <span className="episode-runtime t-callout">
               <Play size={13} fill="currentColor" /> {label}
@@ -109,7 +115,7 @@ export function EpisodeCard({
           <span className="t-headline episode-card-title">
             {/* A phone's list has no number column: the number leads the title instead (detail.css). */}
             {layout === "list" && <span className="episode-title-num tabular">{number}. </span>}
-            {v.title}
+            {episodeTitle}
           </span>
           {v.overview && <p className="t-callout episode-card-overview">{v.overview}</p>}
           <span className="t-caption faint tabular">

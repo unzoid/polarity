@@ -4,7 +4,7 @@ import { usePersonPhoto } from "../../lib/catalog";
 import { useQuery } from "@tanstack/react-query";
 import { keys, useRatings, useStreams } from "../../lib/net";
 import { isFresh, metacriticTone } from "../../lib/ui";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ContentType, ExternalRatings, Meta } from "../../lib/types";
 import { letterboxdUrl } from "../CardMenu";
 import { BrandIcon } from "../BrandIcon";
@@ -157,11 +157,15 @@ export function DetailsLinks({ label, children }: { label: string; children: Rea
 function Cast({ person: p }: { person: { name: string; character?: string; photo?: string; tmdbId?: number } }) {
   // No photo from the metadata source: look the name up on IMDb. Initials until it answers (or if it can't).
   const { data: found } = usePersonPhoto(p.name, !p.photo);
+  const [failedPhoto, setFailedPhoto] = useState<string>();
   const { navigate } = useNavigation();
-  const photo = p.photo ?? found ?? undefined;
+  const rawPhoto = p.photo ?? found ?? undefined;
+  const photo = rawPhoto && failedPhoto !== rawPhoto ? rawPhoto : undefined;
   const face = (
     <>
-      <span className="person-photo">{photo ? <Img src={photo} alt="" /> : <span aria-hidden>{initials(p.name)}</span>}</span>
+      <span className="person-photo">
+        {photo ? <Img src={photo} alt="" onFail={() => setFailedPhoto(rawPhoto)} /> : <span aria-hidden>{initials(p.name)}</span>}
+      </span>
       <span className="person-name">{p.name}</span>
       {p.character && <span className="person-role">{p.character}</span>}
     </>

@@ -17,6 +17,8 @@ import { isTvMode, setTvMode } from "./tvMode";
  */
 export type TvAction = "search" | "prevTab" | "nextTab" | "menu";
 export const TV_ACTION_EVENT = "polar:tv-action";
+export type TvOskKey = "x" | "y";
+export const TV_OSK_EVENT = "polar:tv-osk";
 
 export type Button = "a" | "b" | "x" | "y" | "lb" | "rb" | "view" | "menu" | "up" | "down" | "left" | "right";
 
@@ -262,6 +264,11 @@ function press(button: Button) {
   }
 
   if (direction) return void key(ARROW[direction]);
+  // Inside the on-screen keyboard, Y inserts a space and X deletes, matching its button glyphs.
+  if ((pad === "x" || pad === "y") && focused().closest(".tv-osk")) {
+    window.dispatchEvent(new CustomEvent<TvOskKey>(TV_OSK_EVENT, { detail: pad }));
+    return;
+  }
   switch (bindings.nav[pad!]) {
     case "select":
       return activate();

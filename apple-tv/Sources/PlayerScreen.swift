@@ -49,8 +49,14 @@ private struct PlayerStage: View {
                     ProgressView()
                 }
                 if barShown || player.paused {
-                    PlayerBar(heading: heading, position: player.position, duration: player.duration, paused: player.paused)
-                        .transition(.opacity)
+                    PlayerBar(
+                        heading: heading,
+                        position: player.position,
+                        duration: player.duration,
+                        paused: player.paused,
+                        hasTracks: !player.tracks.isEmpty
+                    )
+                    .transition(.opacity)
                 }
             }
         }
@@ -150,6 +156,7 @@ private struct PlayerBar: View {
     let position: Double
     let duration: Double
     let paused: Bool
+    let hasTracks: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -162,7 +169,7 @@ private struct PlayerBar: View {
                 Image(systemName: paused ? "pause.fill" : "play.fill")
                 Text(timeText(position))
                 Spacer()
-                Text("◀ ▶ 10 s  ·  ▼ Audio and subtitles").foregroundStyle(.secondary)
+                Text(hasTracks ? "◀ ▶ 10 s  ·  ▼ Audio and subtitles" : "◀ ▶ 10 s").foregroundStyle(.secondary)
                 Spacer()
                 Text(duration > 0 ? "-\(timeText(max(duration - position, 0)))" : "")
             }
@@ -186,11 +193,10 @@ func timeText(_ seconds: Double) -> String {
     return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
 }
 
-/// Audio and subtitle tracks of what's playing; Menu closes it.
+/// Audio and subtitle tracks of what's playing; stays open so both can be picked before Menu closes it.
 private struct TrackPicker: View {
     let tracks: [Track]
     let choose: (Track?, String) -> Void
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let audio = tracks.filter { $0.kind == "audio" }
@@ -212,7 +218,6 @@ private struct TrackPicker: View {
     private func row(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button {
             action()
-            dismiss()
         } label: {
             HStack {
                 Text(label)

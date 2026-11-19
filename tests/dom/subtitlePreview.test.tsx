@@ -43,7 +43,7 @@ test("with mpv, the preview takes its size from mpv's options and window, not a 
 test("without mpv, the preview follows the built-in player's ::cue size", async () => {
   const { container, unmount } = await render(<SubtitlePreview style={{ ...DEFAULT_SUBTITLE_STYLE, size: 200 }} media={null} />);
   const preview = container.querySelector<HTMLElement>(".sub-preview")!;
-  const expected = Math.min(Math.max(20, 0.024 * window.innerWidth), 36) * 2;
+  const expected = Math.min(Math.max(24, 0.03 * window.innerWidth), 64) * 2;
   expect(px(preview, "--sub-size")).toBeCloseTo(expected, 3);
   expect(px(preview, "--sub-line")).toBeCloseTo(expected * 1.25, 3);
   expect(preview.dataset.engine).toBe("built-in");

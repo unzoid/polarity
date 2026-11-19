@@ -1,5 +1,5 @@
 import { Menu as Base } from "@base-ui/react/menu";
-import { createContext, useContext, type ComponentProps, type ReactNode } from "react";
+import { createContext, useContext, type ComponentProps, type CSSProperties, type ReactNode } from "react";
 import { Check, ChevronRight } from "../icons";
 
 /**
@@ -21,15 +21,21 @@ type Positioning = Pick<ComponentProps<typeof Base.Positioner>, "anchor" | "side
 export type MenuPopupProps = Positioning & {
   look?: MenuLook;
   "aria-label"?: string;
+  /** Extra classes on the panel (the player's dock gives its menus their own look). */
+  className?: string;
+  style?: CSSProperties;
+  /** Drawn behind the items, inside the panel (the player's dock menus: a frosted copy of the picture). */
+  backdrop?: ReactNode;
   children: ReactNode;
 };
 
 /** The floating panel, in a portal above everything (`.select-positioner`). */
-export function MenuPopup({ look = "compact", "aria-label": label, children, ...positioning }: MenuPopupProps) {
+export function MenuPopup({ look = "compact", "aria-label": label, className, style, backdrop, children, ...positioning }: MenuPopupProps) {
   return (
     <Base.Portal>
       <Base.Positioner className="select-positioner" {...positioning}>
-        <Base.Popup className={`menu menu-${look}`} aria-label={label}>
+        <Base.Popup className={`menu menu-${look}${className ? ` ${className}` : ""}`} style={style} aria-label={label}>
+          {backdrop}
           <LookContext.Provider value={look}>{children}</LookContext.Provider>
         </Base.Popup>
       </Base.Positioner>

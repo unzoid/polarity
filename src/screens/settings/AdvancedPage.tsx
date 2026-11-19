@@ -166,7 +166,7 @@ function ResetRow(props: Expandable) {
     },
   });
   return (
-    <ExpandRow icon={Reset} title="Reset all settings" caption="Put every option back to how it started" {...props}>
+    <ExpandRow icon={Reset} title="Reset all settings" {...props}>
       <p className="settings-expand-text">
         Your library, history, profiles, add-ons, keyboard shortcuts, and API keys stay as they are.
       </p>

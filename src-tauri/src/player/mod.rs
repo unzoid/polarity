@@ -226,6 +226,9 @@ pub struct Mpv {
     held: AtomicBool,
     /// The viewer's last saved screenshot, for "Show in folder" ([`mpv_screenshot_reveal`]).
     last_shot: StdMutex<Option<PathBuf>>,
+    /// Serialises JPEG screenshots ([`mpv_screenshot`]) and overlay snapshots ([`mpv_snapshot`]) so
+    /// raising `screenshot-jpeg-quality` to 95 and putting 70 back never interleaves with a snapshot.
+    shot_lock: Mutex<()>,
 }
 
 /// Whether this build keeps a watch log (#424): a dev build, or one made with `bun tauri dev`.
@@ -442,7 +445,7 @@ impl Mpv {
             "--audio-file-auto=no".into(),
             // Subtitles: clean white type with a soft shadow, like the web player.
             "--sub-font=Segoe UI Semibold".into(),
-            "--sub-font-size=42".into(),
+            "--sub-font-size=52".into(),
             "--sub-border-size=1.6".into(),
             "--sub-shadow-offset=1".into(),
             "--sub-color=#FFFFFFFF".into(),

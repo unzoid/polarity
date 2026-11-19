@@ -1,5 +1,6 @@
-import { extraKind, extraStill } from "../../lib/catalog";
+import { extraKind, extraStills } from "../../lib/catalog/people";
 import type { Extra, Meta } from "../../lib/types";
+import { Play } from "../icons";
 import { openTrailer } from "../Trailer";
 import { Card } from "./Card";
 import { Shelf } from "./Shelf";
@@ -23,10 +24,12 @@ export function ExtrasShelf({ meta }: { meta: Pick<Meta, "extras"> }) {
 
 function ExtraCard({ extra: e }: { extra: Extra }) {
   const kind = extraKind(e.kind);
+  const stills = extraStills(e);
   return (
     <Card
       shape="landscape"
-      art={extraStill(e)}
+      art={stills[0]}
+      artFallbacks={stills.slice(1)}
       fallback={
         <span className="extra-tile">
           <span className="extra-tile-name">{e.name}</span>
@@ -38,6 +41,11 @@ function ExtraCard({ extra: e }: { extra: Extra }) {
       tabular={false}
       hint={`Play ${e.name}`}
       onClick={() => playExtra(e)}
-    />
+    >
+      <div className="card-art-scrim" />
+      <span className="extra-play" aria-hidden>
+        <Play size={15} fill="currentColor" />
+      </span>
+    </Card>
   );
 }

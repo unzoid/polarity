@@ -1,11 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MotionConfig } from "motion/react";
 
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
-import { queryClient } from "./lib/net";
+import { api } from "./lib/api";
+import { keys, queryClient } from "./lib/net";
 import { AccountProvider, startAccountBackend } from "./lib/account";
 import { installKeepFieldInView, mirrorFormFactor } from "./lib/ui";
 import { inShell, os } from "./lib/platform";
@@ -54,7 +54,32 @@ import flagFont from "country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2
 // canvas, so macOS, Linux and Android keep their own), a flags-only font is added, bundled with the
 // app; its @font-face covers only the flag characters, so every other glyph keeps the app's font.
 // Twemoji's flags, CC-BY 4.0; the polyfill MIT (docs/licensing.md).
-if (os === "windows") polyfillCountryFlagEmojis("Twemoji Country Flags", flagFont);
+// The check draws emoji on a canvas, about 15 ms on the way to the first frame, and its answer only changes
+// with the web view: it's kept per user agent, and later starts add the same @font-face without checking.
+if (os === "windows") {
+  const FLAG_FONT = "Twemoji Country Flags";
+  const key = "polar.flagFont";
+  const ua = navigator.userAgent;
+  let known: string | null = null;
+  try {
+    known = localStorage.getItem(key);
+  } catch {
+    /* storage unavailable: check every time */
+  }
+  if (known === `1|${ua}`) {
+    const style = document.createElement("style");
+    // As the polyfill adds it: the flag characters only.
+    style.textContent = `@font-face { font-family: "${FLAG_FONT}"; unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F; src: url('${flagFont}') format('woff2'); font-display: swap; }`;
+    document.head.append(style);
+  } else if (known !== `0|${ua}`) {
+    const added = polyfillCountryFlagEmojis(FLAG_FONT, flagFont);
+    try {
+      localStorage.setItem(key, `${added ? 1 : 0}|${ua}`);
+    } catch {
+      /* checked again next time */
+    }
+  }
+}
 
 // Font rendering differs by OS; base.css tunes text weight for Windows.
 // "mac" also makes room for the traffic lights (shell.css).
@@ -80,20 +105,20 @@ if (!inShell) {
   );
 } else {
   installGamepad();
-  // A dev build's database connection is in the keychain (lib/account/devDatabase.ts).
-  await startAccountBackend().catch(() => undefined);
+  // Warm stored settings alongside the account backend so App() applies theme, scheme, font and motion on frame 0.
+  await Promise.all([
+    startAccountBackend().catch(() => undefined),
+    queryClient.prefetchQuery({ queryKey: keys.settings, queryFn: api.settings }).catch(() => undefined),
+  ]);
   root.render(
     <StrictMode>
-      {/* reducedMotion="user": springs become instant cross-fades when the OS asks for less motion. */}
-      <MotionConfig reducedMotion="user">
-        <ErrorBoundary where="app">
-          <QueryClientProvider client={queryClient}>
-            <AccountProvider>
-              <App />
-            </AccountProvider>
-          </QueryClientProvider>
-        </ErrorBoundary>
-      </MotionConfig>
+      <ErrorBoundary where="app">
+        <QueryClientProvider client={queryClient}>
+          <AccountProvider>
+            <App />
+          </AccountProvider>
+        </QueryClientProvider>
+      </ErrorBoundary>
     </StrictMode>,
   );
 }

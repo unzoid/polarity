@@ -9,11 +9,16 @@ import { AccountShell } from "./AccountShell";
 
 /** Arrow keys move through the icon grid, like a TV remote. */
 function moveFocus(e: KeyboardEvent<HTMLElement>) {
-  const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  const cols = getComputedStyle(e.currentTarget).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+  const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
   if (!step) return;
   const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=radio]")];
   const i = items.indexOf(document.activeElement as HTMLElement);
-  const next = items[(i + step + items.length) % items.length];
+  if (i < 0) return;
+  const next =
+    e.key === "ArrowRight" || e.key === "ArrowLeft"
+      ? items[(i + step + items.length) % items.length]
+      : items[i + step];
   if (next) {
     e.preventDefault();
     next.focus();
@@ -29,6 +34,7 @@ export function OnboardingScreen() {
   const nameId = useId();
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState<AvatarId>(AVATARS[0].id);
+  const [stops, setStops] = useState<Record<string, AvatarId>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const trimmed = name.trim();
@@ -74,7 +80,6 @@ export function OnboardingScreen() {
             id={nameId}
             value={name}
             onChange={setName}
-            placeholder="What should we call you?"
             maxLength={40}
             autoComplete="nickname"
             spellCheck={false}
@@ -83,31 +88,37 @@ export function OnboardingScreen() {
         </div>
 
         <div className="onboard-icons">
-          {AVATAR_GROUPS.map((g, gi) => (
-            <section key={g.id} className="onboard-group" style={{ "--i": gi } as CSSProperties}>
-              <h2>{g.name}</h2>
-              <div className="onboard-row" role="radiogroup" aria-label={g.name} onKeyDown={moveFocus}>
-                {AVATARS.filter((a) => a.group === g.id).map((a) => (
-                  <button
-                    type="button"
-                    key={a.id}
-                    role="radio"
-                    aria-checked={a.id === avatar}
-                    aria-label={a.id}
-                    className="onboard-choice"
-                    onClick={() => setAvatar(a.id)}
-                  >
-                    <Avatar id={a.id} />
-                    {a.id === avatar && (
-                      <span className="icon-choice-check">
-                        <Check size={12} strokeWidth={3} />
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
+          {AVATAR_GROUPS.map((g, gi) => {
+            const items = AVATARS.filter((a) => a.group === g.id);
+            const stop = stops[g.id] ?? (items.some((a) => a.id === avatar) ? avatar : items[0]?.id);
+            return (
+              <section key={g.id} className="onboard-group" style={{ "--i": gi } as CSSProperties}>
+                <h2>{g.name}</h2>
+                <div className="onboard-row" role="radiogroup" aria-label={g.name} onKeyDown={moveFocus}>
+                  {items.map((a) => (
+                    <button
+                      type="button"
+                      key={a.id}
+                      role="radio"
+                      aria-checked={a.id === avatar}
+                      aria-label={a.id}
+                      tabIndex={a.id === stop ? 0 : -1}
+                      className="onboard-choice"
+                      onFocus={() => setStops((s) => (s[g.id] === a.id ? s : { ...s, [g.id]: a.id }))}
+                      onClick={() => setAvatar(a.id)}
+                    >
+                      <Avatar id={a.id} />
+                      {a.id === avatar && (
+                        <span className="icon-choice-check">
+                          <Check size={12} strokeWidth={3} />
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
 
         {error && (

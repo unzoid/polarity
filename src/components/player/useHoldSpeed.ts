@@ -11,19 +11,20 @@ const HOLD_SLOP = 12;
  * has sped up, its release doesn't count as a click (`swallowClick`), so play/pause and the controls stay
  * as they were. `enabled` off (a watch party plays at 1x for everyone, or the setting is off) does nothing.
  */
-export function useHoldSpeed(enabled: boolean, playing: boolean) {
+export function useHoldSpeed(enabled: boolean, playing: boolean, onActivate?: () => void) {
   const [held, setHeld] = useState(false);
   const heldNow = useRef(false);
   const press = useRef<{ id: number; x: number; y: number } | null>(null);
   const timer = useRef<number>(undefined);
   /** The last hold sped up: the click its release makes is the hold's, not a tap. */
   const justHeld = useRef(false);
-  const live = useRef({ enabled, playing });
-  live.current = { enabled, playing };
+  const live = useRef({ enabled, playing, onActivate });
+  live.current = { enabled, playing, onActivate };
 
   const hold = useCallback((on: boolean) => {
     heldNow.current = on;
     setHeld(on);
+    if (on) live.current.onActivate?.();
   }, []);
   const release = useCallback(() => {
     window.clearTimeout(timer.current);

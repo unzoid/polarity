@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight, type Icon as IconT } from "../icons";
 import { PAGE_SECTIONS, type PageId } from "../../lib/settings/pages";
+import { SECTION_ICONS } from "./pages";
 import { SliderField } from "../SliderField";
 import { Button, type ButtonVariant } from "../ui/Button";
 import { Switch } from "../ui/Switch";
@@ -283,7 +284,7 @@ export function SectionList({ page, openSection }: { page: PageId; openSection: 
   return (
     <Card>
       {(PAGE_SECTIONS[page] ?? []).map((s) => (
-        <LinkRow key={s.id} title={s.label} caption={s.caption} onClick={() => openSection(s.id)} />
+        <LinkRow key={s.id} icon={SECTION_ICONS[s.id]} title={s.label} caption={s.caption} onClick={() => openSection(s.id)} />
       ))}
     </Card>
   );

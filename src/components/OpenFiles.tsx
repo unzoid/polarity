@@ -14,7 +14,7 @@ import {
 } from "../lib/localFiles";
 import { useRouter } from "../lib/router";
 import { actionFor, isSettingsOpen } from "../lib/settings";
-import { OpenFile } from "./icons";
+import { Close, OpenFile } from "./icons";
 
 /**
  * "Open File…" (#204): drop videos on it (or anywhere on the window, which opens it), or browse for
@@ -112,6 +112,9 @@ export function OpenFilesHost() {
         <Dialog.Backdrop className="open-files-scrim" />
         <Dialog.Popup className="open-files" data-dragging={drag.over || undefined}>
           <Dialog.Title className="open-files-label">Open Files</Dialog.Title>
+          <Dialog.Close className="open-files-close pressable" aria-label="Close">
+            <Close size={18} />
+          </Dialog.Close>
           <DropZone drag={drag} busy={busy} problem={problem} onBrowse={() => void browse()} />
           <p className="open-files-foot">Files you open play at once and are listed in Library, on this device only.</p>
         </Dialog.Popup>
@@ -131,7 +134,14 @@ function DropZone({ drag, busy, problem, onBrowse }: { drag: DragState; busy: bo
   const line = dragLine(drag);
   const refused = drag.over && !drag.videos && !drag.folders;
   return (
-    <div className="open-files-zone" data-refused={refused || undefined}>
+    <div
+      className="open-files-zone"
+      data-refused={refused || undefined}
+      data-busy={busy || undefined}
+      onClick={() => {
+        if (!busy && !drag.over) onBrowse();
+      }}
+    >
       <div className="open-files-stack" aria-hidden>
         <span className="open-files-card" data-side="left">
           <span className="open-files-kind">MKV</span>
@@ -147,7 +157,15 @@ function DropZone({ drag, busy, problem, onBrowse }: { drag: DragState; busy: bo
       <div className="open-files-lines">
         <p className="open-files-title" data-shown={!line || undefined} aria-hidden={!!line}>
           Drop files here or{" "}
-          <button type="button" className="open-files-browse" onClick={onBrowse} disabled={busy}>
+          <button
+            type="button"
+            className="open-files-browse"
+            onClick={(e) => {
+              e.stopPropagation();
+              onBrowse();
+            }}
+            disabled={busy}
+          >
             browse
           </button>
         </p>
@@ -156,7 +174,7 @@ function DropZone({ drag, busy, problem, onBrowse }: { drag: DragState; busy: bo
         </p>
       </div>
       <p className="open-files-hint" data-problem={!!problem || undefined}>
-        {problem ?? "MP4, MKV, HEVC, WebM and more · subtitles beside a file load with it"}
+        {problem ?? "Subtitles beside a file load with it."}
       </p>
     </div>
   );

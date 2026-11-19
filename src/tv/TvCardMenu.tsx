@@ -3,8 +3,9 @@ import { Check, Close, Hidden, Info, Minus, PlaylistIcon, Plus, Reset, Watched }
 import { episodeCode } from "../lib/format";
 import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
+import { usePresence } from "../lib/ui";
 import type { MetaPreview, Progress } from "../lib/types";
-import { useBack, useFocusTrap } from "./shell";
+import { PanelLeaving, useBack, useFocusTrap } from "./shell";
 import { playSound } from "./sounds";
 import { isMenuKey } from "./menuKey";
 import { NamePanel, PlaylistsPanel } from "./TvDetail";
@@ -66,25 +67,34 @@ export const useCardMenuOpen = () => useSyncExternalStore(subscribe, () => !!cur
 
 export { isMenuKey };
 
+const CARD_MENU_OUT_MS = 160;
+
 export function TvCardMenuHost() {
-  const target = useSyncExternalStore(subscribe, () => current);
+  const live = useSyncExternalStore(subscribe, () => current);
+  const { shown: target, leaving } = usePresence(live, CARD_MENU_OUT_MS);
   if (!target) return null;
-  return <Layers key={target.key} target={target} />;
+  return (
+    <PanelLeaving.Provider value={leaving}>
+      <Layers key={target.key} target={target} leaving={leaving} />
+    </PanelLeaving.Provider>
+  );
 }
 
 type Layer = { kind: "menu" } | { kind: "playlists" } | { kind: "name"; playlistId?: string };
 
-function Layers({ target }: { target: Target }) {
+function Layers({ target, leaving }: { target: Target; leaving: boolean }) {
   // Picking a playlist replaces the menu: Back from there goes to the card.
   const [layers, setLayers] = useState<Layer[]>([{ kind: "menu" }]);
   const pop = () => (layers.length > 1 ? setLayers((ls) => ls.slice(0, -1)) : closeCardMenu());
-  useBack(true, pop);
+  useBack(!leaving, pop);
   const top = layers[layers.length - 1];
 
   return (
     <div
       className="tv-card-menu-layer"
       data-dim={top.kind === "menu" || undefined}
+      data-leaving={leaving || undefined}
+      inert={leaving || undefined}
       onClick={(e) => e.target === e.currentTarget && closeCardMenu()}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -106,7 +116,7 @@ function Layers({ target }: { target: Target }) {
               />
             );
           case "name":
-            return <NamePanel key={i} item={target.item} playlistId={layer.playlistId} active={isTop} onDone={pop} />;
+            return <NamePanel key={i} item={target.item} playlistId={layer.playlistId} active={isTop && !leaving} onDone={pop} />;
         }
       })}
     </div>

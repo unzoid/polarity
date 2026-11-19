@@ -1,5 +1,5 @@
 import { deflateRawSync } from "node:zlib";
-import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test, wakeControls } from "./fixtures";
 import { mediaAnswer } from "./anilistMock";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
@@ -264,32 +264,51 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   await app.waitForTimeout(1500);
   expect(await clock(app)).toBe(paused);
 
-  // A click that misses a control inside the panel, or lands just past it, leaves it open; clearly outside closes it (#202).
-  await app.getByRole("button", { name: "Subtitles & Audio", exact: true }).click();
+  // On the desktop the panel is a menu above its button in the one row of controls, clear of the timeline; the
+  // controls stay up while it's open. A click between its columns leaves it open.
+  const tracksButton = app.getByRole("button", { name: "Subtitles & Audio", exact: true });
+  await wakeControls(app);
+  await tracksButton.click();
   const overlay = app.locator(".options-overlay[data-open=true]");
-  await expect(overlay).toBeVisible();
+  await expect(overlay).toHaveAttribute("data-place", "dock");
+  await expect(tracksButton).toHaveAttribute("aria-expanded", "true");
+  await expect(player.locator(".player-bottom")).toHaveCSS("opacity", "1");
+  const menu = (await overlay.locator(".options-columns").boundingBox())!;
+  const button = (await tracksButton.boundingBox())!;
+  const timeline = (await player.locator(".player-timeline").boundingBox())!;
+  expect(Math.abs(menu.x + menu.width - (button.x + button.width))).toBeLessThan(1);
+  expect(menu.y + menu.height).toBeLessThanOrEqual(timeline.y);
   const [audio, subs] = await Promise.all([0, 1].map((i) => app.locator(".options-column").nth(i).boundingBox()));
   await app.mouse.click((audio!.x + audio!.width + subs!.x) / 2, audio!.y + 40);
-  await app.mouse.click(audio!.x - 12, audio!.y + 40);
-  // 50 px past the left or right edge, moving across the columns, is still a miss (#320).
-  await app.mouse.click(audio!.x - 50, audio!.y + 40);
-  await app.mouse.click(subs!.x + subs!.width + 50, subs!.y + 40);
   await expect(overlay).toBeVisible();
   // The subtitle preview is set like the built-in player's cues (#228): ::cue's
-  // clamp(1.25rem, 2.4vw, 2.25rem) at the bottom, following a resized window.
-  await app.getByRole("button", { name: "Subtitle settings" }).click();
+  // clamp(1.5rem, 3vw, 4rem) at the bottom, following a resized window. In the dock the subtitles' Tracks | Style
+  // switch opens their style.
+  const subsView = app.getByRole("radiogroup", { name: "Subtitles view" });
+  await subsView.getByRole("radio", { name: "Style" }).click();
   const sample = app.locator(".sub-preview-text");
   const cueSize = () => sample.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-  await expect.poll(cueSize).toBeCloseTo(1440 * 0.024, 1);
+  await expect.poll(cueSize).toBeCloseTo(1440 * 0.03, 1);
   await app.setViewportSize({ width: 1000, height: 700 });
-  await expect.poll(cueSize).toBeCloseTo(24, 1);
+  await expect.poll(cueSize).toBeCloseTo(30, 1);
+  // In the dock it stands above the title, clear of the menu and the controls (player.css).
   const line = await app.locator(".sub-preview").boundingBox();
-  expect(Math.abs(line!.y + line!.height - 700)).toBeLessThan(1);
+  const dockBottom = parseFloat(await overlay.evaluate((el) => getComputedStyle(el).getPropertyValue("--dock-bottom")));
+  expect(Math.abs(line!.y + line!.height - (700 - dockBottom - 72))).toBeLessThan(1);
   await app.setViewportSize({ width: 1440, height: 900 });
-  await app.getByRole("button", { name: "Subtitle settings" }).click();
-  await app.mouse.click(8, 8 + 450);
+  // Tracks leads back to the list.
+  await subsView.getByRole("radio", { name: "Tracks" }).click();
+  // A click on the picture closes the menu and nothing else: it stays paused.
+  await app.mouse.click(300, 300);
+  await expect(app.locator(".options-overlay")).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+  // Its button opens it and closes it again.
+  await tracksButton.click();
+  await expect(overlay).toBeVisible();
+  await tracksButton.click();
   await expect(app.locator(".options-overlay")).toHaveCount(0);
 
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   // The source bar's controls never stick out past the list (re-test N9), at any width.
   for (const width of [1440, 1100]) {
@@ -321,21 +340,27 @@ test("Back is the same button in the same spot on a title page and in the player
   }
 });
 
-test("the player's crop button and Z switch Fit and Fill window, say which, and remember it (#183, #330)", async ({ app }) => {
+test("the player's crop item and Z switch Fit and Fill window, say which, and remember it (#183, #330)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
   await card(app, "The Glass Orchard").click();
   await app.getByRole("button", { name: "Play", exact: true }).click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
-  const crop = player.getByRole("button", { name: /^Crop:/ });
+  // On the desktop the crop mode is in More, under the timeline.
+  const crop = async () => {
+    await wakeControls(app);
+    await player.getByRole("button", { name: "More" }).click();
+    return app.getByRole("menuitemcheckbox", { name: /^Crop:/ });
+  };
   const video = player.locator(".player-video");
   // Fit by default. The browser's video has no autocrop: the cycle skips Crop black bars.
-  await expect(crop).toHaveAccessibleName("Crop: Fit");
-  await expect(crop).toHaveAttribute("title", /^Fit \(next: Fill window\)/);
-  await expect(video).toHaveCSS("object-fit", "contain");
   await player.hover();
-  await crop.click();
-  await expect(crop).toHaveAccessibleName("Crop: Fill window");
+  const item = await crop();
+  await expect(item).toHaveAccessibleName(/^Crop: Fit( |$)/);
+  await expect(video).toHaveCSS("object-fit", "contain");
+  await item.click();
+  await expect(item).toHaveAccessibleName(/^Crop: Fill window( |$)/);
+  await app.keyboard.press("Escape");
   await expect(player.getByText("Fill window", { exact: true })).toBeVisible();
   await expect(video).toHaveCSS("object-fit", "cover");
   // Remembered for the next video.
@@ -346,8 +371,8 @@ test("the player's crop button and Z switch Fit and Fill window, say which, and 
   await expect(video).toHaveCSS("object-fit", "cover");
   await app.keyboard.press("z");
   await expect(video).toHaveCSS("object-fit", "contain");
-  await expect(crop).toHaveAccessibleName("Crop: Fit");
   await expect(player.getByText("Fit", { exact: true })).toBeVisible();
+  await expect(await crop()).toHaveAccessibleName(/^Crop: Fit( |$)/);
 });
 
 test("a dev build's player copies its watch log: what played, sought and showed the controls, with hosts and no links (#424)", async ({ app }) => {
@@ -386,7 +411,7 @@ test("the player's focus ring shows for Tab, never for a click or the clicked bu
   await app.getByRole("button", { name: "Play", exact: true }).click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
-  const fill = player.getByRole("button", { name: /^Crop:/ });
+  const fill = player.locator(".player-dock").getByRole("button", { name: /^(Mute|Unmute)$/ });
   // Drawn: an outline that isn't none or see-through.
   const ring = (el: Locator) =>
     expect.poll(() => el.evaluate((e) => getComputedStyle(e).outlineStyle !== "none" && getComputedStyle(e).outlineColor !== "rgba(0, 0, 0, 0)"));
@@ -395,12 +420,12 @@ test("the player's focus ring shows for Tab, never for a click or the clicked bu
   await expect(fill).toBeFocused();
   await ring(fill).toBe(false);
   // Its shortcut keeps the focus where the click left it, still without a ring.
-  await app.keyboard.press("z");
-  await expect(fill).toHaveAccessibleName("Crop: Fit");
+  await app.keyboard.press("m");
+  await expect(fill).toHaveAccessibleName("Mute");
   await expect(fill).toBeFocused();
   await ring(fill).toBe(false);
-  // Tab moves the focus: the control it reaches shows the ring.
-  await app.keyboard.press("Tab");
+  // Tab moves the focus: the control it reaches shows the ring (back to Play/Pause; forward is the volume slider).
+  await app.keyboard.press("Shift+Tab");
   const reached = player.locator(":focus");
   await ring(reached).toBe(true);
   // The ring goes with the controls; the next key brings both back on the same control.
@@ -517,7 +542,9 @@ test("with an AirPlay receiver around, the player sends the video to it and back
   await app.getByRole("button", { name: "Play", exact: true }).click();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
 
-  const airplay = app.locator(".player-top").getByRole("button", { name: "AirPlay" });
+  await app.mouse.move(300, 300);
+  await app.mouse.move(310, 310);
+  const airplay = app.locator(".player-dock").getByRole("button", { name: "AirPlay" });
   await expect(airplay).toBeVisible();
   await airplay.click();
   await expect(app.getByText("Playing on AirPlay")).toBeVisible();
@@ -694,6 +721,7 @@ test("the player's Sources panel marks the same links (#21)", async ({ app }) =>
   await card(app, "The Glass Orchard").click();
   await app.getByRole("button", { name: "Play", exact: true }).click();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   const sources = app.getByRole("radiogroup", { name: "Sources" });
   // The source playing keeps its check; the next ones are marked.
@@ -747,12 +775,14 @@ test("a source picked in the player's Sources panel plays, while playing and whi
 
   // While playing: the click switches to the source.
   const playing = await video.getAttribute("src");
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   await quick().click();
   await expect(video).not.toHaveAttribute("src", playing!);
   await expect(player).toHaveAttribute("data-started", "true");
 
   // A source that stays starting, then another picked while it starts (the Sources shortcut opens the panel).
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   await sources.getByRole("radio", { name: /Open Mirror/ }).first().click();
   await expect(video).toHaveAttribute("src", /\/[34]\.mp4/);
@@ -810,6 +840,7 @@ test("while a downloaded episode plays, its copy is the first source and picking
   await expect(video).toHaveAttribute("src", /\/downloads\/.+\.mkv$/);
   const sources = app.getByRole("radiogroup", { name: "Sources" });
   const open = async () => {
+    await wakeControls(app);
     await app.getByRole("button", { name: "Sources", exact: true }).click();
     await expect(sources).toBeVisible();
   };
@@ -1248,71 +1279,38 @@ test("with seasons as separate shows, Continue Watching names the anime entry th
   await expect(row.locator(".card").first()).toContainText("S2");
 });
 
-test("the player's episode rail reaches every episode by wheel and paddles, and its row/list switch is the title page's (#226)", async ({ app }) => {
+test("on the desktop, Episodes is a list above its button: the one playing opens on its still, the season heading opens the seasons, and a pick plays it", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
   await card(app, "Fieldwork").click();
   await expect(app.locator(".episode-card")).toHaveCount(10);
-  await app.locator(".episode-card-main:not([disabled])").first().click();
-  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-  await app.getByRole("button", { name: "Episodes", exact: true }).click();
-  const rail = app.locator(".episode-rail");
-  const last = rail.locator(".episode-rail-card").last();
-  // Whether the season's last episode is wholly in the rail's view.
-  const lastShown = () =>
-    rail.evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      const c = el.lastElementChild!.getBoundingClientRect();
-      return c.left >= r.left - 1 && c.right <= r.right + 1;
-    });
-  await expect(last).toBeAttached();
-  expect(await lastShown()).toBe(false);
-
-  // A mouse wheel turns up/down only: it moves the rail along, and the player's re-renders don't put it back.
-  const box = (await rail.boundingBox())!;
-  await app.mouse.move(box.x + box.width / 2, box.y + 60);
-  for (let i = 0; i < 40 && !(await lastShown()); i++) await app.mouse.wheel(0, 120);
-  expect(await lastShown()).toBe(true);
-  await app.waitForTimeout(1500);
-  expect(await lastShown()).toBe(true);
-  await expect(app.locator(".episode-rail-viewport .row-paddle[data-dir=next]")).toHaveCSS("pointer-events", "none");
-
-  // The paddle at the start pages back to the first episode.
-  const prev = app.locator(".episode-rail-viewport .row-paddle[data-dir=prev]");
-  // Where the rail rests once a paddle's smooth scroll has ended: mid-glide it can still read
-  // more than 4 px and then reach the start, hiding the paddle the next click waits for.
-  const restingLeft = async () => {
-    let last = await rail.evaluate((el) => el.scrollLeft);
-    for (;;) {
-      await app.waitForTimeout(150);
-      const now = await rail.evaluate((el) => el.scrollLeft);
-      if (Math.abs(now - last) < 0.5) return now;
-      last = now;
-    }
-  };
-  for (let i = 0; i < 10 && (await restingLeft()) > 4; i++) await prev.click();
-  expect(await rail.evaluate((el) => el.scrollLeft)).toBeLessThanOrEqual(4);
-  await expect(prev).toHaveCSS("pointer-events", "none");
-
-  // The arrow keys step card by card from the one playing, each brought into view.
-  await expect(rail.locator('[aria-current="true"] > .episode-rail-main')).toBeFocused();
-  for (let i = 0; i < 9; i++) await app.keyboard.press("ArrowRight");
-  await expect(last.locator(".episode-rail-main")).toBeFocused();
-  await expect.poll(lastShown).toBe(true);
-
-  // List in the player: seasons and episodes as columns, remembered on the title page.
-  await app.getByRole("radio", { name: "List" }).click();
-  await expect(rail).toHaveCount(0);
-  await expect(app.getByRole("radiogroup", { name: "Episodes" }).getByRole("radio")).toHaveCount(10);
-  await app.keyboard.press("Escape");
-  await app.keyboard.press("Escape");
-  await expect(app.locator(".player")).toHaveCount(0);
-  await expect(app.locator(".episode-list")).toBeVisible();
-  // And back to a row from the title page, which the player follows.
-  await app.getByRole("radio", { name: "Row" }).click();
-  await expect(app.locator(".episode-list")).toHaveCount(0);
-  await app.locator(".episode-card-main:not([disabled])").first().click();
-  await app.getByRole("button", { name: "Episodes", exact: true }).click();
-  await expect(rail).toBeVisible();
+  // A later episode, so the list opens scrolled to it.
+  await app.locator(".episode-card-main:not([disabled])").nth(5).click();
+  const player = app.locator(".player");
+  await expect(player).toHaveAttribute("data-started", "true");
+  await app.mouse.move(300, 300);
+  await app.mouse.move(310, 310);
+  await player.locator(".player-dock").getByRole("button", { name: "Episodes", exact: true }).click();
+  const menu = app.locator(".ep-menu");
+  await expect(menu.locator(".ep-menu-title")).toHaveText("Season 1");
+  // The one playing is open on its still, in view and focused for the keyboard.
+  const playing = menu.locator('.ep-menu-item[aria-current="true"]');
+  await expect(playing.locator(".ep-menu-still")).toBeVisible();
+  await expect(playing.locator(".ep-menu-row")).toBeFocused();
+  const list = (await app.locator(".options-overlay[data-open=true] .options-list").boundingBox())!;
+  const row = (await playing.boundingBox())!;
+  expect(row.y).toBeGreaterThanOrEqual(list.y);
+  expect(row.y + row.height).toBeLessThanOrEqual(list.y + list.height);
+  // The heading opens the seasons; picking one browses it while this one plays on.
+  await menu.getByRole("button", { name: "Seasons" }).click();
+  await menu.getByRole("radio", { name: "Season 2" }).click();
+  await expect(menu.locator(".ep-menu-title")).toHaveText("Season 2");
+  await expect(player).toHaveAttribute("data-started", "true");
+  // A pick plays it and closes the menu.
+  const first = menu.locator(".ep-menu-row:not([disabled])").first();
+  const name = (await first.getAttribute("aria-label"))!.replace(/^\d+\. /, "");
+  await first.click();
+  await expect(app.locator(".options-overlay")).toHaveCount(0);
+  await expect(player.locator(".player-title")).toContainText(name);
 });
 
 test("a source's i button shows what the source carries with every key masked, on the title page and in the player (#229)", async ({ app }) => {
@@ -1367,6 +1365,7 @@ test("a source's i button shows what the source carries with every key masked, o
   // The player's list: the same panel, over its Sources.
   await app.getByRole("button", { name: "Play", exact: true }).click();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   const list = app.getByRole("radiogroup", { name: "Sources" });
   const row = list.locator(".options-item-wrap").last();
@@ -1378,136 +1377,6 @@ test("a source's i button shows what the source carries with every key masked, o
   await app.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(list).toBeVisible();
-});
-
-test("the player's episode rail pages with Home's shelf paddles: blurred edge, shown on hover but not for keyboard focus, gone at the ends (#250)", async ({ app, browserName }) => {
-  // What makes a paddle look and act as it does, read from the next one in `viewport` while `shown` or not.
-  const look = (viewport: Locator) =>
-    viewport.locator(".row-paddle[data-dir=next]").evaluate((b) => {
-      const chevron = getComputedStyle(b.querySelector("svg")!);
-      const layers = [...b.querySelectorAll(".edge-blur i")].map((i) => getComputedStyle(i));
-      return {
-        width: getComputedStyle(b).width,
-        layers: layers.length,
-        blur: layers.map((l) => l.backdropFilter),
-        shown: chevron.opacity,
-        chevronShadow: chevron.filter,
-        tint: getComputedStyle(b.querySelector(".edge-blur")!, "::before").backgroundColor,
-      };
-    });
-  const away = () => app.mouse.move(2, 2);
-
-  // Home's first shelf, pointed at.
-  const shelf = app.locator(".row-viewport").first();
-  await expect(shelf).toBeVisible();
-  await shelf.hover();
-  await expect.poll(async () => (await look(shelf)).shown).toBe("1");
-  const home = await look(shelf);
-
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
-  await card(app, "Fieldwork").click();
-  await app.locator(".episode-card-main:not([disabled])").first().click();
-  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-  await app.getByRole("button", { name: "Episodes", exact: true }).click();
-  const rail = app.locator(".episode-rail-viewport");
-  await expect(rail.locator(".row-paddle .edge-blur")).toHaveCount(2);
-
-  // Pointed at: the same edge as Home's, blurred, its chevron shown.
-  await rail.locator(".episode-rail").hover();
-  await expect.poll(async () => (await look(rail)).shown).toBe("1");
-  expect(await look(rail)).toEqual(home);
-  // WebKit runs with every backdrop-filter removed (fixtures.ts), so only Chromium has a blur to see.
-  if (browserName !== "webkit") expect(home.blur.every((b) => b.startsWith("blur("))).toBe(true);
-
-  // Not pointed at and no keyboard focus: hidden, and not blurring (#134).
-  await app.locator(".episode-rail-card[aria-current] .episode-rail-main").evaluate((b) => (b as HTMLElement).blur());
-  await away();
-  await expect.poll(async () => (await look(rail)).shown).toBe("0");
-  await expect.poll(async () => (await look(rail)).blur.every((b) => b === "none")).toBe(true);
-
-  // A card reached by the keys doesn't: the keys move the rail along as on TV, the ring on the card's still.
-  await app.locator(".episode-rail-card").first().locator(".episode-rail-main").focus();
-  await app.keyboard.press("ArrowRight");
-  await expect(app.locator(".episode-rail-main:focus-visible .episode-rail-still")).toHaveCSS("outline-style", "solid");
-  expect((await look(rail)).shown).toBe("0");
-
-  // At the start, the left one is gone and can't be clicked; it never takes the focus.
-  await rail.locator(".episode-rail").evaluate((el) => (el.scrollLeft = 0));
-  const prev = rail.locator(".row-paddle[data-dir=prev]");
-  await expect(prev).toHaveCSS("pointer-events", "none");
-  await expect(prev.locator("svg")).toHaveCSS("opacity", "0");
-  const focused = await app.evaluate(() => document.activeElement?.className);
-  await rail.locator(".row-paddle[data-dir=next]").click();
-  expect(await app.evaluate(() => document.activeElement?.className)).toBe(focused);
-  await expect(prev).toHaveCSS("pointer-events", "auto");
-});
-
-test("the player's episode rail shows the playing and focused cards' whole ring at any scroll, and its edge blur reaches the rail's edges (#349)", async ({ app }) => {
-  await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
-  await card(app, "Fieldwork").click();
-  await expect(app.locator(".episode-card")).toHaveCount(10);
-  // A later episode, so the rail opens scrolled to it.
-  await app.locator(".episode-card-main:not([disabled])").nth(5).click();
-  await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-  await app.getByRole("button", { name: "Episodes", exact: true }).click();
-  const rail = app.locator(".episode-rail");
-  await expect(rail.locator(".episode-rail-card[aria-current]")).toBeVisible();
-
-  // How far `selector`'s box, grown by its ring (box-shadow spread) or focus outline (width + offset), pokes
-  // out of the rail's visible box on each side; nothing pokes out when all are <= 0.
-  const pokesOut = (selector: string) =>
-    rail.evaluate((el, selector) => {
-      const target = el.querySelector<HTMLElement>(selector)!;
-      const css = getComputedStyle(target);
-      const ring = Math.max(
-        Number(css.boxShadow.match(/(-?[\d.]+)px\)?$/)?.[1] ?? 0),
-        css.outlineStyle === "none" ? 0 : parseFloat(css.outlineWidth) + parseFloat(css.outlineOffset),
-      );
-      const r = el.getBoundingClientRect();
-      const c = target.getBoundingClientRect();
-      return { left: r.left - (c.left - ring), right: c.right + ring - r.right, ring };
-    }, selector);
-  // Polled: a card the keys reach glides into view.
-  const whole = (selector: string) =>
-    expect.poll(async () => {
-      const out = await pokesOut(selector);
-      return out.ring > 0 && out.left <= 0.5 && out.right <= 0.5 ? "whole" : JSON.stringify(out);
-    }).toBe("whole");
-
-  // Opened on the playing episode: its ring is whole without any scrolling, and so is the focus outline.
-  expect(await rail.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
-  const playing = ".episode-rail-card[aria-current] .episode-rail-still";
-  await whole(playing);
-  await expect(rail.locator('[aria-current="true"] > .episode-rail-main')).toBeFocused();
-  await app.keyboard.press("ArrowLeft");
-  await app.keyboard.press("ArrowRight");
-  await whole(".episode-rail-main:focus-visible .episode-rail-still");
-
-  // Stepped by the keys to either end, the focused card's outline stays whole each step.
-  for (let i = 0; i < 6; i++) {
-    await app.keyboard.press("ArrowLeft");
-    await whole(".episode-rail-main:focus-visible .episode-rail-still");
-  }
-  expect(await rail.evaluate((el) => el.scrollLeft)).toBeLessThanOrEqual(1);
-  for (let i = 0; i < 9; i++) {
-    await app.keyboard.press("ArrowRight");
-    await whole(".episode-rail-main:focus-visible .episode-rail-still");
-  }
-  await expect(rail.locator(".episode-rail-card").last().locator(".episode-rail-main")).toBeFocused();
-
-  // The paddles' blur runs right up to the rail's visible edges, with no sharp strip beyond it, at any window size.
-  await rail.hover();
-  const blurGaps = () =>
-    app.locator(".episode-rail-viewport").evaluate((v) => {
-      const r = v.querySelector(".episode-rail")!.getBoundingClientRect();
-      const blur = (dir: string) => v.querySelector(`.row-paddle[data-dir=${dir}] .edge-blur`)!.getBoundingClientRect();
-      const still = v.querySelector(".episode-rail-still")!.getBoundingClientRect();
-      return [blur("prev").left - r.left, r.right - blur("next").right, blur("prev").top - still.top, still.bottom - blur("prev").bottom];
-    });
-  for (const size of [null, { width: 1000, height: 700 }, { width: 1800, height: 1000 }]) {
-    if (size) await app.setViewportSize(size);
-    for (const gap of await blurGaps()) expect(Math.abs(gap)).toBeLessThanOrEqual(0.5);
-  }
 });
 
 test.describe("signed in, on a fresh profile", () => {
@@ -1537,6 +1406,7 @@ test.describe("signed in, on a fresh profile", () => {
     await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.details).toBe("Watching on Polarity");
     expect((await sentToDiscord(app)).at(-1)?.buttons).toBeUndefined();
     expect((await sentToDiscord(app)).at(-1)?.join).toBeUndefined();
+    await wakeControls(app);
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
@@ -1635,6 +1505,7 @@ test.describe("signed in, on a fresh profile", () => {
     await card(app, "The Glass Orchard").click();
     await app.getByRole("button", { name: "Play", exact: true }).click();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    await wakeControls(app);
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await expect(partySurfaces(app)).toHaveCount(1);
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
@@ -1756,6 +1627,7 @@ test.describe("signed in, on a fresh profile", () => {
     await app.locator(".episode-card-main:not([disabled])").first().click();
     const player = app.locator(".player");
     await expect(player).toHaveAttribute("data-started", "true");
+    await wakeControls(app);
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
@@ -1767,7 +1639,7 @@ test.describe("signed in, on a fresh profile", () => {
     await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Movies", exact: true }).click();
     await app.waitForTimeout(3000);
     await backToParty(app);
-    await expect(app.locator(".player-heading")).toContainText("Fieldwork");
+    await expect(app.locator(".player-title")).toContainText("Fieldwork");
     await expect.poll(() => videoTime(app)).toBeGreaterThan(2.5);
     await expect(app.getByRole("button", { name: "Pause" })).toBeVisible();
     // Paused, the party waits where it is: back again, it's paused there.
@@ -1971,15 +1843,19 @@ test("the player pins the window on top and locks it, P unpins, and leaving the 
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
   await player.hover();
-  const pin = player.getByRole("button", { name: "Pin window" });
-  await expect(pin).toHaveAttribute("aria-pressed", "false");
-  // A pushpin (#332), tilted while unpinned and upright once pinned, so the glyph itself shows the state.
-  const glyph = () => pin.locator("svg").evaluate((svg) => svg.innerHTML);
-  const unpinnedGlyph = await glyph();
-  expect(unpinnedGlyph).toContain("rotate(45");
+  // On the desktop, pinning is in More, under the timeline.
+  const pinItem = async () => {
+    await wakeControls(app);
+    await player.getByRole("button", { name: "More" }).click();
+    return app.getByRole("menuitemcheckbox", { name: "Pin window on top" });
+  };
+  const pin = await pinItem();
+  await expect(pin).toHaveAttribute("aria-checked", "false");
   await pin.click();
-  await expect(pin).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(glyph).not.toContain("rotate(45");
+  await expect(pin).toHaveAttribute("aria-checked", "true");
+  // The menu stays for its check items; Escape closes the menu and nothing else.
+  await app.keyboard.press("Escape");
+  await expect(app.getByRole("menu")).toHaveCount(0);
   await expect.poll(told).toEqual({ set_always_on_top: true, set_resizable: false, set_minimizable: false, set_maximizable: false });
   // Locked in place: nothing to drag the window by, minimise and maximise off, close still there.
   await expect(player.locator("[data-tauri-drag-region]")).toHaveCount(0);
@@ -1989,7 +1865,6 @@ test("the player pins the window on top and locks it, P unpins, and leaving the 
   // The first time, it says how to get out of it.
   await expect(player).toContainText("Window pinned, press P to unpin");
   await app.keyboard.press("p");
-  await expect(pin).toHaveAttribute("aria-pressed", "false");
   await expect.poll(told).toEqual({ set_always_on_top: false, set_resizable: true, set_minimizable: true, set_maximizable: true });
   await expect(player.locator("[data-tauri-drag-region]")).toHaveCount(2);
   // Pinned again, then out of the player: the window goes back.
@@ -2373,74 +2248,42 @@ test("Settings → Services: a linked Simkl profile imports its Plan to Watch an
   expect(await app.evaluate(() => localStorage.getItem("polar.link.simkl.local"))).toBeNull();
 });
 
-test("in a narrow window nothing in the player's bars overlaps, the title is cut short and the bars give way in steps (#396)", async ({ app }) => {
+test("in a narrow window nothing in the player's bars overlaps, the title is cut short and every control stays in its one row (#396)", async ({ app }) => {
   await app.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Series", exact: true }).click();
   await card(app, "Fieldwork").click();
   await app.locator(".episode-card-main:not([disabled])").first().click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
+  await expect(player).toHaveAttribute("data-dock", "true");
   // A title and show name far wider than any window.
   const long = "An Invented Episode Title That Goes On and On Well Past the Width of Any Window Someone Might Use";
-  await app.locator(".player-heading-title").evaluate((el, t) => (el.textContent = `S1:E1 · ${t}`), long);
-  await app.locator(".player-heading-show").evaluate((el, t) => (el.textContent = t), long);
-  const actions = app.locator(".player-actions");
+  await app.locator(".player-title-episode").evaluate((el, t) => (el.textContent = `S1:E1 · ${t}`), long);
+  await app.locator(".player-title-name").evaluate((el, t) => (el.textContent = t), long);
+  const dock = app.locator(".player-dock");
   const showControls = async () => {
     await app.mouse.move(300, 300);
     await app.mouse.move(310, 310);
     await expect(player).toHaveAttribute("data-chrome", "true");
   };
 
-  // The window's least width (tauri.conf.json), every 100 px above it, and 1400.
-  for (const width of [960, 1060, 1160, 1260, 1360, 1400]) {
+  // Narrower than a desktop window gets (the browser build), the window's least width (tauri.conf.json), and wider.
+  for (const width of [700, 860, 960, 1160, 1400, 1600]) {
     await app.setViewportSize({ width, height: 800 });
     await showControls();
     await expect.poll(() => barOverlaps(app), `at ${width} px`).toEqual([]);
-    const cut = await app.locator(".player-heading-title").evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow);
-    expect(cut, `the title is cut short at ${width} px`).toBe("ellipsis");
+    for (const line of [".player-title-episode", ".player-title-name"]) {
+      const cut = await app.locator(line).evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow);
+      expect(cut, `${line} is cut short at ${width} px`).toBe("ellipsis");
+    }
+    // Every control in one row, the volume slider among them.
+    const tops = await dock.locator("button, input").evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2)))]);
+    expect(tops, `one row at ${width} px`).toHaveLength(1);
+    await expect(dock.getByRole("slider", { name: "Volume" })).toBeVisible();
   }
-  // A short title and name sit in the middle of the window.
-  await app.locator(".player-heading-title").evaluate((el) => (el.textContent = "S1:E1 · Pilot"));
-  await app.locator(".player-heading-show").evaluate((el) => (el.textContent = "Fieldwork"));
-  await app.setViewportSize({ width: 1200, height: 800 });
-  await showControls();
-  for (const line of [".player-heading-title", ".player-heading-show"]) {
-    const { centre, width } = await app.locator(line).evaluate((el) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const r = range.getBoundingClientRect();
-      return { centre: r.left + r.width / 2, width: r.width };
-    });
-    expect(width).toBeGreaterThan(20);
-    expect(Math.abs(centre - 600), `${line} centred`).toBeLessThan(2);
-  }
-  await app.locator(".player-heading-title").evaluate((el, t) => (el.textContent = `S1:E1 · ${t}`), long);
-  await app.locator(".player-heading-show").evaluate((el, t) => (el.textContent = t), long);
-  // Too narrow for their words, the actions are glyphs, named by their labels; wider, the words come back.
-  await app.setViewportSize({ width: 760, height: 800 });
-  await showControls();
-  await expect(actions).toHaveAttribute("data-labels", "false");
-  await expect.poll(() => barOverlaps(app)).toEqual([]);
-  await expect(actions.getByRole("button", { name: "Subtitles & Audio" })).toBeVisible();
-  await app.setViewportSize({ width: 1600, height: 800 });
-  await showControls();
-  await expect(actions).toHaveAttribute("data-labels", "true");
-
-  // Narrower than a desktop window gets (the browser build), the slider folds, then pin and fill go into More.
-  const top = app.locator(".player-top");
-  const slider = app.getByRole("slider", { name: "Volume" });
-  await app.setViewportSize({ width: 860, height: 800 });
-  await showControls();
-  await expect(app.locator(".player-volume")).toHaveAttribute("data-folded", "true");
-  await expect(slider).toBeHidden();
-  await top.getByRole("button", { name: "Mute" }).hover();
-  await expect(slider).toBeVisible();
-  await expect.poll(() => barOverlaps(app)).toEqual([]);
-
-  await app.setViewportSize({ width: 700, height: 800 });
-  await showControls();
-  await expect(top.getByRole("button", { name: /^Crop:/ })).toHaveCount(0);
-  await expect.poll(() => barOverlaps(app)).toEqual([]);
-  await top.getByRole("button", { name: "More" }).click();
+  // Nothing for the window in the top bar but Back: pin and fill are in More.
+  await expect(app.locator(".player-top").getByRole("button", { name: /^(Mute|More|Pin window|Crop:)/ })).toHaveCount(0);
+  await wakeControls(app);
+  await dock.getByRole("button", { name: "More" }).click();
   const fillItem = app.getByRole("menuitemcheckbox", { name: /^Crop:/ });
   await expect(fillItem).toHaveAttribute("aria-checked", "false");
   await fillItem.click();
@@ -2486,13 +2329,17 @@ test("the sleep timer counts down by the clock, offers +15 min in its last minut
   // The clock stands still from here, so the time left reads exactly. Minutes later is a jump of the time of day
   // (which fires nothing) and then a moment run, for the timer's next tick: running every frame of a quarter of an
   // hour would take longer than the test may.
+  // Sleep Timer is in More on the desktop; opened before the clock stands still, which the menu's opening needs.
+  await wakeControls(app);
+  await player.getByRole("button", { name: "More" }).click();
+  await app.getByRole("menuitem", { name: "Sleep Timer" }).click();
   const set = (await app.evaluate(() => Date.now())) + 1000;
   await app.clock.pauseAt(set);
   const at = async (ms: number) => {
     await app.clock.setSystemTime(set + ms);
     await app.clock.runFor(1500);
   };
-  await player.getByRole("button", { name: "Sleep Timer" }).click();
+
   await app.locator(".options-overlay[data-open=true]").getByRole("radio", { name: "15 minutes" }).click();
   await expect(player.getByRole("timer")).toHaveText("15:00");
 

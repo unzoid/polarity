@@ -15,12 +15,19 @@ export const HIDDEN_TOAST_MS = 8_000;
  */
 export function HiddenTitleToast({ tv }: { tv: boolean }) {
   const [item, setItem] = useState<(MetaPreview & { key: number }) | null>(null);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  if (!item && (hovered || focused)) {
+    setHovered(false);
+    setFocused(false);
+  }
+  const paused = hovered || focused;
   useEffect(() => onTitleHidden((it) => setItem({ ...it, key: Date.now() })), []);
   useEffect(() => {
-    if (!item) return;
+    if (!item || paused) return;
     const t = setTimeout(() => setItem(null), HIDDEN_TOAST_MS);
     return () => clearTimeout(t);
-  }, [item]);
+  }, [item, paused]);
   const { shown, leaving } = usePresence(item, TOAST_OUT_MS);
   if (!shown) return null;
   const undo = () => {
@@ -46,6 +53,12 @@ export function HiddenTitleToast({ tv }: { tv: boolean }) {
       actions={actions}
       leaving={leaving}
       data-kind="title-hidden"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
     >
       <strong>{shown.name} is hidden</strong>
       {tv && <span>Its page can unhide it.</span>}

@@ -1,8 +1,9 @@
 // Whether a title logo reads on the picture behind it (#215), decided on contrast: the logo's ink against the
 // backdrop where the logo sits, after the page's own gradient. Pure functions on RGBA pixels; TitleLogo measures.
 
-/** How a logo is drawn: as it is, as a white silhouette, or with a soft halo (light behind a dark logo, dark behind a light one). */
-export type LogoLook = "as-is" | "silhouette" | "halo-light" | "halo-dark";
+/** How a logo is drawn: as it is, as a white or dark silhouette, or with a soft halo (light behind a dark logo, dark behind a light one). */
+export type LogoLook = "as-is" | "silhouette" | "silhouette-dark" | "halo-light" | "halo-dark";
+export type LogoScheme = "dark" | "light";
 
 /** A measured logo: each opaque pixel's relative luminance (0-1) with its weight, and whether it's one ink throughout. */
 export interface Ink {
@@ -83,6 +84,8 @@ function weightedMedian(values: number[], weight: number[], total: number) {
 export const LOGO_SPOTS = {
   hero: { x0: 0.03, y0: 0.45, x1: 0.4, y1: 0.8, scrim: 0.5 },
   detail: { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7, onPage: true },
+  /** A big screen's title page with Show page background off: its hero is dark in either scheme (title/darkHero.ts). */
+  "detail-dark": { x0: 0.03, y0: 0.4, x1: 0.4, y1: 0.75, scrim: 0.7 },
   "tv-stage": { x0: 0.03, y0: 0.5, x1: 0.35, y1: 0.85, scrim: 0.8 },
   "tv-detail": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
   "tv-panel": { x0: 0, y0: 0.25, x1: 0.35, y1: 0.6, scrim: 0.9 },
@@ -95,14 +98,24 @@ const SCRIM = 10;
 /** The light page's grey (lib/theme LIGHT_BASE, #f4f4f6). */
 const LIGHT_SCRIM = 244;
 
+/** The active page scheme (`data-scheme` on `<html>`), defaulting to dark. */
+export function currentLogoScheme(): LogoScheme {
+  return typeof document !== "undefined" && document.documentElement.dataset.scheme === "light" ? "light" : "dark";
+}
+
 /** The grey a spot's gradient is made of right now: the light page's for an `onPage` spot in light mode. */
-export function scrimLevel(spot: Pick<LogoSpot, "onPage">): number {
-  const light = typeof document !== "undefined" && document.documentElement.dataset.scheme === "light";
-  return spot.onPage && light ? LIGHT_SCRIM : SCRIM;
+export function scrimLevel(spot: Pick<LogoSpot, "onPage">, scheme: LogoScheme = currentLogoScheme()): number {
+  return spot.onPage && scheme === "light" ? LIGHT_SCRIM : SCRIM;
 }
 
 /** The luminance behind a logo when the backdrop can't be measured, or there's none: the app's dark page. */
 export const DARK_PAGE = luminance(SCRIM, SCRIM, SCRIM);
+/** The luminance behind an `onPage` logo in light mode when there's no backdrop. */
+export const LIGHT_PAGE = luminance(LIGHT_SCRIM, LIGHT_SCRIM, LIGHT_SCRIM);
+
+export function pageLuminance(spot?: Pick<LogoSpot, "onPage">, scheme: LogoScheme = currentLogoScheme()): number {
+  return spot?.onPage && scheme === "light" ? LIGHT_PAGE : DARK_PAGE;
+}
 
 /**
  * The mean luminance of a backdrop's pixels (already cut to the logo's spot) under the page's gradient of
@@ -134,12 +147,13 @@ export const readsOn = (ink: Ink, behind: number) => legibleShare(ink, behind) >
 
 /**
  * How to draw a logo on a backdrop of luminance `behind`: as it is when it reads; a single ink as the white
- * silhouette, when white reads there; else a halo of the opposite tone, which keeps a multicolour or detailed
- * logo's artwork.
+ * silhouette (or crisp dark silhouette on a light-mode page), when that reads there; else a halo of the opposite
+ * tone, which keeps a multicolour or detailed logo's artwork.
  */
-export function logoLook(ink: Ink, behind: number): LogoLook {
+export function logoLook(ink: Ink, behind: number, lightPage = false): LogoLook {
   if (readsOn(ink, behind)) return "as-is";
   if (ink.single && contrast(1, behind) >= LOGO_CONTRAST) return "silhouette";
+  if (lightPage && ink.single && contrast(DARK_PAGE, behind) >= LOGO_CONTRAST) return "silhouette-dark";
   // Dark behind a light logo, light behind a dark one: whichever stands further from the ink's median.
   return contrast(ink.median, 0) > contrast(ink.median, 1) ? "halo-dark" : "halo-light";
 }
@@ -149,12 +163,12 @@ export function logoLook(ink: Ink, behind: number): LogoLook {
  * backdrop as it is; when none does, the first, drawn by `logoLook`. Logos that couldn't be measured (null) are
  * passed over unless none could be.
  */
-export function pickLogo(inks: (Ink | null)[], behind: number): { index: number; look: LogoLook } | null {
+export function pickLogo(inks: (Ink | null)[], behind: number, lightPage = false): { index: number; look: LogoLook } | null {
   const readable = inks.findIndex((ink) => ink && readsOn(ink, behind));
   if (readable >= 0) return { index: readable, look: "as-is" };
   const first = inks.findIndex((ink) => ink);
   if (first < 0) return null;
-  return { index: first, look: logoLook(inks[first]!, behind) };
+  return { index: first, look: logoLook(inks[first]!, behind, lightPage) };
 }
 
 /** A logo picture's size, and the share of its pixels that are see-through (null when they can't be read). */
@@ -195,12 +209,14 @@ export function chooseLogo(
   inks: (Ink | null)[],
   behind: number | null,
   shapes: (LogoShape | null)[] = [],
+  lightPage = false,
 ): { src: string; look: LogoLook } | "unsure" | "none" {
   const kept = candidates.map((_, i) => i).filter((i) => !shapes[i] || logoShaped(shapes[i]));
   if (!kept.length) return "none";
   const picked = pickLogo(
     kept.map((i) => inks[i] ?? null),
-    behind ?? DARK_PAGE,
+    behind ?? (lightPage ? LIGHT_PAGE : DARK_PAGE),
+    lightPage,
   );
   if (picked) return { src: candidates[kept[picked.index]], look: picked.look };
   return behind === null ? "unsure" : { src: candidates[kept[0]], look: "as-is" };

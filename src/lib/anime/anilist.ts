@@ -461,9 +461,9 @@ export function useAnimeSeasons(anime: Anime | undefined) {
  * The query behind {@link useAnimeSeasons}, for walking several franchises at once (the Anime tab's banner, #325,
  * and wide cards, #336). `priority` places the walk's requests in AniList's queue (a visible row's by default).
  */
-export function seasonsQuery(client: QueryClient, anime: Anime | undefined, priority?: Priority) {
+export function seasonsQuery(client: QueryClient, anime: Anime | undefined, priority?: Priority, id = anime?.id) {
   return {
-    queryKey: keys.anime.seasons(anime?.id),
+    queryKey: keys.anime.seasons(id),
     enabled: !!anime,
     staleTime: 6 * 60 * 60_000,
     refetchInterval: (q: { state: { data?: SeasonWalk } }) => (q.state.data && !q.state.data.complete ? 60_000 : false),

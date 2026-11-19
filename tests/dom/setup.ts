@@ -70,7 +70,9 @@ for (const key of ["window", "self"]) Object.defineProperty(globalThis, key, { v
 // animation's promise where nothing catches it. Without it motion steps its own animations.
 delete (win.Element.prototype as Partial<Element>).animate;
 
-afterEach(() => {
+afterEach(async () => {
+  const { unmountRendered } = await import("./render");
+  await unmountRendered();
   document.body.replaceChildren();
   localStorage.clear();
 });

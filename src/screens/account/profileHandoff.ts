@@ -26,28 +26,26 @@ function radiusPx(el: HTMLElement, width: number) {
 
 /**
  * Flies `avatar` into the navbar's. A copy flies, fixed to the window and outliving the picker, so
- * neither the picker's scrolling area nor its unmounting cuts it short; the landing spot stays hidden
- * until it arrives. With nowhere to land (the phone's native tabs) or reduced motion, nothing flies:
- * the avatar fades out with the picker.
+ * neither the picker's scrolling area nor its unmounting cuts it short; `:root[data-profile-handoff]`
+ * keeps the destination avatar hidden until landing so it never flashes beforehand. With nowhere to
+ * land (the phone's native tabs) or reduced motion, returns `false` so the avatar fades with the picker.
  */
-export function flyToNavbar(avatar: HTMLElement) {
+export function flyToNavbar(avatar: HTMLElement): boolean {
   const target = document.querySelector<HTMLElement>(TARGET);
-  if (!target || prefersReducedMotion()) return;
+  if (!target || prefersReducedMotion()) return false;
 
   const from = avatar.getBoundingClientRect();
   const to = target.getBoundingClientRect();
   // Measured as laid out, without the chosen tile's scale (its origin is the centre, so the centre holds).
   const size = avatar.offsetWidth;
+  if (!size || !to.width) return false;
   const cx = from.left + from.width / 2;
   const cy = from.top + from.height / 2;
   const dx = to.left + to.width / 2 - cx;
   const dy = to.top + to.height / 2 - cy;
   const s0 = from.width / size;
   const s1 = to.width / size;
-  // The copy is scaled, which scales its corners too: give it, at each point, the radius that shows
-  // as the avatar's at the start and as the navbar's on landing, so nothing re-rounds once it's there.
   const r0 = radiusPx(avatar, size);
-  const r1 = radiusPx(target, target.offsetWidth) / s1;
 
   const copy = avatar.cloneNode(true) as HTMLElement;
   Object.assign(copy.style, {
@@ -56,15 +54,18 @@ export function flyToNavbar(avatar: HTMLElement) {
     top: `${cy - size / 2}px`,
     width: `${size}px`,
     margin: "0",
+    borderRadius: `${r0}px`,
     zIndex: "var(--z-overlay)",
     pointerEvents: "none",
+    willChange: "transform",
   });
+  document.documentElement.dataset.profileHandoff = "";
   document.body.appendChild(copy);
   avatar.style.visibility = "hidden";
-  target.style.visibility = "hidden";
 
-  // A quadratic Bézier from the start (0, 0) through the bend to the landing spot; the scale and the
-  // radius go along with it. The timing curve applies to the whole flight, over these points.
+  // A quadratic Bézier from the start (0, 0) through the bend to the landing spot; transform-only
+  // (no borderRadius keyframes) so the entire flight stays on the GPU compositor thread even during
+  // first-boot Home mount.
   const keyframes: Keyframe[] = [];
   for (let i = 0; i <= STEPS; i++) {
     const t = i / STEPS;
@@ -72,12 +73,18 @@ export function flyToNavbar(avatar: HTMLElement) {
     const x = bend * dx * BEND.across + t * t * dx;
     const y = bend * dy * BEND.up + t * t * dy;
     const s = s0 + (s1 - s0) * t;
-    keyframes.push({ offset: t, transform: `translate(${x}px, ${y}px) scale(${s})`, borderRadius: `${r0 + (r1 - r0) * t}px` });
+    keyframes.push({ offset: t, transform: `translate3d(${x}px, ${y}px, 0) scale(${s})` });
   }
 
+  let landed = false;
   const land = () => {
-    target.style.visibility = "";
+    if (landed) return;
+    landed = true;
+    window.clearTimeout(guard);
+    delete document.documentElement.dataset.profileHandoff;
     copy.remove();
   };
+  const guard = window.setTimeout(land, FLIGHT_MS + 120);
   copy.animate(keyframes, { duration: FLIGHT_MS, easing: cssEase(ease.inOut), fill: "forwards" }).finished.then(land, land);
+  return true;
 }

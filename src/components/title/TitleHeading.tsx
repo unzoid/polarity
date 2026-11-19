@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { LOGO_SPOTS, useNameWait } from "../../lib/ui";
 import { TitleLogo, logoReady } from "../TitleLogo";
+import { useDarkHero } from "./darkHero";
 
 /** Where the heading sits; names its classes (`hero-logo` / `hero-title` and so on), so each layout keeps its CSS. */
 export type HeadingLook = "hero" | "detail" | "tv-stage" | "tv-detail" | "tv-panel";
+
+/** Where the logo sits over the art: a title page's hero, when it's dark in either scheme, under the dark scrim. */
+function useLogoSpot(look: HeadingLook) {
+  const dark = useDarkHero();
+  return look === "detail" && dark ? LOGO_SPOTS["detail-dark"] : LOGO_SPOTS[look];
+}
 
 /**
  * A title's name at the top of a hero or title page (docs/ui-components.md U4): its logo when it has one,
@@ -44,6 +51,7 @@ export function TitleHeading({
   const settled = useRef(onSettled);
   settled.current = onSettled;
   const nameShown = !(logo && failed !== logo) && !waiting;
+  const spot = useLogoSpot(look);
   useEffect(() => {
     if (nameShown) settled.current?.();
   }, [nameShown, name]);
@@ -55,7 +63,7 @@ export function TitleHeading({
           src={logo}
           logos={logos}
           backdrop={backdrop}
-          spot={LOGO_SPOTS[look]}
+          spot={spot}
           alt=""
           className={`${look}-logo art-after`}
           loading={panel ? undefined : "eager"}
@@ -83,6 +91,7 @@ export function TitleHeading({
 export function useHeadingReady({ logo, logos, backdrop, look, pending = false }: { logo?: string; logos?: string[]; backdrop?: string; look: HeadingLook; pending?: boolean }) {
   const key = `${logo ?? ""}|${pending}`;
   const [settledFor, setSettledFor] = useState<string>();
-  const now = !pending && (!logo || logoReady(logo, logos, backdrop, LOGO_SPOTS[look]));
+  const spot = useLogoSpot(look);
+  const now = !pending && (!logo || logoReady(logo, logos, backdrop, spot));
   return { ready: now || settledFor === key, onSettled: () => setSettledFor(key) };
 }

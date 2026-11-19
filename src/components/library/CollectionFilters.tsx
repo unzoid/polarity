@@ -122,7 +122,7 @@ export function FilteredCollection<T>({
         />
       </div>
       {entries && arranged && entries.length > 0 && (
-        <p className="library-filter-summary t-footnote muted" aria-live="polite">
+        <p className="library-filter-summary t-caption muted" aria-live="polite">
           {active.length ? `${arranged.items.length} of ${titles(entries.length)}` : titles(entries.length)}
           {looking && ` · Still looking up ${titles(arranged.undecided)}, shown until their details are in`}
           {active.length > 0 && (

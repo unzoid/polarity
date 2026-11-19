@@ -2,7 +2,7 @@
 .poster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--poster-w), 1fr));
-  gap: 2rem 1.25rem;
+  gap: 2rem 0.625rem;
   padding: 0 var(--gutter) 0 var(--content-start);
   transition: opacity 150ms var(--ease-std);
 }

@@ -36,7 +36,11 @@
   content-visibility: hidden;
 }
 .page[data-active="false"]:not([data-motion]):not([data-drag]):not([data-under-player="true"]) *,
-.tv-page[data-active="false"]:not([data-under-player="true"]) * {
+.page[data-active="false"]:not([data-motion]):not([data-drag]):not([data-under-player="true"]) *::before,
+.page[data-active="false"]:not([data-motion]):not([data-drag]):not([data-under-player="true"]) *::after,
+.tv-page[data-active="false"]:not([data-under-player="true"]) *,
+.tv-page[data-active="false"]:not([data-under-player="true"]) *::before,
+.tv-page[data-active="false"]:not([data-under-player="true"]) *::after {
   animation-play-state: paused !important;
 }
 /* The page the player returns to stays rendered (only not painted), so it's back in the
@@ -90,15 +94,115 @@
 .page[data-drag-settle]::after {
   transition: opacity 280ms var(--ease-out);
 }
-/* Pushed pages (detail) get one short entrance; tab switches get none. */
+/* Page transitions are driven by usePageMotion (lib/ui/pageMotion.ts) across all form factors.
+   will-change is scoped strictly to .page[data-motion] so idle compositor layer count stays tiny. */
 .page-pushed {
-  animation: page-in var(--dur-base) var(--ease-out);
+  animation: none;
 }
-@keyframes page-in {
+.page[data-motion] {
+  visibility: visible;
+  content-visibility: visible;
+  will-change: transform, opacity;
+}
+.page[data-motion="leave"] {
+  pointer-events: none;
+}
+
+/* Desktop & tablet spatial navigation choreography:
+   - Push/Pop: Z-depth spatial scale (0.985 + opacity + subtle elevation shadow on the top page, receding 0.988 + 0.6
+     on the under page), gated by [data-go] so the incoming page is laid out before frame 1.
+   - Tab switches: crisp asymmetric dissolve + subtle 10px directional glide. */
+:root:not([data-form="phone"]) {
+  --desk-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --desk-push: 220ms;
+  --desk-tab: 190ms;
+  --desk-tab-out: 115ms;
+  --desk-fade: 170ms;
+  --desk-fade-out: 90ms;
+}
+:root:not([data-form="phone"]) .page[data-over] {
+  z-index: 1;
+  background: var(--bg);
+  isolation: isolate;
+}
+:root:not([data-form="phone"]) .page[data-over]:not([data-tab], [data-fade]) {
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 24px 64px -16px var(--shadow-deep);
+}
+:root:not([data-form="phone"]) .page[data-tab] {
+  background: var(--bg);
+  isolation: isolate;
+}
+:root:not([data-form="phone"]) .page[data-motion="enter"][data-over]:not([data-go]),
+:root:not([data-form="phone"]) .page[data-tab][data-motion="enter"]:not([data-go]) {
+  opacity: 0;
+  pointer-events: none;
+}
+:root:not([data-form="phone"]) .page[data-motion="enter"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
+  animation: desk-push-in var(--desk-push) var(--desk-ease) both;
+}
+:root:not([data-form="phone"]) .page[data-motion="leave"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
+  animation: desk-push-out var(--desk-push) var(--desk-ease) forwards;
+}
+:root:not([data-form="phone"]) .page[data-motion="leave"][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
+  animation: desk-under-out var(--desk-push) var(--desk-ease) forwards;
+}
+:root:not([data-form="phone"]) .page[data-motion="enter"][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
+  animation: desk-under-in var(--desk-push) var(--desk-ease) both;
+}
+:root:not([data-form="phone"]) .page[data-tab][data-motion="enter"][data-go] {
+  z-index: 2;
+  animation:
+    desk-tab-in var(--desk-tab) var(--desk-ease) both,
+    page-fade-in var(--desk-tab) var(--desk-ease) both;
+}
+:root:not([data-form="phone"]) .page[data-tab][data-motion="leave"][data-go] {
+  animation:
+    desk-tab-out var(--desk-tab) var(--desk-ease) forwards,
+    page-fade-out var(--desk-tab-out) linear forwards;
+}
+:root:not([data-form="phone"]) .page[data-fade][data-over][data-go] {
+  animation: page-fade-out var(--desk-fade-out) linear forwards;
+}
+:root:not([data-form="phone"]) .page[data-fade][data-motion="enter"][data-go]:not([data-over]) {
+  animation: page-fade-in var(--desk-fade) var(--desk-ease) both;
+}
+@keyframes desk-push-in {
   from {
     opacity: 0;
+    transform: scale(0.985);
   }
 }
+@keyframes desk-push-out {
+  to {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+@keyframes desk-under-out {
+  to {
+    opacity: 0.6;
+    transform: scale(0.988);
+  }
+}
+@keyframes desk-under-in {
+  from {
+    opacity: 0.6;
+    transform: scale(0.988);
+  }
+}
+@keyframes desk-tab-in {
+  from {
+    transform: translate3d(calc(var(--page-dir, 0) * 10px), 0, 0);
+  }
+}
+@keyframes desk-tab-out {
+  to {
+    transform: translate3d(calc(var(--page-dir, 0) * -10px), 0, 0);
+  }
+}
+
 /* On a phone a page change moves whole screens (lib/ui/pageMotion.ts), each with its own background, so it's the
    page that changes, not its contents over a still backdrop. Of the pair, the page drawn on top (`data-over`: the
    page pushed, or the one going) moves. A page pushed comes in from the right fading up, and Back takes it out the
@@ -134,7 +238,6 @@
   animation:
     page-turn-in var(--page-tab) var(--turn-ease) both,
     page-fade-in var(--turn-fade-in) linear both;
-  will-change: transform, opacity;
 }
 :root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
   animation:
@@ -172,20 +275,9 @@
     transform: translateX(calc(var(--page-dir) * -100%));
   }
 }
-:root[data-form="phone"] .page-pushed {
-  animation: none;
-}
-:root[data-form="phone"] .page[data-motion] {
-  visibility: visible;
-  content-visibility: visible;
-}
-:root[data-form="phone"] .page[data-motion="leave"] {
-  pointer-events: none;
-}
 :root[data-form="phone"] .page[data-over] {
   z-index: 1;
   background: var(--bg);
-  will-change: transform, opacity;
 }
 /* Nothing moves until a frame with both pages has been drawn (`data-go`, pageMotion.ts): a page coming in on top
    waits unseen for it, while a page coming back under the one going is drawn already, covered, so painting it
@@ -211,7 +303,6 @@
 }
 :root[data-form="phone"] .page[data-fade][data-motion="enter"][data-go]:not([data-over]) {
   animation: page-fade-in var(--page-fade) cubic-bezier(0.2, 0.6, 0.35, 1) both;
-  will-change: opacity;
 }
 @keyframes page-fade-out {
   to {
@@ -296,19 +387,34 @@
   pointer-events: none;
   opacity: 0;
 }
-/* Less motion: the pair crossfades in place. */
+/* Less motion: the pair crossfades in place (unless Settings → Reduce motion is explicitly "Off"). */
 @media (prefers-reduced-motion: reduce) {
-  :root[data-form="phone"] .page {
+  :root[data-form="phone"]:not([data-reduce-motion="off"]) .page {
     --page-shift: 0px;
   }
-  :root[data-form="phone"] .page[data-tab][data-motion="enter"][data-go] {
+  :root[data-form="phone"]:not([data-reduce-motion="off"]) .page[data-tab][data-motion="enter"][data-go] {
     animation-name: none, page-fade-in;
   }
-  :root[data-form="phone"] .page[data-tab][data-motion="leave"][data-go] {
+  :root[data-form="phone"]:not([data-reduce-motion="off"]) .page[data-tab][data-motion="leave"][data-go] {
     animation-name: none, page-fade-out;
   }
-  :root[data-form="phone"] .main[data-turn] > .navbar :is(.navbar-fade, .navbar-back, .navbar-brand, .navbar-title, .navbar-actions) {
+  :root[data-form="phone"]:not([data-reduce-motion="off"]) .main[data-turn] > .navbar :is(.navbar-fade, .navbar-back, .navbar-brand, .navbar-title, .navbar-actions) {
     animation-name: none, page-fade-in;
+  }
+  :root:not([data-form="phone"]):not([data-reduce-motion="off"]) .page[data-motion="enter"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
+    animation-name: page-fade-in;
+  }
+  :root:not([data-form="phone"]):not([data-reduce-motion="off"]) .page[data-motion="leave"][data-over][data-go]:not([data-card], [data-fade], [data-tab]) {
+    animation-name: page-fade-out;
+  }
+  :root:not([data-form="phone"]):not([data-reduce-motion="off"]) .page[data-motion][data-go]:not([data-over], [data-card], [data-fade], [data-tab]) {
+    animation: none;
+  }
+  :root:not([data-form="phone"]):not([data-reduce-motion="off"]) .page[data-tab][data-motion="enter"][data-go] {
+    animation-name: none, page-fade-in;
+  }
+  :root:not([data-form="phone"]):not([data-reduce-motion="off"]) .page[data-tab][data-motion="leave"][data-go] {
+    animation-name: none, page-fade-out;
   }
 }
 
@@ -331,14 +437,55 @@
   position: absolute;
   inset: 0 0 -32px 0;
   z-index: -2;
-  /* Black in dark mode; the page's near-white in light mode, so the bar's dark text reads over the art. */
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--tone-sunk) 45%, transparent),
-    color-mix(in srgb, var(--tone-sunk) 15%, transparent) 55%,
-    transparent
-  );
+  /* Black in dark mode; the page's near-white in light mode, so the bar's dark text reads over the art. A flat colour
+     faded by a mask (not a gradient of colours), so a change of scheme under it (a title page's dark hero scrolling
+     away, NavBar.tsx) cross-fades instead of snapping. */
+  background-color: color-mix(in srgb, var(--tone-sunk) 46%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.7) 26%, rgb(0 0 0 / 0.35) 54%, rgb(0 0 0 / 0.11) 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.7) 26%, rgb(0 0 0 / 0.35) 54%, rgb(0 0 0 / 0.11) 78%, transparent 100%);
   pointer-events: none;
+  transition:
+    opacity var(--dur-slow) var(--ease-std),
+    background-color 360ms var(--ease-std);
+}
+/* Light mode over dark artwork needs a stronger top white wash + subtle text halo so dark navbar labels
+   and icons remain effortlessly readable. Over a title page's dark hero (.scheme-dark, NavBar.tsx) the bar stays dark. */
+:root[data-scheme="light"] .navbar:not(.scheme-dark)::before {
+  background-color: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 34%, rgb(0 0 0 / 0.48) 64%, rgb(0 0 0 / 0.16) 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 34%, rgb(0 0 0 / 0.48) 64%, rgb(0 0 0 / 0.16) 84%, transparent 100%);
+}
+:root[data-scheme="light"] .navbar:not([data-scrolled="true"], .scheme-dark) :is(.navbar-brand, .navbar-link, .navbar-icon, .navbar-back, .win-btn) {
+  filter: drop-shadow(0 1px 4px rgb(255 255 255 / 0.72));
+}
+/* The bar's ink eases between schemes with its tint (above), rather than flipping in one frame. Added to each
+   control's own transitions: theirs stay as they are. */
+.navbar :is(.navbar-brand, .navbar-back) {
+  transition-property: transform, opacity, margin-left, color, filter, background-color;
+  transition-duration: var(--dur-press), var(--dur-fast), var(--dur-base), 360ms, 360ms, var(--dur-fast);
+  transition-timing-function: var(--ease-out), var(--ease-std), var(--ease-out), var(--ease-std), var(--ease-std), var(--ease-std);
+}
+.navbar .navbar-icon {
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std),
+    color 360ms var(--ease-std),
+    filter 360ms var(--ease-std);
+}
+.navbar .navbar-link {
+  transition:
+    color var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std),
+    filter 360ms var(--ease-std);
+}
+.navbar .wordmark {
+  transition: filter 360ms var(--ease-std);
+}
+/* Once scrolled, the frosted edge-blur takes over; over Home's HeroGlow there's no art to shade, so don't veil the glow. */
+.navbar[data-scrolled="true"]::before,
+:root[data-hero-glow] .navbar:not([data-scrolled="true"])::before {
+  opacity: 0;
 }
 /* Once the page scrolls under it, the bar is a progressive blur, as on iOS
    (components/EdgeBlur.tsx, pointed up): what passes beneath is most out of
@@ -352,8 +499,13 @@
   --edge-shown: 0;
 }
 .edge-blur.navbar-fade::before {
-  transition: opacity var(--dur-base) var(--ease-std);
-  background: linear-gradient(to top, transparent, color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent) 70%);
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    background-color 360ms var(--ease-std);
+  /* A flat tint faded by a mask, so it cross-fades between schemes (above). */
+  background: color-mix(in srgb, var(--tone-sunk) var(--nav-tint), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 38%, rgb(0 0 0 / 0.42) 68%, rgb(0 0 0 / 0.12) 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.82) 38%, rgb(0 0 0 / 0.42) 68%, rgb(0 0 0 / 0.12) 88%, transparent 100%);
 }
 /* Like .row-paddle (#134), drop the 6 masked backdrop-filter surfaces once faded out at the top of the page. */
 .edge-blur.navbar-fade i {
@@ -381,20 +533,11 @@
 /* Light, as Netflix's is: mostly the page itself, blurred and a little more vivid, under a thin grey veil
    (about rgb(48 48 48 / 0.37) in dark mode), rather than a near-black bar. */
 :root[data-form="phone"] .edge-blur.navbar-fade::before {
+  -webkit-mask-image: none;
+  mask-image: none;
   background: color-mix(in srgb, var(--tone-sunk) 30%, rgb(var(--ink) / 0.1));
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   backdrop-filter: blur(24px) saturate(180%);
-}
-/* The dark shade over the hero's art gives way to the frosted bar, which would otherwise blur it in. */
-:root[data-form="phone"] .navbar::before {
-  transition: opacity var(--dur-slow) var(--ease-std);
-}
-:root[data-form="phone"] .navbar[data-scrolled="true"]::before {
-  opacity: 0;
-}
-/* Over Home's glow (HeroGlow.tsx) there's no art to shade, and the shade would dim the glow where it's brightest. */
-:root[data-form="phone"][data-hero-glow] .navbar::before {
-  opacity: 0;
 }
 /* Past the top the bar's contents settle a size smaller, each towards its own edge, as Netflix's header does
    when the page leaves its hero: the content gets the attention, the chrome steps back.
@@ -412,7 +555,7 @@
   transform: scale(0.9);
 }
 @media (prefers-reduced-motion: reduce) {
-  :root[data-form="phone"] :is(.navbar-brand, .navbar-title, .navbar-actions) {
+  :root[data-form="phone"]:not([data-reduce-motion="off"]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
     transition: none;
   }
 }
@@ -432,11 +575,15 @@
    into "More" (NavBar.tsx NavLinks) instead of pushing the actions and window
    buttons off-screen. It takes the free width so it can tell how much there is. */
 .navbar-links {
+  position: relative;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 0.25rem;
   min-width: 0;
+  /* Room for .navbar-active-pill's outer ring and drop shadow so overflow: hidden never clips them. */
+  padding: 4px 2px;
+  margin: -4px -2px;
   overflow: hidden;
 }
 /* Out of room: kept in the layout's measurements, but not drawn or clickable. */
@@ -446,17 +593,61 @@
   pointer-events: none;
 }
 .navbar-more {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: row;
   gap: 0.3rem;
 }
 .navbar-links::-webkit-scrollbar {
   display: none;
 }
-/* Netflix-style pills: the current section sits on a soft grey pill, and
-   hovering any other link previews a fainter one. */
+/* Sliding active pill: crisp native macOS toolbar capsule; glides smoothly between tabs. */
+.navbar-active-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.13);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.14),
+    0 0 0 0.5px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    transform var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
+    width var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
+    height var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--dur-fast) var(--ease-std),
+    background-color 360ms var(--ease-std),
+    box-shadow 360ms var(--ease-std);
+}
+:root[data-scheme="light"] .navbar:not(.scheme-dark) .navbar-active-pill {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.1),
+    0 1px 2.5px rgb(0 0 0 / 0.08);
+}
+.navbar-active-pill[data-shown="true"] {
+  opacity: 1;
+}
+.navbar-active-pill[data-instant="true"] {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion="off"]) .navbar-active-pill {
+    transition: none;
+  }
+}
+/* Netflix-style pills: the current section sits on .navbar-active-pill, and
+   hovering any other link previews a fainter one. [data-label]::after reserves
+   650-weight metrics invisibly so switching tabs never shifts neighbour widths. */
 .navbar-link {
+  position: relative;
+  z-index: 1;
   flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   height: 40px;
   padding: 0 1.125rem;
   white-space: nowrap;
@@ -470,9 +661,21 @@
     color var(--dur-fast) var(--ease-std),
     background-color var(--dur-fast) var(--ease-std);
 }
+.navbar-link[data-label]::after {
+  content: attr(data-label);
+  content: attr(data-label) / "";
+  height: 0;
+  visibility: hidden;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  font-weight: 650;
+}
 .navbar-link[aria-current="page"] {
   color: var(--text);
   font-weight: 650;
+}
+.navbar-links:not(:has(> .navbar-active-pill[data-shown="true"])) .navbar-link[aria-current="page"] {
   background: rgb(var(--ink) / 0.2);
 }
 .navbar-actions {
@@ -483,17 +686,23 @@
   margin-left: auto;
   margin-right: 1.5rem;
 }
-/* Right side: plain white icons, Netflix-style — no chrome around them. */
+/* Right side: plain icons at rest; a soft pill when active (phone/tablet top-bar sections). */
 .navbar-icon {
   flex: none;
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
+  border-radius: var(--r-round);
   color: var(--text);
   transition:
     transform var(--dur-press) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-std);
+    opacity var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std);
+}
+.navbar-icon[aria-current="page"] {
+  background: rgb(var(--ink) / 0.2);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.12);
 }
 /* --- Back (#348): one button (components/BackButton.tsx), on the pages in the navbar and in the player's top bar,
    at the same spot. These say where the navbar puts it, so the player puts it there too. */
@@ -569,18 +778,20 @@ html[data-os="mac"] {
   visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
-  .navbar-back {
+  :root:not([data-reduce-motion="off"]) .navbar-back {
     transition: opacity var(--dur-fast) var(--ease-std);
   }
 }
 @media (hover: hover) and (pointer: fine) {
   .navbar-link:not([aria-current="page"]):hover {
     color: var(--text);
+    background: var(--fill-2);
+  }
+  .navbar-icon:hover {
     background: var(--fill-3);
   }
-  .navbar-icon:hover,
-  .navbar-search-icon:hover {
-    opacity: 0.75;
+  .navbar-search:not([data-open="true"]) .navbar-search-icon:hover {
+    background: var(--fill-3);
   }
 }
 
@@ -606,17 +817,35 @@ html[data-os="mac"] {
   clip-path: inset(0 0 0 calc(100% - 40px) round 20px);
   transition:
     clip-path var(--dur-base) var(--ease-out),
+    margin-left var(--dur-base) var(--ease-out),
     background-color var(--dur-fast) var(--ease-std),
     box-shadow var(--dur-fast) var(--ease-std);
 }
 .navbar-search[data-open="true"] {
   margin-left: 0;
   clip-path: inset(0 round 20px);
-  /* Dark glass on a dark page, frosted white on a light one: it sits over whatever scrolls under the bar. */
-  background: var(--field-glass);
-  -webkit-backdrop-filter: var(--blur-control);
-  backdrop-filter: var(--blur-control);
-  box-shadow: inset 0 0 0 1px var(--field-edge);
+  /* Crisp solid native macOS recessed search pill (never lets hero glow bleed through). */
+  background: color-mix(in srgb, var(--tone-3) 82%, #242428);
+  box-shadow:
+    inset 0 0.5px 1px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+:root[data-scheme="light"] .navbar:not(.scheme-dark) .navbar-search[data-open="true"] {
+  background: #efeff2;
+  box-shadow:
+    inset 0 0.5px 1.5px rgb(0 0 0 / 0.08),
+    inset 0 0 0 1px rgb(0 0 0 / 0.09);
+}
+.navbar-search[data-open="true"]:focus-within {
+  box-shadow:
+    inset 0 0.5px 1px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+}
+:root[data-scheme="light"] .navbar:not(.scheme-dark) .navbar-search[data-open="true"]:focus-within {
+  background: #ececf0;
+  box-shadow:
+    inset 0 0.5px 1.5px rgb(0 0 0 / 0.1),
+    inset 0 0 0 1px rgb(0 0 0 / 0.14);
 }
 .navbar-search-icon {
   position: absolute;
@@ -627,10 +856,12 @@ html[data-os="mac"] {
   place-items: center;
   width: 40px;
   height: 40px;
+  border-radius: var(--r-round);
   color: var(--text);
   transform: translateX(calc(var(--search-w) - 40px));
   transition:
     transform var(--dur-base) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-std),
     opacity var(--dur-fast) var(--ease-std);
 }
 .navbar-search[data-open="true"] .navbar-search-icon {
@@ -671,10 +902,10 @@ html[data-os="mac"] {
 }
 /* Reduced motion: no sweep; the field and icon just appear (fades stay). */
 @media (prefers-reduced-motion: reduce) {
-  .navbar-search {
+  :root:not([data-reduce-motion="off"]) .navbar-search {
     transition-property: background-color, box-shadow;
   }
-  .navbar-search-icon {
+  :root:not([data-reduce-motion="off"]) .navbar-search-icon {
     transition-property: opacity;
   }
 }
@@ -775,9 +1006,21 @@ html[data-os="mac"] {
   padding: 0 0.25rem var(--safe-bottom);
   justify-content: space-around;
   gap: 0;
-  background: var(--glass-heavy);
-  backdrop-filter: var(--blur-glass);
+  background: color-mix(in srgb, var(--tone-sunk) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
   box-shadow: inset 0 1px 0 var(--hairline);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-form="phone"] .navbar-links {
+    background: var(--tone-sunk);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+:root[data-form="phone"][data-scheme="light"] .navbar-active-pill {
+  background: rgb(0 0 0 / 0.08);
+  box-shadow: none;
 }
 :root[data-form="phone"] .navbar-link {
   height: 44px;
@@ -824,15 +1067,22 @@ html[data-os="mac"] {
 :root[data-native-tabs][data-form="phone"] {
   --tabbar-h: var(--safe-bottom);
 }
-/* A phone's tab bar floats over the page: the page darkens towards the bottom edge under it, as Netflix's does,
-   so the bar reads over bright posters instead of sitting on them. Over every page; the player is above it. */
+/* A phone's tab bar floats over the page: the page fades towards its own background under it (dark in dark mode,
+   pale in light mode), so the bar reads cleanly over posters without a dark smudge in light mode. */
 :root[data-form="phone"] .main::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
   z-index: 5;
   height: calc(var(--tabbar-h, var(--safe-bottom)) + 3.5rem);
-  background: linear-gradient(to top, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.55) 45%, transparent);
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--bg) 88%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 68%, transparent) 28%,
+    color-mix(in srgb, var(--bg) 38%, transparent) 56%,
+    color-mix(in srgb, var(--bg) 12%, transparent) 80%,
+    transparent 100%
+  );
   pointer-events: none;
 }
 :root[data-form="phone"] .brand-logo {
@@ -857,8 +1107,12 @@ html[data-os="mac"] {
 :root[data-form="phone"] .scroll {
   padding-bottom: calc(4rem + var(--tabbar-h));
 }
-:root[data-form="phone"] .toast:not(.toast-tv) {
+:root[data-form="phone"] .toast-stack,
+:root[data-form="phone"] .toast:not(.toast-tv):not(.toast-stack > .toast) {
   bottom: calc(1rem + var(--tabbar-h));
+}
+:root[data-form="phone"] body:has(.downloads-selectbar) .toast-stack {
+  bottom: calc(5.25rem + var(--tabbar-h));
 }
 /* A screen's title gets its own line; its controls (Discover's genre and catalog)
    go under it and scroll sideways rather than run off the edge. */
@@ -895,10 +1149,24 @@ html[data-os="mac"] {
 :root[data-form="phone"] .discover-controls:has(> .select-trigger:nth-of-type(3)) > .select-trigger:first-of-type {
   flex-basis: 100%;
 }
-/* Touch: the bar's icons grow to a finger's size. */
+/* Touch: the bar's icons, segmented controls and toolbar pickers grow to finger-friendly heights. */
 :root[data-touch="true"] .navbar-icon {
   min-width: var(--hit);
   min-height: var(--hit);
+}
+:root[data-touch="true"] .segmented:not([data-variant="large"]) .segmented-item {
+  height: 36px;
+  font-size: 14px;
+}
+:root[data-touch="true"] :is(
+  .discover-controls,
+  .library-toolbar,
+  .library-filters,
+  .downloads-toolbar,
+  .seasons-picker
+) .select-trigger:not([data-size="large"]) {
+  min-height: var(--hit);
+  font-size: 15px;
 }
 
 .window-controls {
@@ -920,6 +1188,10 @@ html[data-os="mac"] {
   background: var(--fill-3);
   color: var(--text);
 }
+.window-controls button:active:not(:disabled) {
+  background: var(--fill-4);
+  color: var(--text);
+}
 /* The player's pinned window (#266): minimise and maximise are off. */
 .window-controls button:disabled {
   color: var(--text-3);
@@ -927,6 +1199,10 @@ html[data-os="mac"] {
 }
 .window-controls .close:hover {
   background: #c42b1c;
+  color: white;
+}
+.window-controls .close:active {
+  background: #a82315;
   color: white;
 }
 
@@ -946,39 +1222,61 @@ html[data-os="mac"] {
 .segmented {
   position: relative;
   display: inline-flex;
-  padding: 0.1875rem;
+  padding: 2px;
   border-radius: var(--r-pill);
-  background: var(--glass);
-  backdrop-filter: var(--blur-control);
-  box-shadow: 0 0 0 1px var(--glass-edge);
+  background: var(--well-bg);
+  box-shadow: var(--well-shadow);
   flex: none;
 }
 .segmented-item {
   position: relative;
-  min-width: 2.75rem;
-  height: 2rem;
-  padding: 0 1rem;
+  min-width: 2.5rem;
+  height: 1.75rem;
+  padding: 0 0.875rem;
   border-radius: var(--r-pill);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
   color: var(--text-2);
   white-space: nowrap;
   display: grid;
   place-items: center;
+  cursor: default;
   transition: color var(--dur-fast) var(--ease-std);
 }
 .segmented-active {
   position: absolute;
-  inset: 0.1875rem;
+  inset: 2px;
   display: flex;
   pointer-events: none;
-  background: var(--pill-light);
+  background: rgb(255 255 255 / 0.2);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.22),
+    0 1px 3px rgb(0 0 0 / 0.35);
   border-radius: var(--r-pill);
   transition: clip-path var(--dur-base) var(--ease-in-out);
+}
+:root[data-scheme="light"] .segmented:not([data-variant="large"]) .segmented-active {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.08),
+    0 1px 3px rgb(0 0 0 / 0.12);
 }
 .segmented-active[data-instant="true"] {
   transition: none;
 }
 .segmented-active .segmented-item {
+  color: #fff;
+  font-weight: 550;
+}
+:root[data-scheme="light"] .segmented:not([data-variant="large"]) .segmented-active .segmented-item {
+  color: var(--text);
+}
+.segmented[data-variant="large"] .segmented-active {
+  background: var(--pill-light);
+  box-shadow: none;
+}
+.segmented[data-variant="large"] .segmented-active .segmented-item {
   color: var(--text-on-light);
 }
 @media (hover: hover) and (pointer: fine) {
@@ -1007,11 +1305,8 @@ html[data-os="mac"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .segmented-active {
+  :root:not([data-reduce-motion="off"]) .segmented-active {
     transition: none;
-  }
-  .page-pushed {
-    animation-duration: 150ms;
   }
 }
 
@@ -1023,48 +1318,73 @@ html[data-os="mac"] {
   pointer-events: none;
 }
 /* The wordmark is a white picture (navbar, sign-in, profiles): in light mode it's drawn in the text's
-   near-black. By its class, not its file name: a build inlines the small picture as a data: URL. */
-:root[data-scheme="light"] .wordmark {
+   near-black (white again in a part kept dark). By its class, not its file name: a build inlines the small picture
+   as a data: URL. */
+:root[data-scheme="light"] .wordmark:not(.scheme-dark *) {
   filter: brightness(0) opacity(0.88);
 }
 
-/* Under the empty search field: genres to start from (NavBar SearchSuggestions). */
+/* Under the empty search field: native macOS Tahoe floating panel — 3-layer AppKit rim,
+   20px continuous squircle corners, quiet Title Case headings, and full-pill 28px recent rows. */
 .search-suggest {
   position: fixed;
   z-index: var(--z-popover);
-  width: min(440px, calc(100vw - 2rem));
-  padding: 1rem;
+  width: min(420px, calc(100vw - 2rem));
+  padding: 10px 12px 12px;
   display: grid;
-  gap: 0.625rem;
-  border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--tone-0) 90%, transparent);
-  -webkit-backdrop-filter: blur(8px) saturate(1.2);
-  backdrop-filter: blur(8px) saturate(1.2);
-  /* The settings panel's border. */
-  border: 1px solid var(--fill-3);
-  box-shadow:
-    0 0 0 1px var(--ring-outer),
-    0 12px 32px var(--shadow-deep);
-  animation: search-suggest-in var(--dur-fast) var(--ease-out);
+  gap: 8px;
+  border: 0;
+  border-radius: 18px;
+  corner-shape: superellipse(1.45);
+  background: var(--surface-menu);
+  box-shadow: var(--shadow-menu);
+  transform-origin: top right;
+  animation: search-suggest-in 140ms var(--ease-out);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 130ms var(--ease-out);
+}
+.search-suggest[data-leaving] {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+  pointer-events: none;
 }
 @keyframes search-suggest-in {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion="off"]) .search-suggest {
+    animation-name: fade-in;
+  }
+  :root:not([data-reduce-motion="off"]) .search-suggest[data-leaving] {
+    transform: none;
   }
 }
 .search-suggest-title {
-  font-size: var(--fs-xs);
-  font-weight: 600;
+  padding-inline: 2px;
+  font-size: 12px;
+  font-weight: 550;
   color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: -0.004em;
 }
 .search-suggest .genre-chip {
-  height: 28px;
-  padding: 0 0.75rem;
+  height: 27px;
+  padding: 0 11px;
+  border: 0;
+  background: var(--bezel-bg);
+  box-shadow: var(--bezel-shadow);
+  font-size: 12.5px;
+  font-weight: 500;
 }
-/* Recent searches: full-width rows above the genre chips. */
+.search-suggest .genre-chip[data-highlighted="true"] {
+  background: var(--selection-bg);
+  box-shadow: none;
+  color: var(--accent-fg);
+}
+/* Recent searches: full-pill macOS rows above the genre chips. */
 .search-suggest-head {
   display: flex;
   align-items: baseline;
@@ -1074,26 +1394,34 @@ html[data-os="mac"] {
   font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-3);
-  transition: color 150ms var(--ease-std);
+  transition: color 130ms var(--ease-out);
 }
 .search-recent {
   display: grid;
-  margin: -0.25rem -0.5rem 0.25rem;
+  gap: 1px;
+  margin: -2px -5px 2px;
 }
 .search-recent-item {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  height: 34px;
-  padding: 0 0.5rem;
-  border-radius: var(--r-sm);
-  color: var(--text-2);
-  font-size: var(--fs-md);
-  font-weight: 500;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  corner-shape: superellipse(1.45);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -0.008em;
   text-align: left;
-  transition:
-    background-color 150ms var(--ease-std),
-    color 150ms var(--ease-std);
+  cursor: default;
+}
+.search-recent-item[data-highlighted="true"] {
+  background: var(--selection-bg);
+  color: var(--accent-fg);
+}
+.search-recent-item[data-highlighted="true"] > svg {
+  color: inherit;
 }
 .search-recent-item > span {
   min-width: 0;
@@ -1103,12 +1431,17 @@ html[data-os="mac"] {
 }
 .search-recent-item > svg {
   flex: none;
+  width: 14px;
+  height: 14px;
   color: var(--text-3);
 }
 @media (hover: hover) and (pointer: fine) {
   .search-recent-item:hover {
-    background: var(--fill-2);
-    color: var(--text);
+    background: var(--selection-bg);
+    color: var(--accent-fg);
+  }
+  .search-recent-item:hover > svg {
+    color: inherit;
   }
   .search-suggest-clear:hover {
     color: var(--text);
@@ -1142,29 +1475,47 @@ html[data-os="mac"] {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-/* A page toolbar's pickers in the segmented control's shape: same pill, height and glass. */
+/* A page toolbar's pickers: native macOS bezel pop-up pills matching the segmented control's height. */
 .discover-controls .select-trigger,
 .library-toolbar .select-trigger,
 .library-filters .select-trigger,
 .downloads-toolbar .select-trigger,
 .seasons-picker .select-trigger:not([data-size="large"]) {
   width: auto;
-  min-width: 9.5rem;
-  min-height: 38px;
-  padding: 0 0.75rem 0 1rem;
+  min-width: 8.5rem;
+  min-height: 32px;
+  padding: 0 0.625rem 0 0.875rem;
   border: 0;
   border-radius: var(--r-pill);
-  background: var(--glass);
-  backdrop-filter: var(--blur-control);
-  box-shadow: 0 0 0 1px var(--glass-edge);
-  font-weight: 600;
+  background: var(--bezel-bg);
+  box-shadow: var(--bezel-shadow);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
 }
 
 /* --- macOS: the window keeps its traffic lights (tauri.macos.conf.json puts
-       them at 20px from the left, centred in the navbar), so the bars that
-       start at the top left begin after them. */
+       them at 20px from the left, centred on the navbar's 76px row), so the
+       bars that start at the top left begin after them.
+       The lights sit at a fixed place on screen, but Settings → Interface
+       size zooms the page (--ui-zoom, App.tsx): the room kept for them and
+       the rows they line up with are divided back out of the zoom, so at any
+       size the bar keeps clear of them and its row stays centred on them. In
+       fullscreen macOS hides them, and nothing makes room. */
 html[data-os="mac"] {
-  --traffic-lights: 88px;
+  --traffic-lights: calc(88px / var(--ui-zoom, 1));
+}
+html[data-os="mac"][data-fullscreen] {
+  --traffic-lights: 0px;
+}
+/* The row the lights are centred on: 76 screen px whatever the zoom. Back (here, and the player's, which stands
+   where the navbar's does) is centred on it. */
+html[data-os="mac"]:not([data-fullscreen]) {
+  --mac-row: max(calc(76px / var(--ui-zoom, 1)), 44px);
+  --back-top: calc((var(--mac-row) - var(--back-box)) / 2);
+}
+html[data-os="mac"]:not([data-fullscreen]) .navbar {
+  height: var(--mac-row);
 }
 /* The window is transparent (mpv draws under the page), which costs it the
    native rounded corners and edge: draw them. */
@@ -1186,8 +1537,7 @@ html[data-os="mac"] .account-bar {
 }
 html[data-os="mac"] .player-top {
   --bar-left: var(--traffic-lights);
-}
-html[data-os="mac"] .options-close {
+}html[data-os="mac"] .options-close {
   left: var(--traffic-lights);
 }
 /* TV mode is fullscreen: square, edge to edge. */

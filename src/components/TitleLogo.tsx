@@ -1,17 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Img, type ImgProps } from "./Img";
 import { api } from "../lib/api";
 import {
   backdropLuminance,
   chooseLogo,
   clearShare,
-  DARK_PAGE,
+  currentLogoScheme,
   imageBroken,
   imageLoaded,
   measureInk,
+  pageLuminance,
   scrimLevel,
   type Ink,
   type LogoLook,
+  type LogoScheme,
   type LogoShape,
   type LogoSpot,
 } from "../lib/ui";
@@ -67,11 +69,24 @@ export function TitleLogo({ logos, backdrop, spot, onReady, ...props }: TitleLog
   );
 }
 
-/** The cache key of a logo's choice: its candidates and the spot on the backdrop it's measured against. */
-function choiceId(src: string, logos?: string[], backdrop?: string, spot?: LogoSpot) {
+function subscribeScheme(onChange: () => void) {
+  if (typeof MutationObserver === "undefined" || typeof document === "undefined") return () => {};
+  const mo = new MutationObserver(onChange);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-scheme"] });
+  return () => mo.disconnect();
+}
+
+function useLogoScheme(): LogoScheme {
+  return useSyncExternalStore(subscribeScheme, currentLogoScheme, (): LogoScheme => "dark");
+}
+
+/** The cache key of a logo's choice: its candidates, the active scheme (for `onPage` spots) and the spot on the backdrop. */
+function choiceId(src: string, logos?: string[], backdrop?: string, spot?: LogoSpot, scheme: LogoScheme = currentLogoScheme()) {
   const candidates = logos?.includes(src) ? logos.slice(0, MAX_CANDIDATES) : [src];
-  const behindKey = backdrop && spot ? `${backdrop} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim} ${scrimLevel(spot)}` : undefined;
-  return { candidates, id: `${candidates.join(" ")}|${behindKey}` };
+  const level = spot ? scrimLevel(spot, scheme) : undefined;
+  const lightPage = !!(spot?.onPage && scheme === "light");
+  const behindKey = backdrop && spot ? `${backdrop} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim} ${level}` : lightPage ? "light" : "dark";
+  return { candidates, lightPage, id: `${candidates.join(" ")}|${behindKey}` };
 }
 
 /**
@@ -79,7 +94,7 @@ function choiceId(src: string, logos?: string[], backdrop?: string, spot?: LogoS
  * failed), or no logo will show (the name does). Synchronous, so a page whose logo is in already shows at once.
  */
 export function logoReady(src: string, logos?: string[], backdrop?: string, spot?: LogoSpot) {
-  const choice = choices.get(choiceId(src, logos, backdrop, spot).id);
+  const choice = lruGet(choices, choiceId(src, logos, backdrop, spot).id);
   if (choice === undefined) return false;
   if (typeof choice === "string") return true;
   return imageLoaded(choice.src) || imageBroken(choice.src);
@@ -90,20 +105,21 @@ export function logoReady(src: string, logos?: string[], backdrop?: string, spot
  * logo to show and how, "none" or "unsure" when the name shows instead, undefined while it's being measured.
  */
 export function useLogoChoice(src: string | undefined, logos?: string[], backdrop?: string, spot?: LogoSpot): Choice | undefined {
-  const { candidates, id } = src ? choiceId(src, logos, backdrop, spot) : { candidates: [] as string[], id: "" };
+  const scheme = useLogoScheme();
+  const { candidates, lightPage, id } = src ? choiceId(src, logos, backdrop, spot, scheme) : { candidates: [] as string[], lightPage: false, id: "" };
   // The choice lives in the module's cache, so a new title never shows the last one's for a frame.
-  const choice = choices.get(id);
+  const choice = id ? lruGet(choices, id) : undefined;
   const [, setMeasured] = useState(0);
   useEffect(() => {
     if (!candidates.length || choices.has(id)) return;
     let live = true;
-    const behind = backdrop && spot ? measureBackdrop(backdrop, spot) : Promise.resolve(DARK_PAGE);
+    const behind = backdrop && spot ? measureBackdrop(backdrop, spot, scheme) : Promise.resolve(pageLuminance(spot, scheme));
     (async () => {
       const [lum, first] = await Promise.all([behind, measureLogo(candidates[0])]);
-      if (candidates.length === 1) return chooseLogo(candidates, [first.ink], lum, [first.shape]);
+      if (candidates.length === 1) return chooseLogo(candidates, [first.ink], lum, [first.shape], lightPage);
       // Fast-path: when the primary logo already reads cleanly as-is on the measured backdrop, skip downloading & scanning fallback logos 1..5.
       if (lum !== null) {
-        const fast = chooseLogo([candidates[0]], [first.ink], lum, [first.shape]);
+        const fast = chooseLogo([candidates[0]], [first.ink], lum, [first.shape], lightPage);
         if (typeof fast === "object" && fast.look === "as-is") return fast;
       }
       const rest = await Promise.all(candidates.slice(1).map(measureLogo));
@@ -113,18 +129,19 @@ export function useLogoChoice(src: string | undefined, logos?: string[], backdro
         measured.map((m) => m.ink),
         lum,
         measured.map((m) => m.shape),
+        lightPage,
       );
     })()
       // Whatever goes wrong measuring, the name shows rather than an error escaping.
       .catch((): Choice => "unsure")
       .then((c) => {
-        choices.set(id, c);
+        lruSet(choices, id, c);
         if (live) setMeasured((n) => n + 1);
       });
     return () => {
       live = false;
     };
-    // `candidates` and `spot` are new each render; `id` says when they change.
+    // `candidates` and `spot` are new each render; `id` says when they (or `scheme` for onPage spots) change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   return candidates.length ? choice : undefined;
@@ -136,11 +153,28 @@ export type Choice = { src: string; look: LogoLook } | "unsure" | "none";
 /** More logos than this aren't measured (each is a request). */
 const MAX_CANDIDATES = 6;
 
+const MAX = 300;
 const choices = new Map<string, Choice>();
 const logos = new Map<string, Promise<MeasuredLogo>>();
 const behinds = new Map<string, Promise<number | null>>();
 const readables = new Map<string, Promise<HTMLImageElement | null>>();
-const MAX_READABLE_CACHE = 150;
+
+function lruGet<K, V>(map: Map<K, V>, key: K): V | undefined {
+  if (!map.has(key)) return undefined;
+  const value = map.get(key)!;
+  map.delete(key);
+  map.set(key, value);
+  return value;
+}
+
+function lruSet<K, V>(map: Map<K, V>, key: K, value: V, limit = MAX): void {
+  if (map.has(key)) map.delete(key);
+  else if (map.size >= limit) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+  map.set(key, value);
+}
 
 /** How long a picture may take to load for measuring before it counts as not loading. */
 const LOAD_TIMEOUT = 8000;
@@ -152,17 +186,13 @@ const LOAD_TIMEOUT = 8000;
  */
 export function loadReadable(src: string): Promise<HTMLImageElement | null> {
   const key = toneUrl(src);
-  let pending = readables.get(key);
+  let pending = lruGet(readables, key);
   if (!pending) {
-    if (readables.size >= MAX_READABLE_CACHE) {
-      const oldest = readables.keys().next().value;
-      if (oldest !== undefined) readables.delete(oldest);
-    }
     pending = (async () => (await load(src)) ?? (await loadThroughApp(src)))().then((img) => {
       if (!img) readables.delete(key);
       return img;
     });
-    readables.set(key, pending);
+    lruSet(readables, key, pending);
   }
   return pending;
 }
@@ -250,7 +280,7 @@ interface MeasuredLogo {
  * even the app can't read it, the picture is loaded as shown, for its size alone.
  */
 function measureLogo(src: string) {
-  let measured = logos.get(src);
+  let measured = lruGet(logos, src);
   // Wide enough that thin bright detail (a ring, small letters, an outline) survives the downscale (#11).
   if (!measured) {
     measured = loadReadable(src).then(async (img) => {
@@ -260,23 +290,23 @@ function measureLogo(src: string) {
       const shape = sized && sized.naturalWidth ? { width: sized.naturalWidth, height: sized.naturalHeight, clear: px ? clearShare(px) : null } : null;
       return { ink: px ? measureInk(px) : null, shape };
     }).catch(() => ({ ink: null, shape: null }));
-    logos.set(src, measured);
+    lruSet(logos, src, measured);
   }
   return measured;
 }
 
-/** The luminance behind the logo, measured once per backdrop and spot; null when it can't be. */
-function measureBackdrop(src: string, spot: LogoSpot) {
-  const level = scrimLevel(spot);
+/** The luminance behind the logo, measured once per backdrop, spot and scheme; null when it can't be. */
+function measureBackdrop(src: string, spot: LogoSpot, scheme: LogoScheme = currentLogoScheme()) {
+  const level = scrimLevel(spot, scheme);
   const key = `${src} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim} ${level}`;
-  let lum = behinds.get(key);
+  let lum = lruGet(behinds, key);
   if (!lum) {
     lum = loadReadable(src).then((img) => {
       const px = img && pixelsOf(img, 48, spot);
       if (!px) noteUnmeasured("backdrop", src);
       return px ? backdropLuminance(px, spot.scrim, level) : null;
     }).catch(() => null);
-    behinds.set(key, lum);
+    lruSet(behinds, key, lum);
   }
   return lum;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { EdgeBlur } from "./EdgeBlur";
 import { useFormFactor } from "../lib/ui";
 import { artFocusX, focusPosition } from "../lib/ui";
 import { loadReadable, pixelsOf } from "./TitleLogo";
@@ -79,6 +80,17 @@ export function useArtFocus(src: string | undefined, on: boolean): { style?: CSS
  * being worked out it's marked `data-placing`, and the page's entrance waits for it (pageMotion.ts), so the art
  * doesn't shift sideways once the page is already in.
  */
+/**
+ * The progressive blur at the bottom of a title page's art when it scrolls with the page (`.detail-bg-fade`). On a
+ * big screen: eight layers from about 1px to 33px, gathering toward the edge over the lower half of the art, so the
+ * picture goes softly out of focus as it darkens instead of turning into a smeared strip. A phone keeps six even
+ * layers: each one is taken again on every frame of a scroll.
+ */
+export function DetailFade() {
+  const phone = useFormFactor().form === "phone";
+  return phone ? <EdgeBlur className="detail-bg-fade" edge="bottom" layers={6} step={4} /> : <EdgeBlur className="detail-bg-fade" edge="bottom" layers={8} step={1.2} curve={1.6} />;
+}
+
 export function DetailArt({ src, children }: { src: string | undefined; children: ReactNode }) {
   const { style, placing } = useArtFocus(src, useFormFactor().form === "phone");
   return (

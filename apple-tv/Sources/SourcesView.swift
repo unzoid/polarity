@@ -35,30 +35,54 @@ struct SourcesView: View {
     }
 
     private func list(_ sources: Sources) -> some View {
-        List {
+        let matching = sources.sources.filter { !$0.otherEpisode }
+        let others = sources.sources.filter { $0.otherEpisode }
+        return List {
             if !sources.failed.isEmpty {
-                Text("Didn't answer: \(sources.failed.joined(separator: ", "))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Section {
+                    Text("Didn't answer: \(sources.failed.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            ForEach(sources.sources, id: \.url) { source in
-                Button {
-                    chosen = source
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(source.label.isEmpty ? source.addon : "\(source.label) · \(source.addon)")
-                            .font(.headline)
-                        if !source.text.isEmpty {
-                            Text(source.text).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                        }
-                        if source.otherEpisode {
-                            Text("Its file names another episode").font(.caption).foregroundStyle(.orange)
-                        }
+            if let best = matching.first {
+                Section("Best Match") {
+                    sourceRow(best)
+                }
+            }
+            let more = Array(matching.dropFirst())
+            if !more.isEmpty {
+                Section("More Sources") {
+                    ForEach(Array(more.enumerated()), id: \.offset) { _, source in
+                        sourceRow(source)
+                    }
+                }
+            }
+            if !others.isEmpty {
+                Section("Other Episodes") {
+                    ForEach(Array(others.enumerated()), id: \.offset) { _, source in
+                        sourceRow(source)
                     }
                 }
             }
         }
-        .padding(.horizontal, 80)
+    }
+
+    private func sourceRow(_ source: Source) -> some View {
+        Button {
+            chosen = source
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(source.label.isEmpty ? source.addon : "\(source.label) · \(source.addon)")
+                    .font(.headline)
+                if !source.text.isEmpty {
+                    Text(source.text).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                }
+                if source.otherEpisode {
+                    Text("Its file names another episode").font(.caption).foregroundStyle(.orange)
+                }
+            }
+        }
     }
 
     private func emptyReason(_ sources: Sources) -> String {

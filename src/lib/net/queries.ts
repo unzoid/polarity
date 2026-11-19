@@ -1,4 +1,4 @@
-import { type QueryClient, useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, type QueryClient, useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { libraryToggled } from "../library/libraryEvents";
 import { useCallback } from "react";
 import { api } from "../api";
@@ -166,11 +166,13 @@ export const useProgress = (metaId: string) =>
   useQuery({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 });
 
 /** Several titles' progress at once, flattened (the Downloads page's watched marks, #15); the same cache as useProgress. */
-export const useProgressOf = (metaIds: string[]) =>
-  useQueries({
-    queries: metaIds.map((metaId) => ({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 })),
+export const useProgressOf = (metaIds: string[]) => {
+  const unique = [...new Set(metaIds)];
+  return useQueries({
+    queries: unique.map((metaId) => ({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 })),
     combine: flatProgress,
   });
+};
 
 // Outside the hook, so the combined list keeps its identity until a result changes.
 const flatProgress = (results: { data?: Progress[] }[]) => results.flatMap((r) => r.data ?? []);
@@ -193,7 +195,7 @@ export const useSearch = (query: string) => {
     queryKey: keys.search(query),
     queryFn: () => api.search(query),
     enabled: query.trim().length >= searchMinLength(query.trim()),
-    placeholderData: (prev) => prev, // keep old results on screen while typing
+    placeholderData: keepPreviousData,
     select,
   });
 };

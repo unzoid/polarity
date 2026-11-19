@@ -21,9 +21,8 @@ function configuredDatabase() {
 
 function initialBackend(): AccountBackend | null {
   // fake.html's stand-in account (lib/platform/fake/account.ts): dev server only, never in a build.
-  if (import.meta.env.DEV) {
-    const fake = (globalThis as { __polarFakeAccount?: AccountBackend }).__polarFakeAccount;
-    if (fake) return fake;
+  if (import.meta.env.DEV && "__polarFakeAccount" in globalThis) {
+    return (globalThis as { __polarFakeAccount?: AccountBackend | null }).__polarFakeAccount ?? null;
   }
   return null;
 }
@@ -32,12 +31,9 @@ export let backend = initialBackend();
 
 /** Before the app renders: loads the configured account provider (and in dev builds, any saved connection code). */
 export async function startAccountBackend() {
-  if (import.meta.env.DEV) {
-    const fake = (globalThis as { __polarFakeAccount?: AccountBackend }).__polarFakeAccount;
-    if (fake) {
-      backend = fake;
-      return;
-    }
+  if (import.meta.env.DEV && "__polarFakeAccount" in globalThis) {
+    backend = (globalThis as { __polarFakeAccount?: AccountBackend | null }).__polarFakeAccount ?? null;
+    return;
   }
   if (buildChannel === "dev") await loadDevDatabase();
   const db = configuredDatabase();

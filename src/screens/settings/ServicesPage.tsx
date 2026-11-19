@@ -454,7 +454,7 @@ function ArtworkRow(props: Expandable) {
       {...props}
     >
       <p className="settings-expand-text">
-        Free key from themoviedb.org (Settings → API). Adds logos, better posters and episode details.
+        Free key from themoviedb.org (Settings → API).
       </p>
       <FormRow
         look="expand"

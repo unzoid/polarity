@@ -195,7 +195,7 @@ export function AnimeLandscapeCard({ item, label }: { item: Media; label?: strin
       {...open}
       style={{ "--cover": item.coverImage.color ?? undefined } as React.CSSProperties}
     >
-      {page !== undefined && <ArtTitle name={title} logo={page?.logo} logos={page?.logos} />}
+      {page !== undefined && <ArtTitle name={title} logo={page?.logo} logos={page?.logos} decorative />}
       {matureContent === "blur" && isMature(item) && <MatureCover />}
     </Card>
   );

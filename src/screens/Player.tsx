@@ -24,12 +24,13 @@ import {
   VolumeMuted,
 } from "../components/icons";
 import { AnimatePresence, motion } from "motion/react";
-import { ease, useFormFactor } from "../lib/ui";
+import { ease, useDismiss, useFormFactor, useLayer } from "../lib/ui";
 import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, keepScreenOn, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
+import { SwapIcon } from "../components/SwapIcon";
 import { streamKey } from "../components/StreamList";
 import { SourceFilterBar } from "../components/SourceFilters";
 import { TvSourceMenu, useSourceInfo } from "../components/SourceInfo";
@@ -71,12 +72,15 @@ import { downloadedStream, episodeState, isLocalFile, nextVideo, previousVideo, 
 import { nextInOrder, previousInOrder, shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
 import { WindowControls } from "../components/WindowControls";
 import { Scrubber } from "../components/player/Scrubber";
+import { VideoBackdrop } from "../components/player/VideoBackdrop";
 import { useSource } from "../components/player/useSource";
 import { useSourceRecord, useThroughput } from "../components/player/useSourceRecord";
 import { SkipButton, useSkipSegments } from "../components/player/SkipSegments";
 import { OptionsOverlay, type OptionColumn, type OptionItem } from "../components/player/OptionsOverlay";
 import { VolumeHud, type VolumePing } from "../components/player/VolumeHud";
 import { EpisodeRail } from "../components/player/EpisodeRail";
+import { EpisodeMenu } from "../components/player/EpisodeMenu";
+import { SpeedLine } from "../components/player/SpeedLine";
 import { Dropdown } from "../components/Dropdown";
 import { SkipTransport } from "../components/player/SkipTransport";
 import { useTracks } from "../components/player/useTracks";
@@ -100,6 +104,7 @@ import { createMiniWindow } from "../components/player/miniWindow";
 import { YouTubeMedia } from "../components/player/youtubeMedia";
 import { useYouTubeSpeed } from "../components/player/useYouTubeSpeed";
 import { useHoldSpeed } from "../components/player/useHoldSpeed";
+import { useDockZoom } from "../components/player/useDockZoom";
 import { useSwipeLevels } from "../components/player/useSwipeLevels";
 import { useScreenBrightness } from "../components/player/useScreenBrightness";
 import { BrightnessHud } from "../components/player/BrightnessHud";
@@ -483,7 +488,21 @@ export function Player({
   const frameSteps = useStepping(paused, buffering);
   // YouTube's bar stays out of the way while paused too: showing it moves the picture (#384).
   // Settings → Playback can leave the picture clear on pause: the controls then come only with input.
-  const { chrome, poke, hide: hideChrome, overControls } = usePlayerChrome(hideAfter, paused && pauseShowsControls && !frameSteps.stepping && !ytFramed);
+  const { chrome, poke, hide: hideChrome, controlHover } = usePlayerChrome(hideAfter, paused && pauseShowsControls && !frameSteps.stepping && !ytFramed);
+  // A watch party plays at 1x for everyone (its sync nudges the rate itself).
+  const inParty = !!party;
+  // Press and hold on the picture: faster until let go (Settings → Playback). Not in a party, nor on YouTube's own player.
+  // Hides chrome immediately when 2x kicks in so the bars and touch's 45% dim never obscure the sped-up video.
+  const hold = useHoldSpeed(holdSpeed > 0 && !inParty && !ytFramed && started, started && !paused, () => hideChrome("hold speed"));
+  const playRate = hold.held ? holdSpeed : rate;
+  const [scrubbing, setScrubbing] = useState(false);
+  const onScrubChange = useCallback(
+    (active: boolean) => {
+      setScrubbing(active);
+      if (!active) poke(false, "scrub");
+    },
+    [poke],
+  );
   // The focus ring shows only for focus moved by the keyboard, never after a click (#329).
   const keyFocus = useKeyboardFocus();
   const ready = source.state.status === "ready" && !error;
@@ -492,7 +511,10 @@ export function Player({
   // Playing on a TV, nobody watches this screen: the controls that drive the TV stay up.
   // Phones and tablets: locked against touches (TouchLock.tsx), the controls stay hidden.
   const touchLock = useTouchLock(touch && !tv);
-  const chromeVisible = !touchLock.locked && (chrome.visible || !!options || nativeMenu || moreOpen || !ready || airplay.casting || !!chromecast.casting);
+  const chromeVisible =
+    !touchLock.locked &&
+    !hold.held &&
+    (chrome.visible || scrubbing || !!options || nativeMenu || moreOpen || !ready || !started || airplay.casting || !!chromecast.casting);
   // YouTube's bar (#384) collapses once the video has played, and says what the party's hold says once it lasts.
   const [ytPlayed, setYtPlayed] = useState(false);
   useEffect(() => {
@@ -503,6 +525,8 @@ export function Player({
   // player's own pointerdown shows them before the click, so a tap that should
   // bring them back would otherwise hide them again at once.
   const chromeAtPress = useRef(false);
+  const chromeBeforeTap = useRef(false);
+  const touchChain = useRef<{ side: "back" | "forward"; until: number } | null>(null);
 
   // --- Current / next episode ---------------------------------------------
   const { animeSkipFiller } = usePrefs();
@@ -663,11 +687,6 @@ export function Player({
     if (!systemVolume) storeLocal("polar.volume", String(volume));
   }, [volume, muted, media, sleep.gain, volumeTop]);
 
-  // A watch party plays at 1x for everyone (its sync nudges the rate itself).
-  const inParty = !!party;
-  // Press and hold on the picture: faster until let go (Settings → Playback). Not in a party, nor on YouTube's own player.
-  const hold = useHoldSpeed(holdSpeed > 0 && !inParty && !ytFramed && started, started && !paused);
-  const playRate = hold.held ? holdSpeed : rate;
   // Phones and tablets: a finger up or down the right half sets the volume, the left the screen's brightness
   // (useSwipeLevels; Settings → Controls & TV turns it off). Not in TV mode, while locked or held, nor on YouTube's player.
   const { swipeGestures } = usePrefs();
@@ -1091,6 +1110,7 @@ export function Player({
             label: `${order?.number.get(v.id) ?? v.episode}. ${v.title}`,
             detail: released && inProgress && p ? formatRemaining(p.position, p.duration) : airLabel(v),
             thumbnail: stillFor(v.id) ?? v.thumbnail ?? "",
+            unwatched: !watched,
             progress: watched ? undefined : fraction,
             badge: watched ? { text: "Watched" } : undefined,
             disabled: !openable,
@@ -1362,19 +1382,31 @@ export function Player({
   }, [next, pastThreeQuarters, type]);
 
   // Autoplay countdown once the episode ends, unless it's time to ask
-  // whether anyone's still watching (Settings → Playback).
+  // whether anyone's still watching (Settings → Playback). Pauses while playback is
+  // paused before EOF or while a picker/menu is open so browsing sources/subtitles never hijacks playback.
   const askAfter = settings?.stillWatchingAfter ?? 0;
   const stillWatching = askAfter > 0 && autoplayStreak() >= askAfter;
   // A sleep timer set to the end of this episode (or run out) stops here: no next one (#270).
   const willAutoplay = !!settings?.autoplayNext && !stillWatching && sleep.choice !== "episode" && !sleep.asleep;
+  const countdownPaused = (paused && !ended) || !!options || moreOpen || !!sourceMenu;
+  const autoplayLeft = useRef(countdown * 1000);
   useEffect(() => {
-    if (!ended || !next || nextDismissed || !willAutoplay) return;
+    autoplayLeft.current = countdown * 1000;
+  }, [ended, videoId, countdown]);
+  useEffect(() => {
+    if (!ended || !next || nextDismissed || !willAutoplay || countdownPaused) return;
+    const startedAt = performance.now();
+    const wait = autoplayLeft.current;
     const t = window.setTimeout(() => {
+      autoplayLeft.current = 0;
       countAutoplay();
       playVideo(next.id);
-    }, countdown * 1000);
-    return () => window.clearTimeout(t);
-  }, [ended, next, nextDismissed, willAutoplay, countdown, playVideo]);
+    }, wait);
+    return () => {
+      window.clearTimeout(t);
+      autoplayLeft.current = Math.max(0, wait - (performance.now() - startedAt));
+    };
+  }, [ended, next, nextDismissed, willAutoplay, countdownPaused, playVideo]);
 
   // With IntroDB credit timings, "Up next" arrives exactly when the credits
   // roll (Netflix-style); without them, fall back to the last ~40s. Settings
@@ -1389,6 +1421,10 @@ export function Player({
     return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
   });
   const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
+  const sleepEndedRef = useRef<HTMLDivElement>(null);
+  useDismiss(showNextUp && !!next && !options, () => setNextDismissed(true));
+  useDismiss(sleep.warning && !sleep.asleep && !options, () => sleep.cancel());
+  useLayer(sleepEndedRef, sleep.asleep && !options, () => sleep.wake());
   // As Up Next comes: the next episode's first two picks get the request pressing Play makes, so their
   // servers have the file open by the time it starts (its sources were fetched at three quarters).
   const nextId = next?.id;
@@ -1454,11 +1490,26 @@ export function Player({
   const actionRow = useRef<HTMLDivElement>(null);
   const showPin = canPin && !fullscreen && !mini;
   const showFill = !tv && isDesktop;
+  // A desktop window (not a phone, a compact window, TV or Picture in Picture): one row of controls under the
+  // timeline, and each panel a small menu above its button instead of a layer over the whole picture.
+  const dock = !tv && form === "desktop" && !mini;
+  const dockZoom = useDockZoom(dock);
+  // The dock's popup menus (Cast, More) share its panels' look and scale (player.css `.menu-dock`).
+  // Zoomed only past 1× (player.css data-zoomed): at 1× nothing carries a zoom, which WebKit doesn't treat as a no-op.
+  const zoomed = dock && dockZoom > 1;
+  const dockMenu = dock
+    ? {
+        className: zoomed ? "scheme-dark menu-dock menu-dock-zoomed" : "scheme-dark menu-dock",
+        style: zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined,
+        // The same smoked glass as the dock's panels: a frosted copy of the picture behind the menu.
+        backdrop: <VideoBackdrop media={media} className="options-frost" crop cropSize={[192, 168]} fade />,
+      }
+    : {};
   const barFit = useBarFit(
     topBar,
     actionRow,
     Number(showPin) + Number(showFill),
-    !tv && form !== "phone" && !compact,
+    !tv && form !== "phone" && !compact && !dock,
     [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join(
       "|",
     ),
@@ -1496,23 +1547,21 @@ export function Player({
                 ),
               },
             ]
-          : [{ title: "Watch Party", size: "medium" as const, options: [], onSelect: () => {}, content: <PartyStart me={profile!} onStart={local ? undefined : startHere} /> }]),
-        // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
-        ...(party || tv
-          ? []
           : [
               {
-                title: "Watch a Link",
+                // One column, headed by the pane itself: its own heading says what it is.
+                title: "Watch Party",
+                titleHidden: true,
                 size: "medium" as const,
                 options: [],
                 onSelect: () => {},
                 content: (
-                  <div className="party-pane">
-                    <p className="party-lede">
-                      Start a party on a YouTube video, or a video file or stream from the web. Everyone's app opens the link itself, after seeing it.
-                    </p>
-                    <LinkForm me={profile!} onDone={() => setOptions(null)} />
-                  </div>
+                  <PartyStart
+                    me={profile!}
+                    onStart={local ? undefined : startHere}
+                    // Not in a party yet: a link can start one. TV mode: no pasting on a remote.
+                    link={tv ? undefined : <LinkForm me={profile!} onDone={() => setOptions(null)} />}
+                  />
                 ),
               },
             ]),
@@ -1564,6 +1613,7 @@ export function Player({
     return (
       <div
         className="player player-yt"
+        data-nav-scope=""
         data-engine="youtube"
         data-chrome={barShown}
         data-key-focus={keyFocus || undefined}
@@ -1578,8 +1628,7 @@ export function Player({
             className="player-yt-bar"
             data-shown={barShown}
             data-tauri-drag-region={pinned ? undefined : true}
-            onPointerEnter={() => (overControls.current = true)}
-            onPointerLeave={() => (overControls.current = false)}
+            {...controlHover}
           >
             <BackButton className="player-back" onClick={() => void exit()} />
             <p className="player-yt-message t-callout" role="status" aria-live="polite" data-tauri-drag-region={pinned ? undefined : true}>
@@ -1634,9 +1683,167 @@ export function Player({
     );
   }
 
+  const currentUnwatched = !!current && !local && !episodeState(current, progressById.get(current.id), watchedFraction()).watched;
+  const nextUnwatched = !!next && !local && !episodeState(next, progressById.get(next.id), watchedFraction()).watched;
+  const statusEpisode = current && !local ? `${episodeCode(current.season, current.episode)}${current.title ? ` · ${current.title}` : ""}` : undefined;
+
+  // The window-level controls: in the top bar, or in the desktop dock under the timeline.
+  const volumeControl = !systemVolume && (
+    <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
+      <IconButton
+        variant="player"
+        onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
+        label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
+        aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
+        title={withShortcut("Mute", "mute")}
+      >
+        <VolumeIcon size={22} />
+      </IconButton>
+      <span className="player-volume-slider">
+        <input
+          type="range"
+          min={0}
+          max={volumeTop}
+          step={0.01}
+          value={muted ? 0 : Math.min(volume, volumeTop)}
+          data-boost={volumeTop > 1 || undefined}
+          onChange={(e) => {
+            setVolume(Number(e.target.value));
+            setMuted(false);
+          }}
+          aria-label="Volume"
+          aria-valuetext={`${Math.round((muted ? 0 : Math.min(volume, volumeTop)) * 100)}%`}
+          style={
+            {
+              "--value": `${((muted ? 0 : Math.min(volume, volumeTop)) / volumeTop) * 100}%`,
+              "--unity-frac": volumeTop > 1 ? 1 / volumeTop : undefined,
+            } as React.CSSProperties
+          }
+        />
+      </span>
+    </div>
+  );
+  const castControls = (
+    <>
+      {airplay.available && (
+        <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
+          <Tv size={22} />
+        </IconButton>
+      )}
+      {/* Chromecast (#443): the TVs on the network, and back to this computer. */}
+      {chromecast.available && (
+        <MenuRoot
+          modal={false}
+          onOpenChange={(next) => {
+            setMoreOpen(next);
+            if (next) setOptions(null);
+          }}
+        >
+          <MenuTrigger
+            className={iconButtonClass("player")}
+            aria-label="Cast to a TV"
+            title="Cast to a TV"
+            aria-pressed={!!chromecast.casting}
+          >
+            <Cast size={22} />
+          </MenuTrigger>
+          <MenuPopup sideOffset={dock ? 12 : 6} align="end" collisionPadding={12} aria-label="Cast to a TV" {...dockMenu}>
+            {chromecast.devices.map((d) => (
+              <MenuCheckItem
+                key={d.id}
+                checked={chromecast.casting?.id === d.id}
+                onCheckedChange={() => (chromecast.casting?.id === d.id ? chromecast.stop() : chromecast.start(d))}
+              >
+                {d.name}
+              </MenuCheckItem>
+            ))}
+            {chromecast.casting && <MenuItem onClick={chromecast.stop}>Stop Casting</MenuItem>}
+          </MenuPopup>
+        </MenuRoot>
+      )}
+    </>
+  );
+  const moreMenu = (more || dock || watchLog || moreItems) && (
+    <MenuRoot
+      modal={false}
+      onOpenChange={(next) => {
+        setMoreOpen(next);
+        if (next) setOptions(null);
+      }}
+    >
+      <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More" data-panel="more">
+        <More size={22} />
+      </MenuTrigger>
+      <MenuPopup
+        sideOffset={dock ? 12 : 6}
+        align="end"
+        collisionPadding={12}
+        aria-label="More"
+        {...dockMenu}
+      >
+        {(more || dock) && showPin && (
+          <MenuCheckItem checked={pinned} onCheckedChange={togglePin} meta={shortcutText("pinWindow")}>
+            Pin window on top
+          </MenuCheckItem>
+        )}
+        {(more || dock) && showFill && (
+          <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
+            {`Crop: ${cropModeLabel(crop)}`}
+          </MenuCheckItem>
+        )}
+        {dock && (
+          <MenuItem onClick={() => setOptions("sleep")} meta={sleep.left != null ? sleepLabel(sleep.left) : undefined}>
+            Sleep Timer
+          </MenuItem>
+        )}
+        {canMini && (
+          <MenuCheckItem checked={mini} onCheckedChange={toggleMini} meta={shortcutText("miniPlayer")}>
+            Picture in Picture
+          </MenuCheckItem>
+        )}
+        {canShoot && (
+          <MenuItem onClick={takeScreenshot} meta={shortcutText("screenshot")}>
+            Save Screenshot
+          </MenuItem>
+        )}
+        {canShoot && shotSaved && (
+          <MenuItem onClick={() => void api.revealScreenshot().catch(warnFailed("reveal screenshot"))}>
+            Show Last Screenshot
+          </MenuItem>
+        )}
+        {canHandOff &&
+          otherPlayers.map((p) => (
+            <MenuItem key={p.id} onClick={() => handOff(p)}>
+              {`Play in ${p.name}`}
+            </MenuItem>
+          ))}
+        {watchLog && (
+          <MenuItem
+            onClick={() =>
+              void watchLogText(engine ?? "not chosen yet")
+                .then((text) => navigator.clipboard.writeText(text))
+                .then(
+                  () => flashNotice("Watch log copied", 2000),
+                  () => flashNotice("Couldn't copy the watch log", 2500),
+                )
+            }
+          >
+            Copy Watch Log
+          </MenuItem>
+        )}
+      </MenuPopup>
+    </MenuRoot>
+  );
+  const fullscreenButton = !tv && isDesktop && (
+    <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
+      {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
+    </IconButton>
+  );
+
   return (
     <div
       className="player"
+      data-nav-scope=""
       data-engine={engine ?? undefined}
       data-fill={fill || undefined}
       data-fullscreen={fullscreen || tv || undefined}
@@ -1647,6 +1854,9 @@ export function Player({
       data-key-focus={keyFocus || undefined}
       data-options={!!options}
       data-options-instant={optionsByKey}
+      data-dock={dock || undefined}
+      data-zoomed={zoomed || undefined}
+      style={zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined}
       data-started={started}
       onPointerMove={() => poke()}
       onPointerDown={() => poke()}
@@ -1685,10 +1895,33 @@ export function Player({
           swipe.handlers.onPointerCancel(e);
         }}
         onPointerLeave={hold.handlers.onPointerLeave}
-        onClick={() => {
+        onClick={(e) => {
           // The release of a hold that sped up, or of a swipe: play/pause and the controls stay as they were.
           const held = hold.swallowClick();
           if (swipe.swallowClick() || held) return;
+          if (touch) {
+            const third = e.currentTarget.clientWidth / 3;
+            const x = e.nativeEvent.offsetX;
+            const side: "back" | "forward" | null = x < third ? "back" : x > third * 2 ? "forward" : null;
+            const now = performance.now();
+            const activeChain = touchChain.current && now < touchChain.current.until ? touchChain.current : null;
+            if (side && activeChain?.side === side) {
+              seekBy((side === "back" ? -1 : 1) * seekStep);
+              kick(side);
+              touchChain.current = { side, until: now + 900 };
+              return;
+            }
+            if (side && e.detail >= 2) {
+              seekBy((side === "back" ? -1 : 1) * seekStep);
+              kick(side);
+              touchChain.current = { side, until: now + 900 };
+              if (chromeBeforeTap.current) poke(true, "double tap");
+              else hideChrome("double tap");
+              return;
+            }
+            touchChain.current = null;
+            if (e.detail <= 1) chromeBeforeTap.current = chromeAtPress.current;
+          }
           if (!touch && settings?.clickAction !== "controls") return togglePlay();
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
@@ -1699,9 +1932,13 @@ export function Player({
           const third = e.currentTarget.clientWidth / 3;
           const x = e.nativeEvent.offsetX;
           if (touch && (x < third || x > third * 2)) {
-            seekBy((x < third ? -1 : 1) * seekStep);
-            kick(x < third ? "back" : "forward");
-            return poke(true, "double tap");
+            const side = x < third ? "back" : "forward";
+            const now = performance.now();
+            if (touchChain.current && now < touchChain.current.until && touchChain.current.side === side) return;
+            seekBy((side === "back" ? -1 : 1) * seekStep);
+            kick(side);
+            touchChain.current = { side, until: now + 900 };
+            return;
           }
           if (!isDesktop) return cycleCrop();
           // Pinned, the window stays as it is (#266).
@@ -1734,6 +1971,7 @@ export function Player({
             logos={art.logos}
             artPending={art.pending}
             name={link ? title : meta?.name}
+            episode={statusEpisode}
             background={art.background}
             steps={steps}
             backend={engine === "html" ? "built-in" : engine === "youtube" ? "YouTube's embedded player" : (engine ?? "not chosen yet")}
@@ -1789,88 +2027,38 @@ export function Player({
           }
         />
       )}
-      {notice && <div className="player-notice t-callout">{notice}</div>}
-      {hold.held && (
-        <div className="player-hold-speed t-callout tabular" role="status">
-          <Speed size={16} aria-hidden /> {holdSpeed}x
-        </div>
-      )}
-      {party && ready && started && <PartyHold party={party} videoId={videoId} />}
+      <div className="player-top-stack">
+        {hold.held && (
+          <div className="player-hold-speed t-callout tabular" role="status">
+            <HoldChevrons /> {holdSpeed}x
+          </div>
+        )}
+        {party && ready && started && <PartyHold party={party} videoId={videoId} />}
+        {notice && <div className="player-notice t-callout">{notice}</div>}
+      </div>
       {party && <PartyNotes party={party} />}
 
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
       {/* Pinned (#266), nothing moves the window. */}
-      <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true}>
+      <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true} {...controlHover}>
         <BackButton className="player-back" onClick={() => void exit()} />
         {/* Between Back and the controls: centred while it fits, off-centre when it would meet them, then cut short (#396). */}
+        {/* The desktop dock names what's playing above the timeline instead. */}
         <div className="player-heading" data-tauri-drag-region={pinned ? undefined : true}>
-          <span className="player-heading-title">{heading}</span>
-          {current && <span className="player-heading-show">{title}</span>}
-          {playingFormat && <span className="player-heading-format">{playingFormat}</span>}
+          {!dock && (
+            <>
+              <span className="player-heading-title">{heading}</span>
+              {current && <span className="player-heading-show">{title}</span>}
+              {playingFormat && <span className="player-heading-format">{playingFormat}</span>}
+            </>
+          )}
         </div>
         <div className="player-top-end">
           <div className="player-top-actions">
             {party && <PartyBadge party={party} onOpen={() => setOptions("party")} />}
-            {!systemVolume && (
-              <div className="player-volume" data-folded={sliderFolded || undefined} data-open={volumeOpen || undefined}>
-                <IconButton
-                  variant="player"
-                  onClick={() => (sliderFolded && touch ? setVolumeOpen((o) => !o) : setMuted((m) => !m))}
-                  label={sliderFolded && touch ? "Volume" : muted ? "Unmute" : "Mute"}
-                  aria-expanded={sliderFolded && touch ? volumeOpen : undefined}
-                  title={withShortcut("Mute", "mute")}
-                >
-                  <VolumeIcon size={22} />
-                </IconButton>
-                <span className="player-volume-slider">
-                  <input
-                    type="range"
-                    min={0}
-                    max={volumeTop}
-                    step={0.01}
-                    value={muted ? 0 : Math.min(volume, volumeTop)}
-                    onChange={(e) => {
-                      setVolume(Number(e.target.value));
-                      setMuted(false);
-                    }}
-                    aria-label="Volume"
-                    aria-valuetext={`${Math.round((muted ? 0 : Math.min(volume, volumeTop)) * 100)}%`}
-                    style={{ "--value": `${((muted ? 0 : Math.min(volume, volumeTop)) / volumeTop) * 100}%` } as React.CSSProperties}
-                  />
-                </span>
-              </div>
-            )}
-            {airplay.available && (
-              <IconButton variant="player" onClick={airplay.pick} label="AirPlay" title="AirPlay" aria-pressed={airplay.casting}>
-                <Tv size={22} />
-              </IconButton>
-            )}
-            {/* Chromecast (#443): the TVs on the network, and back to this computer. */}
-            {chromecast.available && (
-              <MenuRoot modal={false} onOpenChange={setMoreOpen}>
-                <MenuTrigger
-                  className={iconButtonClass("player")}
-                  aria-label="Cast to a TV"
-                  title="Cast to a TV"
-                  aria-pressed={!!chromecast.casting}
-                >
-                  <Cast size={22} />
-                </MenuTrigger>
-                <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="Cast to a TV">
-                  {chromecast.devices.map((d) => (
-                    <MenuCheckItem
-                      key={d.id}
-                      checked={chromecast.casting?.id === d.id}
-                      onCheckedChange={() => (chromecast.casting?.id === d.id ? chromecast.stop() : chromecast.start(d))}
-                    >
-                      {d.name}
-                    </MenuCheckItem>
-                  ))}
-                  {chromecast.casting && <MenuItem onClick={chromecast.stop}>Stop Casting</MenuItem>}
-                </MenuPopup>
-              </MenuRoot>
-            )}
-            {showPin && !more && (
+            {!dock && volumeControl}
+            {!dock && castControls}
+            {showPin && !more && !dock && (
               <IconButton
                 variant="player"
                 onClick={togglePin}
@@ -1881,7 +2069,7 @@ export function Player({
                 {pinned ? <Pinned size={22} /> : <Pin size={22} />}
               </IconButton>
             )}
-            {showFill && !more && (
+            {showFill && !more && !dock && (
               <IconButton
                 variant="player"
                 onClick={cycleCrop}
@@ -1892,65 +2080,8 @@ export function Player({
                 {crop === "fit" ? <CropFit size={22} /> : crop === "bars" ? <CropBars size={22} /> : <CropFill size={22} />}
               </IconButton>
             )}
-            {(more || watchLog || moreItems) && (
-              <MenuRoot modal={false} onOpenChange={setMoreOpen}>
-                <MenuTrigger className={iconButtonClass("player", "player-more")} aria-label="More" title="More">
-                  <More size={22} />
-                </MenuTrigger>
-                <MenuPopup sideOffset={6} align="end" collisionPadding={12} aria-label="More">
-                  {more && showPin && (
-                    <MenuCheckItem checked={pinned} onCheckedChange={togglePin} meta={shortcutText("pinWindow")}>
-                      Pin window on top
-                    </MenuCheckItem>
-                  )}
-                  {more && showFill && (
-                    <MenuCheckItem checked={crop !== "fit"} onCheckedChange={cycleCrop} meta={shortcutText("fill")}>
-                      {`Crop: ${cropModeLabel(crop)}`}
-                    </MenuCheckItem>
-                  )}
-                  {canMini && (
-                    <MenuCheckItem checked={mini} onCheckedChange={toggleMini} meta={shortcutText("miniPlayer")}>
-                      Picture in Picture
-                    </MenuCheckItem>
-                  )}
-                  {canShoot && (
-                    <MenuItem onClick={takeScreenshot} meta={shortcutText("screenshot")}>
-                      Save Screenshot
-                    </MenuItem>
-                  )}
-                  {canShoot && shotSaved && (
-                    <MenuItem onClick={() => void api.revealScreenshot().catch(warnFailed("reveal screenshot"))}>
-                      Show Last Screenshot
-                    </MenuItem>
-                  )}
-                  {canHandOff &&
-                    otherPlayers.map((p) => (
-                      <MenuItem key={p.id} onClick={() => handOff(p)}>
-                        {`Play in ${p.name}`}
-                      </MenuItem>
-                    ))}
-                  {watchLog && (
-                    <MenuItem
-                      onClick={() =>
-                        void watchLogText(engine ?? "not chosen yet")
-                          .then((text) => navigator.clipboard.writeText(text))
-                          .then(
-                            () => flashNotice("Watch log copied", 2000),
-                            () => flashNotice("Couldn't copy the watch log", 2500),
-                          )
-                      }
-                    >
-                      Copy Watch Log
-                    </MenuItem>
-                  )}
-                </MenuPopup>
-              </MenuRoot>
-            )}
-            {!tv && isDesktop && (
-              <IconButton variant="player" onClick={() => void toggleFullscreen()} label="Fullscreen" title={withShortcut("Fullscreen", "fullscreen")}>
-                {fullscreen ? <ExitFullscreen size={22} /> : <Fullscreen size={22} />}
-              </IconButton>
-            )}
+            {!dock && moreMenu}
+            {!dock && fullscreenButton}
             {touchLock.available && (
               <IconButton variant="player" onClick={touchLock.lock} label="Lock screen" title="Lock screen">
                 <Lock size={22} />
@@ -1972,9 +2103,11 @@ export function Player({
         </div>
       </div>
 
-      {/* Centre transport, Netflix-style: bare glyphs, no button chrome. */}
-      {ready && started && (
+      {/* Centre transport, Netflix-style: bare glyphs, no button chrome. The desktop dock has Play/Pause in its row
+          and the arrow keys for skipping, so only the buffering spinner stays in the middle there. */}
+      {ready && started && dock && (
         <div className="player-center">
+          {/* Shown only while a jump from the keys shows its "+10" (player.css); clicked then, it adds to it. */}
           <SkipTransport
             direction="back"
             seconds={seekStep}
@@ -1983,16 +2116,7 @@ export function Player({
             label={`Back ${seekStep} seconds`}
             title={withShortcut(`Back ${seekStep}s`, "seekBack")}
           />
-          <IconButton variant="transport" className="player-transport-main" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut("Play/Pause", "playPause")}>
-            {/* In px like the circle (player.css), not the rem a number gives. */}
-            {frameSteps.spinner ? (
-              <Spinner className="player-spinner" size="52px" label="Buffering" />
-            ) : paused ? (
-              <Play size="64px" fill="currentColor" strokeWidth={0} />
-            ) : (
-              <Pause size="64px" fill="currentColor" strokeWidth={0} />
-            )}
-          </IconButton>
+          <span className="player-center-gap">{frameSteps.spinner && <Spinner className="player-spinner" size="52px" label="Buffering" />}</span>
           <SkipTransport
             direction="forward"
             seconds={seekStep}
@@ -2003,53 +2127,168 @@ export function Player({
           />
         </div>
       )}
+      {ready && started && !dock && (
+        <div className="player-center">
+          <SkipTransport
+            direction="back"
+            seconds={seekStep}
+            kick={kicks.back}
+            onSkip={() => (seekBy(-seekStep), kick("back"))}
+            label={`Back ${seekStep} seconds`}
+            title={withShortcut(`Back ${seekStep}s`, "seekBack")}
+            {...controlHover}
+          />
+          <IconButton
+            variant="transport"
+            className="player-transport-main"
+            onClick={togglePlay}
+            label={paused ? "Play" : "Pause"}
+            title={withShortcut("Play/Pause", "playPause")}
+            {...controlHover}
+          >
+            {/* In px like the circle (player.css), not the rem a number gives. */}
+            {frameSteps.spinner ? (
+              <Spinner className="player-spinner" size="52px" label="Buffering" />
+            ) : (
+              <SwapIcon state={paused ? "play" : "pause"}>
+                {paused ? (
+                  <Play className="player-play-glyph" size="64px" fill="currentColor" strokeWidth={0} />
+                ) : (
+                  <Pause size="64px" fill="currentColor" strokeWidth={0} />
+                )}
+              </SwapIcon>
+            )}
+          </IconButton>
+          <SkipTransport
+            direction="forward"
+            seconds={seekStep}
+            kick={kicks.forward}
+            onSkip={() => (seekBy(seekStep), kick("forward"))}
+            label={`Forward ${seekStep} seconds`}
+            title={withShortcut(`Forward ${seekStep}s`, "seekForward")}
+            {...controlHover}
+          />
+        </div>
+      )}
 
       {/* Paused on a stepped frame: once the controls hide, its number stays where the clock was (#346). */}
       {frameSteps.stepping && <FrameLabel media={media} fps={fps ?? DEFAULT_FPS} />}
 
-      {/* Bottom: timeline with time left, then labelled text actions. */}
-      <div
-        className="player-bottom"
-        onPointerEnter={() => (overControls.current = true)}
-        onPointerLeave={() => (overControls.current = false)}
-      >
-        <div className="player-timeline">
-          <Scrubber media={media} previews={seekTrack} span={skip.segments?.intro} active={chromeVisible && !options} onSeek={seekTo} />
+      {/* Bottom: timeline with time left, then labelled text actions. The desktop dock puts what's playing above
+          the timeline and every control in one row under it. */}
+      <div className="player-bottom" {...controlHover}>
+        {dock && (
+          <div className="player-title">
+            {/* Just the episode and the title: the picture and sound format isn't repeated here. */}
+            {current && <span className="player-title-episode">{heading}</span>}
+            <span className="player-title-name">{current ? title : heading}</span>
+          </div>
+        )}
+        <div className="player-timeline" inert={!started || undefined}>
+          <Scrubber
+            media={media}
+            previews={seekTrack}
+            span={skip.segments?.intro}
+            segments={skip.segments}
+            active={chromeVisible && (!options || dock)}
+            onSeek={seekTo}
+            onScrubChange={onScrubChange}
+          />
           {sleep.left != null && (
             <span className="player-sleep tabular" role="timer" aria-label={`Sleep timer: ${sleepLabel(sleep.left)} left`}>
               <Moon size={16} />
               {sleepLabel(sleep.left)}
             </span>
           )}
-          <PlayerClock media={media} display={timeDisplay} rate={inParty ? 1 : playRate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} active={chromeVisible && !options} />
+          <PlayerClock media={media} display={timeDisplay} rate={inParty ? 1 : playRate} onCycle={cycleClock} fps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null} active={chromeVisible && (!options || dock)} />
         </div>
-        <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
-          {!party && (
-            <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
-          )}
-          <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
-          {type === "series" && (
-            <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
-          )}
-          {/* YouTube's player keeps its own captions and audio. */}
-          {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
-          {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
-          {canParty && !castingAway && (
-            <ActionButton
-              icon={<WatchParty size={22} />}
-              label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
-              onClick={() => setOptions("party")}
-            />
-          )}
-          {next && (
-            <ActionButton
-              icon={<SkipForward size={22} fill="currentColor" />}
-              label={local ? "Next video" : "Next Episode"}
-              glyph={skip.active ? null : pad("skipOrNext", "nextEpisode")}
-              onClick={() => playVideo(next.id)}
-            />
-          )}
-        </div>
+        {dock ? (
+          <div ref={actionRow} className="player-dock">
+            <div className="player-dock-group">
+              <IconButton variant="player" onClick={togglePlay} label={paused ? "Play" : "Pause"} title={withShortcut(paused ? "Play" : "Pause", "playPause")}>
+                <SwapIcon state={paused ? "play" : "pause"}>
+                  {paused ? <Play size={24} fill="currentColor" strokeWidth={0} /> : <Pause size={24} fill="currentColor" strokeWidth={0} />}
+                </SwapIcon>
+              </IconButton>
+              {volumeControl}
+            </div>
+            <div className="player-dock-group">
+              {next && (
+                <IconButton
+                  variant="player"
+                  onClick={() => playVideo(next.id)}
+                  label={local ? "Next video" : "Next Episode"}
+                  title={withShortcut(local ? "Next video" : "Next episode", "nextEpisode")}
+                >
+                  <SkipForward size={22} fill="currentColor" />
+                </IconButton>
+              )}
+              {type === "series" && (
+                <DockPanelButton panel="episodes" open={options} label={local ? "In this folder" : "Episodes"} title={withShortcut(local ? "In this folder" : "Episodes", "episodes")} onOpen={() => setOptions("episodes")} onClose={() => setOptions(null)}>
+                  <Episodes size={22} />
+                </DockPanelButton>
+              )}
+              {!ytId && (
+                <DockPanelButton panel="tracks" open={options} label="Subtitles & Audio" title={withShortcut("Subtitles & audio", "tracks")} onOpen={(el) => openOptions("tracks", el)} onClose={() => setOptions(null)}>
+                  <Captions size={22} />
+                </DockPanelButton>
+              )}
+              {!party && (
+                <DockPanelButton panel="speed" open={options} label={`Speed (${rate}x)`} title={withShortcut(`Speed (${rate}x)`, "speed")} onOpen={(el) => openOptions("speed", el)} onClose={() => setOptions(null)}>
+                  <Speed size={22} />
+                </DockPanelButton>
+              )}
+              {!link && !local && (
+                <DockPanelButton panel="sources" open={options} label="Sources" title={withShortcut("Sources", "sources")} onOpen={() => setOptions("sources")} onClose={() => setOptions(null)}>
+                  <Sources size={22} />
+                </DockPanelButton>
+              )}
+              {canParty && !castingAway && (
+                <DockPanelButton
+                  panel="party"
+                  open={options}
+                  label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
+                  title={party ? `Watch Party (${party.members.length})` : "Watch Party"}
+                  onOpen={() => setOptions("party")}
+                  onClose={() => setOptions(null)}
+                >
+                  <WatchParty size={22} />
+                </DockPanelButton>
+              )}
+              {castControls}
+              {moreMenu}
+              {fullscreenButton}
+            </div>
+          </div>
+        ) : (
+          <div ref={actionRow} className="player-actions" data-labels={barFit.labels}>
+            {!party && (
+              <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
+            )}
+            <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
+            {type === "series" && (
+              <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
+            )}
+            {/* YouTube's player keeps its own captions and audio. */}
+            {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
+            {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
+            {canParty && !castingAway && (
+              <ActionButton
+                icon={<WatchParty size={22} />}
+                label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
+                onClick={() => setOptions("party")}
+              />
+            )}
+            {next && (
+              <ActionButton
+                icon={<SkipForward size={22} fill="currentColor" />}
+                label={local ? "Next video" : "Next Episode"}
+                glyph={skip.active ? null : pad("skipOrNext", "nextEpisode")}
+                onClick={() => playVideo(next.id)}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* The sleep timer's last minute: more time, or no timer (#270). */}
@@ -2067,7 +2306,7 @@ export function Player({
         </div>
       )}
       {sleep.asleep && (
-        <div className="sleep-ended" role="dialog" aria-label="Sleep timer ended">
+        <div ref={sleepEndedRef} className="sleep-ended" role="dialog" aria-modal="true" aria-label="Sleep timer ended" tabIndex={-1} data-layer="">
           <Moon size={32} />
           <p className="sleep-ended-title">Sleep timer ended</p>
           <Button
@@ -2084,6 +2323,7 @@ export function Player({
       )}
       <OptionsOverlay
         open={options === "speed"}
+        dockedTo={dock ? "speed" : undefined}
         onClose={() => setOptions(null)}
         media={media}
         columns={[
@@ -2092,9 +2332,16 @@ export function Player({
             value: String(rate),
             options: SPEEDS.map((r) => ({ id: String(r), label: speedLabel(r) })),
             onSelect: (id: string) => setRate(Number(id)),
+            // The dock: Netflix's line of speeds, the chosen one named beside the title.
+            ...(dock
+              ? {
+                  header: <span className="options-value tabular">{speedLabel(rate)}</span>,
+                  content: <SpeedLine speeds={SPEEDS} value={rate} onChange={setRate} label={speedLabel} />,
+                }
+              : {}),
           },
-          // Desktop: keep the window on top of the others, locked in place (#266).
-          ...(canPin
+          // Desktop: keep the window on top of the others, locked in place (#266). The dock has it in More.
+          ...(canPin && !dock
             ? [
                 {
                   title: "Window",
@@ -2113,6 +2360,7 @@ export function Player({
       />
       <OptionsOverlay
         open={options === "sleep"}
+        dockedTo={dock ? "more" : undefined}
         onClose={() => setOptions(null)}
         media={media}
         columns={[
@@ -2130,6 +2378,7 @@ export function Player({
       />
       <OptionsOverlay
         open={options === "tracks"}
+        dockedTo={dock ? "tracks" : undefined}
         onClose={() => {
           setOptions(null);
           setSubSettingsOpen(false);
@@ -2144,15 +2393,22 @@ export function Player({
             // Delay and the sound options are mpv's.
             header:
               engine === "mpv" && !castingAway ? (
-                <IconButton
-                  variant="panel"
-                  aria-pressed={audioSettingsOpen}
-                  label="Audio settings"
-                  title="Audio settings"
-                  onClick={() => setAudioSettingsOpen((v) => !v)}
-                >
-                  <Cog size={19} strokeWidth={2.1} />
-                </IconButton>
+                dock ? (
+                  // The dock: the list and its settings as two sides of one switch, either a click away.
+                  <Segmented
+                    label="Audio view"
+                    value={audioSettingsOpen ? 1 : 0}
+                    onChange={(v) => setAudioSettingsOpen(v === 1)}
+                    options={[
+                      { id: 0, label: "Tracks" },
+                      { id: 1, label: "Sound" },
+                    ]}
+                  />
+                ) : (
+                  <IconButton variant="panel" aria-pressed={audioSettingsOpen} label="Audio settings" title="Audio settings" onClick={() => setAudioSettingsOpen((v) => !v)}>
+                    <Cog size={19} strokeWidth={2.1} />
+                  </IconButton>
+                )
               ) : undefined,
             content: audioSettingsOpen ? <AudioSettings delay={audioDelay} onDelay={changeAudioDelay} /> : undefined,
             value: tracks.audio.length ? tracks.audioId : "default",
@@ -2162,14 +2418,18 @@ export function Player({
           {
             title: "Subtitles",
             size: subSettingsOpen ? "medium" : "narrow",
-            header: (
-              <IconButton
-                variant="panel"
-                aria-pressed={subSettingsOpen}
-                label="Subtitle settings"
-                title="Subtitle settings"
-                onClick={() => setSubSettingsOpen((v) => !v)}
-              >
+            header: dock ? (
+              <Segmented
+                label="Subtitles view"
+                value={subSettingsOpen ? 1 : 0}
+                onChange={(v) => setSubSettingsOpen(v === 1)}
+                options={[
+                  { id: 0, label: "Tracks" },
+                  { id: 1, label: "Style" },
+                ]}
+              />
+            ) : (
+              <IconButton variant="panel" aria-pressed={subSettingsOpen} label="Subtitle settings" title="Subtitle settings" onClick={() => setSubSettingsOpen((v) => !v)}>
                 <Cog size={19} strokeWidth={2.1} />
               </IconButton>
             ),
@@ -2182,6 +2442,7 @@ export function Player({
                 onStepLine={engine === "mpv" && !castingAway ? (by) => void stepLine(by) : undefined}
                 second={engine === "mpv" && !castingAway ? { on: secondSubtitles, onChange: (on) => setPrefs({ secondSubtitles: on }) } : undefined}
                 canPosition={engine === "mpv"}
+                look={dock ? "studio" : "rows"}
               />
             ) : undefined,
             value: tracks.subId,
@@ -2236,7 +2497,7 @@ export function Player({
             exit={{ opacity: 0, transform: "translateX(24px)", transition: { duration: 0.18, ease: ease.out } }}
             transition={{ duration: 0.3, ease: ease.drawer }}
           >
-            <div className="next-up-still">
+            <div className="next-up-still" data-unwatched={nextUnwatched || undefined}>
               <Img src={stillFor(next.id) ?? next.thumbnail ?? meta?.background} alt="" />
             </div>
             <div className="next-up-text">
@@ -2259,7 +2520,7 @@ export function Player({
                   }}
                 >
                   {ended && willAutoplay && (
-                    <span className="next-up-countdown" style={{ animationDuration: `${countdown}s` }} />
+                    <span className="next-up-countdown" data-paused={countdownPaused} style={{ animationDuration: `${countdown}s` }} />
                   )}
                   {pad("skipOrNext", "nextEpisode") ?? <Play size={16} fill="currentColor" />} {ended && stillWatching ? "Keep Watching" : "Play Now"}
                 </Button>
@@ -2275,6 +2536,8 @@ export function Player({
       <PlayerPauseScreen
         meta={meta}
         videoId={videoId}
+        media={media}
+        unwatched={currentUnwatched}
         state={{
           engine,
           playing: ready && started,
@@ -2300,6 +2563,7 @@ export function Player({
       {canParty && (
         <OptionsOverlay
           open={options === "party"}
+          dockedTo={dock ? "party" : undefined}
           onClose={() => setOptions(null)}
           media={media}
           columns={partyColumns}
@@ -2308,6 +2572,7 @@ export function Player({
 
       <OptionsOverlay
         open={options === "episodes"}
+        dockedTo={dock ? "episodes" : undefined}
         onClose={() => setOptions(null)}
         media={media}
         columns={
@@ -2325,6 +2590,35 @@ export function Player({
                   },
                 },
               ]
+            : // The desktop dock: one list, Netflix's way, the season named above it (EpisodeMenu).
+              dock && meta
+              ? [
+                  {
+                    title: "Episodes",
+                    size: "wide",
+                    titleHidden: true,
+                    options: [],
+                    onSelect: () => {},
+                    content: (
+                      <EpisodeMenu
+                        meta={meta}
+                        seasons={seasonGroups.map((g) => ({ id: g.id, label: g.label }))}
+                        season={shownSeason}
+                        onSeason={setPickSeason} // browse; playback continues
+                        episodes={shownEpisodes}
+                        numbers={order?.number}
+                        playing={videoId}
+                        progress={progressById}
+                        still={(v) => stillFor(v.id) ?? v.thumbnail}
+                        header={shuffleButton}
+                        onPlay={(id) => {
+                          setOptions(null);
+                          pickEpisode(id);
+                        }}
+                      />
+                    ),
+                  },
+                ]
             : episodeLayout === "list" || !meta
             ? [
                 {
@@ -2388,6 +2682,7 @@ export function Player({
       />
       <OptionsOverlay
         open={options === "sources"}
+        dockedTo={dock ? "sources" : undefined}
         onClose={() => setOptions(null)}
         media={media}
         columns={[
@@ -2501,6 +2796,44 @@ function ActionButton({
   );
 }
 
+/**
+ * A button in the desktop dock that opens one of the player's panels above itself (OptionsOverlay's `dockedTo`
+ * finds it by `data-panel`). Pressed again, it closes the panel.
+ */
+function DockPanelButton({
+  panel,
+  open,
+  label,
+  title,
+  onOpen,
+  onClose,
+  children,
+}: {
+  panel: string;
+  /** The panel open now, if any. */
+  open: string | null;
+  label: string;
+  title: string;
+  onOpen: (el: HTMLButtonElement) => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const isOpen = open === panel;
+  return (
+    <IconButton
+      variant="player"
+      data-panel={panel}
+      aria-haspopup="dialog"
+      aria-expanded={isOpen}
+      label={label}
+      title={title}
+      onClick={(e) => (isOpen ? onClose() : onOpen(e.currentTarget))}
+    >
+      {children}
+    </IconButton>
+  );
+}
+
 /** Whether "Window pinned, press P to unpin" (#266) has been shown on this device. */
 const PIN_HINT = "polar.pinHint";
 function pinHintSeen() {
@@ -2535,6 +2868,16 @@ function useLasting<T>(value: T | null, ms: number): T | null {
     return () => window.clearTimeout(t);
   }, [value, ms]);
   return value == null ? null : lasting === value ? lasting : null;
+}
+
+/** Crisp double fast-forward chevrons for the Hold-for-2x pill. */
+function HoldChevrons() {
+  return (
+    <svg className="player-hold-chevrons" width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path className="player-hold-c1" d="M3.25 3.75 7.75 8l-4.5 4.25" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path className="player-hold-c2" d="M8.5 3.75 13 8l-4.5 4.25" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 /** A short message over the player (a source skipped, an intro skipped) that clears itself. */

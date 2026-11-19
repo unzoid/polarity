@@ -10,8 +10,24 @@ import { AccountShell } from "./AccountShell";
  * Signing in, second step: the email code was right, and the account has two-step sign-in on, so a
  * code from an authenticator app comes before anything is signed in (AccountProvider's `twoStep`).
  * One authenticator is asked; "Use another authenticator" picks one of the others.
+ *
+ * `TwoStepBody` sits directly inside AuthScreen's step choreography so the shell and wordmark stay
+ * put; `TwoStepScreen` wraps it in AccountShell for standalone rendering.
  */
 export function TwoStepScreen() {
+  return (
+    <AccountShell plain>
+      <div className="auth">
+        <img className="auth-mark wordmark" src={logo} alt="Polarity" draggable={false} />
+        <div className="auth-body">
+          <TwoStepBody />
+        </div>
+      </div>
+    </AccountShell>
+  );
+}
+
+export function TwoStepBody() {
   const account = useAccount();
   const authenticators = account.twoStep ?? [];
   const [pick, setPick] = useState(0);
@@ -36,90 +52,80 @@ export function TwoStepScreen() {
     }
   };
 
-  return (
-    <AccountShell plain>
-      <div className="auth">
-        <img className="auth-mark wordmark" src={logo} alt="Polarity" draggable={false} />
-        <div className="auth-body">
-          {choosing ? (
-            <div className="auth-form">
-              <h1 className="auth-title">Use another authenticator</h1>
-              <div className="auth-actions">
-                {authenticators.map((a, i) => (
-                  <Button
-                    key={a.id}
-                    size="block"
-                    variant={i === pick ? "accent" : undefined}
-                    onClick={() => (setPick(i), setChoosing(false), setCode(""), setError(null))}
-                  >
-                    {a.name}
-                  </Button>
-                ))}
-              </div>
-              <button type="button" className="auth-link" onClick={() => setChoosing(false)}>
-                Back
-              </button>
-            </div>
-          ) : (
-            <form
-              className="auth-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void verify(code);
-              }}
-              noValidate
-            >
-              <h1 className="auth-title">Two-step sign-in</h1>
-              <p className="auth-sub">
-                Enter the {TWO_STEP_CODE_LENGTH}-digit code from your authenticator app
-                {authenticators.length > 1 && current ? (
-                  <>
-                    {" "}
-                    (<strong>{current.name}</strong>)
-                  </>
-                ) : null}
-                .
-              </p>
-              <div className="auth-actions">
-                <TextField
-                  look="block"
-                  aria-label="Authenticator code"
-                  className="auth-code"
-                  placeholder="Enter code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  spellCheck={false}
-                  maxLength={TWO_STEP_CODE_LENGTH}
-                  value={code}
-                  onChange={(v) => {
-                    const tidy = tidyCode(v);
-                    setCode(tidy);
-                    setError(null);
-                    if (isTwoStepCode(tidy) && !busy) void verify(tidy);
-                  }}
-                  autoFocus
-                />
-                <Button variant="accent" size="block" type="submit" disabled={busy || !code} busy={busy}>
-                  Continue
-                </Button>
-              </div>
-              {error && (
-                <div className="auth-error" role="alert">
-                  <span>{error}</span>
-                </div>
-              )}
-              {authenticators.length > 1 && (
-                <button type="button" className="auth-link" onClick={() => setChoosing(true)}>
-                  Use another authenticator
-                </button>
-              )}
-              <button type="button" className="auth-link" onClick={() => void account.cancelTwoStep()}>
-                Back to sign in
-              </button>
-            </form>
-          )}
-        </div>
+  return choosing ? (
+    <div className="auth-form">
+      <h1 className="auth-title">Use another authenticator</h1>
+      <div className="auth-actions">
+        {authenticators.map((a, i) => (
+          <Button
+            key={a.id}
+            size="block"
+            variant={i === pick ? "accent" : undefined}
+            onClick={() => (setPick(i), setChoosing(false), setCode(""), setError(null))}
+          >
+            {a.name}
+          </Button>
+        ))}
       </div>
-    </AccountShell>
+      <button type="button" className="auth-link" onClick={() => setChoosing(false)}>
+        Back
+      </button>
+    </div>
+  ) : (
+    <form
+      className="auth-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void verify(code);
+      }}
+      noValidate
+    >
+      <h1 className="auth-title">Two-step sign-in</h1>
+      <p className="auth-sub">
+        Enter the {TWO_STEP_CODE_LENGTH}-digit code from your authenticator app
+        {authenticators.length > 1 && current ? (
+          <>
+            {" "}
+            (<strong>{current.name}</strong>)
+          </>
+        ) : null}
+        .
+      </p>
+      <div className="auth-actions">
+        <TextField
+          look="block"
+          aria-label="Authenticator code"
+          className="auth-code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          spellCheck={false}
+          maxLength={TWO_STEP_CODE_LENGTH}
+          value={code}
+          onChange={(v) => {
+            const tidy = tidyCode(v);
+            setCode(tidy);
+            setError(null);
+            if (isTwoStepCode(tidy) && !busy) void verify(tidy);
+          }}
+          autoFocus
+        />
+        <Button variant="accent" size="block" type="submit" disabled={busy || !code} busy={busy}>
+          Continue
+        </Button>
+      </div>
+      {error && (
+        <div className="auth-error" role="alert">
+          <span>{error}</span>
+        </div>
+      )}
+      {authenticators.length > 1 && (
+        <button type="button" className="auth-link" onClick={() => setChoosing(true)}>
+          Use another authenticator
+        </button>
+      )}
+      <button type="button" className="auth-link" onClick={() => void account.cancelTwoStep()}>
+        Back to sign in
+      </button>
+    </form>
   );
 }

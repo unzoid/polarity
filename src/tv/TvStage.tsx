@@ -23,8 +23,10 @@ export interface StageEntry {
   pending?: boolean;
 }
 
-const StageSetter = createContext<(entry: StageEntry) => void>(() => {});
-export const useStage = () => useContext(StageSetter);
+const NOOP = () => {};
+const StageSetter = createContext<((entry: StageEntry) => void) | null>(null);
+export const useStage = () => useContext(StageSetter) ?? NOOP;
+export const useHasStage = () => useContext(StageSetter) !== null;
 
 const StageSeed = createContext<(entry: StageEntry, el: HTMLElement) => void>(() => {});
 /**
@@ -79,12 +81,13 @@ export function titleFacts(item: MetaPreview, extra: (string | undefined)[] = []
   ].filter(Boolean);
 }
 
-export function Facts({ facts, className = "" }: { facts: ReactNode[]; className?: string }) {
+export function Facts({ facts, className = "", children }: { facts: ReactNode[]; className?: string; children?: ReactNode }) {
   return (
-    <p className={`tv-facts ${className}`}>
+    <p className={className ? `tv-facts ${className}` : "tv-facts"}>
       {facts.map((f, i) => (
         <span key={i}>{f}</span>
       ))}
+      {children}
     </p>
   );
 }
@@ -122,9 +125,13 @@ export function TvStage({ entry }: { entry: StageEntry | null }) {
       {shown && (
         <div key={shown.id} className="tv-stage-info" aria-live="polite" {...gate}>
           <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={bg} look="tv-stage" pending={loading || !!entry?.pending} />
-          {entry?.kicker && <p className="tv-stage-kicker">{entry.kicker}</p>}
-          <Facts facts={titleFacts(shown)} />
-          {shown.description && <p className="tv-stage-description">{shown.description}</p>}
+          {entry?.kicker && <p className="tv-stage-kicker art-after">{entry.kicker}</p>}
+          <Facts facts={titleFacts(shown)} className="art-after" />
+          {(shown.description || loading || entry?.pending) && (
+            <p className="tv-stage-description art-after" data-loading={(!shown.description && (loading || !!entry?.pending)) || undefined}>
+              {shown.description}
+            </p>
+          )}
         </div>
       )}
     </div>

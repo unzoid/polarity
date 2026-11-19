@@ -84,12 +84,124 @@ export const AUTO_TAG_CHOICES = ["dv", "hdr", "hdr10+", "remux", "atmos", "hevc"
 
 export function tagsOf(r: RankedStream): string[] {
   const q = r.quality;
-  const t: string[] = [];
-  if (q.dolbyVision) t.push("dv");
-  if (q.hdr) t.push("hdr");
-  for (const x of q.tags ?? []) t.push(x.toLowerCase());
-  if (q.codec) t.push(q.codec.toLowerCase());
-  return t;
+  const out = new Set<string>();
+  if (q.dolbyVision) out.add("dv");
+  if (q.hdr) out.add("hdr");
+  const addRaw = (raw?: string) => {
+    const low = raw?.trim().toLowerCase();
+    if (!low) return;
+    out.add(low);
+    if (low.includes("dolby vision") || low === "dovi") out.add("dv");
+    if (low.includes("hdr10+") || low.includes("hdr10plus")) out.add("hdr10+");
+    else if (low.startsWith("hdr")) out.add("hdr");
+    if (low.includes("truehd")) out.add("truehd");
+    if (low.includes("atmos")) out.add("atmos");
+    if (low.includes("dts:x") || low.includes("dtsx")) out.add("dts:x");
+    else if (low.includes("dts-hd") || low.includes("dtshd")) out.add("dts-hd");
+    if (/(?:^|\b)7\.1(?:\b|$)/.test(low)) out.add("7.1");
+    if (/(?:^|\b)5\.1(?:\b|$)/.test(low)) out.add("5.1");
+    if (low.includes("hevc") || low === "x265" || low === "h.265" || low === "h265") out.add("hevc");
+    if (low === "av1") out.add("av1");
+    if (low === "h.264" || low === "h264" || low === "x264" || low === "avc") out.add("h.264");
+    if (low.includes("10-bit") || low.includes("10bit")) out.add("10-bit");
+    if (low.includes("remux")) out.add("remux");
+    if (low.includes("imax")) out.add("imax");
+    if (low === "3d") out.add("3d");
+  };
+  for (const x of q.tags ?? []) addRaw(x);
+  addRaw(q.codec);
+  return [...out];
+}
+
+export type SourceBadgeKind = "range" | "audio" | "codec" | "edition";
+
+export interface SourceBadge {
+  key: string;
+  label: string;
+  kind: SourceBadgeKind;
+}
+
+/**
+ * Crisp micro-badges for Dynamic Range, Audio, Codec and Edition derived directly from `r.quality`
+ * (even when `r.label` is minimal, e.g. `"2160p"`), omitting any token already named in `sourceRow(r).title`.
+ */
+export function sourceBadges(r: RankedStream): SourceBadge[] {
+  const has = new Set(tagsOf(r));
+  const title = sourceRow(r).title.toLowerCase();
+  const badges: SourceBadge[] = [];
+
+  // Dynamic range: DV, HDR10+, or HDR.
+  if (has.has("dv") && !title.includes("dolby vision") && !/\bdv\b/.test(title)) {
+    badges.push({ key: "dv", label: "DV", kind: "range" });
+  }
+  if (has.has("hdr10+") && !title.includes("hdr10+")) {
+    badges.push({ key: "hdr10+", label: "HDR10+", kind: "range" });
+  } else if (!has.has("dv") && has.has("hdr") && !/\bhdr\b|\bhdr10\b/.test(title)) {
+    badges.push({ key: "hdr", label: "HDR", kind: "range" });
+  }
+
+  // Audio format & channels.
+  if (has.has("atmos") && !title.includes("atmos")) badges.push({ key: "atmos", label: "Atmos", kind: "audio" });
+  if (has.has("truehd") && !title.includes("truehd")) badges.push({ key: "truehd", label: "TrueHD", kind: "audio" });
+  if (has.has("dts:x") && !title.includes("dts:x")) badges.push({ key: "dts:x", label: "DTS:X", kind: "audio" });
+  else if (has.has("dts-hd") && !title.includes("dts-hd")) badges.push({ key: "dts-hd", label: "DTS-HD", kind: "audio" });
+  if (has.has("7.1") && !/(?:^|\b)7\.1(?:\b|$)/.test(title)) badges.push({ key: "7.1", label: "7.1", kind: "audio" });
+  else if (has.has("5.1") && !/(?:^|\b)5\.1(?:\b|$)/.test(title)) badges.push({ key: "5.1", label: "5.1", kind: "audio" });
+
+  // Video codec.
+  if (has.has("av1") && !/\bav1\b/.test(title)) {
+    badges.push({ key: "av1", label: "AV1", kind: "codec" });
+  } else if (has.has("hevc") && !/\bhevc\b|\bx265\b|\bh\.?265\b/.test(title)) {
+    badges.push({ key: "hevc", label: "HEVC", kind: "codec" });
+  }
+
+  // Edition / mastering tags.
+  if (has.has("remux") && !title.includes("remux")) badges.push({ key: "remux", label: "Remux", kind: "edition" });
+  if (has.has("imax") && !title.includes("imax")) badges.push({ key: "imax", label: "IMAX", kind: "edition" });
+  if (has.has("10-bit") && !title.includes("10-bit") && !title.includes("10bit")) {
+    badges.push({ key: "10-bit", label: "10-bit", kind: "edition" });
+  }
+  if (has.has("3d") && !/\b3d\b/.test(title)) badges.push({ key: "3d", label: "3D", kind: "edition" });
+
+  return badges;
+}
+
+/** Concise positive reasons why the top Best Match source won for this screen and connection. */
+export function featuredMatchSummary(match: Match | undefined): string | null {
+  if (!match) return null;
+  const positives = match.reasons
+    .filter((r) => r.points > 0 && r.reason !== "Unknown resolution")
+    .sort((a, b) => b.points - a.points);
+  if (!positives.length) return null;
+
+  const concise = (reason: string): string => {
+    if (/on a \S+ screen$/.test(reason)) return "Fits this display";
+    if (reason === "Dolby Vision on an HDR screen") return "Dolby Vision";
+    if (reason === "HDR on an HDR screen") return "HDR display";
+    if (reason.endsWith(", decoded by this device's hardware")) {
+      return `${reason.split(",")[0]} hardware decode`;
+    }
+    if (reason.startsWith("Audio in ")) {
+      if (reason.endsWith(", the title's own")) return "Original audio";
+      const lang = reason.replace(/^Audio in /, "").split(",")[0];
+      return `${lang} audio`;
+    }
+    if (reason.startsWith("Multi-audio")) return "Multi-audio";
+    if (reason.endsWith(", which you prefer")) return `${reason.replace(/, which you prefer$/, "")} preferred`;
+    if (reason.endsWith(", a release group you prefer")) return `${reason.split(",")[0]} preferred`;
+    if (reason.includes("more detail than the other")) return "High bitrate";
+    if (reason.startsWith("Release group played through") || reason.startsWith("Add-on played through")) return "Reliable source";
+    if (reason === "Direct link") return "Direct stream";
+    return reason;
+  };
+
+  const out: string[] = [];
+  for (const r of positives) {
+    const label = concise(r.reason);
+    if (label && !out.includes(label)) out.push(label);
+    if (out.length >= 3) break;
+  }
+  return out.length ? out.join(" · ") : null;
 }
 
 /** Sources that say nothing about their audio are counted as English (the usual original). */

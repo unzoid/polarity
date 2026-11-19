@@ -1,13 +1,14 @@
 import { Check, Close, Info, Instant } from "../icons";
+import { Segmented } from "../Segmented";
 import { useSourceRowPress } from "../SourceInfo";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Still } from "../StillPlaceholder";
 import { VideoBackdrop } from "./VideoBackdrop";
 import { railInset } from "./EpisodeRail";
 import { IconButton } from "../ui/Button";
 import { isMpv, type MediaLike } from "./mpvMedia";
 import { os } from "../../lib/platform";
-import { missMargin, prefersReducedMotion, useLayer } from "../../lib/ui";
+import { missMargin, prefersReducedMotion, useFormFactor, useLayer } from "../../lib/ui";
 import { nearest } from "../../tv/spatial";
 
 export interface OptionItem {
@@ -17,6 +18,8 @@ export interface OptionItem {
   detail?: string;
   /** 16:9 still shown before the text (episodes). */
   thumbnail?: string;
+  /** True when the episode has not been watched yet (spoiler blur applies when enabled). */
+  unwatched?: boolean;
   /** 0–1 watch progress drawn under the thumbnail. */
   progress?: number;
   /** Small trailing tag: "Watched", "CAM". */
@@ -73,6 +76,7 @@ export function OptionsOverlay({
   media,
   foreground,
   beside = false,
+  dockedTo,
 }: {
   open: boolean;
   /** The playing video, frosted behind the options. */
@@ -86,13 +90,42 @@ export function OptionsOverlay({
    * player, which nothing may cover (#384). No frosted copy, no trapped focus; its columns stack.
    */
   beside?: boolean;
+  /**
+   * The desktop dock (Player.tsx): the panel is a small menu standing above the dock button with this
+   * `data-panel`, right-aligned to it and clear of the timeline, instead of a layer over the whole picture.
+   * The picture and the rest of the controls stay as they are; a click outside closes it.
+   */
+  dockedTo?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const docked = !!dockedTo && !beside;
+  const { compact } = useFormFactor();
+  // Compact multi-column track pickers (Subtitles & Audio) switch columns by tab; custom multi-card panels
+  // like Watch Party render their cards stacked so every party action ("End Party") stays on one screen (#247).
+  const tabbed = compact && !beside && columns.length > 1 && columns.some((c) => !c.content);
+  const [tabIndex, setTabIndex] = useState(0);
+  useEffect(() => {
+    if (open) setTabIndex(0);
+  }, [open]);
+  const clampedTab = tabbed ? Math.min(tabIndex, columns.length - 1) : 0;
+  const visibleColumns = tabbed ? [columns[clampedTab]] : columns;
+  // A column that turns between its list and its own page (a track list and its settings) slides that way: the page
+  // in from the right, the list back from the left. Nothing slides as the menu opens: it has its own entrance.
+  const views = useRef(new Map<string, { custom: boolean; turn?: "in" | "back" }>());
+  if (!open) views.current.clear();
+  const turnOf = (col: OptionColumn) => {
+    const custom = !!col.content;
+    const prev = views.current.get(col.title);
+    const turn = prev && prev.custom !== custom ? (custom ? "in" : "back") : prev?.turn;
+    views.current.set(col.title, { custom, turn });
+    return turn;
+  };
+
   /** A press that may become a click outside the panel. */
   const press = useRef<{ id: number; x: number; y: number } | null>(null);
   const missesPanel = (e: { target: EventTarget; clientX: number; clientY: number; pointerType: string }) => {
-    if ((e.target as Element).closest?.(".options-close, .select-popup, .srcf-popover, .source-info, .tv-source-menu-layer")) return false;
-    const rects = [...(root.current?.querySelectorAll(".options-column") ?? [])].map((el) => el.getBoundingClientRect());
+    if ((e.target as Element).closest?.(".options-close, .options-tabs, .select-popup, .srcf-popover, .source-info, .tv-source-menu-layer")) return false;
+    const rects = [...(root.current?.querySelectorAll(".options-column, .options-tabs") ?? [])].map((el) => el.getBoundingClientRect());
     return outsidePanel(e.clientX, e.clientY, rects, missMargin(e.pointerType));
   };
   // Stay mounted through the exit transition.
@@ -106,39 +139,126 @@ export function OptionsOverlay({
   // Escape through the shared dismiss stack (lib/ui/dismiss.ts), Tab kept inside, focus back to the
   // opener on close. The parent passes a fresh onClose several times a second during playback;
   // useLayer reads the newest without re-running anything (which would snap the lists back mid-scroll).
-  useLayer(root, open, onClose, { modal: !beside });
+  useLayer(root, open, onClose, { modal: !beside && !docked });
+
+  // Docked: stand above the button, clear of the timeline, growing out of the button; again as the window resizes.
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!docked || !open || !mounted || !el) return;
+    const place = () => {
+      const player = el.closest<HTMLElement>(".player");
+      const button = player?.querySelector<HTMLElement>(`[data-panel="${dockedTo}"]`);
+      if (!player || !button) return;
+      const p = player.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      const floor = player.querySelector<HTMLElement>(".player-timeline")?.getBoundingClientRect().top ?? b.top;
+      const right = Math.max(DOCK_EDGE, p.right - b.right);
+      el.style.setProperty("--dock-right", `${right}px`);
+      el.style.setProperty("--dock-bottom", `${Math.max(DOCK_EDGE, p.bottom - floor + DOCK_GAP)}px`);
+      el.style.setProperty("--dock-pw", `${p.width}px`);
+      el.style.setProperty("--dock-ph", `${p.height}px`);
+      el.style.setProperty("--dock-origin", `${Math.max(0, p.right - (b.left + b.width / 2) - right)}px`);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [docked, dockedTo, open, mounted]);
+
+  // Docked: a press anywhere outside the menu closes it, except on its own button (which toggles it) and on a
+  // dropdown or popover the menu opened. A press on the picture only closes the menu: it doesn't also pause.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!docked || !open) return;
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target?.closest || e.button !== 0) return;
+      if (root.current?.querySelector(".options-columns")?.contains(target)) return;
+      if (target.closest(`[data-panel], ${OPEN_POPUP}, [role="menu"]`)) return;
+      if (target.closest(".player-surface")) {
+        e.stopPropagation();
+        const swallow = (c: Event) => c.stopPropagation();
+        window.addEventListener("click", swallow, { capture: true, once: true });
+        window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 600);
+      }
+      closeRef.current();
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [docked, open]);
 
   // Once per opening: show the current choice in every column, focus it for the keyboard.
   useEffect(() => {
     if (!open || !mounted) return;
     // Scroll each list itself — not scrollIntoView, which also scrolls every
     // ancestor (even overflow:hidden ones) and would shift the whole layer.
-    root.current?.querySelectorAll<HTMLElement>('[aria-checked="true"]').forEach((el) => {
+    root.current?.querySelectorAll<HTMLElement>('.options-column [aria-checked="true"]').forEach((el) => {
       const list = el.closest<HTMLElement>(".options-list");
       if (list) list.scrollTop = topIn(list, el) - list.clientHeight / 2 + el.offsetHeight / 2;
     });
     // The episode rail starts from the one playing (#226). Nothing chosen yet: the layer itself, so Tab and the arrows start inside it.
-    const chosen = root.current?.querySelector<HTMLElement>('.episode-rail [aria-current="true"] > .episode-rail-main') ?? root.current?.querySelector<HTMLElement>('[aria-checked="true"]');
+    const chosen =
+      root.current?.querySelector<HTMLElement>('.episode-rail [aria-current="true"] > .episode-rail-main') ??
+      root.current?.querySelector<HTMLElement>('.ep-menu [aria-current="true"] > .ep-menu-row') ??
+      root.current?.querySelector<HTMLElement>(".speed-line") ??
+      root.current?.querySelector<HTMLElement>('.options-column [aria-checked="true"]');
     (chosen ?? root.current)?.focus({ preventScroll: true });
   }, [open, mounted]);
+
+  // A list back from its settings page starts at the current choice again, as it did when the menu opened.
+  const pages = columns.map((c) => (c.content ? 1 : 0)).join("");
+  useEffect(() => {
+    if (!open || !mounted) return;
+    root.current?.querySelectorAll<HTMLElement>('.options-column[data-turn="back"] [aria-checked="true"]').forEach((el) => {
+      const list = el.closest<HTMLElement>(".options-list");
+      if (list) list.scrollTop = topIn(list, el) - list.clientHeight / 2 + el.offsetHeight / 2;
+    });
+  }, [open, mounted, pages]);
+
+  // When switching compact tabs, scroll the newly visible column's current selection into view.
+  useEffect(() => {
+    if (!open || !mounted || !tabbed) return;
+    root.current?.querySelectorAll<HTMLElement>('.options-column [aria-checked="true"]').forEach((el) => {
+      const list = el.closest<HTMLElement>(".options-list");
+      if (list) list.scrollTop = topIn(list, el) - list.clientHeight / 2 + el.offsetHeight / 2;
+    });
+  }, [open, mounted, tabbed, clampedTab]);
 
   useEffect(() => {
     if (!open || !mounted) return;
     const onKey = (e: KeyboardEvent) => {
       // An open dropdown inside the overlay handles its own keys.
       if (document.querySelector(OPEN_POPUP)) return;
+      const target = e.target as HTMLElement | null;
       // A slider (the source list's size range) takes the arrows for itself.
-      if ((e.target as HTMLElement | null)?.closest?.('[role="slider"], input[type="range"]')) return;
-      // A text field (the party code) keeps its caret keys.
-      if ((e.target as HTMLElement | null)?.matches?.('input:not([type]), input[type="text"]')) return;
+      if (target?.closest?.('[role="slider"], input[type="range"]')) return;
+      // Compact column tabs handle left/right through Segmented's own radiogroup handler.
+      if (target?.closest?.(".options-tabs .segmented") && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+      // Text, URL and search fields (party code, Watch a Link) keep left/right caret movement; up/down still navigates rows.
+      if (target?.matches?.(TEXT_INPUT)) {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          const input = target as HTMLInputElement;
+          // Empty field in a horizontal form (.party-join): ArrowRight can still step to the submit button beside it.
+          if (!(e.key === "ArrowRight" && !input.value && input.closest(".party-join"))) return;
+        } else if (e.key !== "ArrowUp" && e.key !== "ArrowDown") {
+          return;
+        }
+      }
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.stopPropagation();
         e.preventDefault();
         moveFocus(root.current, e.key);
       }
+      // Enter toggles Switch checkboxes on TV remotes / keyboards (browsers only bind Space to checkboxes).
+      if (e.key === "Enter" && target?.matches?.('input[type="checkbox"]:not(:disabled)')) {
+        e.stopPropagation();
+        e.preventDefault();
+        (target as HTMLInputElement).click();
+        return;
+      }
       // Space/Enter act on the focused row natively; keep them from the player. A TV source row times
       // OK itself (held, it opens the row's menu) and keeps it from the player on its own.
-      if ((e.key === " " || e.key === "Enter") && !(e.target as HTMLElement | null)?.closest?.("[data-hold-ok]")) e.stopPropagation();
+      if ((e.key === " " || e.key === "Enter") && !target?.closest?.("[data-hold-ok]")) e.stopPropagation();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -150,16 +270,17 @@ export function OptionsOverlay({
       ref={root}
       className="options-overlay"
       data-open={open}
-      data-place={beside ? "beside" : undefined}
+      data-tabbed={tabbed || undefined}
+      data-place={beside ? "beside" : docked ? "dock" : undefined}
       role="dialog"
-      aria-modal={!beside}
-      aria-label={beside ? columns[0]?.title : undefined}
+      aria-modal={!beside && !docked}
+      aria-label={beside || docked ? columns.map((c) => c.title).join(" & ") : undefined}
       tabIndex={-1}
       data-layer=""
       // A click clearly outside the panel closes it; one that just misses a control does nothing (#202).
       onPointerDown={(e) => {
         press.current = null;
-        if (beside || e.button !== 0 || !missesPanel(e)) return;
+        if (beside || docked || e.button !== 0 || !missesPanel(e)) return;
         // A dropdown open in the panel closes on this click by itself: the panel stays.
         if (document.querySelector(OPEN_POPUP)) return;
         press.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -174,26 +295,44 @@ export function OptionsOverlay({
     >
       {/* On Android mpv draws on a surface behind the clear page: a frosted snapshot over it jumped every
           time it was retaken (#181), so the live picture shows through the shade instead. */}
-      {!beside && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
-      {!beside && <div className="options-shade" aria-hidden />}
-      <IconButton variant="player" className="options-close" onClick={onClose} label="Close" title="Close (Esc)">
-        <Close size={26} />
-      </IconButton>
-      <div className="options-columns" data-count={columns.length}>
-        {columns.map((col, c) => (
-          <section key={col.title} className="options-column" data-column={c} data-size={col.size ?? "narrow"}>
-            <div className="options-head">
-              <h2 className="options-title" data-hidden={col.titleHidden || undefined}>
+      {!beside && !docked && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
+      {!beside && !docked && <div className="options-shade" aria-hidden />}
+      {!docked && (
+        <IconButton variant="player" className="options-close" onClick={onClose} label="Close" title="Close (Esc)">
+          <Close size={26} />
+        </IconButton>
+      )}
+      <div className="options-columns" data-count={visibleColumns.length}>
+        {/* Docked: the menu is a pane of frosted glass over the picture: a blurred copy of just the part of the frame
+            behind it (VideoBackdrop's crop), so its colour follows the scene. mpv's native picture can't be
+            backdrop-filtered; the copy works for both engines. Until it has a frame, the solid surface shows. */}
+        {docked && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} className="options-frost" crop cropSize={FROST_SIZE} fade />}
+        {tabbed && (
+          <div className="options-tabs">
+            <Segmented
+              label="Panel section"
+              value={clampedTab}
+              onChange={setTabIndex}
+              options={columns.map((col, idx) => ({ id: idx, label: col.title }))}
+            />
+          </div>
+        )}
+        {visibleColumns.map((col, c) => (
+          <section key={col.title} className="options-column" data-column={tabbed ? clampedTab : c} data-size={col.size ?? "narrow"} data-turn={turnOf(col)}>
+            <div className="options-head" data-title-only={(!col.header && tabbed) || undefined}>
+              <h2 className="options-title" data-hidden={col.titleHidden || tabbed || undefined}>
                 {col.title}
               </h2>
               {col.header}
             </div>
             {col.content ? (
-              <div className="options-list options-custom">{col.content}</div>
+              <div key="custom" className="options-list options-custom">
+                {col.content}
+              </div>
             ) : (
               <>
                 {col.options.length === 0 && col.empty && <p className="options-empty">{col.empty}</p>}
-                <div role="radiogroup" aria-label={col.title} className="options-list">
+                <div key="list" role="radiogroup" aria-label={col.title} className="options-list">
                   {col.options.map((o) => (
                     <Fragment key={o.id}>
                       {o.heading && <p className="options-group">{o.heading}</p>}
@@ -211,8 +350,22 @@ export function OptionsOverlay({
   );
 }
 
+/**
+ * The docked menu's frosted copy of the picture: small (it's blurred to nothing anyway), about a menu's shape, but
+ * not under Chromium's size for a GPU canvas (about 128×129): below it, every frame of the video is read back from
+ * the GPU to draw it, which held the copy to a few frames a second.
+ */
+const FROST_SIZE = [192, 168] as const;
+
+/** The least room between a docked menu and the player's edges (px), and between it and the timeline. */
+const DOCK_EDGE = 16;
+const DOCK_GAP = 12;
+
 /** A dropdown or popover open over the panel. Closed ones can stay in the page (marked data-closed): they don't count (#226). */
 const OPEN_POPUP = ".select-popup:not([data-closed]), .srcf-popover:not([data-closed]), .source-info, .tv-source-menu";
+const TEXT_INPUT = 'input:not([type]), input[type="text"], input[type="url"], input[type="search"], textarea';
+const ITEM_SELECTOR = '.options-item:not(:disabled), .options-custom :is(button, input:not([type="hidden"]), select, .sub-swatch-custom):not(:disabled)';
+const HGROUP_SELECTOR = ".sub-stepper, .sub-swatches, .sub-split, .sub-tiles, .source-chips, .party-buttons, .party-join, .party-member-actions";
 /** A press that travels further than this (px) is a drag or a scroll, not a click. */
 const CLICK_SLOP = 10;
 
@@ -254,7 +407,7 @@ function Row({ item: o, selected, onSelect }: { item: OptionItem; selected: bool
         {selected ? <Check size={20} strokeWidth={2.5} /> : o.ready === "yes" ? <Instant size={17} fill="currentColor" strokeWidth={0} /> : null}
       </span>
       {o.thumbnail !== undefined && (
-        <span className="options-thumb" aria-hidden>
+        <span className="options-thumb" data-unwatched={o.unwatched || undefined} aria-hidden>
           <Still src={o.thumbnail} />
           {o.progress != null && o.progress > 0 && (
             <span className="options-progress">
@@ -281,33 +434,90 @@ function Row({ item: o, selected, onSelect }: { item: OptionItem; selected: bool
     </button>
   );
   if (!o.onInfo || o.onMenu) return row;
-  // The "i" on the row's right, while it's hovered or focused (player.css).
+  // The "i" on the row's right, while it's hovered, focused or on a touch screen (player.css).
   return (
     <div className="options-item-wrap">
       {row}
-      <button className="options-info" aria-label="Source info" title="Source info" onClick={(e) => o.onInfo?.(e.currentTarget.previousElementSibling as HTMLElement)}>
+      <button
+        className="options-info"
+        aria-label="Source info"
+        title="Source info"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          o.onInfo?.(e.currentTarget.previousElementSibling as HTMLElement);
+        }}
+      >
         <Info size={20} />
       </button>
     </div>
   );
 }
 
+function collectItems(scope: ParentNode): HTMLElement[] {
+  const raw = [...scope.querySelectorAll<HTMLElement>(ITEM_SELECTOR)];
+  const out: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  for (const el of raw) {
+    // `.sub-swatch-custom` is a `<label>` wrapping `<input type="color">`: resolve to its input once so it isn't listed twice.
+    const target = el.classList.contains("sub-swatch-custom") ? (el.querySelector<HTMLElement>("input:not(:disabled)") ?? el) : el;
+    if (!seen.has(target)) {
+      seen.add(target);
+      out.push(target);
+    }
+  }
+  return out;
+}
+
+function hGroupOf(el: Element | null): HTMLElement | null {
+  const g = el?.closest<HTMLElement>(HGROUP_SELECTOR) ?? null;
+  // `PartyRoomPane` nests `.party-stream` (`display: contents`) inside `.party-buttons`: treat them as one horizontal row.
+  if (g?.classList.contains("party-stream")) return g.parentElement?.closest<HTMLElement>(".party-buttons") ?? g;
+  return g;
+}
+
+function entryOfGroup(group: HTMLElement, pool: HTMLElement[]): HTMLElement | undefined {
+  const inGroup = pool.filter((el) => group.contains(el));
+  return (
+    inGroup.find(
+      (el) =>
+        el.getAttribute("aria-checked") === "true" ||
+        el.getAttribute("aria-pressed") === "true" ||
+        el.closest('[aria-checked="true"]') !== null,
+    ) ?? inGroup[0]
+  );
+}
+
 /**
- * Arrow keys: up/down within a column, left/right across columns. A column's
- * header controls (filters, sort, the settings cog) sit above its first row:
- * Up from the top reaches them, left/right moves along them.
+ * Arrow keys: up/down within a column, left/right within horizontal control
+ * groups (`.sub-stepper`, `.sub-swatches`, `.source-chips`, `.party-buttons`,
+ * `.party-join`) and across columns. A column's header controls (filters, sort,
+ * the settings cog) and compact tabs sit above its first row.
  */
 function moveFocus(root: HTMLElement | null, key: string) {
   if (!root) return;
   const active = document.activeElement as HTMLElement | null;
   const columns = [...root.querySelectorAll<HTMLElement>(".options-column")];
+  if (!columns.length) return;
+  const tabsEl = root.querySelector<HTMLElement>(".options-tabs");
   const ci = Math.max(0, columns.findIndex((c) => c.contains(active)));
   const column = columns[ci];
   const head = [...column.querySelectorAll<HTMLElement>(".options-head :is(button, .select-trigger):not(:disabled)")];
-  const items = [...column.querySelectorAll<HTMLElement>(".options-item:not(:disabled), .options-custom button:not(:disabled)")];
+  const items = collectItems(column);
   const hi = head.indexOf(active as HTMLElement);
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
   const step = key === "ArrowDown" || key === "ArrowRight" ? 1 : -1;
+
+  // Compact column tabs above the active column: Down enters the column's header or first row.
+  if (tabsEl && active && tabsEl.contains(active)) {
+    if (key === "ArrowDown") {
+      if (head.length) return head[0].focus();
+      const first = items[0];
+      const fg = first ? hGroupOf(first) : null;
+      return show(fg ? entryOfGroup(fg, items) : first);
+    }
+    return;
+  }
 
   // The episode rail (#226): left/right card by card, down to a card's Download and back, up to the
   // head; down from the head (or left/right from elsewhere) lands on the first card in view. EpisodeRail scrolls the focused card in.
@@ -339,27 +549,57 @@ function moveFocus(root: HTMLElement | null, key: string) {
       const next = nearest(active!, head.filter((el) => !row.contains(el)), key === "ArrowDown" ? "down" : "up");
       if (next) return next.focus();
     } else if (horizontal && head[hi + step]) return head[hi + step].focus();
-    if (key === "ArrowDown") return show(items[0]);
+    if (key === "ArrowUp" && tabsEl) {
+      return tabsEl.querySelector<HTMLElement>('[aria-checked="true"], button')?.focus();
+    }
+    if (key === "ArrowDown") {
+      const first = items[0];
+      const fg = first ? hGroupOf(first) : null;
+      return show(fg ? entryOfGroup(fg, items) : first);
+    }
     if (!horizontal) return;
   }
+
+  const group = active && column.contains(active) ? hGroupOf(active) : null;
   if (horizontal) {
+    if (group) {
+      const inGroup = items.filter((el) => group.contains(el));
+      const gi = inGroup.indexOf(active!);
+      if (gi >= 0 && inGroup[gi + step]) return show(inGroup[gi + step]);
+    }
     const target = columns[ci + step];
-    show(
-      target?.querySelector<HTMLElement>('.options-list [aria-checked="true"]') ??
-        target?.querySelector<HTMLElement>(".options-item, .options-custom button:not(:disabled)") ??
-        undefined,
-    );
+    if (!target) return;
+    const targetItems = collectItems(target);
+    const checked = target.querySelector<HTMLElement>('.options-list [aria-checked="true"]');
+    const resolved = checked?.classList.contains("sub-swatch-custom") ? (checked.querySelector<HTMLElement>("input:not(:disabled)") ?? checked) : checked;
+    show(resolved ?? targetItems[0]);
     return;
   }
+
   const i = items.indexOf(active as HTMLElement);
-  if (i === 0 && step < 0 && head.length) {
-    // Into the last row of chips when there are rows, else the head's pressed control.
-    const rows = [...column.querySelectorAll(".options-head .srcf-chiprow")];
-    const last = rows.at(-1);
-    const pool = last ? head.filter((el) => last.contains(el)) : head;
-    return (pool.find((el) => el.getAttribute("aria-pressed") === "true") ?? pool[0]).focus();
+  let nextIdx = i + step;
+  if (group && i >= 0) {
+    const inGroup = items.filter((el) => group.contains(el));
+    const edge = step > 0 ? inGroup.at(-1)! : inGroup[0]!;
+    nextIdx = items.indexOf(edge) + step;
   }
-  show(items[Math.min(items.length - 1, Math.max(0, i + step))]);
+
+  if ((i < 0 ? step < 0 : nextIdx < 0) && (head.length || tabsEl)) {
+    if (head.length) {
+      // Into the last row of chips when there are rows, else the head's pressed control.
+      const rows = [...column.querySelectorAll(".options-head .srcf-chiprow")];
+      const last = rows.at(-1);
+      const pool = last ? head.filter((el) => last.contains(el)) : head;
+      return (pool.find((el) => el.getAttribute("aria-pressed") === "true") ?? pool[0]).focus();
+    }
+    return tabsEl?.querySelector<HTMLElement>('[aria-checked="true"], button')?.focus();
+  }
+
+  if (!items.length) return;
+  const clamped = i < 0 ? (step > 0 ? 0 : items.length - 1) : Math.min(items.length - 1, Math.max(0, nextIdx));
+  const candidate = items[clamped];
+  const candidateGroup = candidate ? hGroupOf(candidate) : null;
+  show(candidateGroup && candidateGroup !== group ? entryOfGroup(candidateGroup, items) : candidate);
 }
 
 /** Focus a row and bring it to the middle of its column, clear of the faded edges. */

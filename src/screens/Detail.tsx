@@ -1,4 +1,5 @@
-import { LayoutList, LayoutRow, Volume, VolumeMuted } from "../components/icons";
+import { LayoutList, LayoutRow, Reset, Volume, VolumeMuted } from "../components/icons";
+import { SwapIcon } from "../components/SwapIcon";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
 import { ExtrasShelf } from "../components/title/ExtrasShelf";
@@ -6,9 +7,9 @@ import { personIds } from "../lib/catalog";
 import { detailBackdropUrl, sizedArt, useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
-import { useEpisodeLayout } from "../lib/settings";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
+import { useEpisodeLayout, usePrefs } from "../lib/settings";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type BackdropTrailerHandle, useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
 import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
@@ -33,7 +34,8 @@ import { HiddenTitleNote, HideTitleButton } from "../components/title/HiddenTitl
 import { TitleActions } from "../components/title/TitleActions";
 import { EmptyState } from "../components/ui/EmptyState";
 import { preloadPlayerNow } from "../components/PlayerLayer";
-import { DetailArt } from "../components/DetailArt";
+import { DetailArt, DetailFade } from "../components/DetailArt";
+import { useDarkHero, useShowDarkHero } from "../components/title/darkHero";
 import { errorMessage } from "../lib/errors";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 
@@ -51,6 +53,10 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
   // A phone's page scrolls as one: the art sits at its top and leaves with it (detail.css), instead
   // of staying behind the page as on a big screen.
   const phone = useFormFactor().form === "phone";
+  const { pageBackdrop, pageBackdropIntensity } = usePrefs();
+  const bgIntensity = Math.min(1, Math.max(0.1, pageBackdropIntensity / 100));
+  const pinnedBackdrop = !phone && pageBackdrop;
+  const darkHero = useDarkHero();
   // Render instantly from the catalog preview; fill in when full meta arrives.
   const rawShown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
   const shown = useMemo(
@@ -79,10 +85,12 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
     scroller,
   });
 
-  useFoldSnap(scroller, !!shown);
+  useFoldSnap(scroller, !!shown && pageBackdrop);
   // On a phone the page comes in whole: its outline until the details, the art (placed on its subject) and the
   // logo are all there, then everything at once (detail.css).
   const together = usePageTogether(!!meta || isError);
+  const top = useRef<HTMLDivElement>(null);
+  useShowDarkHero(darkHero && onTop && !!shown, top);
 
   if (verdict === "hide") return <EmptyState>{LIMIT_NOTICE}</EmptyState>;
   if (isError && !shown) return <EmptyState>Couldn't load this title: {errorMessage(error)}</EmptyState>;
@@ -94,9 +102,11 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
       {trailer.node}
       {/* No backdrop (or it fails): the poster, blurred, rather than plain black. */}
       <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
+      {!pinnedBackdrop && <DetailFade />}
       <div className="detail-bg-scrim" />
     </DetailArt>
   );
+  const hero = <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />;
 
   return (
     <div
@@ -107,16 +117,33 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
       }}
       data-trailer={trailer.visible}
       data-type={type}
+      data-page-backdrop={pageBackdrop ? "on" : "off"}
       data-ready={phone ? together.state : undefined}
+      style={{ "--detail-bg-intensity": String(bgIntensity) } as CSSProperties}
     >
       {phone && <DetailSkeleton />}
-      {!phone && art}
+      {phone && pageBackdrop && (
+        <div className="detail-bg-ambient" aria-hidden>
+          <Img src={shown.background} fallbacks={[shown.poster]} alt="" loading="eager" className="detail-bg-blur" />
+        </div>
+      )}
+      {pinnedBackdrop && art}
       <div
         className="scroll detail-scroll"
         ref={scroller}
       >
-        {phone && art}
-        <DetailHero item={shown} meta={meta} metaPending={!meta && !isError} onSheet={onSheet} trailer={trailer} />
+        {/* The art and the hero share one box, so the art is always as tall as the hero (detail.css). */}
+        {darkHero ? (
+          <div className="detail-top scheme-dark" ref={top}>
+            {art}
+            {hero}
+          </div>
+        ) : (
+          <>
+            {!pinnedBackdrop && art}
+            {hero}
+          </>
+        )}
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
         {meta && <ExtrasShelf meta={meta} />}
         {type === "movie" && meta && (
@@ -126,8 +153,8 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
           </section>
         )}
       </div>
-      {/* Teases what's below the fold; clears as you scroll. */}
-      <EdgeBlur className="detail-fold" />
+      {/* Teases what's below the fold in ambient backdrop mode; clears as you scroll. */}
+      {pinnedBackdrop && <EdgeBlur className="detail-fold" />}
     </div>
   );
 }
@@ -144,7 +171,7 @@ function DetailHero({
   /** The full metadata hasn't answered yet: the preview's missing logo may still come (#343). */
   metaPending: boolean;
   onSheet: (open: boolean) => void;
-  trailer: { visible: boolean; muted: boolean; toggleMute: () => void };
+  trailer: BackdropTrailerHandle;
 }) {
   const picker = useSourcePicker(onSheet);
 
@@ -158,12 +185,18 @@ function DetailHero({
   // Sources for the primary action load as soon as the page opens, so Play
   // (or the source list) is ready by the time the user reaches for it.
   useStreams(item.type, videoId);
+  const nextTitle = next?.video?.title?.trim();
   const request = videoId && {
     type: item.type,
     metaId: item.id,
     videoId,
     resumable: !!resumeAt,
-    subtitle: isSeries && next?.video ? `${episodeCode(next.video.season, next.video.episode)} · ${next.video.title}` : item.name,
+    subtitle:
+      isSeries && next?.video
+        ? nextTitle
+          ? `${episodeCode(next.video.season, next.video.episode)} · ${nextTitle}`
+          : episodeCode(next.video.season, next.video.episode)
+        : item.name,
   };
 
   const facts = joinFacts([item.releaseInfo, formatRuntime(meta?.runtime)]);
@@ -212,15 +245,23 @@ function DetailHero({
           download={item.type === "movie"}
           more={<HideTitleButton item={item} />}
         >
-          {trailer.visible && (
+          {trailer.state !== "idle" && (
             <IconButton
               variant="glass"
               className="detail-mute"
-              onClick={trailer.toggleMute}
-              label={trailer.muted ? "Turn trailer sound on" : "Mute trailer"}
-              title={trailer.muted ? "Sound on" : "Mute"}
+              onClick={trailer.state === "ended" ? trailer.replay : trailer.toggleMute}
+              label={
+                trailer.state === "ended"
+                  ? "Replay trailer"
+                  : trailer.muted
+                    ? "Turn trailer sound on"
+                    : "Mute trailer"
+              }
+              title={trailer.state === "ended" ? "Replay trailer" : trailer.muted ? "Sound on" : "Mute"}
             >
-              {trailer.muted ? <VolumeMuted size={20} /> : <Volume size={20} />}
+              <SwapIcon state={trailer.state === "ended" ? "ended" : trailer.muted ? "muted" : "sound"}>
+                {trailer.state === "ended" ? <Reset size={20} /> : trailer.muted ? <VolumeMuted size={20} /> : <Volume size={20} />}
+              </SwapIcon>
             </IconButton>
           )}
         </TitleActions>
@@ -293,13 +334,16 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
 
   const [layout, setLayout] = useEpisodeLayout();
   // A started episode keeps its file.
-  const request = (v: Video): PlayRequest => ({
-    type: "series",
-    metaId: meta.id,
-    videoId: v.id,
-    resumable: map.has(v.id),
-    subtitle: `${episodeCode(v.season, v.episode)} · ${v.title}`,
-  });
+  const request = (v: Video): PlayRequest => {
+    const epTitle = v.title?.trim();
+    return {
+      type: "series",
+      metaId: meta.id,
+      videoId: v.id,
+      resumable: map.has(v.id),
+      subtitle: epTitle ? `${episodeCode(v.season, v.episode)} · ${epTitle}` : episodeCode(v.season, v.episode),
+    };
+  };
   const offered = useRef(false);
   useEffect(() => {
     if (!linked || offered.current || progress === undefined) return;

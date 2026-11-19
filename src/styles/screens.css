@@ -391,11 +391,12 @@
   transform: scale(0.97);
 }
 .theme-tile[aria-checked="true"] .scheme-split {
-  outline: 2px solid var(--accent);
+  outline: 2.5px solid color-mix(in srgb, var(--accent) 82%, var(--text));
   outline-offset: 2px;
 }
 .theme-tile[aria-checked="true"] .scheme-split .theme-thumb {
   outline: none;
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
 }
 .theme-grid {
   display: grid;
@@ -429,10 +430,13 @@
 .theme-tile:active .theme-thumb {
   transform: scale(0.97);
 }
-/* The chosen one: ringed in its own accent, a hair off the picture (an outline's gap shows whatever is behind). */
+/* The chosen one: ringed in its own accent mixed slightly toward --text so Graphite and pale accents read clearly in both schemes. */
 .theme-tile[aria-checked="true"] .theme-thumb {
-  outline: 2px solid var(--accent);
+  outline: 2.5px solid color-mix(in srgb, var(--accent) 82%, var(--text));
   outline-offset: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink) / 0.14),
+    0 6px 16px -6px var(--shadow-deep);
 }
 .theme-tile:focus-visible .theme-thumb {
   box-shadow:
@@ -541,7 +545,7 @@
   translate: -50% -50%;
   z-index: calc(var(--z-modal) + 2);
   width: min(30rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow: hidden auto;
   border-radius: var(--r-lg);
   background: var(--tone-2);
@@ -660,24 +664,39 @@
   gap: 0.5rem;
 }
 .theme-dialog-swatch {
-  width: 1.375rem;
-  height: 1.375rem;
+  position: relative;
+  width: 1.625rem;
+  height: 1.625rem;
   padding: 0;
   border: 0;
   border-radius: var(--r-round);
   background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.16);
   cursor: pointer;
   transition:
     transform var(--dur-press) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
+}
+.theme-dialog-swatch::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+:root[data-touch="true"] .theme-dialog-swatches {
+  gap: 0.625rem;
+}
+:root[data-touch="true"] .theme-dialog-swatch {
+  width: 2rem;
+  height: 2rem;
 }
 .theme-dialog-swatch:active {
   transform: scale(0.9);
 }
 .theme-dialog-swatch[aria-checked="true"] {
   box-shadow:
+    inset 0 0 0 1px rgb(var(--ink) / 0.18),
     0 0 0 2px var(--tone-2),
-    0 0 0 3.5px var(--swatch);
+    0 0 0 4px color-mix(in srgb, var(--swatch) 82%, rgb(var(--ink)));
 }
 .theme-dialog-swatch:focus-visible {
   outline: 2px solid var(--focus);
@@ -801,14 +820,20 @@
 .t3s .settings-expand-accessory {
   right: calc(1.25rem + 18px + 0.375rem);
 }
-/* A handle at the row's start (ExpandRow `handle`), in the row's left padding. */
+/* A handle at the row's start (ExpandRow `handle`), in the row's left padding with room before the lead icon. */
 .settings-expand-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  left: 0.125rem;
   display: flex;
   align-items: center;
+}
+.settings-expand-head:has(.settings-expand-handle) > .settings-row-button {
+  padding-left: 1.75rem;
+}
+.t3s .settings-expand-head:has(.settings-expand-handle) > .settings-row-button {
+  padding-left: 1.625rem;
 }
 
 /* Settings → Add-ons: the installed ones, dragged into the order they're asked in. */
@@ -865,7 +890,7 @@
 .addon-logo {
   width: 24px;
   height: 24px;
-  margin: -2px;
+  margin: -2px 0;
   border-radius: 6px;
   object-fit: contain;
 }
@@ -1222,6 +1247,11 @@
 .shortcut-tool:focus-visible {
   opacity: 1;
 }
+@media (hover: none) {
+  .shortcut-tool {
+    opacity: 1;
+  }
+}
 @media (hover: hover) and (pointer: fine) {
   .shortcut-row:hover .shortcut-tool {
     opacity: 1;
@@ -1264,6 +1294,7 @@
   background: var(--fill-2);
   box-shadow: inset 0 0 0 1.5px var(--accent);
   color: var(--text-2);
+  outline: none;
 }
 .shortcut-capture-cancel {
   display: grid;
@@ -1459,6 +1490,8 @@
 :root[data-form="phone"] .library-search.search-field-pill {
   flex: 1 1 100%;
   width: auto;
+  min-height: var(--hit);
+  height: auto;
 }
 .playlist-view {
   padding-top: calc(var(--nav-h) + 1.75rem);
@@ -1539,8 +1572,8 @@
   width: 2rem;
   height: 2rem;
   border-radius: var(--r-round);
-  background: rgb(0 0 0 / 0.45);
-  backdrop-filter: blur(12px);
+  background: rgb(24 24 28 / 0.88);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
   color: #fff;
 }
 .downloads {
@@ -1674,6 +1707,9 @@
 .download-row-main:focus-visible .download-row-play {
   opacity: 1;
 }
+.downloads[data-selecting] .download-row-play {
+  display: none;
+}
 .download-row[data-state="downloading"] .download-row-still img,
 .download-row[data-state="paused"] .download-row-still img {
   opacity: 0.6;
@@ -1804,11 +1840,10 @@
   width: min(30rem, calc(100vw - 2rem));
   padding: 0.375rem;
   border-radius: var(--r-pill);
-  background: var(--glass);
-  backdrop-filter: blur(24px) saturate(180%);
+  background: var(--surface-popover);
   box-shadow:
     0 0 0 1px var(--glass-edge),
-    0 16px 40px -12px rgb(0 0 0 / 0.7);
+    var(--shadow-menu);
   transform: translateX(-50%);
   transition:
     opacity 220ms var(--ease-out),
@@ -1819,6 +1854,11 @@
     opacity: 0;
     transform: translate(-50%, 0.75rem);
   }
+}
+.downloads-selectbar[data-leaving] {
+  opacity: 0;
+  transform: translate(-50%, 0.75rem);
+  pointer-events: none;
 }
 .downloads-selectbar .btn {
   background: var(--fill-2);
@@ -1836,6 +1876,9 @@
     .downloads-selectbar {
       transform: translateX(-50%);
     }
+  }
+  .downloads-selectbar[data-leaving] {
+    transform: translateX(-50%);
   }
 }
 /* One grouped surface per list, as on the Library page: hairlines between the
@@ -1898,7 +1941,7 @@
   content: "";
   width: 0.75rem;
   height: 0.75rem;
-  background: #fff;
+  background: var(--accent-fg);
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
     center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
@@ -1948,7 +1991,7 @@
 .downloads-active-bar > span {
   display: block;
   height: 100%;
-  background: var(--progress);
+  background: var(--accent);
   transform-origin: left;
   transition: transform var(--dur-base) var(--ease-out);
 }
@@ -2067,7 +2110,7 @@
 .download-row-watched svg {
   display: inline;
   vertical-align: -2px;
-  color: var(--progress);
+  color: var(--text-2);
 }
 .download-row[data-watched] .download-row-still img {
   opacity: 0.6;
@@ -2355,6 +2398,12 @@
   transform: translateX(-22%) rotate(-7deg) scale(0.92);
 }
 @media (hover: hover) and (pointer: fine) {
+  .playlist-tile:hover .playlist-fan > :nth-child(1) {
+    transform: translateY(-4%) scale(1.03);
+  }
+  .playlist-tile:hover .playlist-fan[data-count="2"] > :nth-child(1) {
+    transform: translate(12%, -3%) rotate(4deg) scale(1.02);
+  }
   .playlist-tile:hover .playlist-fan > :nth-child(2) {
     transform: translateX(-32%) rotate(-12deg) scale(0.9);
   }
@@ -2613,8 +2662,8 @@
   width: 26px;
   height: 26px;
   border-radius: var(--r-round);
-  background: rgb(0 0 0 / 0.65);
-  backdrop-filter: blur(8px);
+  background: rgb(24 24 28 / 0.88);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
   color: #fff;
   opacity: 0;
   transition:
@@ -2626,6 +2675,11 @@
 }
 .playlist-remove:focus-visible {
   opacity: 1;
+}
+@media (hover: none) {
+  .playlist-remove {
+    opacity: 1;
+  }
 }
 @media (hover: hover) and (pointer: fine) {
   .playlist-entry:hover .playlist-remove {

@@ -243,14 +243,14 @@ function Results({ text }: { text: string }) {
     return () => window.clearTimeout(t);
   }, [text]);
 
-  return <ResultsBody query={deferred} />;
+  return <ResultsBody query={deferred} typing={text !== deferred} />;
 }
 
-const ResultsBody = memo(function ResultsBody({ query: deferred }: { query: string }) {
+const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { query: string; typing: boolean }) {
   const { animeEnabled } = usePrefs();
   const { navigate } = useNavigation();
 
-  const { data } = useSearch(deferred);
+  const { data, isPlaceholderData } = useSearch(deferred);
   const hasQuery = deferred.length >= searchMinLength(deferred);
   const genre = hasQuery ? genreOf(deferred) : undefined;
   // What the catalogs found (they forgive typos): what AniList is asked for when the typed words find nothing.
@@ -264,6 +264,7 @@ const ResultsBody = memo(function ResultsBody({ query: deferred }: { query: stri
   const movies = withoutAnime(data?.movies, anime.all, aliases);
   const series = withoutAnime(data?.series, anime.all, aliases);
   const waiting = !hasQuery || !data;
+  const stale = !waiting && (typing || isPlaceholderData);
   const addonsBusy = fromAddons.some((r) => !r.items && !r.failed);
   const addonsFound = fromAddons.some((r) => r.items?.length);
   const rows: Record<SearchRow, ReactNode> = {
@@ -284,12 +285,16 @@ const ResultsBody = memo(function ResultsBody({ query: deferred }: { query: stri
       />
     ),
   };
-  const nothing = !waiting && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
+  const nothing = !waiting && !stale && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
 
   return (
     <>
       {/* Opening a result counts as running the search (Recent, in the search field). */}
-      <div className="rows search-rows" onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}>
+      <div
+        className="rows search-rows"
+        data-stale={stale || undefined}
+        onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}
+      >
         {searchRows(genre, !!anime.genre).map((row) => rows[row])}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
         {fromAddons.map(
@@ -336,8 +341,11 @@ function AnimeRow({
   retry: () => void;
   onOpen?: () => void;
 }) {
+  const kept = useRef<Card[]>(undefined);
+  if (items) kept.current = items;
+  const shown = items ?? (loading ? kept.current : undefined);
   // A failed search isn't "no anime": it says so, with a way to try again (test report 1, item 28).
-  if (failed && !items?.length)
+  if (failed && !shown?.length)
     return (
       <section className="row">
         <div className="row-header">
@@ -346,6 +354,6 @@ function AnimeRow({
         <EmptyState action={{ label: "Try Again", onClick: retry }}>Anime results couldn't load.</EmptyState>
       </section>
     );
-  if (!loading && !items?.length) return null;
-  return <Shelf title={title} onOpen={onOpen} items={items} card={(a) => <AnimeCard key={a.id} item={a} />} />;
+  if (!loading && !shown?.length) return null;
+  return <Shelf title={title} onOpen={onOpen} items={shown} card={(a) => <AnimeCard key={a.id} item={a} />} />;
 }

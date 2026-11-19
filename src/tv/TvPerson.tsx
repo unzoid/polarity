@@ -4,7 +4,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { bioPreview, filmography, lifeFacts } from "../lib/catalog";
 import { usePerson } from "../lib/net";
 import { initialsOf } from "../screens/Person";
-import { TvCard, TvRail } from "./TvRails";
+import { TvCard, TvRail, TvSkeletonRail } from "./TvRails";
 
 /**
  * A person's page, TV-style: photo, name, the facts and the start of the biography (More reads on), then the
@@ -35,6 +35,7 @@ export function TvPerson({ id, name }: { id: number; name?: string }) {
         </div>
       </header>
       {isError && <EmptyState variant="tv">Couldn't load this page.</EmptyState>}
+      {!person && !isError && <TvSkeletonRail shape="poster" />}
       {person &&
         filmography(person).map((row) => (
           <TvRail key={row.key} title={row.title}>
