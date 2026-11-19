@@ -1,5 +1,5 @@
 import { deflateRawSync } from "node:zlib";
-import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
+import { backPlace, barOverlaps, card, clock, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test, wakeControls } from "./fixtures";
 import { mediaAnswer } from "./anilistMock";
 import type { Locator, Page } from "@playwright/test";
 import { serveMedia } from "./media";
@@ -267,6 +267,7 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   // On the desktop the panel is a menu above its button in the one row of controls, clear of the timeline; the
   // controls stay up while it's open. A click between its columns leaves it open.
   const tracksButton = app.getByRole("button", { name: "Subtitles & Audio", exact: true });
+  await wakeControls(app);
   await tracksButton.click();
   const overlay = app.locator(".options-overlay[data-open=true]");
   await expect(overlay).toHaveAttribute("data-place", "dock");
@@ -307,6 +308,7 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   await tracksButton.click();
   await expect(app.locator(".options-overlay")).toHaveCount(0);
 
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   // The source bar's controls never stick out past the list (re-test N9), at any width.
   for (const width of [1440, 1100]) {
@@ -346,6 +348,7 @@ test("the player's crop item and Z switch Fit and Fill window, say which, and re
   await expect(player).toHaveAttribute("data-started", "true");
   // On the desktop the crop mode is in More, under the timeline.
   const crop = async () => {
+    await wakeControls(app);
     await player.getByRole("button", { name: "More" }).click();
     return app.getByRole("menuitemcheckbox", { name: /^Crop:/ });
   };
@@ -718,6 +721,7 @@ test("the player's Sources panel marks the same links (#21)", async ({ app }) =>
   await card(app, "The Glass Orchard").click();
   await app.getByRole("button", { name: "Play", exact: true }).click();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   const sources = app.getByRole("radiogroup", { name: "Sources" });
   // The source playing keeps its check; the next ones are marked.
@@ -771,12 +775,14 @@ test("a source picked in the player's Sources panel plays, while playing and whi
 
   // While playing: the click switches to the source.
   const playing = await video.getAttribute("src");
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   await quick().click();
   await expect(video).not.toHaveAttribute("src", playing!);
   await expect(player).toHaveAttribute("data-started", "true");
 
   // A source that stays starting, then another picked while it starts (the Sources shortcut opens the panel).
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   await sources.getByRole("radio", { name: /Open Mirror/ }).first().click();
   await expect(video).toHaveAttribute("src", /\/[34]\.mp4/);
@@ -834,6 +840,7 @@ test("while a downloaded episode plays, its copy is the first source and picking
   await expect(video).toHaveAttribute("src", /\/downloads\/.+\.mkv$/);
   const sources = app.getByRole("radiogroup", { name: "Sources" });
   const open = async () => {
+    await wakeControls(app);
     await app.getByRole("button", { name: "Sources", exact: true }).click();
     await expect(sources).toBeVisible();
   };
@@ -1358,6 +1365,7 @@ test("a source's i button shows what the source carries with every key masked, o
   // The player's list: the same panel, over its Sources.
   await app.getByRole("button", { name: "Play", exact: true }).click();
   await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+  await wakeControls(app);
   await app.getByRole("button", { name: "Sources", exact: true }).click();
   const list = app.getByRole("radiogroup", { name: "Sources" });
   const row = list.locator(".options-item-wrap").last();
@@ -1398,6 +1406,7 @@ test.describe("signed in, on a fresh profile", () => {
     await expect.poll(async () => (await sentToDiscord(app)).at(-1)?.details).toBe("Watching on Polarity");
     expect((await sentToDiscord(app)).at(-1)?.buttons).toBeUndefined();
     expect((await sentToDiscord(app)).at(-1)?.join).toBeUndefined();
+    await wakeControls(app);
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
@@ -1496,6 +1505,7 @@ test.describe("signed in, on a fresh profile", () => {
     await card(app, "The Glass Orchard").click();
     await app.getByRole("button", { name: "Play", exact: true }).click();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
+    await wakeControls(app);
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await expect(partySurfaces(app)).toHaveCount(1);
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
@@ -1617,6 +1627,7 @@ test.describe("signed in, on a fresh profile", () => {
     await app.locator(".episode-card-main:not([disabled])").first().click();
     const player = app.locator(".player");
     await expect(player).toHaveAttribute("data-started", "true");
+    await wakeControls(app);
     await app.getByRole("button", { name: "Watch Party", exact: true }).click();
     await app.getByRole("button", { name: "Start a Watch Party" }).click();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();
@@ -1834,6 +1845,7 @@ test("the player pins the window on top and locks it, P unpins, and leaving the 
   await player.hover();
   // On the desktop, pinning is in More, under the timeline.
   const pinItem = async () => {
+    await wakeControls(app);
     await player.getByRole("button", { name: "More" }).click();
     return app.getByRole("menuitemcheckbox", { name: "Pin window on top" });
   };
@@ -2270,6 +2282,7 @@ test("in a narrow window nothing in the player's bars overlaps, the title is cut
   }
   // Nothing for the window in the top bar but Back: pin and fill are in More.
   await expect(app.locator(".player-top").getByRole("button", { name: /^(Mute|More|Pin window|Crop:)/ })).toHaveCount(0);
+  await wakeControls(app);
   await dock.getByRole("button", { name: "More" }).click();
   const fillItem = app.getByRole("menuitemcheckbox", { name: /^Crop:/ });
   await expect(fillItem).toHaveAttribute("aria-checked", "false");
@@ -2317,6 +2330,7 @@ test("the sleep timer counts down by the clock, offers +15 min in its last minut
   // (which fires nothing) and then a moment run, for the timer's next tick: running every frame of a quarter of an
   // hour would take longer than the test may.
   // Sleep Timer is in More on the desktop; opened before the clock stands still, which the menu's opening needs.
+  await wakeControls(app);
   await player.getByRole("button", { name: "More" }).click();
   await app.getByRole("menuitem", { name: "Sleep Timer" }).click();
   const set = (await app.evaluate(() => Date.now())) + 1000;
