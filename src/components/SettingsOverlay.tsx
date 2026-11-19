@@ -1,15 +1,29 @@
+import "../styles/settings-overlay.css";
+import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
+import { animate } from "motion/react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { Avatar } from "./Avatar";
 import { ChevronLeft, ChevronRight, Close, Reset, SignOut } from "./icons";
 import { iconButtonClass } from "./ui/Button";
 import { useNativeBack } from "./NativeBack";
-import { dismissDepth, isTextField, onDismissDepth, useFormFactor } from "../lib/ui";
+import { dismissDepth, isTextField, onDismissDepth, prefersReducedMotion, project, rubberband, springs, useFormFactor } from "../lib/ui";
 import { tvModeAvailable } from "../tv/tvMode";
 import { SearchField } from "./ui/SearchField";
 import { useAccount } from "../lib/account";
 import { buildChannel } from "../lib/platform";
-import { closeSettings, type PageId, prefsCustomized, resetPrefs, searchSettings, type SettingEntry, usePrefs, useSettingsOverlay } from "../lib/settings";
+import {
+  closeSettings,
+  PAGE_SECTIONS,
+  type PageId,
+  prefsCustomized,
+  resetPrefs,
+  searchSettings,
+  sectionOf,
+  type SettingEntry,
+  usePrefs,
+  useSettingsOverlay,
+} from "../lib/settings";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
 
@@ -26,6 +40,8 @@ const GROUPS: { heading?: string; pages: PageId[] }[] = [
 
 /** Settings for TV mode, left out of search where there is none (tvMode.ts). */
 const TV_ONLY = new Set(["tvMode", "showTvButton"]);
+/** Shown on phones and tablets only (ControlsPage). */
+const TOUCH_ONLY = new Set(["swipeGestures"]);
 
 /** Where a search result's row can be on its page. */
 const ROW_LABELS = ".settings-row-title, .settings-group-title, .sub-setting-label, .shortcut-label";
@@ -37,6 +53,9 @@ function revealSetting(root: HTMLElement, entry: SettingEntry) {
   const label = marked ?? [...root.querySelectorAll<HTMLElement>(ROW_LABELS)].find((el) => el.textContent?.trim() === entry.title);
   if (!label) return;
   const box = marked ?? label.closest<HTMLElement>(ROW_BOXES) ?? label;
+  const expand = box.classList.contains("settings-expand") ? box : box.closest<HTMLElement>(".settings-expand");
+  const toggle = expand?.dataset.open === "false" ? expand.querySelector<HTMLButtonElement>('.settings-row-button[aria-expanded="false"]') : null;
+  toggle?.click();
   box.scrollIntoView({ block: "center" });
   clearTimeout(hitTimers.get(box));
   box.removeAttribute("data-search-hit");
@@ -86,13 +105,29 @@ export function SettingsOverlay({
   const pages = account.enabled ? PAGES : PAGES.filter((p) => p.id !== "account");
   const fallback = pages.find((p) => p.id === "playback")?.id ?? pages[0].id;
   const [page, setPage] = useState<PageId>(fallback);
+  // A long page's section open (PAGE_SECTIONS), or null for the page itself: its list of sections.
+  const [sectionId, setSection] = useState<string | null>(null);
+  // Which way the last move between a page and its sections went, for the page's slide in (settings-overlay.css);
+  // null for any other change (another page, a search result), which shows at once.
+  const [move, setMove] = useState<"in" | "out" | null>(null);
+  const openSection = (id: string) => (setMove("in"), setSection(id));
+  const closeSection = () => (setMove("out"), setSection(null));
+  const section = PAGE_SECTIONS[page]?.find((s) => s.id === sectionId) ?? null;
   const [query, setQuery] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   // A phone has no room for the sidebar beside a page: it shows one or the other, the list of
   // sections first, as a phone's own Settings app does. Back (or Escape) goes from a page to the list.
-  const phone = useFormFactor().form === "phone";
+  const { form, touch } = useFormFactor();
+  const phone = form === "phone";
   const [view, setView] = useState<"list" | "page">("list");
+  // Which way the phone last went between the list and a page, for the one coming in to push in from that side
+  // (settings-overlay.css `data-push`); null when Settings opens, which its sheet's own entrance covers.
+  const [push, setPush] = useState<"in" | "out" | null>(null);
+  const showView = (next: "list" | "page") => {
+    if (next !== view) setPush(next === "page" ? "in" : "out");
+    setView(next);
+  };
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
@@ -103,7 +138,9 @@ export function SettingsOverlay({
   useEffect(() => {
     if (open) setBelow(dismissDepth());
   }, [open]);
-  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], () => setView("list"));
+  // Back from a section goes to its page's list of sections, then (on a phone) to the list of pages.
+  const back = () => (section ? closeSection() : showView("list"));
+  const nativeBack = useNativeBack(backButton, open && phone && view === "page" && layers <= below, ["Settings"], back);
   // Back on a phone's page goes to the list; on the list it closes Settings (#455). The system's Back (iOS's swipe,
   // Android's button and gesture) arrives as Escape (lib/ui/systemBack.ts), so Escape is taken here, before the
   // dialog would close on it (or the sheet below would). A menu open on the page closes first, as it always does.
@@ -118,13 +155,13 @@ export function SettingsOverlay({
       if (isTextField(at) && "value" in at && at.value) return;
       e.preventDefault();
       e.stopPropagation();
-      if (view === "page") setView("list");
+      if (view === "page") back();
       else if (onExit) onExit();
       else closeSettings();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, phone, view, below, onExit]);
+  }, [open, phone, view, below, onExit, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Each opening lands on the requested page (or where it was left, unless that was Account), search cleared.
   useEffect(() => {
@@ -133,28 +170,35 @@ export function SettingsOverlay({
     if (asked) setPage(requested);
     else if (page === "account") setPage(fallback);
     setView(asked ? "page" : "list");
+    setPush(null);
+    setSection(null);
+    setMove(null);
     setQuery("");
     setTarget(null);
   }, [open, requested]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 });
-  }, [page]);
+  }, [page, sectionId]);
 
   const current = pages.find((p) => p.id === page) ?? pages[0];
   // The sheet holding it names the view and takes its Back.
   useEffect(() => {
     if (!onHead) return;
-    onHead(view === "page" ? { label: current.label, back: () => setView("list") } : { label: "Settings", back: () => (onExit ?? closeSettings)() });
-  }, [onHead, onExit, view, current.label]);
+    onHead(
+      view === "page"
+        ? { label: section?.label ?? current.label, back }
+        : { label: "Settings", back: () => (onExit ?? closeSettings)() },
+    );
+  }, [onHead, onExit, view, current.label, section]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageOf = (id: PageId) => pages.find((p) => p.id === id) ?? pages[0];
   const searching = query.trim() !== "";
   const results = useMemo(
     () =>
       searchSettings(query, (id) => pageOf(id).label, new Set(pages.map((p) => p.id))).filter(
-        (entry) => tvModeAvailable || !TV_ONLY.has(entry.id),
+        (entry) => (tvModeAvailable || !TV_ONLY.has(entry.id)) && (touch || !TOUCH_ONLY.has(entry.id)),
       ),
-    [query, pages], // eslint-disable-line react-hooks/exhaustive-deps
+    [query, pages, touch], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const [selected, setSelected] = useState(0);
   const resultsList = useRef<HTMLDivElement>(null);
@@ -176,19 +220,54 @@ export function SettingsOverlay({
       setTarget(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [target, page]);
+  }, [target, page, sectionId]);
 
-  const go = (id: PageId) => {
+  const go = (id: PageId, inSection: string | null = null) => {
     setPage(id);
-    setView("page");
+    setSection(inSection);
+    setMove(null);
+    showView("page");
     setQuery("");
   };
 
   const dragDown = useDragDown(closeSettings);
 
   const pick = (entry: SettingEntry) => {
-    go(entry.page);
+    go(entry.page, sectionOf(entry.page, entry.id)?.id ?? null);
     setTarget({ entry }); // a fresh object, so picking the same one again still scrolls
+  };
+
+  const focusSearch = () => {
+    const input = searchInput.current;
+    if (!input) return false;
+    if (!phone && getComputedStyle(input.closest(".t3s-search") ?? input).display === "none") return false;
+    if (phone && view === "page") {
+      showView("list");
+      requestAnimationFrame(() => {
+        searchInput.current?.focus();
+        searchInput.current?.select();
+      });
+      return true;
+    }
+    input.focus();
+    input.select();
+    return true;
+  };
+
+  const onRootKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
+    const mod = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+    const k = e.key.toLowerCase();
+    if (mod && (k === "f" || k === "k")) {
+      if (focusSearch()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+    const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+    if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (focusSearch()) e.preventDefault();
+    }
   };
 
   // The sections and the page, the same in the window and in the sheet; only the chrome round them differs.
@@ -233,6 +312,7 @@ export function SettingsOverlay({
               <div className="t3s-results" id="t3s-results" role="listbox" aria-label="Matching settings" ref={resultsList}>
                 {results.map((entry, i) => {
                   const p = pageOf(entry.page);
+                  const s = sectionOf(entry.page, entry.id);
                   return (
                     <div
                       key={entry.id}
@@ -248,7 +328,7 @@ export function SettingsOverlay({
                       <p.icon size={16} strokeWidth={2} />
                       <span className="t3s-result-text">
                         <span className="t3s-result-title">{entry.title}</span>
-                        <span className="t3s-result-page">{p.label}</span>
+                        <span className="t3s-result-page">{s ? `${p.label} › ${s.label}` : p.label}</span>
                       </span>
                     </div>
                   );
@@ -284,7 +364,7 @@ export function SettingsOverlay({
         )}
         {!account.enabled && buildChannel === "dev" && (
           <div className="t3s-sidebar-foot">
-            <button className="t3s-nav-item" onClick={() => go("advanced")}>
+            <button className="t3s-nav-item" aria-label="No database: connect one" title="No database: connect one" onClick={() => go("advanced")}>
               <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
               <span>No database: connect one</span>
             </button>
@@ -293,7 +373,7 @@ export function SettingsOverlay({
         {account.enabled && (
           <div className="t3s-sidebar-foot">
             {account.status === "guest" ? (
-              <button className="t3s-nav-item" onClick={account.showSignIn}>
+              <button className="t3s-nav-item" aria-label="Sign in to sync" title="Sign in to sync" onClick={account.showSignIn}>
                 <SignOut size={16} strokeWidth={2} style={{ transform: "scaleX(-1)" }} />
                 <span>Sign in to sync</span>
               </button>
@@ -302,6 +382,8 @@ export function SettingsOverlay({
                 className="t3s-nav-item"
                 data-active={!phone && page === "account"}
                 aria-current={!phone && page === "account" ? "page" : undefined}
+                aria-label={account.profile.name}
+                title={account.profile.name}
                 onClick={() => go("account")}
               >
                 <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
@@ -320,8 +402,8 @@ export function SettingsOverlay({
                 ref={backButton}
                 className={iconButtonClass("settings", "t3s-back")}
                 data-native-back={nativeBack || undefined}
-                aria-label="All settings"
-                onClick={() => setView("list")}
+                aria-label={section ? current.label : "All settings"}
+                onClick={back}
               >
                 <ChevronLeft size={20} strokeWidth={2.2} />
               </button>
@@ -331,7 +413,20 @@ export function SettingsOverlay({
               <span className="t3s-crumb-sep" aria-hidden>
                 /
               </span>
-              <span className="t3s-crumb-page">{current.label}</span>
+              {section ? (
+                <>
+                  {/* Back to the page's list of sections. */}
+                  <button className="t3s-crumb-link" onClick={closeSection}>
+                    {current.label}
+                  </button>
+                  <span className="t3s-crumb-sep" aria-hidden>
+                    /
+                  </span>
+                  <span className="t3s-crumb-page">{section.label}</span>
+                </>
+              ) : (
+                <span className="t3s-crumb-page">{current.label}</span>
+              )}
             </Dialog.Title>
             <div className="t3s-header-actions">
               {/* On a phone its label doesn't fit here, and its arrow alone read as a Back that did nothing (#455):
@@ -355,8 +450,8 @@ export function SettingsOverlay({
         )}
 
         <div className="t3s-scroll" ref={scroller}>
-          <div className="t3s-page" key={page}>
-            <SettingsPageBody page={page} />
+          <div className="t3s-page" key={`${page}/${sectionId ?? ""}`} data-move={move ?? undefined}>
+            <SettingsPageBody page={page} section={section?.id ?? null} openSection={openSection} />
           </div>
         </div>
       </div>
@@ -366,7 +461,15 @@ export function SettingsOverlay({
   if (embedded)
     return (
       // Named as the window is: by the section open, else Settings.
-      <div className="t3s" data-embedded="" data-view={view} role="region" aria-label={view === "page" ? current.label : "Settings"}>
+      <div
+        className="t3s"
+        data-embedded=""
+        data-view={view}
+        data-push={push ?? undefined}
+        role="region"
+        aria-label={view === "page" ? (section?.label ?? current.label) : "Settings"}
+        onKeyDown={onRootKeyDown}
+      >
         {body}
       </div>
     );
@@ -385,15 +488,10 @@ export function SettingsOverlay({
         <Dialog.Popup
           className="t3s"
           data-view={phone ? view : undefined}
+          data-push={phone ? (push ?? undefined) : undefined}
           aria-label="Settings"
           {...(phone ? dragDown : {})}
-          onKeyDown={(e) => {
-            const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-            if (e.key === "/" && !typing) {
-              e.preventDefault();
-              searchInput.current?.focus();
-            }
-          }}
+          onKeyDown={onRootKeyDown}
         >
           {phone && (
             <div className="t3s-grab" aria-hidden>
@@ -420,7 +518,14 @@ function NavItem({
   onClick: () => void;
 }) {
   return (
-    <button className="t3s-nav-item" data-active={active} aria-current={active ? "page" : undefined} onClick={onClick}>
+    <button
+      className="t3s-nav-item"
+      data-active={active}
+      aria-current={active ? "page" : undefined}
+      aria-label={page.label}
+      title={page.label}
+      onClick={onClick}
+    >
       <page.icon size={16} strokeWidth={2} />
       <span>{page.label}</span>
       {chevron && <ChevronRight size={18} className="t3s-nav-chevron" aria-hidden />}
@@ -428,40 +533,80 @@ function NavItem({
   );
 }
 
-/** Past this far down, or this fast (px/ms), letting go closes the sheet. */
+/** Past this far down, or projected past 42% of the sheet's height, letting go closes it. */
 const CLOSE_AT = 140;
 const FLICK = 0.11;
 
+/** Read the element's live on-screen translateY so grabbing mid-flight never jumps. */
+function liveTranslateY(el: HTMLElement): number {
+  const tf = getComputedStyle(el).transform;
+  if (!tf || tf === "none") return 0;
+  if (typeof DOMMatrix !== "undefined") return new DOMMatrix(tf).m42;
+  const m = tf.match(/matrix\([^,]+,[^,]+,[^,]+,[^,]+,[^,]+,\s*([^)]+)\)/);
+  return m ? Number(m[1]) || 0 : 0;
+}
+
 /**
- * A phone's Settings sheet follows a finger down from its grabber or a header, and closes when let go far
- * enough down or flicked; otherwise it springs back. Up past the top it gives a little, against friction.
- * Only the first finger drags (pointer capture keeps it, off the sheet too).
+ * A phone's Settings sheet follows a finger down from its grabber or a header, with progressive
+ * rubber-band resistance above the top, instantaneous velocity tracking, momentum projection,
+ * and interruptible velocity-handed-off spring settle.
  */
 function useDragDown(close: () => void) {
-  const drag = useRef<{ id: number; y: number; t: number; dy: number } | null>(null);
-  const settle = (el: HTMLElement, transform: string, ms: number, curve: string) => {
-    el.style.transition = `transform ${ms}ms ${curve}`;
-    el.style.transform = transform;
-    const done = () => {
-      el.style.transition = "";
-      el.removeEventListener("transitionend", done);
-    };
-    el.addEventListener("transitionend", done);
+  const drag = useRef<{ id: number; startY: number; baseY: number; lastY: number; lastT: number; vy: number; dy: number } | null>(null);
+  const anim = useRef<ReturnType<typeof animate> | null>(null);
+
+  const springTo = (el: HTMLElement, target: number, velocity: number, onDone?: () => void) => {
+    anim.current?.stop();
+    if (prefersReducedMotion()) {
+      el.style.transform = target === 0 ? "" : `translateY(${target}px)`;
+      onDone?.();
+      return;
+    }
+    const ctrl = animate(
+      el,
+      { y: target },
+      {
+        ...springs.bottomSheet,
+        velocity,
+        onComplete: () => {
+          if (anim.current === ctrl) anim.current = null;
+          if (target === 0) el.style.transform = "";
+          onDone?.();
+        },
+      },
+    );
+    anim.current = ctrl;
   };
+
   return {
     onPointerDown: (e: PointerEvent<HTMLElement>) => {
       const t = e.target as HTMLElement;
       if (drag.current || e.button !== 0) return;
       if (!t.closest(".t3s-grab, .t3s-list-head, .t3s-header") || t.closest("button, input, a")) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.currentTarget.style.transition = "none";
-      drag.current = { id: e.pointerId, y: e.clientY, t: performance.now(), dy: 0 };
+      const el = e.currentTarget;
+      anim.current?.stop();
+      anim.current = null;
+      const baseY = liveTranslateY(el);
+      el.setPointerCapture(e.pointerId);
+      el.style.transition = "none";
+      el.style.transform = baseY ? `translateY(${baseY}px)` : "";
+      const now = performance.now();
+      drag.current = { id: e.pointerId, startY: e.clientY, baseY, lastY: e.clientY, lastT: now, vy: 0, dy: baseY };
     },
     onPointerMove: (e: PointerEvent<HTMLElement>) => {
       const d = drag.current;
       if (!d || e.pointerId !== d.id) return;
-      const raw = e.clientY - d.y;
-      d.dy = raw < 0 ? raw * 0.1 : raw;
+      const now = performance.now();
+      const dt = now - d.lastT;
+      if (dt > 0) {
+        const inst = ((e.clientY - d.lastY) / dt) * 1000;
+        d.vy = d.vy === 0 ? inst : inst * 0.6 + d.vy * 0.4;
+        d.lastY = e.clientY;
+        d.lastT = now;
+      }
+      const raw = d.baseY + (e.clientY - d.startY);
+      const h = e.currentTarget.offsetHeight || window.innerHeight || 600;
+      d.dy = raw < 0 ? -rubberband(-raw, h, 0.25) : raw;
       e.currentTarget.style.transform = `translateY(${d.dy}px)`;
     },
     onPointerUp: (e: PointerEvent<HTMLElement>) => {
@@ -469,16 +614,24 @@ function useDragDown(close: () => void) {
       if (!d || e.pointerId !== d.id) return;
       drag.current = null;
       const el = e.currentTarget;
-      const velocity = d.dy / Math.max(1, performance.now() - d.t);
-      if (d.dy > CLOSE_AT || (d.dy > 24 && velocity > FLICK)) {
-        settle(el, "translateY(100%)", 240, "var(--ease-out)");
+      const h = el.offsetHeight || window.innerHeight || 600;
+      const stale = performance.now() - d.lastT > 80;
+      const vy = stale ? 0 : d.vy;
+      const projected = d.dy + project(vy, 0.994);
+      const shouldClose = vy >= -150 && (d.dy > CLOSE_AT || projected > h * 0.42 || (d.dy > 24 && vy > FLICK * 1000));
+      el.style.transition = "";
+      if (shouldClose) {
+        springTo(el, h, Math.max(0, vy));
         close();
-      } else settle(el, "", 320, "var(--ease-drawer)");
+      } else {
+        springTo(el, 0, vy);
+      }
     },
     onPointerCancel: (e: PointerEvent<HTMLElement>) => {
       if (drag.current?.id !== e.pointerId) return;
       drag.current = null;
-      settle(e.currentTarget, "", 320, "var(--ease-drawer)");
+      e.currentTarget.style.transition = "";
+      springTo(e.currentTarget, 0, 0);
     },
   };
 }

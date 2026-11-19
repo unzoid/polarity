@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Check, Close, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
+import { Check, Close, Hidden, Info, Minus, PlaylistIcon, Plus, Reset, Watched } from "../components/icons";
 import { episodeCode } from "../lib/format";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
+import { usePresence } from "../lib/ui";
 import type { MetaPreview, Progress } from "../lib/types";
-import { useBack, useFocusTrap } from "./shell";
+import { PanelLeaving, useBack, useFocusTrap } from "./shell";
 import { playSound } from "./sounds";
 import { isMenuKey } from "./menuKey";
 import { NamePanel, PlaylistsPanel } from "./TvDetail";
@@ -66,25 +67,34 @@ export const useCardMenuOpen = () => useSyncExternalStore(subscribe, () => !!cur
 
 export { isMenuKey };
 
+const CARD_MENU_OUT_MS = 160;
+
 export function TvCardMenuHost() {
-  const target = useSyncExternalStore(subscribe, () => current);
+  const live = useSyncExternalStore(subscribe, () => current);
+  const { shown: target, leaving } = usePresence(live, CARD_MENU_OUT_MS);
   if (!target) return null;
-  return <Layers key={target.key} target={target} />;
+  return (
+    <PanelLeaving.Provider value={leaving}>
+      <Layers key={target.key} target={target} leaving={leaving} />
+    </PanelLeaving.Provider>
+  );
 }
 
 type Layer = { kind: "menu" } | { kind: "playlists" } | { kind: "name"; playlistId?: string };
 
-function Layers({ target }: { target: Target }) {
+function Layers({ target, leaving }: { target: Target; leaving: boolean }) {
   // Picking a playlist replaces the menu: Back from there goes to the card.
   const [layers, setLayers] = useState<Layer[]>([{ kind: "menu" }]);
   const pop = () => (layers.length > 1 ? setLayers((ls) => ls.slice(0, -1)) : closeCardMenu());
-  useBack(true, pop);
+  useBack(!leaving, pop);
   const top = layers[layers.length - 1];
 
   return (
     <div
       className="tv-card-menu-layer"
       data-dim={top.kind === "menu" || undefined}
+      data-leaving={leaving || undefined}
+      inert={leaving || undefined}
       onClick={(e) => e.target === e.currentTarget && closeCardMenu()}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -106,7 +116,7 @@ function Layers({ target }: { target: Target }) {
               />
             );
           case "name":
-            return <NamePanel key={i} item={target.item} playlistId={layer.playlistId} active={isTop} onDone={pop} />;
+            return <NamePanel key={i} item={target.item} playlistId={layer.playlistId} active={isTop && !leaving} onDone={pop} />;
         }
       })}
     </div>
@@ -124,7 +134,7 @@ const GAP = 28; // between the lifted card and the menu
 
 function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => void }) {
   const { item, entry, anchor } = target;
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   const a = useTitleActions(item, entry);
 
   const act = (fn: () => void) => () => {
@@ -171,6 +181,8 @@ function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => 
         icon: a.inPlaylist ? <Check size={24} /> : <PlaylistIcon size={24} />,
         onPick: () => onLayer({ kind: "playlists" }),
       },
+      // Out of Home, Discover and recommendations; its page offers Unhide (lib/library/hiddenTitles.ts).
+      { label: a.hidden ? "Unhide This Title" : "Hide This Title", icon: <Hidden size={24} />, onPick: act(a.toggleHidden) },
     ],
   ];
 
@@ -184,7 +196,8 @@ function CardMenu({ target, onLayer }: { target: Target; onLayer: (l: Layer) => 
     if (!menu || !layer) return;
     const measure = () => {
       const box = layer.getBoundingClientRect();
-      const card = anchor.getBoundingClientRect();
+      // The frame, not the card: on the Library's shelves a focused card's frame opens out past its slot.
+      const card = (anchor.querySelector(".tv-card-frame") ?? anchor).getBoundingClientRect();
       const w = menu.offsetWidth;
       const h = menu.offsetHeight;
       const right = card.right - box.left + GAP;

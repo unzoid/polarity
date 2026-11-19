@@ -23,8 +23,15 @@ async function fetchRelease(): Promise<Release | null> {
   }
 }
 
-// One shared request for every download button on the page.
-export const release = createRoot(() => createResource(fetchRelease)[0]);
+let resource: ReturnType<typeof createResource<Release | null>>[0] | undefined;
+function ensureRelease() {
+  return (resource ??= createRoot(() => createResource(fetchRelease)[0]));
+}
+
+// One shared request for every download button on the page, started lazily only on pages that read it.
+const readRelease = (() => ensureRelease()()) as (() => Release | null | undefined) & { readonly loading: boolean };
+Object.defineProperty(readRelease, "loading", { get: () => ensureRelease().loading });
+export const release = readRelease;
 
 function detectPlatform(): Platform | null {
   if (typeof navigator === "undefined") return null;

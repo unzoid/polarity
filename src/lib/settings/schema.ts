@@ -1,6 +1,8 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
+import { LIMIT_STEPS } from "../catalog/ageRating";
 import { isMac } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
+import { MAX_VOLUMES } from "../playback/volume";
 import type { Prefs } from "./prefs";
 import type { Settings } from "../types";
 import type { PageId } from "./pages";
@@ -168,6 +170,8 @@ export const SETTINGS: SettingDef[] = [
     title: "Import from Letterboxd",
     keywords: "import letterboxd watchlist watched diary films movies export zip csv file",
   },
+  { id: "polarityExport", page: "account", title: "Export library and history", keywords: "export backup save download library history watched progress playlists json csv spreadsheet file" },
+  { id: "polarityImport", page: "account", title: "Import a Polarity export", keywords: "import restore backup move device profile library history playlists json file" },
   // Friends (#135): kept on the account server per profile, drawn by the page (components/friends/FriendsSettings.tsx).
   { id: "friendsEnabled", page: "account", title: "Friends", keywords: "friends friend code list online invite watch party join social" },
   { id: "friendsOnline", page: "account", title: "Who sees you're online", keywords: "friends privacy online status presence hide invisible" },
@@ -293,6 +297,31 @@ export const SETTINGS: SettingDef[] = [
     control: { kind: "number", min: 50, max: 100, unit: "%" },
     invalidates: [["continue"], ["history"]],
   },
+  {
+    id: "autoDownloadNext",
+    page: "playback",
+    title: "Keep the next episodes downloaded",
+    caption:
+      "When you finish a downloaded episode, this many episodes after it are downloaded with the first source that can be. Only while Polarity is open; waits for Wi-Fi and stops when space runs low.",
+    keywords: "download next episodes automatically rolling offline queue",
+    bind: p("autoDownloadNext"),
+    control: choice([
+      { value: 0, label: "Off" },
+      { value: 1, label: "1" },
+      { value: 2, label: "2" },
+      { value: 3, label: "3" },
+      { value: 5, label: "5" },
+    ]),
+  },
+  {
+    id: "autoDownloadRemoveWatched",
+    page: "playback",
+    title: "Remove downloaded episodes once watched",
+    caption: "Deletes a downloaded episode's file after you finish it and close the player.",
+    keywords: "delete downloads watched episodes free space automatically",
+    bind: p("autoDownloadRemoveWatched"),
+    control: toggle,
+  },
   { id: "startFullscreen", page: "playback", title: "Start in fullscreen", keywords: "full screen", bind: s("startFullscreen", false), control: toggle },
   {
     id: "pauseOnMinimize",
@@ -330,7 +359,60 @@ export const SETTINGS: SettingDef[] = [
       { value: "anyone", label: "Anyone who sees it" },
     ]),
   },
-  { id: "rememberSpeed", page: "playback", title: "Remember playback speed", keywords: "rate faster slower" },
+  { id: "rememberSpeed", page: "playback", title: "Remember playback speed", keywords: "rate faster slower default" },
+  {
+    id: "holdSpeed",
+    page: "playback",
+    title: "Press and hold to speed up",
+    caption: "Hold a finger or the mouse button on the video to play faster until you let go",
+    keywords: "hold long press fast forward 2x speed faster",
+    bind: p("holdSpeed"),
+    control: choice([
+      { value: 0, label: "Off" },
+      { value: 1.5, label: "1.5x" },
+      { value: 2, label: "2x" },
+      { value: 3, label: "3x" },
+    ]),
+  },
+  {
+    id: "showPlayingFormat",
+    page: "playback",
+    title: "Show what's playing under the title",
+    caption: "The picture and sound as they play, such as 4K · Dolby Vision · Dolby Atmos · English 5.1",
+    keywords: "quality resolution hdr dolby vision atmos audio format language badge info stats",
+    bind: p("showPlayingFormat"),
+    control: toggle,
+    tv: "Show Picture and Sound Format",
+  },
+  {
+    id: "pauseShowsControls",
+    page: "playback",
+    title: "Show the controls when paused",
+    caption: "Off: pausing leaves the picture clear. Move the mouse or press a key to bring them back",
+    keywords: "pause controls overlay hide osd clean picture screenshot",
+    bind: p("pauseShowsControls"),
+    control: toggle,
+    tv: "Show Controls When Paused",
+  },
+  {
+    id: "pauseDetails",
+    page: "playback",
+    title: "Show details while paused",
+    caption: "Paused for a few seconds, the picture dims and shows the title, its overview and cast. Any key or touch brings the picture back",
+    keywords: "pause screen details cast actors overview synopsis description dim idle",
+    bind: p("pauseDetails"),
+    control: toggle,
+    tv: "Show Details While Paused",
+  },
+  {
+    id: "loadingDetails",
+    page: "playback",
+    title: "Detailed loading information",
+    caption: "While a video loads, list each step with its time instead of one line",
+    keywords: "loading steps log debug details",
+    bind: p("loadingDetails"),
+    control: toggle,
+  },
   {
     id: "timeDisplay",
     page: "playback",
@@ -483,7 +565,6 @@ export const SETTINGS: SettingDef[] = [
     id: "torrentSpeedMbps",
     page: "sources",
     title: "Torrent download limit",
-    caption: "Caps how fast a torrent source downloads",
     keywords: "torrent bandwidth speed limit download mbps",
     bind: p("torrentSpeedMbps"),
     control: { kind: "number", min: 0, max: 1000, step: 5, unit: "Mbit/s", zero: "No limit", tvStep: 10 },
@@ -562,6 +643,35 @@ export const SETTINGS: SettingDef[] = [
     ]),
   },
   {
+    id: "preferSdh",
+    page: "subtitles",
+    title: "Prefer subtitles for the deaf and hard of hearing",
+    caption: "When a video has both, pick the SDH ones, which also describe sounds and music",
+    keywords: "sdh cc closed captions hearing impaired deaf accessibility sound effects",
+    bind: p("preferSdh"),
+    control: toggle,
+    tv: "Prefer SDH Subtitles",
+  },
+  {
+    id: "secondSubtitles",
+    page: "subtitles",
+    title: "Show a second subtitle",
+    caption: "Two languages at once, the second at the top of the picture. Pick it in the player's Second Subtitles list.",
+    keywords: "dual subtitles two languages secondary learn language bilingual",
+    bind: p("secondSubtitles"),
+    control: toggle,
+    tv: "Second Subtitle",
+  },
+  {
+    id: "secondSubtitleLanguage",
+    page: "subtitles",
+    title: "Second subtitle language",
+    controlLabel: "Second subtitle language",
+    keywords: "dual subtitles secondary language",
+    bind: p("secondSubtitleLanguage"),
+    control: choice((current) => languageChoices(current, "None")),
+  },
+  {
     id: "dialogueBoost",
     page: "subtitles",
     title: "Boost dialogue",
@@ -578,6 +688,27 @@ export const SETTINGS: SettingDef[] = [
     keywords: "night mode loudness normalize compression leveling",
     bind: p("volumeLeveling"),
     control: toggle,
+  },
+  {
+    id: "maxVolume",
+    page: "subtitles",
+    title: "Volume goes up to",
+    caption: "Past 100% makes quiet films louder than the file itself. Loud scenes can distort.",
+    keywords: "volume boost louder amplify 150 200 percent quiet max maximum",
+    bind: p("maxVolume"),
+    control: choice(MAX_VOLUMES.map((v) => ({ value: v, label: `${v * 100}%` }))),
+    tv: "Volume Goes Up To",
+  },
+  {
+    id: "passthrough",
+    page: "subtitles",
+    title: "Send surround sound to my receiver",
+    caption:
+      "For an AV receiver or soundbar on HDMI or optical: Dolby and DTS go to it as they are, for it to decode. The volume and the sound options above don't apply to them then.",
+    keywords: "passthrough bitstream spdif hdmi optical receiver soundbar dolby dts truehd atmos",
+    bind: p("passthrough"),
+    control: toggle,
+    tv: "Surround to Receiver (Passthrough)",
   },
   { id: "subtitleStyle", page: "subtitles", title: "Subtitle Style", keywords: "captions appearance" },
   { id: "subtitleDelay", page: "subtitles", title: "Delay", keywords: "subtitle sync offset timing" },
@@ -612,10 +743,10 @@ export const SETTINGS: SettingDef[] = [
     page: "appearance",
     title: "Font",
     keywords: "text typeface inter instrument hanken grotesk onest mona system opendyslexic dyslexia dyslexic accessibility readability",
-    bind: s("uiFont", "inter"),
+    bind: s("uiFont", "instrument"),
     control: choice([
-      { value: "inter", label: "Inter" },
       { value: "instrument", label: "Instrument Sans" },
+      { value: "inter", label: "Inter" },
       { value: "hanken", label: "Hanken Grotesk" },
       { value: "onest", label: "Onest" },
       { value: "mona", label: "Mona Sans" },
@@ -635,6 +766,24 @@ export const SETTINGS: SettingDef[] = [
       { value: "on", label: "On" },
       { value: "off", label: "Off" },
     ]),
+  },
+  {
+    id: "pageBackdrop",
+    page: "appearance",
+    title: "Show page background",
+    caption: "Keep a blurred backdrop behind title pages as you scroll. Off: clean solid background below the hero.",
+    keywords: "background backdrop blur detail title page ambient solid black white",
+    bind: p("pageBackdrop"),
+    control: toggle,
+  },
+  {
+    id: "pageBackdropIntensity",
+    page: "appearance",
+    title: "Background intensity",
+    caption: "How strongly the blurred artwork shows behind the scrolled page",
+    keywords: "background backdrop intensity opacity strength dim blur title page",
+    bind: p("pageBackdropIntensity"),
+    control: { kind: "number", min: 10, max: 100, step: 5, unit: "%" },
   },
 
   // Browsing
@@ -664,7 +813,6 @@ export const SETTINGS: SettingDef[] = [
     id: "trailerSound",
     page: "browsing",
     title: "Automatic trailer sound",
-    caption: "When enabled, automatic trailer previews start with sound",
     keywords: "trailer muted audio volume with sound",
     bind: s("trailerSound", false),
     control: toggle,
@@ -684,7 +832,6 @@ export const SETTINGS: SettingDef[] = [
     id: "heroAutoplay",
     page: "browsing",
     title: "Rotate the featured titles",
-    caption: "Move to the next featured title every few seconds",
     keywords: "carousel hero autoplay",
     bind: s("heroAutoplay", true),
     control: toggle,
@@ -698,6 +845,17 @@ export const SETTINGS: SettingDef[] = [
     control: toggle,
     tv: "Continue Watching",
   },
+  {
+    id: "hideWatched",
+    page: "browsing",
+    title: "Hide watched titles",
+    caption: "Movies and shows you've finished leave Home, Movies, Series and recommendations. Continue Watching, the Library and Search still show them",
+    keywords: "watched seen finished hide filter home discover shelves recommendations",
+    bind: p("hideWatched"),
+    control: toggle,
+    tv: "Hide Watched Titles",
+  },
+  { id: "hiddenTitles", page: "browsing", title: "Hidden titles", keywords: "hidden hide unhide never show again blocked titles home discover" },
   {
     id: "hideEpisodeThumbs",
     page: "browsing",
@@ -730,6 +888,28 @@ export const SETTINGS: SettingDef[] = [
     tv: "Mature Anime",
   },
   {
+    id: "viewingLimit",
+    page: "browsing",
+    title: "Hide titles rated above",
+    caption: "Age ratings come from TMDB. Titles above the limit leave Home, Movies, Shows and Search, and don't open or play",
+    keywords: "age rating certification parental kids family children limit pg",
+    bind: p("viewingLimit"),
+    control: choice([{ value: 0, label: "No limit" }, ...LIMIT_STEPS.map((age) => ({ value: age, label: String(age) }))]),
+    // Film lists are asked for within the limit, so pages come back full.
+    invalidates: [["catalog"], ["discover"], ["featured"]],
+    tv: "Age Limit",
+  },
+  {
+    id: "viewingHideUnrated",
+    page: "browsing",
+    title: "Also hide titles without a rating",
+    caption: "With a limit set. Titles from add-ons and without a TMDB key have none",
+    keywords: "age rating unrated certification parental kids",
+    bind: p("viewingHideUnrated"),
+    control: toggle,
+    tv: "Hide Unrated Titles",
+  },
+  {
     id: "searchSuggestions",
     page: "browsing",
     title: "Suggest genres",
@@ -746,7 +926,7 @@ export const SETTINGS: SettingDef[] = [
     bind: p("saveRecentSearches"),
     control: toggle,
   },
-  { id: "showCardTitles", page: "browsing", title: "Show titles", keywords: "cards names", bind: s("showCardTitles", true), control: toggle },
+  { id: "showCardTitles", page: "browsing", title: "Show titles", keywords: "cards names", bind: s("showCardTitles", false), control: toggle },
   { id: "showCardDetails", page: "browsing", title: "Show details", keywords: "cards year" },
   {
     id: "showCardRatings",
@@ -1007,6 +1187,7 @@ export const SETTINGS: SettingDef[] = [
       { value: "pluck", label: "Pluck" },
       { value: "classic", label: "Classic" },
     ]),
+    tv: "Sound Pack",
   },
   {
     id: "uiSoundVolume",
@@ -1016,6 +1197,15 @@ export const SETTINGS: SettingDef[] = [
     bind: p("uiSoundVolume"),
     control: { kind: "number", min: 5, max: 100, step: 5, unit: "%", scale: 100, tvStep: 10 },
     tv: "Sound Volume",
+  },
+  {
+    id: "swipeGestures",
+    page: "controls",
+    title: "Swipe gestures in the player",
+    caption: "Swipe up or down on the right of the video for volume, on the left for brightness. Double-tap to skip works either way",
+    keywords: "touch swipe gesture volume brightness phone tablet drag",
+    bind: p("swipeGestures"),
+    control: toggle,
   },
   { id: "shortcuts", page: "controls", title: "Keyboard Shortcuts", keywords: "keybinds hotkeys keys" },
 
@@ -1052,6 +1242,7 @@ export const SETTINGS: SettingDef[] = [
       { value: "playstation", label: "PlayStation" },
       { value: "nintendo", label: "Nintendo" },
     ]),
+    tv: "Button Labels",
   },
   {
     id: "padHints",
@@ -1085,6 +1276,7 @@ export const SETTINGS: SettingDef[] = [
       { value: "normal", label: "Normal" },
       { value: "high", label: "High (a light touch)" },
     ]),
+    tv: "Stick Sensitivity",
   },
   {
     id: "padRepeat",
@@ -1098,6 +1290,7 @@ export const SETTINGS: SettingDef[] = [
       { value: "normal", label: "Normal" },
       { value: "fast", label: "Fast" },
     ]),
+    tv: "Repeat Speed",
   },
   { id: "padNav", page: "controller", title: "Buttons while browsing", keywords: "controller gamepad buttons remap bindings dpad d-pad" },
   { id: "padPlayer", page: "controller", title: "Buttons in the player", keywords: "controller gamepad buttons remap bindings" },
@@ -1143,6 +1336,15 @@ export const SETTINGS: SettingDef[] = [
   { id: "mal", page: "services", title: "MyAnimeList", keywords: "mal anime list account link sign in import tracking" },
   { id: "trakt", page: "services", title: "Trakt", keywords: "trakt scrobble history watchlist ratings account link sign in import tracking" },
   { id: "simkl", page: "services", title: "Simkl", keywords: "simkl scrobble history watchlist ratings anime list account link sign in import tracking" },
+  {
+    id: "askRating",
+    page: "services",
+    title: "Ask for a rating after finishing",
+    caption: "When a film or the last episode out of a show ends, a small card lets you rate it on your linked Trakt or Simkl",
+    keywords: "rate rating stars score prompt ask finish ended trakt simkl",
+    bind: p("askRating"),
+    control: toggle,
+  },
 
   // Advanced
   {
@@ -1153,6 +1355,33 @@ export const SETTINGS: SettingDef[] = [
     keywords: "gpu hwdec green glitches black",
     bind: p("hwdec"),
     control: toggle,
+  },
+  {
+    id: "hdrOutput",
+    page: "advanced",
+    title: "HDR video",
+    caption:
+      "HDR on this screen sends the picture in HDR when Windows or macOS has HDR on. Convert to SDR helps when HDR looks washed out or too dark.",
+    keywords: "hdr dolby vision tone mapping washed out grey dark colours colors sdr display screen",
+    bind: p("hdrOutput"),
+    control: choice([
+      { value: "auto", label: "Automatic" },
+      { value: "screen", label: "HDR on this screen" },
+      { value: "sdr", label: "Convert to SDR" },
+    ]),
+  },
+  {
+    id: "subtitleHdrPeak",
+    page: "advanced",
+    title: "Subtitle brightness in HDR",
+    caption: "White subtitles can glare over HDR video shown in HDR. Standard keeps them as bright as in SDR video.",
+    keywords: "hdr subtitles bright glare blinding dim nits white",
+    bind: p("subtitleHdrPeak"),
+    control: choice([
+      { value: "auto", label: "Full" },
+      { value: "sdr", label: "Standard" },
+      { value: "dim", label: "Dim" },
+    ]),
   },
   {
     id: "deband",
@@ -1207,6 +1436,17 @@ export const SETTINGS: SettingDef[] = [
       { value: "large", label: "Large (5 min)" },
     ]),
   },
+  {
+    id: "mpvUserConfig",
+    page: "advanced",
+    title: "Use my own mpv settings",
+    caption:
+      "mpv also reads mpv.conf, input.conf, scripts and shaders from Polarity's mpv folder, for options and shaders of your own, such as upscalers. Applies from the next video. Turn it off if videos stop playing.",
+    keywords: "mpv conf config custom options shaders glsl anime4k upscale scripts lua input advanced",
+    bind: p("mpvUserConfig"),
+    control: toggle,
+  },
+  { id: "mpvConfigFolder", page: "advanced", title: "mpv folder", keywords: "mpv conf config folder open shaders scripts" },
   { id: "resetSettings", page: "advanced", title: "Reset all settings", keywords: "defaults restore" },
 
   // About & Updates
@@ -1267,11 +1507,12 @@ export const SETTINGS: SettingDef[] = [
   { id: "pickedTracks", page: "about", title: "Picked tracks", keywords: "remembered audio subtitles subtitle delay per source clear forget" },
 ];
 
-const BY_ID = new Map(SETTINGS.map((d) => [d.id, d]));
+let byId: Map<string, SettingDef> | undefined;
 
 /** The entry with this id; throws on a typo, so a wrong id fails at once rather than drawing nothing. */
 export function settingDef(id: string): SettingDef {
-  const def = BY_ID.get(id);
+  byId ??= new Map(SETTINGS.map((d) => [d.id, d]));
+  const def = byId.get(id);
   if (!def) throw new Error(`No setting "${id}" in lib/settings/schema.ts`);
   return def;
 }

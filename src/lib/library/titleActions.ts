@@ -5,6 +5,13 @@ import { useLibrary, useMeta, useProgress, useToggleLibrary } from "../net/queri
 import type { MetaPreview, Progress } from "../types";
 import { forgetTracks } from "../playback/trackMemory";
 import { isWatched, markWatched, movieEntry, showEntries } from "./watched";
+import { hideTitle, unhideTitle, useIsHidden } from "./hiddenTitles";
+
+/**
+ * Takes Continue Watching cards out of the row: each card's video back to the start, the rest of
+ * its title's history kept. The card menu's "Remove from Continue Watching", and the row's Edit mode for several.
+ */
+export const removeFromContinueWatching = (entries: Progress[]) => markWatched(entries, false);
 
 /**
  * What can be done with a title from its card (the TV options menu and the
@@ -29,6 +36,7 @@ export function useTitleActions(item: MetaPreview, entry?: Progress) {
   const episodeUnwatched = !!episode && !isWatched(episode.position, episode.duration);
   /** The card's own video is part-way through (what Continue Watching shows). */
   const entryInProgress = !!entry && entry.position > 0 && !isWatched(entry.position, entry.duration);
+  const hidden = useIsHidden(item.id);
 
   return {
     meta,
@@ -64,7 +72,10 @@ export function useTitleActions(item: MetaPreview, entry?: Progress) {
      * Take the card's video back to the start, which also takes it out of
      * Continue Watching. The rest of the title's history stays.
      */
-    resetEntry: () => entry && void markWatched([entry], false),
+    resetEntry: () => entry && void removeFromContinueWatching([entry]),
+    /** Left out of Home, Discover and recommendations (lib/library/hiddenTitles.ts). */
+    hidden,
+    toggleHidden: () => (hidden ? unhideTitle(item.id) : hideTitle(item)),
     /** Forget every bit of the title's progress: it plays from the very start again. */
     resetAll: () => {
       if (!played.length) return;

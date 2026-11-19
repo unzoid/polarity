@@ -25,12 +25,19 @@ export function StoreProblemToast({ tv }: { tv: boolean }) {
   const [dismissed, setDismissed] = useState(false);
   // A new object each time, so a repeat of the same message restarts the time-out (re-test 3b).
   const [failure, setFailure] = useState<{ message: string } | null>(null);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  if (!failure && (hovered || focused)) {
+    setHovered(false);
+    setFocused(false);
+  }
+  const paused = hovered || focused;
   useEffect(() => onSaveFailure((message) => setFailure({ message })), []);
   useEffect(() => {
-    if (!failure) return;
+    if (!failure || paused) return;
     const t = setTimeout(() => setFailure(null), SAVE_FAILURE_MS);
     return () => clearTimeout(t);
-  }, [failure]);
+  }, [failure, paused]);
 
   const now: Shown | null = failure ? { kind: "failure", message: failure.message } : problem && !dismissed ? { kind: "problem", message: problem } : null;
   const { shown, leaving } = usePresence(now, TOAST_OUT_MS);
@@ -40,7 +47,19 @@ export function StoreProblemToast({ tv }: { tv: boolean }) {
       <Close size={18} />
     </IconButton>
   );
-  const common = { variant: tv ? ("tv" as const) : undefined, lines: true, actions: !tv && dismiss, leaving, className: "store-toast" };
+  const common = {
+    variant: tv ? ("tv" as const) : undefined,
+    lines: true,
+    actions: !tv && dismiss,
+    leaving,
+    className: "store-toast",
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+    onFocus: () => setFocused(true),
+    onBlur: (e: React.FocusEvent<HTMLDivElement>) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+    },
+  };
   if (shown.kind === "failure") {
     return (
       <Toast {...common} data-kind="save-failed">

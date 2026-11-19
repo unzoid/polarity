@@ -29,6 +29,7 @@ export function usePartySync({
   buffering,
   hint,
   leaving,
+  asleep = false,
 }: {
   media: MediaLike | null;
   current: PartyMedia;
@@ -38,6 +39,11 @@ export function usePartySync({
   hint?: StreamHint;
   /** Fading out after Back: the viewer has left, whatever the engine still does. */
   leaving: boolean;
+  /**
+   * This viewer's sleep timer ran out (#270): it pauses for them alone. The room sees them as away and goes on;
+   * this player stops following it until Resume, which takes it back to where the room is.
+   */
+  asleep?: boolean;
 }) {
   const party = useParty();
   const inParty = !!party;
@@ -111,7 +117,7 @@ export function usePartySync({
 
   // In the player, or out browsing (the party goes on; the room stops waiting for
   // you). Away from the moment Back is pressed, not when the fade-out ends.
-  const away = leaving || own;
+  const away = leaving || own || asleep;
   useEffect(() => {
     if (!inParty) return;
     setPartyAway(away);
@@ -121,7 +127,8 @@ export function usePartySync({
   // Follow the room, and make what the viewer does here the room's.
   const follower = useRef<ReturnType<typeof createPartyFollower> | null>(null);
   useEffect(() => {
-    if (!media || !inParty || leaving) return;
+    // Asleep, the pause that follows is this viewer's own: the follower is gone before it, so it isn't the room's.
+    if (!media || !inParty || leaving || asleep) return;
     const f = createPartyFollower({
       media,
       videoId,
@@ -150,17 +157,17 @@ export function usePartySync({
       media.removeEventListener("seeking", onSeeking);
       media.removeEventListener(FRAME_STEP_EVENT, onStep);
     };
-  }, [media, inParty, videoId, leaving]);
+  }, [media, inParty, videoId, leaving, asleep]);
 
   // Where this player is, now and then, so the others see if it falls behind.
   useEffect(() => {
-    if (!media || !inParty || leaving || !onRoomVideo || !started) return;
+    if (!media || !inParty || leaving || asleep || !onRoomVideo || !started) return;
     // Stalled isn't moving, whatever the engine's paused flag says.
     const report = () => reportPosition(videoId, media.currentTime, media.paused || stalled.current, stalled.current);
     report();
     const t = window.setInterval(report, REPORT_MS);
     return () => window.clearInterval(t);
-  }, [media, inParty, leaving, onRoomVideo, started, videoId]);
+  }, [media, inParty, leaving, asleep, onRoomVideo, started, videoId]);
 
   // Sync now (party menu): straight to the room's position.
   const resync = party?.resync ?? 0;

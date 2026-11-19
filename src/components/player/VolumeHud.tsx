@@ -24,25 +24,55 @@ export type VolumePing = { n: number; dir: "up" | "down" | "mute" };
  *    and springs back: the press was heard, there's just no further to go.
  *  - Reduced motion: it fades in and out in place; the level jumps, no stretch.
  */
-export function VolumeHud({ volume, muted, ping, media }: { volume: number; muted: boolean; ping: VolumePing; media: MediaLike | null }) {
+export function VolumeHud({
+  volume,
+  max = 1,
+  muted,
+  ping,
+  media,
+  side = "left",
+  held = false,
+}: {
+  volume: number;
+  /** The loudest it goes (1 = 100%; more where Settings allows a boost): the pill full. */
+  max?: number;
+  muted: boolean;
+  ping: VolumePing;
+  media: MediaLike | null;
+  /** The edge it lives on: the right for a phone's swipe on the right half (useSwipeLevels). */
+  side?: "left" | "right";
+  /** A finger is on it (a swipe): it stays, and lingers once let go. */
+  held?: boolean;
+}) {
   const reduce = useReducedMotion();
-  const [visible, setVisible] = useState(false);
+  const [shown, setVisible] = useState(false);
+  const visible = shown || held;
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    const was = wasHeld.current;
+    wasHeld.current = held;
+    if (!was || held) return;
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), LINGER_MS);
+    return () => clearTimeout(t);
+  }, [held]);
+  const fromX = side === "left" ? -24 : 24;
   const pill = useRef<HTMLDivElement | null>(null);
   const last = useRef({ n: ping.n, volume });
   // Read by the ping effect without re-running it (a re-run would cancel the hide timer).
-  const current = useRef({ volume, reduce });
-  current.current = { volume, reduce };
+  const current = useRef({ volume, reduce, max });
+  current.current = { volume, reduce, max };
 
   useEffect(() => {
     if (ping.n === last.current.n) return;
-    const { volume, reduce } = current.current;
+    const { volume, reduce, max } = current.current;
     const before = last.current.volume;
     last.current = { n: ping.n, volume };
     setVisible(true);
     const t = setTimeout(() => setVisible(false), LINGER_MS);
 
     // A press that couldn't move the level: rubber-band toward where it pushed.
-    const pinned = (ping.dir === "up" && before >= 1 && volume >= 1) || (ping.dir === "down" && before <= 0 && volume <= 0);
+    const pinned = (ping.dir === "up" && before >= max && volume >= max) || (ping.dir === "down" && before <= 0 && volume <= 0);
     let frame = 0;
     if (pinned && !reduce) {
       const stretch = () => {
@@ -70,11 +100,12 @@ export function VolumeHud({ volume, muted, ping, media }: { volume: number; mute
       {visible && (
         <motion.div
           className="volume-hud"
+          data-side={side}
           role="status"
           aria-label={muted ? "Muted" : `Volume ${Math.round(volume * 100)}%`}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, x: -24, scale: 0.94 }}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, x: fromX, scale: 0.94 }}
           animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, x: -24, scale: 0.94, transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] } }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, x: fromX, scale: 0.94, transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] } }}
           transition={PRESENCE}
         >
           <div
@@ -84,8 +115,8 @@ export function VolumeHud({ volume, muted, ping, media }: { volume: number; mute
             {/* The blur: backdrop-filter has nothing to sample over the video
                 (VideoBackdrop.tsx), so a frosted copy of just the part of the frame behind the pill. */}
             <VideoBackdrop media={media} className="volume-hud-backdrop" crop />
-            <motion.div className="volume-hud-fill" initial={false} animate={{ scaleY: level }} transition={reduce ? { duration: 0 } : LEVEL} />
-            <Icon className="volume-hud-icon" data-covered={level > 0.2} size="1.5rem" />
+            <motion.div className="volume-hud-fill" initial={false} animate={{ scaleY: level / max }} transition={reduce ? { duration: 0 } : LEVEL} />
+            <Icon className="volume-hud-icon" data-covered={level / max > 0.2} size="1.5rem" />
           </div>
         </motion.div>
       )}

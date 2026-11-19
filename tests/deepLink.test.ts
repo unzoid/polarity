@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseDeepLink, partyPage, watchPage } from "../src/lib/deepLink/deepLink";
+import { parseDeepLink, partyPage, tvSignInLink, watchPage } from "../src/lib/deepLink/deepLink";
 import { titleRoute, type TitleLookups } from "../src/lib/deepLink/open";
 
 // polarity:// links from the website's /watch and /party pages (#153).
@@ -118,4 +118,33 @@ test("a dev build's links are its own: polarity-dev:// there, never the released
   expect(parseDeepLink("polarity://title/movie/tt0000000", "polarity-dev")).toBeNull();
   expect(parseDeepLink("polarity-dev://title/movie/tt0000000")).toBeNull();
   expect(parseDeepLink("polarity-dev://together?u=https%3A%2F%2Fmedia.example.com%2Ffilm.mkv", "polarity-dev")).toMatchObject({ kind: "together" });
+});
+
+// A TV's QR code (#133): the link carries the TV's code and nothing else.
+
+test("a TV sign-in link round-trips its code, and only a code", () => {
+  expect(tvSignInLink("HJKMNPQR")).toBe("polarity://tv-sign-in/HJKMNPQR");
+  // Made from the code as shown or typed, it's still the bare code.
+  expect(tvSignInLink("hjkm-npqr")).toBe("polarity://tv-sign-in/HJKMNPQR");
+  expect(parseDeepLink(tvSignInLink("HJKM-NPQR"))).toEqual({ kind: "tv-sign-in", code: "HJKMNPQR" });
+  expect(parseDeepLink(tvSignInLink("23456789", "polarity-dev"), "polarity-dev")).toEqual({ kind: "tv-sign-in", code: "23456789" });
+  for (const bad of [
+    "polarity://tv-sign-in/",
+    "polarity://tv-sign-in/HJKMNPQ",
+    "polarity://tv-sign-in/HJKMNPQRS",
+    "polarity://tv-sign-in/HJKMNPQ0",
+    "polarity://tv-sign-in/hjkmnpqr",
+    "polarity://tv-sign-in/HJKM-NPQR",
+    "polarity://tv-sign-in/%48JKMNPQR",
+    "polarity://tv-sign-in/HJKMNPQR/",
+    "polarity://tv-sign-in/HJKMNPQR/approve",
+    "polarity://tv-sign-in/HJKMNPQR?approve=1",
+    "polarity://tv-sign-in/HJKMNPQR#x",
+    "polarity://tv-sign-in?c=HJKMNPQR",
+    "polarity://tv-sign-in",
+    "polarity-dev://tv-sign-in/HJKMNPQR",
+    "https://getpolar.app/tv-sign-in/HJKMNPQR",
+  ]) {
+    expect(parseDeepLink(bad)).toBeNull();
+  }
 });

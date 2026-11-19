@@ -3,14 +3,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/api";
 import type { ContentType, SubtitleOption, VideoFile } from "../../lib/types";
 import { ISO3, hashed, langMatches, languageName, matchTrack, recallTracks, rememberTracks, type TrackTraits } from "../../lib/playback";
-import { isMpv, type MediaLike, type MpvTrack } from "./mpvMedia";
-import { OFF, mpvSelection } from "./trackChoice";
+import { setPrefs, usePrefs } from "../../lib/settings";
+import { isMpv, type MediaLike, type MpvMedia, type MpvTrack } from "./mpvMedia";
+import { OFF, isAddonTrack, mpvSelection, type AddonSubtitle } from "./trackChoice";
+import { bestAudio, bestSubtitle, forcedSubtitle, kindTags, type KindSource } from "./trackKinds";
 import { keys } from "../../lib/net";
 import { warnFailed } from "../../lib/errors";
 
 export interface TrackOption {
   id: string;
   label: string;
+  /** Second line: the add-on a subtitle came from. */
+  detail?: string;
 }
 
 export { languageName };
@@ -24,22 +28,34 @@ interface AudioTrackLike {
   id: string;
   label: string;
   language: string;
+  kind: string;
   enabled: boolean;
 }
 type AudioTrackListLike = ArrayLike<AudioTrackLike> & EventTarget;
 
+/** An add-on's subtitle with its menu id. */
+type AddonSub = SubtitleOption & AddonSubtitle;
+
+/** How long a subtitle mpv was asked to add gets to show up in its track list. */
+const ADD_WAIT_MS = 8000;
+
 /**
  * Audio and subtitle tracks for the current video:
  *  - audio: the file's own tracks (when the engine exposes them);
- *  - subtitles: tracks embedded in the file, plus every subtitle addon's files
- *    (one per language), converted to WebVTT in Rust.
+ *  - subtitles: tracks embedded in the file (or loaded from this device), plus
+ *    every file the subtitle add-ons offer, each its own entry, named by its
+ *    add-on; the built-in player gets them converted to WebVTT in Rust.
  * Preferred languages (Settings) are applied automatically once the tracks are
  * known; choosing a track here updates that preference, so the next episode
- * starts the same way.
+ * starts the same way. Among tracks in the preferred language, a full subtitle
+ * beats a signs-only (forced) one, SDH goes as Settings says, and the film's
+ * own sound beats a description or commentary track (trackKinds.ts).
  *
  * With the mpv engine, tracks come from mpv's own track-list — so embedded
  * subtitles (SRT/ASS/PGS in MKV) and every audio track are real — and addon
- * subtitles are handed to mpv with `sub-add` (it fetches SRT itself).
+ * subtitles are handed to mpv with `sub-add` (it fetches SRT itself). mpv can
+ * also show a second subtitle at the top (`secondary-sid`), for two languages
+ * at once.
  *
  * What the user picks is also remembered for the playing source (`memoryKey`, #418, lib/playback/trackMemory.ts):
  * when that source of that episode plays again, the same tracks come back, before the preferred languages.
@@ -66,15 +82,19 @@ export function useTracks(
 ) {
   const video = media instanceof HTMLVideoElement ? media : null;
   const mpv = isMpv(media) ? media : null;
+  const { preferSdh, secondSubtitles, secondSubtitleLanguage } = usePrefs();
   const [mpvLoaded, setMpvLoaded] = useState(false);
   const [audio, setAudio] = useState<TrackOption[]>([]);
   const [audioId, setAudioId] = useState<string>();
   const [embedded, setEmbedded] = useState<TrackOption[]>([]);
   const [subId, setSubId] = useState<string>(OFF);
+  const [secondId, setSecondId] = useState<string>(OFF);
   const userChose = useRef(false);
   const audioChose = useRef(false);
+  const secondChose = useRef(false);
   const appliedAudio = useRef(false);
   const appliedSub = useRef(false);
+  const appliedSecond = useRef(false);
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
   const onPrefRef = useRef(onPrefChange);
@@ -97,17 +117,21 @@ export function useTracks(
     placeholderData: (previous, query) => (query?.queryKey[2] === videoId ? previous : undefined),
   });
 
-  /** One entry per language, in a stable, readable order; the remembered one stands for its language. */
-  const rememberedAddon = recalled?.subtitle && "addon" in recalled.subtitle ? recalled.subtitle.addon : undefined;
-  const externalByLang = useMemo(() => {
-    const seen = new Map<string, SubtitleOption>();
-    const mine = rememberedAddon && external.data?.find((s) => s.lang === rememberedAddon.lang && subtitleId(s) === rememberedAddon.id);
-    if (mine) seen.set(mine.lang, mine);
-    for (const s of external.data ?? []) if (!seen.has(s.lang)) seen.set(s.lang, s);
-    return [...seen.values()].sort((a, b) => (languageName(a.lang) ?? a.lang).localeCompare(languageName(b.lang) ?? b.lang));
-  }, [external.data, rememberedAddon]);
-  const externalByLangRef = useRef(externalByLang);
-  externalByLangRef.current = externalByLang;
+  /** Every add-on subtitle once (by link), by language name; within a language, in the add-ons' own order. */
+  const addonSubs = useMemo(() => {
+    const seen = new Set<string>();
+    const list: AddonSub[] = [];
+    for (const s of external.data ?? []) {
+      const key = `ext:${subtitleId(s)}`;
+      if (seen.has(s.url) || seen.has(key)) continue;
+      seen.add(s.url).add(key);
+      list.push({ ...s, key });
+    }
+    const name = (s: AddonSub) => languageName(s.lang) ?? (s.lang || "~");
+    return list.sort((a, b) => name(a).localeCompare(name(b)));
+  }, [external.data]);
+  const addonSubsRef = useRef(addonSubs);
+  addonSubsRef.current = addonSubs;
 
   // mpv: mirror its track-list and the tracks it is actually playing (its own
   // pick at start included); again when add-on subtitles arrive, to name an
@@ -117,19 +141,21 @@ export function useTracks(
     const read = () => {
       const audioTracks = mpv.tracks.filter((t) => t.type === "audio");
       setAudio(audioTracks.map((t) => ({ id: String(t.id), label: mpvLabel(t) })));
+      // The add-ons' subtitles are listed with them; one loaded from this device goes with the file's own.
       setEmbedded(
         mpv.tracks
-          .filter((t) => t.type === "sub" && !t.external)
-          .map((t) => ({ id: `emb:${t.id}`, label: mpvLabel(t) })),
+          .filter((t) => t.type === "sub" && !isAddonTrack(t))
+          .map((t) => ({ id: `emb:${t.id}`, label: mpvLabel(t), detail: t.external ? "From a file" : undefined })),
       );
-      const now = mpvSelection(mpv.tracks, mpv.aid, mpv.sid, externalByLangRef.current);
+      const now = mpvSelection(mpv.tracks, mpv.aid, mpv.sid, addonSubsRef.current);
       setAudioId(now.audioId);
       if (now.subId) setSubId(now.subId);
+      if (now.secondId) setSecondId(now.secondId);
     };
     read();
     mpv.addEventListener("tracks", read);
     return () => mpv.removeEventListener("tracks", read);
-  }, [mpv, externalByLang]);
+  }, [mpv, addonSubs]);
 
   useEffect(() => {
     if (!mpv) return;
@@ -174,6 +200,22 @@ export function useTracks(
     };
   }, [video]);
 
+  /** Audio tracks with what tells them apart and what they're for. */
+  const audioCandidates = useCallback((): (TrackTraits & KindSource & { id: string })[] => {
+    if (mpv) return mpv.tracks.filter((t) => t.type === "audio").map(mpvCandidate);
+    const list = (video as unknown as { audioTracks?: AudioTrackListLike } | null)?.audioTracks;
+    return Array.from((list ?? []) as ArrayLike<AudioTrackLike>).map((t, i) => ({ ...htmlTraits(t.id || String(i), t.language, t.label), kind: t.kind }));
+  }, [mpv, video]);
+
+  /** The file's own subtitles (and, with mpv, ones loaded from this device), the same way. */
+  const subtitleCandidates = useCallback((): (TrackTraits & KindSource & { id: string })[] => {
+    if (mpv) return mpv.tracks.filter((t) => t.type === "sub" && !isAddonTrack(t)).map(mpvCandidate);
+    if (!video) return [];
+    return Array.from(video.textTracks)
+      .filter((t) => !t.id.startsWith("ext:"))
+      .map((t, i) => ({ ...htmlTraits(String(i), t.language, t.label), kind: t.kind }));
+  }, [mpv, video]);
+
   const selectAudio = useCallback(
     (id: string, remember = true) => {
       if (remember) audioChose.current = true;
@@ -203,10 +245,10 @@ export function useTracks(
 
   const rememberAddon = useCallback(
     (id: string) => {
-      const sub = externalByLang.find((x) => `ext:${x.lang}` === id);
+      const sub = addonSubs.find((x) => x.key === id);
       if (sub) keep({ subtitle: { addon: { lang: sub.lang, id: subtitleId(sub) } } });
     },
-    [externalByLang, keep],
+    [addonSubs, keep],
   );
 
   const selectSubtitle = useCallback(
@@ -217,7 +259,7 @@ export function useTracks(
         if (id === OFF) void mpv.set("sid", "no");
         else if (id.startsWith("emb:")) void mpv.set("sid", Number(id.slice(4)));
         else {
-          const sub = externalByLang.find((x) => `ext:${x.lang}` === id);
+          const sub = addonSubs.find((x) => x.key === id);
           if (!sub) return;
           const loaded = mpv.tracks.find((t) => t.type === "sub" && t["external-filename"] === sub.url);
           if (loaded) void mpv.set("sid", loaded.id);
@@ -229,7 +271,7 @@ export function useTracks(
               ? ""
               : id.startsWith("emb:")
                 ? norm(mpv.tracks.find((t) => t.type === "sub" && t.id === Number(id.slice(4)))?.lang)
-                : norm(id.slice(4));
+                : norm(addonSubs.find((x) => x.key === id)?.lang);
           onPrefRef.current({ subtitleLanguage: lang });
           if (id === OFF) keep({ subtitle: { off: true } });
           else if (id.startsWith("emb:")) {
@@ -247,7 +289,7 @@ export function useTracks(
       if (id.startsWith("ext:")) {
         target = tracks.find((t) => t.id === id);
         if (!target) {
-          const sub = externalByLang.find((s) => `ext:${s.lang}` === id);
+          const sub = addonSubs.find((s) => s.key === id);
           if (!sub) return;
           const vtt = await api.subtitleVtt(sub.url);
           const el = document.createElement("track");
@@ -265,13 +307,46 @@ export function useTracks(
 
       for (const t of Array.from(video.textTracks)) t.mode = t === target ? "showing" : "disabled";
       if (remember) {
-        onPrefRef.current({ subtitleLanguage: id === OFF ? "" : norm(target?.language || id.slice(4)) });
+        const addonLang = addonSubs.find((s) => s.key === id)?.lang;
+        onPrefRef.current({ subtitleLanguage: id === OFF ? "" : norm(target?.language || addonLang) });
         if (id === OFF) keep({ subtitle: { off: true } });
         else if (id.startsWith("emb:") && target) keep({ subtitle: { embedded: htmlTraits(id.slice(4), target.language, target.label) } });
         else if (id.startsWith("ext:")) rememberAddon(id);
       }
     },
-    [video, mpv, externalByLang, keep, rememberAddon],
+    [video, mpv, addonSubs, keep, rememberAddon],
+  );
+
+  /** mpv: the second subtitle, shown at the top; its language is put on by itself next time. */
+  const selectSecond = useCallback(
+    async (id: string, remember = true) => {
+      if (!mpv) return;
+      if (remember) secondChose.current = true;
+      setSecondId(id);
+      let lang = "";
+      if (id === OFF) void mpv.set("secondary-sid", "no");
+      else if (id.startsWith("emb:")) {
+        const track = mpv.tracks.find((t) => t.type === "sub" && t.id === Number(id.slice(4)));
+        lang = norm(track?.lang);
+        void mpv.set("secondary-sid", Number(id.slice(4)));
+      } else {
+        const sub = addonSubs.find((x) => x.key === id);
+        if (!sub) return;
+        lang = norm(sub.lang);
+        let track = mpv.tracks.find((t) => t.type === "sub" && t["external-filename"] === sub.url);
+        if (!track) {
+          // Added without taking the main subtitle's place, then shown as the second one.
+          const added = await mpv.command("sub-add", sub.url, "auto", languageName(sub.lang) ?? sub.lang, ISO3[sub.lang] ?? sub.lang).then(
+            () => true,
+            (e: unknown) => (warnFailed("Adding the second subtitle")(e), false),
+          );
+          track = added ? await addedTrack(mpv, sub.url) : undefined;
+        }
+        if (track) void mpv.set("secondary-sid", track.id);
+      }
+      if (remember) setPrefs({ secondSubtitleLanguage: lang });
+    },
+    [mpv, addonSubs],
   );
 
   // Apply the track remembered for this source, else the preferred audio language, once, as soon as the
@@ -279,16 +354,12 @@ export function useTracks(
   useEffect(() => {
     if (appliedAudio.current || audioChose.current || !(recalled?.audio || prefs.audio)) return;
     if (!(video || (mpv && mpvLoaded))) return;
-    const tracks: (TrackTraits & { id: string })[] = mpv
-      ? mpv.tracks.filter((t) => t.type === "audio").map(mpvTraits)
-      : Array.from(((video as unknown as { audioTracks?: AudioTrackListLike })?.audioTracks ?? []) as ArrayLike<AudioTrackLike>).map((t, i) =>
-          htmlTraits(t.id || String(i), t.language, t.label),
-        );
+    const tracks = audioCandidates();
     if (!tracks.length) return;
     appliedAudio.current = true;
-    const match = (recalled?.audio && matchTrack(recalled.audio, tracks)) || (prefs.audio ? tracks.find((t) => langMatches(t.lang, prefs.audio)) : undefined);
+    const match = (recalled?.audio && matchTrack(recalled.audio, tracks)) || (prefs.audio ? bestAudio(tracks.filter((t) => langMatches(t.lang, prefs.audio))) : undefined);
     if (match && match.id !== audioId) selectAudio(match.id, false);
-  }, [recalled, prefs.audio, video, mpv, mpvLoaded, audio, audioId, selectAudio]);
+  }, [recalled, prefs.audio, video, mpv, mpvLoaded, audio, audioId, selectAudio, audioCandidates]);
 
   // Same for subtitles: a track inside the file wins (it's timed to this exact
   // release); otherwise an addon's subtitles in that language. Empty = off.
@@ -303,13 +374,9 @@ export function useTracks(
       void selectSubtitle(OFF, false);
       return;
     }
+    const own = subtitleCandidates();
     if (want && "embedded" in want) {
-      const list = mpv
-        ? mpv.tracks.filter((t) => t.type === "sub" && !t.external).map(mpvTraits)
-        : Array.from(video!.textTracks)
-            .filter((t) => !t.id.startsWith("ext:"))
-            .map((t, i) => htmlTraits(String(i), t.language, t.label));
-      const match = matchTrack(want.embedded, list);
+      const match = matchTrack(want.embedded, own);
       if (match) {
         appliedSub.current = true;
         void selectSubtitle(`emb:${match.id}`, false);
@@ -319,10 +386,10 @@ export function useTracks(
     if (want && "addon" in want) {
       // Found again only when an add-on offers that same subtitle again.
       if (external.isLoading) return;
-      const ext = externalByLang.find((x) => x.lang === want.addon.lang && subtitleId(x) === want.addon.id);
+      const ext = addonSubs.find((x) => x.key === `ext:${want.addon.id}`);
       if (ext) {
         appliedSub.current = true;
-        void selectSubtitle(`ext:${ext.lang}`, false);
+        void selectSubtitle(ext.key, false);
         return;
       }
     }
@@ -330,6 +397,7 @@ export function useTracks(
       appliedSub.current = true;
       return;
     }
+    const inLanguage = own.filter((t) => langMatches(t.lang, prefs.subtitle));
     if (prefs.subtitleMode === "foreign") {
       // The language that will be playing: the preferred audio if the file
       // has it (applied above), else whatever track is on now.
@@ -342,27 +410,51 @@ export function useTracks(
         (prefs.audio && audioTracks.find((t) => langMatches(t.lang, prefs.audio))?.lang) ||
         audioTracks.find((t) => t.on)?.lang ||
         (audioTracks.length === 1 ? audioTracks[0].lang : undefined);
-      // Already in the subtitle language: nothing to read. Unknown: show them.
+      // Already in the subtitle language: only the signs and foreign lines, if the file has them. Unknown: show them.
       if (playing && langMatches(playing, prefs.subtitle)) {
         appliedSub.current = true;
+        const forced = forcedSubtitle(inLanguage);
+        if (forced) void selectSubtitle(`emb:${forced.id}`, false);
         return;
       }
     }
-    const embeddedMatch = mpv
-      ? mpv.tracks.find((t) => t.type === "sub" && !t.external && langMatches(t.lang, prefs.subtitle))
-      : Array.from(video!.textTracks).find((t) => !t.id.startsWith("ext:") && langMatches(t.language, prefs.subtitle));
+    const embeddedMatch = bestSubtitle(inLanguage, preferSdh);
     if (embeddedMatch) {
       appliedSub.current = true;
-      const idx = mpv ? (embeddedMatch as MpvTrack).id : Array.from(video!.textTracks).indexOf(embeddedMatch as TextTrack);
-      void selectSubtitle(`emb:${idx}`, false);
+      void selectSubtitle(`emb:${embeddedMatch.id}`, false);
       return;
     }
     // External subtitles arrive asynchronously; wait for them before giving up.
     if (external.isLoading) return;
     appliedSub.current = true;
-    const ext = externalByLang.find((x) => langMatches(x.lang, prefs.subtitle));
-    if (ext) void selectSubtitle(`ext:${ext.lang}`, false);
-  }, [recalled, prefs.subtitle, prefs.subtitleMode, prefs.audio, video, mpv, mpvLoaded, audio, embedded, externalByLang, external.isLoading, selectSubtitle]);
+    const ext = addonSubs.find((x) => langMatches(x.lang, prefs.subtitle));
+    if (ext) void selectSubtitle(ext.key, false);
+  }, [recalled, prefs.subtitle, prefs.subtitleMode, prefs.audio, preferSdh, video, mpv, mpvLoaded, audio, embedded, addonSubs, external.isLoading, selectSubtitle, subtitleCandidates]);
+
+  // mpv: the second subtitle in its language, once the first is settled, from the file first, else an add-on.
+  useEffect(() => {
+    if (!mpv || !mpvLoaded || !secondSubtitles || !secondSubtitleLanguage) return;
+    if (appliedSecond.current || secondChose.current || !appliedSub.current) return;
+    const main = mpv.playing("sub");
+    const own = subtitleCandidates().filter((t) => langMatches(t.lang, secondSubtitleLanguage) && t.id !== String(main?.id));
+    const match = bestSubtitle(own, preferSdh);
+    if (match) {
+      appliedSecond.current = true;
+      void selectSecond(`emb:${match.id}`, false);
+      return;
+    }
+    if (external.isLoading) return;
+    appliedSecond.current = true;
+    const ext = addonSubs.find((x) => langMatches(x.lang, secondSubtitleLanguage) && x.url !== main?.["external-filename"]);
+    if (ext) void selectSecond(ext.key, false);
+  }, [mpv, mpvLoaded, secondSubtitles, secondSubtitleLanguage, preferSdh, subId, embedded, addonSubs, external.isLoading, selectSecond, subtitleCandidates]);
+
+  // Turned off in the player or Settings: the second subtitle goes.
+  useEffect(() => {
+    if (!mpv || secondSubtitles) return;
+    if (secondaryOn(mpv)) void mpv.set("secondary-sid", "no");
+    setSecondId(OFF);
+  }, [mpv, secondSubtitles]);
 
   // Blob URLs belong to this video only.
   useEffect(
@@ -375,11 +467,7 @@ export function useTracks(
     [video],
   );
 
-  const subtitles: TrackOption[] = [
-    { id: OFF, label: "Off" },
-    ...embedded,
-    ...externalByLang.map((s) => ({ id: `ext:${s.lang}`, label: languageName(s.lang) ?? (s.lang || "Unknown language") })),
-  ];
+  const subtitles: TrackOption[] = [{ id: OFF, label: "Off" }, ...embedded, ...addonOptions(addonSubs)];
 
   return {
     audio,
@@ -388,22 +476,68 @@ export function useTracks(
     subtitles,
     subId,
     selectSubtitle,
+    /** mpv only: the second subtitle's entry (OFF when none), and choosing it. */
+    secondId,
+    selectSecond,
     subtitlesLoading: external.isLoading,
   };
 }
 
-/** "English · 5.1", "Commentary", "Japanese (Signs)". */
+/** One menu entry per add-on file: its language, and the add-on (numbered when it offers several in that language). */
+function addonOptions(subs: readonly AddonSub[]): TrackOption[] {
+  const total = new Map<string, number>();
+  for (const s of subs) total.set(`${s.lang}\n${s.addon}`, (total.get(`${s.lang}\n${s.addon}`) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return subs.map((s) => {
+    const k = `${s.lang}\n${s.addon}`;
+    const n = (seen.get(k) ?? 0) + 1;
+    seen.set(k, n);
+    return {
+      id: s.key,
+      label: languageName(s.lang) ?? (s.lang || "Unknown language"),
+      detail: (total.get(k) ?? 1) > 1 ? `${s.addon} · ${n}` : s.addon,
+    };
+  });
+}
+
+/** Whether mpv shows a second subtitle now. */
+const secondaryOn = (mpv: MpvMedia) => mpv.tracks.some((t) => t.type === "sub" && t.selected && t["main-selection"] === 1);
+
+/** The track mpv lists for a subtitle just added from `url`, once it shows up (undefined if it never does). */
+function addedTrack(mpv: MpvMedia, url: string): Promise<MpvTrack | undefined> {
+  const find = () => mpv.tracks.find((t) => t.type === "sub" && t["external-filename"] === url);
+  return new Promise((resolve) => {
+    if (find()) return resolve(find());
+    const done = () => {
+      mpv.removeEventListener("tracks", onTracks);
+      window.clearTimeout(timer);
+      resolve(find());
+    };
+    const onTracks = () => {
+      if (find()) done();
+    };
+    const timer = window.setTimeout(done, ADD_WAIT_MS);
+    mpv.addEventListener("tracks", onTracks);
+  });
+}
+
+/** "English · 5.1", "Commentary", "Japanese (Signs)", "English · SDH". */
 function mpvLabel(t: MpvTrack) {
   const name = t.title || languageName(t.lang) || `Track ${t.id}`;
   const ch = t["demux-channel-count"];
-  const layout = ch === 6 ? "5.1" : ch === 8 ? "7.1" : ch === 2 ? "Stereo" : ch === 1 ? "Mono" : undefined;
+  const layout = t.type === "audio" ? (ch === 6 ? "5.1" : ch === 8 ? "7.1" : ch === 2 ? "Stereo" : ch === 1 ? "Mono" : undefined) : undefined;
   const lang = t.title && t.lang ? languageName(t.lang) : undefined;
-  return [name, lang && lang !== name ? lang : undefined, layout].filter(Boolean).join(" · ");
+  return [name, lang && lang !== name ? lang : undefined, layout, ...kindTags(t)].filter(Boolean).join(" · ");
 }
 
 /** What tells an mpv track apart in the track memory. */
 function mpvTraits(t: MpvTrack): TrackTraits & { id: string } {
   return { id: String(t.id), lang: t.lang, title: t.title, codec: t.codec, channels: t["demux-channel-count"] };
+}
+
+/** The same with what the track is for, to choose among tracks in one language. */
+function mpvCandidate(t: MpvTrack): TrackTraits & KindSource & { id: string } {
+  return { ...mpvTraits(t), forced: t.forced, "hearing-impaired": t["hearing-impaired"], "visual-impaired": t["visual-impaired"] };
 }
 
 /** The same for the built-in player's tracks, which carry less. */

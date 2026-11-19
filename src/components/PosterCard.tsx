@@ -1,8 +1,9 @@
-import { useCardIntent } from "../lib/ui";
+import { detailBackdropUrl, useCardIntent } from "../lib/ui";
 import { prefetchMeta, preloadImage } from "../lib/net";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import type { MetaPreview, Progress } from "../lib/types";
+import { preloadRoute } from "../screens/lazyScreens";
 import { cardMenu } from "./CardMenu";
 import { CardRating } from "./ImdbBadge";
 import { ArtTitle, Card, ProgressBar } from "./title/Card";
@@ -12,14 +13,15 @@ const INTENT_DELAY = 120;
 /** Prefetch detail + backdrop once the pointer rests on a title. */
 export function useIntent(item: MetaPreview) {
   return useCardIntent(() => {
+    preloadRoute({ name: "detail", type: item.type, id: item.id });
     prefetchTitlePage(item.type, item.id, item);
     prefetchMeta(item.type, item.id);
-    preloadImage(item.background);
+    preloadImage(detailBackdropUrl(item.background));
   }, INTENT_DELAY);
 }
 
 function useOpen(item: MetaPreview, id = item.id) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
   return () => navigate({ name: "detail", type: item.type, id, preview: id === item.id ? item : undefined });
 }
 
@@ -63,6 +65,7 @@ export function LandscapeCard({ item }: { item: MetaPreview }) {
     <Card
       shape="landscape"
       art={item.background ?? item.poster}
+      artFallbacks={item.background && item.poster ? [item.poster] : undefined}
       title={item.name}
       detail={[item.type === "movie" ? "Movie" : "Series", item.genres?.[0], item.releaseInfo].filter(Boolean).join(" · ")}
       tabular={false}
@@ -70,7 +73,7 @@ export function LandscapeCard({ item }: { item: MetaPreview }) {
       {...intent}
       {...cardMenu(item)}
     >
-      <ArtTitle name={item.name} logo={item.logo} />
+      <ArtTitle name={item.name} logo={item.logo} decorative />
     </Card>
   );
 }

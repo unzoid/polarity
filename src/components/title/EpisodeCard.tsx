@@ -9,6 +9,7 @@ import { Check, Play, Sources } from "../icons";
 import { StillPlaceholder } from "../StillPlaceholder";
 import { IconButton, buttonClass } from "../ui/Button";
 import { CardArt, ProgressBar } from "./Card";
+import { OverviewMore } from "./OverviewMore";
 
 /**
  * One episode of a season (docs/ui-components.md U8): the still with its runtime or time left, watched mark,
@@ -26,8 +27,11 @@ export function EpisodeCard({
   onSources,
   menu,
   item,
+  number = v.episode,
 }: {
   item?: MetaPreview;
+  /** The number shown: the episode's place in an episode order when one is chosen; its own number otherwise. */
+  number?: number;
   layout: EpisodeLayout;
   video: Video;
   progress?: Progress;
@@ -44,6 +48,7 @@ export function EpisodeCard({
   const intent = useCardIntent(() => openable && prefetchStreams("series", v.id), 150);
 
   const label = inProgress && p ? formatRemaining(p.position, p.duration) : shortRuntime(runtime);
+  const episodeTitle = v.title?.trim() || `Episode ${number}`;
   // The check pops in when an episode becomes watched while you're looking (marked, or finished), never on mount.
   const wasWatched = useRef(watched);
   const checkIn = useRef(false);
@@ -78,6 +83,11 @@ export function EpisodeCard({
             }
           />
           <div className="card-art-scrim" />
+          {layout === "list" && openable && (
+            <span className="episode-still-play" aria-hidden>
+              <Play size={18} fill="currentColor" />
+            </span>
+          )}
           {released && label && (
             <span className="episode-runtime t-callout">
               <Play size={13} fill="currentColor" /> {label}
@@ -92,20 +102,20 @@ export function EpisodeCard({
           {/* Filler / Recap: on the art, so it's the first thing you see when deciding to skip. */}
           {v.tag && <span className="episode-tag t-micro">{v.tag}</span>}
         </div>
-        {layout === "list" && <span className="episode-number tabular">{v.episode}</span>}
+        {layout === "list" && <span className="episode-number tabular">{number}</span>}
         <div className="episode-card-text">
           {layout === "list" ? (
             // The number column already says which episode it is.
             upNext && released ? <span className="t-micro episode-kicker">Up Next</span> : null
           ) : (
             <span className="t-micro episode-kicker">
-              {upNext && released ? `Up Next · Episode ${v.episode}` : `Episode ${v.episode}`}
+              {upNext && released ? `Up Next · Episode ${number}` : `Episode ${number}`}
             </span>
           )}
           <span className="t-headline episode-card-title">
             {/* A phone's list has no number column: the number leads the title instead (detail.css). */}
-            {layout === "list" && <span className="episode-title-num tabular">{v.episode}. </span>}
-            {v.title}
+            {layout === "list" && <span className="episode-title-num tabular">{number}. </span>}
+            {episodeTitle}
           </span>
           {v.overview && <p className="t-callout episode-card-overview">{v.overview}</p>}
           <span className="t-caption faint tabular">
@@ -114,12 +124,13 @@ export function EpisodeCard({
           </span>
         </div>
       </button>
+      {v.overview && <OverviewMore video={v} />}
       {openable && (
         <IconButton
           variant="glass"
           className="episode-sources pressable"
           onClick={() => onSources(v)}
-          label={`Sources for episode ${v.episode}`}
+          label={`Sources for episode ${number}`}
           title="Choose source"
         >
           <Sources size={15} />

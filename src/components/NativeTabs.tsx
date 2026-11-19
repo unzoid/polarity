@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { nativeTabsAvailable, onNativeTab, setNativeTabs, type NativeTabsState } from "../lib/platform";
 import { useRouter } from "../lib/router";
 import { nativeTabsState, tabRoute, type NavLink } from "../lib/navTabs";
@@ -50,4 +50,33 @@ export function useNativeTabs(links: NavLink[]) {
   useEffect(() => {
     if (nativeTabsAvailable) setNativeTabs(JSON.parse(key) as NativeTabsState).catch(warnFailed("native tab bar"));
   }, [key]);
+
+  useHeldSafeArea(nativeTabsAvailable && (settingsOpen || layers > 0));
 }
+
+/** How long the bar takes to come back, and a little to spare, before the bottom safe area is let go again. */
+const BAR_BACK_MS = 700;
+
+/**
+ * While a sheet covers the screen, iOS's tab bar hides, and with it goes the part of the bottom safe area it took:
+ * the pages and the sheet would lay themselves out again mid-motion, a bump as the sheet rises and another as it
+ * goes. The bottom safe area is held where it was until the bar is back.
+ */
+function useHeldSafeArea(covered: boolean) {
+  useLayoutEffect(() => {
+    if (!covered) return;
+    const root = document.documentElement;
+    if (!root.style.getPropertyValue("--safe-bottom")) {
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
+      document.body.append(probe);
+      root.style.setProperty("--safe-bottom", getComputedStyle(probe).paddingBottom);
+      probe.remove();
+    }
+    clearTimeout(letGo);
+    return () => {
+      letGo = window.setTimeout(() => root.style.removeProperty("--safe-bottom"), BAR_BACK_MS);
+    };
+  }, [covered]);
+}
+let letGo = 0;

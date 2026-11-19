@@ -4,7 +4,7 @@ import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { byDay, dayLabel, monthWeeks, useCalendar, weekDays, weekStart, type CalendarEntry } from "../lib/catalog";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { ownEpisodeName } from "../lib/format";
 import { useBack, useFocusTrap } from "./shell";
 import { focusWhenReady } from "./spatial";
@@ -44,7 +44,7 @@ export function TvCalendar() {
   const [picking, setPicking] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
   const chooser = useRef<HTMLButtonElement>(null);
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
 
   if (!loading && !entries.length) {
     return (
@@ -84,7 +84,7 @@ export function TvCalendar() {
           <p className="tv-cal-range">
             {thisWeek ? "This week" : weekRange(days)}
             {thisWeek && <span> · {weekRange(days)}</span>}
-            {loading && <Spinner size={18} label="Loading" />}
+            {loading && <Spinner size={13} label="Loading" />}
           </p>
         </div>
         <div className="tv-cal-pager">
@@ -94,18 +94,18 @@ export function TvCalendar() {
             </button>
           )}
           <button className="tv-cal-page tv-cal-icon" aria-label="Previous week" onClick={() => show(weekStart(start, -1), false)}>
-            <ChevronLeft size={26} />
+            <ChevronLeft size={19} />
           </button>
           <button className="tv-cal-page tv-cal-icon" aria-label="Choose a week" ref={chooser} onClick={() => setPicking(true)}>
-            <Calendar size={24} />
+            <Calendar size={18} />
           </button>
           <button className="tv-cal-page tv-cal-icon" aria-label="Next week" onClick={() => show(weekStart(start, 1), false)}>
-            <ChevronRight size={26} />
+            <ChevronRight size={19} />
           </button>
         </div>
       </header>
 
-      <div className="tv-cal-grid" ref={grid} data-nav-memory>
+      <div className="tv-cal-grid" ref={grid} data-nav-scroll="center" data-nav-memory>
         {days.map((day, i) => {
           const label = dayLabel(day);
           const items = byDate.get(day) ?? [];
@@ -212,11 +212,11 @@ function TvWeekPicker({
       <div className="tv-week" ref={ref} data-nav-scope role="dialog" aria-label="Choose a week">
         <header className="tv-week-head">
           <button className="tv-week-turn" onClick={() => turn(-1)} aria-label="Previous month">
-            <ChevronLeft size={26} />
+            <ChevronLeft size={19} />
           </button>
           <h2 className="tv-week-month">{monthYear.format(new Date(month.year, month.month, 1))}</h2>
           <button className="tv-week-turn" onClick={() => turn(1)} aria-label="Next month">
-            <ChevronRight size={26} />
+            <ChevronRight size={19} />
           </button>
         </header>
         <div className="tv-week-names" aria-hidden>

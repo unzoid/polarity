@@ -69,6 +69,22 @@ export const card = (page: Page, name: string) => page.getByRole("button", { nam
 export const clock = (page: Page) => page.locator(".player-remaining").textContent();
 
 /**
+ * Brings the player's controls back the way a mouse does: a move over the picture. Playwright's pointer rests where
+ * it last clicked (the title page's Play), which in the desktop dock is the picture, not the controls, so the
+ * controls hide on their timer; a click on a hidden control finds the picture under it and Playwright, seeing that,
+ * never moves the pointer to wake them. Call before clicking a control after the player has been left alone.
+ */
+export const wakeControls = async (page: Page) => {
+  const player = page.locator(".player");
+  const box = await player.boundingBox();
+  if (!box) return;
+  // Two points apart, so it's a move wherever the pointer was.
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
+  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45);
+  await expect(player).not.toHaveAttribute("data-chrome", "false");
+};
+
+/**
  * The watch party's dialogs and panels on screen (#247): the join dialog, a link to confirm, "Watch party over",
  * the party menu (top bar popover, TV panel), the profile menu at its Join or Friends view, and the player's
  * Watch Party panel. Never more than one.
@@ -138,7 +154,7 @@ export const barOverlaps = (page: Page) =>
     };
     const problems: string[] = [];
     for (const bar of player.querySelectorAll(".player-top, .player-bottom")) {
-      const parts = [...bar.querySelectorAll("button, input, .player-heading > *")]
+      const parts = [...bar.querySelectorAll("button, input, .player-heading > *, .player-title > *")]
         .filter((el) => shown(el) && !el.closest(".player-volume[data-folded] .player-volume-slider"))
         .map((el) => ({ name: el.getAttribute("aria-label") ?? el.textContent?.slice(0, 24) ?? el.tagName, box: el.getBoundingClientRect() }));
       for (const { name, box } of parts) {

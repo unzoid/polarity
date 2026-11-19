@@ -36,8 +36,8 @@ params.delete("logos"); // and #437's every-title-has-a-logo switch
 const secretsPlace = params.get("secretsPlace") ?? "keychain"; // Settings → Account's "On this device"
 params.delete("secretsPlace");
 // `fake.html?account=1`: signed in, with watch parties in this page (account.ts); read by lib/account in dev builds only.
-// `?account=signed-out`: the same account, starting at the sign-in screen.
-if (params.get("account")) (globalThis as { __polarFakeAccount?: unknown }).__polarFakeAccount = fakeAccount;
+// `?account=signed-out`: the same account, starting at the sign-in screen. Without `?account`, stay local even if `.env` names Supabase.
+(globalThis as { __polarFakeAccount?: unknown }).__polarFakeAccount = params.get("account") ? fakeAccount : null;
 if (params.get("account") === "signed-out") startSignedOut();
 params.delete("account");
 params.delete("friends"); // `&friends=1`: the profile starts with Friends on (account.ts)
@@ -55,7 +55,15 @@ const deepLinks: string[] = [];
   void emit("deep-link");
 };
 
+/**
+ * The system keychain (src-tauri/src/keychain.rs), kept in this tab's session storage so that, like the real one,
+ * it outlives a reload. Without it a value moved into the "keychain" was dropped, and a reload lost it.
+ */
+const KEYCHAIN = "fake.keychain.";
 const commands: Record<string, (a: Args) => unknown> = {
+  keychain_get: (a) => sessionStorage.getItem(KEYCHAIN + String(a.name)),
+  keychain_set: (a) => void sessionStorage.setItem(KEYCHAIN + String(a.name), String(a.value)),
+  keychain_delete: (a) => void sessionStorage.removeItem(KEYCHAIN + String(a.name)),
   store_problem: () => null,
   secrets_place: () => secretsPlace,
   settings_get: () => ({ ...settings, metadataSource: "TMDB" }),
@@ -76,7 +84,18 @@ const commands: Record<string, (a: Args) => unknown> = {
   },
   meta: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   // TMDB title N is the fixtures' Nth movie or show here (tt9100000 + N, tt9200000 + N); from 900000 on there's no IMDb id (#208).
+  // Every show has a made-up DVD order: discs of four, its specials left out (lib/library/episodeOrder.ts).
+  episode_orders: (a) => {
+    const n = fx.meta(String(a.id))?.videos.filter((v) => v.season > 0).length ?? 0;
+    return n ? [{ id: "aa01", name: "DVD Order", kind: "dvd", episodeCount: n, groupCount: Math.ceil(n / 4) }] : [];
+  },
+  episode_order: (a) => {
+    const ids = (fx.meta(String(a.id))?.videos ?? []).filter((v) => v.season > 0).map((v) => v.id);
+    const groups = Array.from({ length: Math.ceil(ids.length / 4) }, (_, i) => ({ name: `Disc ${i + 1}`, episodes: ids.slice(i * 4, i * 4 + 4) }));
+    return a.order === "aa01" ? { id: "aa01", name: "DVD Order", kind: "dvd", groups } : Promise.reject({ code: "not_found", message: "not found" });
+  },
   imdb_for_tmdb: (a) => (Number(a.id) < 900000 ? `tt${(a.ty === "series" ? 9200000 : 9100000) + Number(a.id)}` : null),
+  person: (a) => fx.person(Number(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   streams: () =>
     sourcesCase === "filtered" ? { streams: [], failed: [], hidden: 5 } : sourcesCase === "none" ? { streams: [], failed: [], asked: [] } : fx.streams(),
   subtitles: () => [],
@@ -90,8 +109,19 @@ const commands: Record<string, (a: Args) => unknown> = {
     fx.WORST
       ? { rottenTomatoes: 100, audience: 0, metacritic: 100, letterboxd: 5, trakt: 100, tmdb: 0, imdb: 10 }
       : { rottenTomatoes: 91, audience: 87, metacritic: 78, letterboxd: 3.9, trakt: 84, tmdb: 81, imdb: 8.2 },
+  // None: the chart shows the fixtures' own episode ratings.
+  episode_ratings: () => [],
   trailer: () => null,
   addons_list: () => addons,
+  // No TVs on the network and no other players installed here.
+  cast_devices: () => [],
+  external_players: () => [],
+  addon_set_enabled: (a) => void (addons = addons.map((x) => (x.manifest.id === a.id ? { ...x, disabled: !a.enabled } : x))),
+  addon_reorder: (a) => {
+    const ids = a.ids as string[];
+    const at = (x: (typeof addons)[number]) => (ids.includes(x.manifest.id) ? ids.indexOf(x.manifest.id) : ids.length);
+    addons = [...addons].sort((x, y) => at(x) - at(y));
+  },
   // Install links (#163): any example.com add-on answers; an address with "broken" in it doesn't. Installs are counted.
   addon_preview: (a) =>
     String(a.url).includes("broken")
@@ -127,6 +157,12 @@ const commands: Record<string, (a: Args) => unknown> = {
     library.unshift(...fresh);
     progress.unshift(...rows);
     return { library: fresh.length, progress: rows.length };
+  },
+  library_export: (a) => `polarity-${a.format === "csv" ? "history" : "library"}-2026-01-01.${a.format === "csv" ? "csv" : "json"}`,
+  anime_links_import: (a) => {
+    const links = (a as { links: AnimeLink[] }).links.filter((l) => (animeLinks.get(l.anilist)?.updatedAt ?? -1) < l.updatedAt);
+    for (const l of links) animeLinks.set(l.anilist, l);
+    return links.length;
   },
   continue_watching: () => progress,
   watch_history: () => progress,
@@ -170,9 +206,16 @@ const commands: Record<string, (a: Args) => unknown> = {
   notifications_take_launch: () => null,
   download_pause: (a) => void (downloads = downloads.map((d) => (d.id === a.id ? { ...d, state: "paused" } : d))),
   download_resume: (a) => void (downloads = downloads.map((d) => (d.id === a.id ? { ...d, state: "downloading" } : d))),
-  downloads_storage: () => ({ dir: "~/Videos/Polarity", free: null }),
+  downloads_storage: () => ({ dir: "~/Videos/Polarity", free: null, custom: false }),
+  // The download folder: no SD card, the folder dialog cancelled, the default kept.
+  downloads_volumes: () => [],
+  downloads_pick_folder: () => null,
+  downloads_set_folder: () => ({ dir: "~/Videos/Polarity", free: null, custom: false }),
   controllers_list: () => [],
   mpv_available: () => false,
+  // The screen's brightness (the player's swipe, iOS): what the screen was told is kept for browser tests to read.
+  player_brightness: () => (window as { __brightness?: number }).__brightness ?? 0.5,
+  player_set_brightness: (a) => void ((window as { __brightness?: number | null }).__brightness = a.level as number | null),
   // Discord: what the player sends is kept for browser tests to read.
   discord_available: () => true,
   discord_presence: (a) => void ((window as { __discord?: unknown[] }).__discord ??= []).push(a.activity),

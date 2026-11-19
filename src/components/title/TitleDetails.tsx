@@ -4,7 +4,7 @@ import { usePersonPhoto } from "../../lib/catalog";
 import { useQuery } from "@tanstack/react-query";
 import { keys, useRatings, useStreams } from "../../lib/net";
 import { isFresh, metacriticTone } from "../../lib/ui";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ContentType, ExternalRatings, Meta } from "../../lib/types";
 import { letterboxdUrl } from "../CardMenu";
 import { BrandIcon } from "../BrandIcon";
@@ -12,6 +12,7 @@ import { ArrowUpRight } from "../icons";
 import { Img } from "../Img";
 import { imdbUrl } from "../RatingRing";
 import { Chip } from "../ui/Chip";
+import { useNavigation } from "../../lib/router";
 
 /**
  * Everything about a title below the fold: who's in it (with faces where the source has them), the facts,
@@ -30,7 +31,8 @@ export function TitleDetails({ meta, links: showLinks = true }: { meta: Meta; li
     ["Runtime", formatRuntime(meta.runtime)],
     ["Status", isSeries ? d.status : undefined],
     ["Seasons", d.seasons ? `${d.seasons} ${d.seasons === 1 ? "season" : "seasons"}${d.episodes ? ` · ${d.episodes} episodes` : ""}` : undefined],
-    ["Rated", ratings?.rated ?? undefined],
+    // TMDB's rating for the metadata language's region first, then MDBList's or OMDb's.
+    ["Rated", meta.certification ?? ratings?.rated ?? undefined],
     [isSeries ? "Created by" : "Director", meta.director?.join(", ")],
     ["Writers", d.writers?.join(", ")],
     [isSeries ? "Network" : "Studio", d.studios?.join(", ")],
@@ -152,15 +154,33 @@ export function DetailsLinks({ label, children }: { label: string; children: Rea
   );
 }
 
-function Cast({ person: p }: { person: { name: string; character?: string; photo?: string } }) {
+function Cast({ person: p }: { person: { name: string; character?: string; photo?: string; tmdbId?: number } }) {
   // No photo from the metadata source: look the name up on IMDb. Initials until it answers (or if it can't).
   const { data: found } = usePersonPhoto(p.name, !p.photo);
-  const photo = p.photo ?? found ?? undefined;
-  return (
-    <li className="person">
-      <span className="person-photo">{photo ? <Img src={photo} alt="" /> : <span aria-hidden>{initials(p.name)}</span>}</span>
+  const [failedPhoto, setFailedPhoto] = useState<string>();
+  const { navigate } = useNavigation();
+  const rawPhoto = p.photo ?? found ?? undefined;
+  const photo = rawPhoto && failedPhoto !== rawPhoto ? rawPhoto : undefined;
+  const face = (
+    <>
+      <span className="person-photo">
+        {photo ? <Img src={photo} alt="" onFail={() => setFailedPhoto(rawPhoto)} /> : <span aria-hidden>{initials(p.name)}</span>}
+      </span>
       <span className="person-name">{p.name}</span>
       {p.character && <span className="person-role">{p.character}</span>}
+    </>
+  );
+  // With TMDB's id the face and name open the person's page (Cinemeta's names have none).
+  const id = p.tmdbId;
+  return (
+    <li className="person">
+      {id != null ? (
+        <button className="person-open" onClick={() => navigate({ name: "person", id, title: p.name })}>
+          {face}
+        </button>
+      ) : (
+        face
+      )}
     </li>
   );
 }
@@ -280,6 +300,16 @@ const Splat = () => (
  * add-ons have subtitles. Read off the sources you can actually play (the
  * same, cached lookup the player makes), so a badge is a promise it keeps.
  */
+/** The title's age rating (TMDB's), boxed like the format badges, in its heading line on every layout. */
+export function AgeRatingBadge({ certification }: { certification?: string }) {
+  if (!certification) return null;
+  return (
+    <span className="format-badge" role="img" aria-label={`Rated ${certification}`} title="Age rating">
+      {certification}
+    </span>
+  );
+}
+
 export function FormatBadges({ type, videoId }: { type: ContentType; videoId?: string }) {
   const { data: streams } = useStreams(type, videoId);
   const { data: subs } = useQuery({

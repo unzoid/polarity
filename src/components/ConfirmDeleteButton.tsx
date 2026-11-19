@@ -2,6 +2,7 @@ import { useEffect, useState, type ButtonHTMLAttributes } from "react";
 import { IconButton } from "./ui/Button";
 import { anchorOf, nativeDialogsAvailable, showNativeDialog } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
+import { iconLength } from "./icons";
 
 /** How long the armed state waits for the second click before standing down. */
 const DISARM_AFTER = 3000;
@@ -74,7 +75,7 @@ export function ConfirmDeleteButton({
 /** A bin drawn in two parts so the lid can hinge open. */
 export function TrashLid({ size = 18 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor" aria-hidden className="confirm-delete-icon">
+    <svg width={iconLength(size)} height={iconLength(size)} viewBox="0 0 20 20" fill="currentColor" aria-hidden className="confirm-delete-icon">
       <g className="confirm-delete-lid">
         <path
           d="M7.5 4.75v-1c0-.69.56-1.25 1.25-1.25h2.5c.69 0 1.25.56 1.25 1.25v1"

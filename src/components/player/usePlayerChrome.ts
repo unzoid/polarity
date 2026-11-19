@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appWindow } from "../../lib/platform";
 import { watch } from "../../lib/playback/watchLog";
 
@@ -13,6 +13,8 @@ export const PAUSED_HIDE_MS = 5000;
  */
 export function usePlayerChrome(hideAfter: number, paused = false) {
   const [chrome, setChrome] = useState({ visible: true, instant: false });
+  const visibleRef = useRef(true);
+  visibleRef.current = chrome.visible;
   const hideTimer = useRef<number>(undefined);
   const overControls = useRef(false);
   const wait = useRef(hideAfter);
@@ -33,6 +35,20 @@ export function usePlayerChrome(hideAfter: number, paused = false) {
       setChrome((c) => (c.visible && c.instant === instant ? c : { visible: true, instant }));
       arm();
     },
+    [arm],
+  );
+  const controlHover = useMemo(
+    () => ({
+      onPointerEnter: (e: { pointerType?: string }) => {
+        if (e.pointerType === "touch") return;
+        overControls.current = true;
+      },
+      onPointerLeave: () => {
+        if (!overControls.current) return;
+        overControls.current = false;
+        if (visibleRef.current) arm();
+      },
+    }),
     [arm],
   );
   // Pausing shows the controls (it may come from a headset button or the party,
@@ -72,5 +88,5 @@ export function usePlayerChrome(hideAfter: number, paused = false) {
     };
   }, [hide]);
   useEffect(() => watch(`controls ${chrome.visible ? "shown" : "hidden"}: ${why.current}`), [chrome.visible]);
-  return { chrome, poke, hide, overControls };
+  return { chrome, poke, hide, overControls, controlHover };
 }

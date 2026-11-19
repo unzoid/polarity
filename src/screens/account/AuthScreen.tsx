@@ -11,6 +11,8 @@ import { PRIVACY_URL, TERMS_URL } from "../../lib/settings";
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
 import { Captcha } from "./Captcha";
+import { TvSignInQr } from "./TvSignInQr";
+import { TwoStepBody } from "./TwoStepScreen";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** The server only sends a new code once a minute. */
@@ -96,6 +98,7 @@ export function AuthScreen() {
 
   const tv = useTvMode();
   const skip = account.canCancelSignIn ? account.cancelSignIn : account.continueAsGuest;
+  const activeStep = account.twoStep ? "two-step" : step;
 
   return (
     <AccountShell plain>
@@ -104,7 +107,7 @@ export function AuthScreen() {
         <AnimatePresence mode="wait" initial={false}>
         <motion.div
           className="auth-body"
-          key={step}
+          key={activeStep}
           // Nearly in place: a 2% sink while fading out, then the next step
           // fades in and springs from 98% to full size with a hint of overshoot.
           // (Scale props, not a transform string: nothing else runs on this screen.)
@@ -116,7 +119,9 @@ export function AuthScreen() {
           exit={{ opacity: 0, scale: reduce ? 1 : 0.98, transition: { duration: 0.21, ease: ease.out } }}
         >
 
-        {step === "start" && (
+        {activeStep === "two-step" && <TwoStepBody />}
+
+        {activeStep === "start" && (
           <>
             <h1 className="auth-title">Sign in to Polarity</h1>
             <div className="auth-actions">
@@ -146,7 +151,7 @@ export function AuthScreen() {
           </>
         )}
 
-        {step === "email" && (
+        {activeStep === "email" && (
           <form className="auth-form" onSubmit={submitEmail} noValidate>
             <h1 className="auth-title">What's your email address?</h1>
             <div className="auth-actions">
@@ -154,7 +159,7 @@ export function AuthScreen() {
                 aria-label="Email address"
                 type="email"
                 autoComplete="email"
-                placeholder="Enter your email address…"
+                placeholder="name@example.com"
                 value={email}
                 onValue={setEmail}
                 autoFocus
@@ -172,7 +177,7 @@ export function AuthScreen() {
           </form>
         )}
 
-        {step === "code" && (
+        {activeStep === "code" && (
           <form
             className="auth-form"
             onSubmit={(e) => {
@@ -183,15 +188,12 @@ export function AuthScreen() {
           >
             <h1 className="auth-title">Check your email</h1>
             <p className="auth-sub">
-              We've sent you a temporary login code.
-              <br />
-              Please check your inbox at <strong>{email.trim()}</strong>.
+              Enter the code sent to <strong>{email.trim()}</strong>.
             </p>
             <div className="auth-actions">
               <Input
                 aria-label="Login code"
                 className="auth-code"
-                placeholder="Enter code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={10}
@@ -208,7 +210,7 @@ export function AuthScreen() {
                 autoFocus
               />
               <Button variant="accent" size="block" type="submit" disabled={busy || !code} busy={busy}>
-                Continue with login code
+                Continue
               </Button>
             </div>
             {captcha > 0 && <Captcha key={captcha} onToken={(t) => void send(t)} />}
@@ -231,7 +233,7 @@ export function AuthScreen() {
           </form>
         )}
 
-        {step === "device" && <DeviceStep tv={tv} onBack={() => go("start")} />}
+        {activeStep === "device" && <DeviceStep tv={tv} onBack={() => go("start")} />}
         </motion.div>
         </AnimatePresence>
       </div>
@@ -283,11 +285,20 @@ function DeviceStep({ tv, onBack }: { tv: boolean; onBack: () => void }) {
       <div className="auth-device-code" aria-live="polite" data-state={state.kind}>
         {state.kind === "code" ? formatTvCode(state.request.code) : state.kind === "signing-in" ? "Signing in…" : state.kind === "loading" ? "········" : ""}
       </div>
-      {state.kind === "code" && (
+      {(state.kind === "code" || state.kind === "loading") && (
         <p className="auth-fine">
-          Waiting for approval · the code expires in {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}
+          {state.kind === "code"
+            ? `Waiting for approval · the code expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
+            : "\u00a0"}
         </p>
       )}
+      {state.kind === "loading" && (
+        <div className="auth-device-qr" aria-hidden>
+          <div className="auth-device-qr-skeleton skeleton" />
+          <p className="auth-fine">On an Android phone with Polarity, you can scan this with the camera instead.</p>
+        </div>
+      )}
+      {state.kind === "code" && <TvSignInQr code={state.request.code} />}
       {state.kind === "over" && (
         <>
           <ErrorLine error={{ message: state.message }} />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerLayer, usePlayerLayer } from "../components/PlayerLayer";
 import { rootTab, useRouter, type Route } from "../lib/router";
 import { TV_ACTION_EVENT, type TvAction } from "./gamepad";
@@ -16,7 +16,7 @@ import {
 } from "./spatial";
 import { dismissDepth, dismissTop, onDismissed, pressEscape, useSystemBack } from "../lib/ui";
 import { leaveApp, systemBack } from "../lib/platform";
-import { Desktop } from "../components/icons";
+import { ArrowLeft, Desktop } from "../components/icons";
 import { actionFor, shortcutText } from "../lib/settings";
 import { playSound } from "./sounds";
 import { markHeldMove } from "./held";
@@ -26,6 +26,8 @@ import { ControllerToast, TvHints, TvMenu, TvNav, sameTab, useTvTabs } from "./T
 import { TvCardMenuHost, useCardMenuOpen } from "./TvCardMenu";
 import { TvAnime, TvAnimeDetail } from "./TvAnime";
 import { TvDetail } from "./TvDetail";
+import { TvPerson } from "./TvPerson";
+import { TrailerHost } from "../components/Trailer";
 import { TvDiscover, TvHome, TvLibrary, TvSearch } from "./TvScreens";
 import { TvCalendar } from "./TvCalendar";
 import { TvDownloads } from "./TvDownloads";
@@ -39,8 +41,10 @@ import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { StoreProblemToast } from "../components/StoreProblemToast";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { SecretsSyncToast } from "../components/SecretsSyncToast";
+import { LockedKeysToast } from "../components/LockedKeysToast";
+import { HiddenTitleToast } from "../components/HiddenTitleToast";
 
-function TvScreen({ route }: { route: Route }) {
+const TvScreen = memo(function TvScreen({ route }: { route: Route }) {
   switch (route.name) {
     case "home":
       return <TvHome />;
@@ -69,8 +73,10 @@ function TvScreen({ route }: { route: Route }) {
       return <TvAnime />;
     case "anime-detail":
       return <TvAnimeDetail id={route.id} />;
+    case "person":
+      return <TvPerson id={route.id} name={route.title} />;
   }
-}
+});
 
 /** The cursor gets out of the way: hidden while you use keys or a controller, back when the mouse moves. */
 const CURSOR_IDLE_MS = 2500;
@@ -90,7 +96,7 @@ export function TvApp() {
   const activeTab = rootTab(stack);
   const [menuOpen, setMenuOpen] = useState(false);
   const cardMenuOpen = useCardMenuOpen();
-  const [cursorHidden, setCursorHidden] = useState(true);
+  const appRef = useRef<HTMLDivElement>(null);
   const pageEls = useRef(new Map<number, HTMLElement>());
   const { data: settings } = useSettings();
   const tabs = useTvTabs();
@@ -166,19 +172,29 @@ export function TvApp() {
     const onAction = (e: Event) => {
       const action = (e as CustomEvent<TvAction>).detail;
       if (action === "menu") {
+        if (dismissDepth() > 0 && !menuOpen) return;
         playSound(menuOpen ? "back" : "select");
         return setMenuOpen((o) => !o);
       }
-      if (menuOpen) return;
-      playSound("move");
-      if (action === "search") return tab({ name: "search" });
+      // On a pushed page or inside an open panel/modal, Y and shoulder buttons stay local instead of tearing it down.
+      if (menuOpen || !atRoot || dismissDepth() > 0) return;
+      if (action === "search") {
+        if (activeTab.name === "search") return;
+        playSound("move");
+        return tab({ name: "search" });
+      }
       const i = tabs.findIndex((t) => sameTab(t.route, activeTab));
       const j = Math.min(tabs.length - 1, Math.max(0, i + (action === "nextTab" ? 1 : -1)));
-      if (j !== i) tab(tabs[j].route);
+      if (j !== i) {
+        playSound("move");
+        tab(tabs[j].route);
+      } else {
+        playSound("edge");
+      }
     };
     window.addEventListener(TV_ACTION_EVENT, onAction);
     return () => window.removeEventListener(TV_ACTION_EVENT, onAction);
-  }, [playing, menuOpen, cardMenuOpen, tab, activeTab, tabs]);
+  }, [playing, menuOpen, cardMenuOpen, atRoot, tab, activeTab, tabs]);
 
   // Arriving on a page (or back from the player) puts focus where you were on it, or its first title.
   useEffect(() => {
@@ -206,13 +222,19 @@ export function TvApp() {
 
   useEffect(() => {
     let t = 0;
-    const onMove = () => {
-      setCursorHidden(false);
-      window.clearTimeout(t);
-      t = window.setTimeout(() => setCursorHidden(true), CURSOR_IDLE_MS);
+    let hidden = true;
+    const setHidden = (next: boolean) => {
+      if (hidden === next) return;
+      hidden = next;
+      if (appRef.current) appRef.current.dataset.cursor = next ? "hidden" : "shown";
     };
-    const onKey = () => setCursorHidden(true);
-    window.addEventListener("pointermove", onMove);
+    const onMove = () => {
+      setHidden(false);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setHidden(true), CURSOR_IDLE_MS);
+    };
+    const onKey = () => setHidden(true);
+    window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(t);
@@ -223,9 +245,10 @@ export function TvApp() {
 
   return (
     <div
+      ref={appRef}
       className="app tv"
       data-player-leaving={leaving}
-      data-cursor={cursorHidden ? "hidden" : "shown"}
+      data-cursor="hidden"
       data-card-ratings={settings?.showCardRatings ?? false}
       data-rating-position={settings?.cardRatingPosition ?? "poster"}
       data-rating-colors={settings?.ratingColors ?? false}
@@ -257,11 +280,32 @@ export function TvApp() {
         })}
         {/* Sections are for the top level; a title page is a place of its own. */}
         {atRoot && <TvNav onMenu={() => setMenuOpen(true)} />}
+        {!atRoot && !playing && !menuOpen && (
+          <button
+            className="tv-back"
+            tabIndex={-1}
+            aria-label="Back"
+            onClick={() => {
+              if (dismissTop()) return;
+              playSound("back");
+              goBack();
+            }}
+          >
+            <ArrowLeft size={20} />
+            Back
+          </button>
+        )}
         {!playing && <TvCardMenuHost />}
-        {menuOpen && <TvMenu onClose={() => setMenuOpen(false)} />}
+        <TvMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         {joinPartyOpen && !playing && <TvJoinParty />}
         {partyMenuOpen && !playing && <TvPartyMenu />}
         {friendsOpen && !playing && <TvFriendsPanel />}
+        {/* A title's extras play here, over the page (TvExtras.tsx). */}
+        {!playing && (
+          <ErrorBoundary where="trailer" variant="tv">
+            <TrailerHost />
+          </ErrorBoundary>
+        )}
         <TvHints />
         {!playing && (
           <button className="tv-exit" tabIndex={-1} onClick={() => setTvMode(false)}>
@@ -274,6 +318,8 @@ export function TvApp() {
         <StoreProblemToast tv />
         <AccountFullToast tv />
         <SecretsSyncToast tv />
+        <LockedKeysToast tv />
+        <HiddenTitleToast tv />
       </main>
       <PlayerLayer player={player} leaving={leaving} />
     </div>

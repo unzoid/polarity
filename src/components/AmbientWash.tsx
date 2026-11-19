@@ -24,23 +24,41 @@ export function bakedFilter(filter: string, shownWidth: number, width: number): 
  * browser can filter a canvas (#36): as a CSS filter, a full-screen blur is
  * redone on every frame anything moves over it, and a held direction on TV
  * dropped to a few frames a second. Elsewhere the CSS filter applies as before.
- *
- * `flat` shrinks it one step further, to a single pixel: the art's main colour
- * as one even tint, for a page that only takes on the art's colour.
  */
-export function AmbientWash({ src, current, flat = false }: { src?: string; current: boolean; flat?: boolean }) {
+export function AmbientWash({ src, current }: { src?: string; current: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const [baked, setBaked] = useState(false);
 
   useEffect(() => {
+    setReady(false);
+    setBaked(false);
     if (!src) return;
+    const cv = canvas.current;
+    let wash: HTMLCanvasElement | null = null;
+    let bakedWidth = 0;
+
+    const paint = () => {
+      const el = canvas.current;
+      const ctx = el?.getContext("2d");
+      if (!el || !ctx || !wash) return;
+      const shownWidth = el.clientWidth;
+      const shownHeight = el.clientHeight;
+      const filter = "filter" in ctx ? bakedFilter(getComputedStyle(el).getPropertyValue("--wash"), shownWidth, BAKED_WIDTH) : null;
+      // Resizing resets the context, so the filter is set after.
+      el.width = filter ? BAKED_WIDTH : wash.width;
+      el.height = filter && shownWidth > 0 ? Math.max(1, Math.round((BAKED_WIDTH * shownHeight) / shownWidth)) : wash.height;
+      if (filter) ctx.filter = filter;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(wash, 0, 0, el.width, el.height);
+      bakedWidth = filter ? shownWidth : 0;
+      setBaked(!!filter);
+      setReady(true);
+    };
+
     const img = new Image();
     img.decoding = "async";
     img.onload = () => {
-      const cv = canvas.current;
-      const ctx = cv?.getContext("2d");
-      if (!cv || !ctx) return;
       // Two steps so the tiny version averages the whole picture, not a few pixels of it.
       const mid = document.createElement("canvas");
       mid.width = 48;
@@ -55,30 +73,26 @@ export function AmbientWash({ src, current, flat = false }: { src?: string; curr
       m.drawImage(img, 0, 0, mid.width, mid.height);
       t.imageSmoothingQuality = "high";
       t.drawImage(mid, 0, 0, tiny.width, tiny.height);
-      let wash = tiny;
-      if (flat) {
-        wash = document.createElement("canvas");
-        wash.width = wash.height = 1;
-        const w = wash.getContext("2d");
-        if (!w) return;
-        w.imageSmoothingQuality = "high";
-        w.drawImage(tiny, 0, 0, 1, 1);
-      }
-      const filter = "filter" in ctx ? bakedFilter(getComputedStyle(cv).getPropertyValue("--wash"), cv.clientWidth, BAKED_WIDTH) : null;
-      // Resizing resets the context, so the filter is set after.
-      cv.width = filter ? BAKED_WIDTH : wash.width;
-      cv.height = filter ? Math.max(1, Math.round((BAKED_WIDTH * cv.clientHeight) / cv.clientWidth)) : wash.height;
-      if (filter) ctx.filter = filter;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(wash, 0, 0, cv.width, cv.height);
-      setBaked(!!filter);
-      setReady(true);
+      wash = tiny;
+      paint();
     };
     img.src = src;
+
+    // Re-bake if the image loaded before layout gave the canvas a non-zero width, or on major resizes.
+    const ro =
+      cv && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            if (!wash || cv.clientWidth <= 0) return;
+            if (bakedWidth === 0 || Math.abs(cv.clientWidth - bakedWidth) > 64) paint();
+          })
+        : null;
+    if (cv && ro) ro.observe(cv);
+
     return () => {
       img.onload = null;
+      ro?.disconnect();
     };
-  }, [src, flat]);
+  }, [src]);
 
   return <canvas ref={canvas} width={4} height={3} data-current={current && ready} data-baked={baked || undefined} />;
 }

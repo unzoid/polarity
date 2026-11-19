@@ -13,13 +13,16 @@
   outline: none;
   -webkit-user-select: text;
   user-select: text;
-  transition: border-color var(--dur-fast) var(--ease-std);
+  transition:
+    border-color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std);
 }
 .text-field::placeholder {
   color: var(--text-3);
 }
 .text-field:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* block: the account screens' field (after Linear's): full width, 44px, a quiet border and a soft ring on focus. */

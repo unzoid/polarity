@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LetterboxdImport } from "../../src/components/settings/LetterboxdImport";
@@ -41,6 +41,7 @@ const imported: { library: LibraryItem[]; progress: Progress[] }[] = [];
     return null;
   },
 };
+afterAll(() => void delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 
 const settle = () => act(async () => new Promise((r) => setTimeout(r, 30)));
 

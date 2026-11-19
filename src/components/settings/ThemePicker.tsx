@@ -262,6 +262,29 @@ function ThemeDialog({
   const valid = draft.name.trim() !== "";
   const submit = () => valid && onSave(draft, editing);
   const del = useConfirmDelete(() => editing && onDelete(editing), "Delete Theme");
+  const swatchesRef = useRef<HTMLDivElement>(null);
+  const chosenSwatch = THEME_ACCENTS.findIndex((a) => a.value.toUpperCase() === draft.accent.toUpperCase());
+  const swatchStop = Math.max(0, chosenSwatch);
+
+  const onSwatchKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=radio]")];
+    const at = Math.max(0, chosenSwatch >= 0 ? chosenSwatch : items.indexOf(document.activeElement as HTMLElement));
+    const n = THEME_ACCENTS.length;
+    const moves: Record<string, number> = {
+      ArrowRight: (at + 1) % n,
+      ArrowDown: (at + 1) % n,
+      ArrowLeft: (at - 1 + n) % n,
+      ArrowUp: (at - 1 + n) % n,
+      Home: 0,
+      End: n - 1,
+    };
+    if (!(e.key in moves)) return;
+    const next = moves[e.key];
+    e.preventDefault();
+    e.stopPropagation();
+    set({ accent: THEME_ACCENTS[next].value });
+    items[next]?.focus();
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
@@ -300,16 +323,17 @@ function ThemeDialog({
                 <span className="theme-dialog-label" id="theme-dialog-accent">
                   Accent
                 </span>
-                <div className="theme-dialog-swatches" role="radiogroup" aria-labelledby="theme-dialog-accent">
-                  {THEME_ACCENTS.map((a) => (
+                <div ref={swatchesRef} className="theme-dialog-swatches" role="radiogroup" aria-labelledby="theme-dialog-accent" onKeyDown={onSwatchKeyDown}>
+                  {THEME_ACCENTS.map((a, i) => (
                     <button
                       key={a.value}
                       type="button"
                       className="theme-dialog-swatch"
                       role="radio"
-                      aria-checked={draft.accent === a.value}
+                      aria-checked={draft.accent.toUpperCase() === a.value.toUpperCase()}
                       aria-label={a.label}
                       title={a.label}
+                      tabIndex={i === swatchStop ? 0 : -1}
                       style={{ "--swatch": a.value } as CSSProperties}
                       onClick={() => set({ accent: a.value })}
                     />

@@ -1,0 +1,5 @@
+[bindings.swift]
+# `import PolarCore` in the app; the C side is the module `PolarCoreFFI`.
+module_name = "PolarCore"
+ffi_module_name = "PolarCoreFFI"
+ffi_module_filename = "PolarCoreFFI"

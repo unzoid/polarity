@@ -33,11 +33,74 @@ pub struct Tune {
     /// changes. macOS and iOS always read every frame, in memory.
     #[serde(default)]
     pub every_frame: bool,
+    /// Send Dolby and DTS audio to an AV receiver as it is (S/PDIF or HDMI
+    /// passthrough). The receiver decodes it; mpv's volume and audio filters
+    /// don't apply then.
+    #[serde(default)]
+    pub passthrough: bool,
+    /// How HDR video reaches the screen.
+    #[serde(default)]
+    pub hdr: HdrOutput,
+    /// How bright subtitles are over HDR video shown in HDR.
+    #[serde(default)]
+    pub sub_hdr: SubtitleHdr,
 }
+
+/// Subtitle brightness over HDR video shown in HDR, where white text can be glaring: mpv's own choice, the
+/// white of SDR video, or dimmer still.
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleHdr {
+    #[default]
+    Auto,
+    Sdr,
+    Dim,
+}
+
+impl SubtitleHdr {
+    /// mpv's `sub-hdr-peak` for it: "auto", "sdr" (203 nits), or a peak in nits.
+    pub fn peak(self) -> serde_json::Value {
+        match self {
+            SubtitleHdr::Auto => "auto".into(),
+            SubtitleHdr::Sdr => "sdr".into(),
+            SubtitleHdr::Dim => 100.into(),
+        }
+    }
+}
+
+/// How HDR video is shown: mpv's choice, as HDR on a screen that takes it,
+/// or always tone-mapped to SDR (the picture looked washed out on a screen
+/// whose HDR mode Windows had wrong).
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HdrOutput {
+    #[default]
+    Auto,
+    Screen,
+    Sdr,
+}
+
+impl HdrOutput {
+    /// mpv's `target-colorspace-hint` for it.
+    pub fn colorspace_hint(self) -> &'static str {
+        match self {
+            HdrOutput::Auto => "auto",
+            HdrOutput::Screen => "yes",
+            HdrOutput::Sdr => "no",
+        }
+    }
+}
+
+/// The formats passthrough hands to the receiver undecoded (`audio-spdif`).
+pub const PASSTHROUGH_CODECS: &str = "ac3,eac3,dts,dts-hd,truehd";
 
 fn on() -> bool {
     true
 }
+
+/// Phones, tablets and TV boxes (a Google TV dongle has 2 GB for everything): the demuxer cache
+/// stays small whatever the Buffer setting ([`Tune::cache`]).
+const SMALL_MEMORY: bool = cfg!(any(target_os = "android", target_os = "ios"));
 
 /// Where libmpv in the app hands our detector each frame in memory (src-tauri's player/apple.rs).
 const FRAMES_IN_MEMORY: bool = cfg!(any(target_os = "macos", target_os = "ios"));
@@ -79,11 +142,23 @@ impl Default for Tune {
             autocrop: false,
             lookahead: true,
             every_frame: false,
+            passthrough: false,
+            hdr: HdrOutput::Auto,
+            sub_hdr: SubtitleHdr::Auto,
         }
     }
 }
 
 impl Tune {
+    /// mpv's `audio-spdif`: the formats sent to the receiver as they are, or none.
+    pub fn spdif(&self) -> &'static str {
+        if self.passthrough {
+            PASSTHROUGH_CODECS
+        } else {
+            ""
+        }
+    }
+
     pub fn audio_filters(&self) -> String {
         let mut chain: Vec<&str> = Vec::new();
         if self.dialogue_boost {
@@ -136,10 +211,19 @@ impl Tune {
 
     /// (seconds ahead, max bytes) for the demuxer cache.
     pub fn cache(&self) -> (u32, &'static str) {
-        match self.buffer {
-            BufferSize::Small => (30, "64MiB"),
-            BufferSize::Normal => (90, "192MiB"),
-            BufferSize::Large => (300, "768MiB"),
+        self.cache_with(SMALL_MEMORY)
+    }
+
+    /// [`Tune::cache`] on a desktop, or on a phone or TV box, where Normal is the 64 MiB mpv starts
+    /// with there (`IOS_ARGS`, src-tauri's Android arguments) and Large stays well inside a 2 GB box.
+    fn cache_with(&self, small_memory: bool) -> (u32, &'static str) {
+        match (self.buffer, small_memory) {
+            (BufferSize::Small, false) => (30, "64MiB"),
+            (BufferSize::Normal, false) => (90, "192MiB"),
+            (BufferSize::Large, false) => (300, "768MiB"),
+            (BufferSize::Small, true) => (30, "32MiB"),
+            (BufferSize::Normal, true) => (90, "64MiB"),
+            (BufferSize::Large, true) => (300, "128MiB"),
         }
     }
 
@@ -182,11 +266,48 @@ mod tests {
             autocrop: false,
             lookahead: true,
             every_frame: false,
+            passthrough: false,
+            hdr: HdrOutput::Auto,
+            sub_hdr: SubtitleHdr::Auto,
         };
         assert!(t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm"));
         let off = Tune { dialogue_boost: false, volume_leveling: false, ..t };
         assert_eq!(off.audio_filters(), "");
-        assert_eq!(t.cache(), (300, "768MiB"));
+        assert_eq!(t.cache_with(false), (300, "768MiB"));
+    }
+
+    #[test]
+    fn cache_stays_small_on_phones_and_tv_boxes() {
+        let at = |buffer| Tune { buffer, ..Tune::default() }.cache_with(true);
+        assert_eq!(at(BufferSize::Normal), (90, "64MiB"));
+        assert_eq!(at(BufferSize::Small), (30, "32MiB"));
+        assert_eq!(at(BufferSize::Large), (300, "128MiB"));
+        // Normal is what mpv starts with there.
+        assert!(IOS_ARGS.contains(&"--demuxer-max-bytes=64MiB"));
+    }
+
+    #[test]
+    fn passthrough_and_hdr_are_presets() {
+        // An older page sends neither: off, and mpv's own HDR choice.
+        let page = r#"{"dialogueBoost":false,"volumeLeveling":false,"hwdec":true,"deband":false,"buffer":"normal"}"#;
+        let t = serde_json::from_str::<Tune>(page).unwrap();
+        assert_eq!((t.spdif(), t.hdr), ("", HdrOutput::Auto));
+        let on = serde_json::from_str::<Tune>(&page.replace('}', r#","passthrough":true,"hdr":"sdr"}"#)).unwrap();
+        assert_eq!(on.spdif(), PASSTHROUGH_CODECS);
+        assert_eq!(on.hdr.colorspace_hint(), "no");
+        assert_eq!(HdrOutput::Screen.colorspace_hint(), "yes");
+        // Anything else is refused, never handed to mpv.
+        assert!(serde_json::from_str::<Tune>(&page.replace('}', r#","hdr":"--script=x"}"#)).is_err());
+    }
+
+    #[test]
+    fn subtitle_brightness_over_hdr_is_a_preset() {
+        let page = r#"{"dialogueBoost":false,"volumeLeveling":false,"hwdec":true,"deband":false,"buffer":"normal"}"#;
+        assert_eq!(serde_json::from_str::<Tune>(page).unwrap().sub_hdr.peak(), "auto");
+        let dim = serde_json::from_str::<Tune>(&page.replace('}', r#","subHdr":"dim"}"#)).unwrap();
+        assert_eq!(dim.sub_hdr.peak(), 100);
+        assert_eq!(SubtitleHdr::Sdr.peak(), "sdr");
+        assert!(serde_json::from_str::<Tune>(&page.replace('}', r#","subHdr":5000}"#)).is_err());
     }
 
     #[test]

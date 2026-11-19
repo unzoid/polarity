@@ -6,6 +6,7 @@
       "frameworks": [
         "OpenGLES",
         "AVFoundation",
+        "MediaPlayer",
         "UserNotifications",
         "Vision",
         "vendor/ios/frameworks/Libavcodec.xcframework",

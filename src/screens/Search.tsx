@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { cardArtUrl } from "../lib/ui";
 import { AnimeCard } from "../components/anime/AnimeCard";
 import { PosterCard } from "../components/PosterCard";
 import { Shelf } from "../components/title/Shelf";
@@ -22,9 +23,12 @@ import {
   useRecentSearches,
   useListable,
   useSearchText,
+  catalogBound,
+  keepWithinLimit,
+  useViewingLimit,
 } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
-import { useRouter } from "../lib/router";
+import { useRouter, useNavigation } from "../lib/router";
 import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
 import type { ContentType, MetaPreview } from "../lib/types";
@@ -187,7 +191,7 @@ const TILE_HUES: Record<string, [number, number]> = {
  */
 function MovieGenreTile({ genre }: { genre: string }) {
   const { data, isPending } = useGenreRow("movie", genre);
-  return <GenreTile genre={genre} image={data?.find((m) => m.background)?.background} pending={isPending} />;
+  return <GenreTile genre={genre} image={cardArtUrl(data?.find((m) => m.background)?.background, "landscape")} pending={isPending} />;
 }
 
 /**
@@ -219,38 +223,48 @@ function GenreTile({ genre, image, pending }: { genre: string; image?: string; p
 }
 
 function useGenreRow(type: ContentType, genre: string, enabled = true) {
+  const viewing = useViewingLimit();
   return useQuery({
     queryKey: keys.genreRow(type, genre),
-    queryFn: () => api.catalog(type, "popular", 0, genre),
+    queryFn: () => api.catalog(type, "popular", 0, genre, catalogBound(type)),
     staleTime: 30 * 60_000,
     enabled,
+    select: useCallback((list: MetaPreview[]) => keepWithinLimit(list, viewing), [viewing]),
   });
 }
 
 function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const deferred = useDeferredValue(query);
-  const { animeEnabled } = usePrefs();
 
-  // Keystrokes update the field instantly; the network waits for a pause.
+  // Keystrokes update the field instantly; the network and result shelves wait for a pause.
   useEffect(() => {
     const t = window.setTimeout(() => setQuery(text), 180);
     return () => window.clearTimeout(t);
   }, [text]);
 
-  const { data } = useSearch(deferred);
+  return <ResultsBody query={deferred} typing={text !== deferred} />;
+}
+
+const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { query: string; typing: boolean }) {
+  const { animeEnabled } = usePrefs();
+  const { navigate } = useNavigation();
+
+  const { data, isPlaceholderData } = useSearch(deferred);
   const hasQuery = deferred.length >= searchMinLength(deferred);
   const genre = hasQuery ? genreOf(deferred) : undefined;
   // What the catalogs found (they forgive typos): what AniList is asked for when the typed words find nothing.
   const anime = useAnimeResults(animeEnabled && hasQuery ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
   const aliases = useAnimeAliases();
   const fromAddons = useAddonSearches(hasQuery ? deferred : "");
+  const viewing = useViewingLimit();
 
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
   const movies = withoutAnime(data?.movies, anime.all, aliases);
   const series = withoutAnime(data?.series, anime.all, aliases);
   const waiting = !hasQuery || !data;
+  const stale = !waiting && (typing || isPlaceholderData);
   const addonsBusy = fromAddons.some((r) => !r.items && !r.failed);
   const addonsFound = fromAddons.some((r) => r.items?.length);
   const rows: Record<SearchRow, ReactNode> = {
@@ -259,39 +273,79 @@ function Results({ text }: { text: string }) {
     movies: <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
     series: <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
     anime: animeEnabled && (
-      <AnimeRow key="anime" title={anime.title} items={anime.items} loading={anime.loading} failed={anime.failed} retry={anime.retry} />
+      <AnimeRow
+        key="anime"
+        title={anime.title}
+        items={anime.items}
+        loading={anime.loading}
+        failed={anime.failed}
+        retry={anime.retry}
+        // A genre or kind of show: the heading opens it in Anime → Browse.
+        onOpen={anime.browse && (() => navigate({ name: "anime-browse", ...anime.browse }))}
+      />
     ),
   };
-  const nothing = !waiting && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
+  const nothing = !waiting && !stale && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
 
   return (
     <>
       {/* Opening a result counts as running the search (Recent, in the search field). */}
-      <div className="rows search-rows" onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}>
+      <div
+        className="rows search-rows"
+        data-stale={stale || undefined}
+        onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}
+      >
         {searchRows(genre, !!anime.genre).map((row) => rows[row])}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
-        {fromAddons.map((r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} />)}
+        {fromAddons.map(
+          (r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items && keepWithinLimit(r.items, viewing)} />,
+        )}
       </div>
       {nothing && <EmptyState>Nothing found for “{deferred}”.</EmptyState>}
     </>
   );
-}
+});
 
 function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   const { data } = useGenreRow(type, genre);
-  return <ResultRow title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`} items={data} />;
+  const { navigate } = useNavigation();
+  // The heading opens the genre's whole list in Movies or Series.
+  return (
+    <ResultRow
+      title={`Popular ${genre} ${type === "movie" ? "Movies" : "Series"}`}
+      items={data}
+      onOpen={() => navigate({ name: "discover", type, genre })}
+    />
+  );
 }
 
 /** Leaves out what can't play and has nothing to show (#337): a stub whose poster and backdrop don't load. */
-function ResultRow({ title, items: found }: { title: string; items?: MetaPreview[] }) {
+function ResultRow({ title, items: found, onOpen }: { title: string; items?: MetaPreview[]; onOpen?: () => void }) {
   const items = useListable(found);
   if (items && !items.length) return null;
-  return <Shelf title={title} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
+  return <Shelf title={title} onOpen={onOpen} items={items} card={(item) => <PosterCard key={item.id} item={item} />} />;
 }
 
-function AnimeRow({ title, items, loading, failed, retry }: { title: string; items?: Card[]; loading: boolean; failed: boolean; retry: () => void }) {
+function AnimeRow({
+  title,
+  items,
+  loading,
+  failed,
+  retry,
+  onOpen,
+}: {
+  title: string;
+  items?: Card[];
+  loading: boolean;
+  failed: boolean;
+  retry: () => void;
+  onOpen?: () => void;
+}) {
+  const kept = useRef<Card[]>(undefined);
+  if (items) kept.current = items;
+  const shown = items ?? (loading ? kept.current : undefined);
   // A failed search isn't "no anime": it says so, with a way to try again (test report 1, item 28).
-  if (failed && !items?.length)
+  if (failed && !shown?.length)
     return (
       <section className="row">
         <div className="row-header">
@@ -300,6 +354,6 @@ function AnimeRow({ title, items, loading, failed, retry }: { title: string; ite
         <EmptyState action={{ label: "Try Again", onClick: retry }}>Anime results couldn't load.</EmptyState>
       </section>
     );
-  if (!loading && !items?.length) return null;
-  return <Shelf title={title} items={items} card={(a) => <AnimeCard key={a.id} item={a} />} />;
+  if (!loading && !shown?.length) return null;
+  return <Shelf title={title} onOpen={onOpen} items={shown} card={(a) => <AnimeCard key={a.id} item={a} />} />;
 }

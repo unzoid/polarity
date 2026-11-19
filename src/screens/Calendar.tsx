@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { cardMenu } from "../components/CardMenu";
 import { Img } from "../components/Img";
 import { byDay, dayLabel, useCalendar, type CalendarEntry } from "../lib/catalog";
-import { useRouter } from "../lib/router";
+import { useNavigation } from "../lib/router";
 import { episodeEntry } from "../lib/library";
 import { ownEpisodeName } from "../lib/format";
+import { cardArtUrl } from "../lib/ui";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Skeleton } from "../components/ui/Skeleton";
 
@@ -15,10 +16,26 @@ import { Skeleton } from "../components/ui/Skeleton";
 export function Calendar() {
   const { entries, loading, showCount } = useCalendar();
   const days = useMemo(() => byDay(entries), [entries]);
-  const firstUpcoming = days.findIndex((d) => !dayLabel(d.day).past);
+  const labels = useMemo(() => days.map((d) => dayLabel(d.day)), [days]);
+  const todayIndex = labels.findIndex((l) => l.today);
+  const firstUpcoming = labels.findIndex((l) => !l.past);
+  const targetIndex = todayIndex >= 0 ? todayIndex : firstUpcoming > 0 ? firstUpcoming : -1;
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const targetRef = useRef<HTMLElement>(null);
+  const didAutoScroll = useRef(false);
+
+  useEffect(() => {
+    if (didAutoScroll.current || loading || targetIndex <= 0) return;
+    const scroller = scrollerRef.current;
+    const target = targetRef.current;
+    if (!scroller || !target) return;
+    didAutoScroll.current = true;
+    const top = Math.max(0, target.offsetTop - 88);
+    if (top > 0) scroller.scrollTo({ top, behavior: "auto" });
+  }, [loading, targetIndex]);
 
   return (
-    <div className="scroll">
+    <div className="scroll" ref={scrollerRef}>
       <header className="screen-header">
         <div>
           <h1 className="t-title1">Calendar</h1>
@@ -45,10 +62,17 @@ export function Calendar() {
       )}
       <div className="calendar">
         {days.map((d, i) => {
-          const label = dayLabel(d.day);
+          const label = labels[i];
+          const showComingUp = i === firstUpcoming && i > 0 && !label.today;
           return (
-            <section key={d.day} className="calendar-day" data-past={label.past} data-today={label.today}>
-              {i === firstUpcoming && i > 0 && <div className="calendar-now t-micro">Coming up</div>}
+            <section
+              key={d.day}
+              ref={i === targetIndex ? targetRef : undefined}
+              className="calendar-day"
+              data-past={label.past}
+              data-today={label.today}
+            >
+              {showComingUp && <div className="calendar-now t-micro">Coming up</div>}
               <h2 className="calendar-date">
                 <span className="calendar-date-name">{label.name}</span>
                 <span className="calendar-date-day">{label.date}</span>
@@ -69,16 +93,21 @@ export function Calendar() {
 const aired = (v: { released?: string }) => !!v.released && Date.parse(v.released) <= Date.now();
 
 function CalendarItem({ entry: { show, video } }: { entry: CalendarEntry }) {
-  const { navigate } = useRouter();
+  const { navigate } = useNavigation();
+  const isAired = aired(video);
   return (
     <button
       className="calendar-item"
-      onClick={() => navigate({ name: "detail", type: "series", id: show.id, preview: show })}
+      onClick={() => navigate({ name: "detail", type: "series", id: show.id, preview: show, episode: isAired ? video.id : undefined })}
       {...cardMenu(show, episodeEntry(show, video), { episode: true })}
     >
       <span className="calendar-art">
         {/* An episode still to air has no still yet (its link 404s): the show's art, and that too when a still fails. */}
-        <Img src={aired(video) ? video.thumbnail : undefined} fallbacks={[show.background, show.poster]} alt="" />
+        <Img
+          src={isAired ? cardArtUrl(video.thumbnail, "landscape") : undefined}
+          fallbacks={[cardArtUrl(show.background, "landscape"), cardArtUrl(show.poster, "poster")]}
+          alt=""
+        />
       </span>
       <span className="calendar-text">
         <span className="calendar-show">{show.name}</span>

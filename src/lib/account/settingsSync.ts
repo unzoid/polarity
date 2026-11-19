@@ -92,7 +92,27 @@ export function secretsState(space: string): "plain" | "sealed" | "locked" {
 
 /** Profiles whose account holds sealed keys this device couldn't open: Settings → Account asks for the passphrase. */
 const locked = new Set<string>();
-const setLocked = (space: string, yes: boolean) => void (yes ? locked.add(space) : locked.delete(space));
+const lockedListeners = new Set<() => void>();
+function setLocked(space: string, yes: boolean) {
+  if (locked.has(space) === yes) return;
+  if (yes) locked.add(space);
+  else locked.delete(space);
+  for (const l of lockedListeners) l();
+}
+
+/**
+ * Whether `space`'s account keys and add-on links are sealed with a passphrase this device doesn't
+ * have, kept current as sync rounds open them (#470): the add-ons from the account can't be used here until then.
+ */
+export function useSecretsLocked(space: string | null | undefined): boolean {
+  return useSyncExternalStore(onSecretsLockedChange, () => !!space && locked.has(space));
+}
+
+/** Calls `changed` whenever a profile's keys become locked or open; returns how to stop. */
+export function onSecretsLockedChange(changed: () => void): () => void {
+  lockedListeners.add(changed);
+  return () => void lockedListeners.delete(changed);
+}
 
 /**
  * The document the server refused as too large (critique M7), as sent: not tried again until it
@@ -261,14 +281,21 @@ async function saveSynced(changed: Record<string, unknown>, secrets: Secrets | u
 /** Restores still running, by profile: a sync round waits for its profile's (critique H3). */
 const restoring = new Map<string, Promise<void>>();
 
-/** Entering a profile: put back what this device last synced for it. */
-export function restoreSettings(space: string): Promise<void> {
+/**
+ * Entering a profile: put back what this device last synced for it. `before` is whose settings the
+ * store held until now (`keepDeviceSettings`): when it was this profile's (the app started again),
+ * the store is newer than the synced copy, holding changes no round has sent yet (the app was
+ * closed or offline within moments of them, as phones end apps), so it stays and the next round
+ * sends them.
+ */
+export function restoreSettings(space: string, before: string | null = null): Promise<void> {
   const run = (async () => {
     await ready(space);
     const saved = load(space);
     if (!saved) return;
-    const missing = await apply(saved.doc);
     setLocked(space, !!saved.doc.unopened);
+    if (before === space) return;
+    const missing = await apply(saved.doc);
     save(space, { ...saved, missing });
   })().finally(() => {
     if (restoring.get(space) === run) restoring.delete(space);

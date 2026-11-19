@@ -53,7 +53,10 @@ fn field_names_match_contract() {
         id_prefixes: None,
         behavior_hints: None,
     };
-    add("InstalledAddon", keys(&InstalledAddon { manifest_url: "https://a.io/manifest.json".into(), manifest }));
+    add(
+        "InstalledAddon",
+        keys(&InstalledAddon { manifest_url: "https://a.io/manifest.json".into(), manifest, disabled: false }),
+    );
     add(
         "Download",
         keys(&Download {
@@ -82,7 +85,14 @@ fn field_names_match_contract() {
     add("LocalChanges", keys(&LocalChanges { changes: Changes::default(), pulled_at: s("2026-01-01") }));
     add(
         "StreamsResult",
-        keys(&StreamsResult { streams: vec![], failed: vec![], hidden: 0, asked: vec![], ids: vec![] }),
+        keys(&StreamsResult {
+            streams: vec![],
+            failed: vec![],
+            hidden: 0,
+            asked: vec![],
+            ids: vec![],
+            waiting: vec![],
+        }),
     );
     add("TorrentLink", keys(&crate::torrent::TorrentLink { url: "http://127.0.0.1:1/t/1/video.mkv".into(), size: 1 }));
     add("Playable.url", keys(&Playable::Url { url: "https://a.io".into() }));
@@ -107,7 +117,62 @@ fn field_names_match_contract() {
     add("Span", keys(&crate::introdb::Span { start: 0.0, end: 1.0 }));
     add("Segments", keys(&crate::introdb::Segments::default()));
     add("Ratings", keys(&crate::ratings::Ratings::default()));
+    add(
+        "EpisodeRating",
+        keys(&crate::episode_ratings::EpisodeRating { season: 1, episode: 1, rating: 8.0, votes: Some(1) }),
+    );
     add("CmdError", keys(&CmdError::Other("x".into())));
+    add(
+        "EpisodeOrderInfo",
+        keys(&polar_index::EpisodeOrderInfo {
+            id: "aa01".into(),
+            name: "DVD".into(),
+            kind: "dvd".into(),
+            description: s("d"),
+            episode_count: 1,
+            group_count: 1,
+        }),
+    );
+    let group = polar_index::EpisodeOrderGroup { name: "Disc 1".into(), episodes: vec!["tt1:1:1".into()] };
+    add("EpisodeOrderGroup", keys(&group));
+    add(
+        "EpisodeOrder",
+        keys(&polar_index::EpisodeOrder {
+            id: "aa01".into(),
+            name: "DVD".into(),
+            kind: "dvd".into(),
+            groups: vec![group],
+        }),
+    );
+    let preview = polar_addon::MetaPreview {
+        id: "tt0000001".into(),
+        ty: "movie".into(),
+        name: "Film".into(),
+        poster: None,
+        background: None,
+        logo: None,
+        logos: vec![],
+        description: None,
+        release_info: None,
+        imdb_rating: None,
+        genres: vec![],
+        certification: None,
+    };
+    add(
+        "PersonPage",
+        keys(&polar_index::PersonPage {
+            id: 1,
+            name: "P".into(),
+            photo: s("p"),
+            biography: s("b"),
+            born: s("1970-01-01"),
+            died: s("2020-01-01"),
+            birthplace: s("Example Town"),
+            known_for: s("Acting"),
+            acting: vec![preview.clone()],
+            directing: vec![preview],
+        }),
+    );
 
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../contract/app.json");
     let actual = Value::Object(types);

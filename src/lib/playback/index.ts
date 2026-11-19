@@ -9,6 +9,7 @@ export * from "./headers";
 export * from "./languages";
 export * from "./loadingArt";
 export * from "./lookahead";
+export * from "./nowPlaying";
 export * from "./playTarget";
 export * from "./readiness";
 export * from "./resume";

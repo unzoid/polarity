@@ -3,7 +3,8 @@
 # - deps (every push and pull request): cargo-deny holds licences, crate sources and duplicate bans
 #   to deny.toml (licences as docs/licensing.md lists them); OSV-Scanner and `bun audit` look up
 #   advisories for Cargo.lock and the bun.lock files. Only high or critical advisories fail the job
-#   (scripts/advisoryGate.ts); the rest are listed in the job summary.
+#   (scripts/advisoryGate.ts); the rest are listed in the job summary. osv-scanner.toml names the
+#   ones left out for now, each until a date.
 # - codeql (pushes to master, weekly, by hand): TypeScript and Rust; results go to the repository's
 #   Security tab, so this job alone needs security-events: write. Not a pull request check.
 # - fuzz (nightly, by hand): each target in fuzz/ for a few minutes; a crash is kept as an artifact.
@@ -55,6 +56,7 @@ jobs:
           scan-args: |-
             --format=json
             --output=osv.json
+            --config=osv-scanner.toml
             --lockfile=Cargo.lock
             --lockfile=bun.lock
             --lockfile=web/bun.lock
@@ -64,7 +66,7 @@ jobs:
           test -s osv.json || { echo "::error::OSV-Scanner wrote no report"; exit 1; }
           bun scripts/advisoryGate.ts osv.json >> "$GITHUB_STEP_SUMMARY"
       - name: Advisories (bun audit, high and critical)
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high --ignore=GHSA-fc5q-39xc-vjpf # until 2027-01-17, as osv-scanner.toml
 
   codeql:
     name: CodeQL (${{ matrix.language }})

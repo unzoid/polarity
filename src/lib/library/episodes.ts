@@ -1,5 +1,6 @@
 import { isReleased } from "../format";
 import { watchedFraction } from "./watched";
+import { firstInOrder, nextInOrder, type OrderView } from "./episodeOrder";
 import type { Meta, Progress, Video } from "../types";
 
 /** Season numbers with regular seasons first and specials (0) last. */
@@ -18,6 +19,17 @@ export function nextVideo(meta: Meta, videoId: string): Video | undefined {
     .find((v) => (current.season === 0 ? v.season === 0 : v.season !== 0) && isReleased(v));
 }
 
+/** The episode before `videoId`, crossing back into the previous season; specials only from specials. */
+export function previousVideo(meta: Meta, videoId: string): Video | undefined {
+  const i = meta.videos.findIndex((v) => v.id === videoId);
+  if (i < 0) return undefined;
+  const current = meta.videos[i];
+  return meta.videos
+    .slice(0, i)
+    .reverse()
+    .find((v) => (current.season === 0 ? v.season === 0 : v.season !== 0) && isReleased(v));
+}
+
 export interface UpNext {
   video?: Video;
   /** Resume point in seconds, if partially watched. */
@@ -27,11 +39,12 @@ export interface UpNext {
 
 /**
  * What the big button should do. Picks the most recently touched episode:
- * resume it if unfinished, otherwise move on to the one after it.
+ * resume it if unfinished, otherwise move on to the one after it. With an episode `order` chosen
+ * (episodeOrder.ts), "after" and "first" follow that order.
  */
-export function upNext(meta: Meta, progress: Progress[]): UpNext {
+export function upNext(meta: Meta, progress: Progress[], order?: OrderView): UpNext {
   const latest = [...progress].sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  const firstRegular = meta.videos.find((v) => v.season > 0 && isReleased(v)) ?? meta.videos[0];
+  const firstRegular = order ? firstInOrder(order) : (meta.videos.find((v) => v.season > 0 && isReleased(v)) ?? meta.videos[0]);
 
   if (!latest) return { video: firstRegular, kind: "start" };
   const video = meta.videos.find((v) => v.id === latest.videoId);
@@ -42,7 +55,7 @@ export function upNext(meta: Meta, progress: Progress[]): UpNext {
     // Unfinished: resume it, or (barely started) play it again from the top.
     return latest.position > 30 ? { video, resumeAt: latest.position, kind: "resume" } : { video, kind: "next" };
   }
-  const next = nextVideo(meta, video.id);
+  const next = order ? nextInOrder(order, video.id) : nextVideo(meta, video.id);
   return next ? { video: next, kind: "next" } : { video: firstRegular, kind: "start" };
 }
 

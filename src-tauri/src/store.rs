@@ -50,7 +50,7 @@ pub struct Settings {
     pub rating_colors: bool,
     /// How a season's episodes are laid out: "row" (horizontal shelf) or "list".
     pub episode_layout: String,
-    /// Interface font: "inter" (bundled) or "system" (Segoe UI Variable on Windows).
+    /// Interface font: "instrument" (bundled, the default), "inter", … or "system" (Segoe UI Variable on Windows).
     pub ui_font: String,
     /// How subtitles look in the player.
     pub subtitle_style: SubtitleStyle,
@@ -225,12 +225,12 @@ impl Default for Settings {
             anime_subtitle_language: "same".into(),
             seek_step: 10,
             auto_pick_source: true,
-            show_card_titles: true,
-            show_card_details: true,
+            show_card_titles: false,
+            show_card_details: false,
             show_card_ratings: false,
             rating_colors: false,
             episode_layout: "row".into(),
-            ui_font: "inter".into(),
+            ui_font: "instrument".into(),
             subtitle_style: SubtitleStyle::default(),
             autoplay_countdown: 8,
             still_watching_after: 0,
@@ -321,6 +321,9 @@ impl Settings {
 pub struct InstalledAddon {
     pub manifest_url: String,
     pub manifest: Manifest,
+    /// Switched off in Settings → Add-ons: kept, but asked for nothing. This device's own, like the order.
+    #[serde(default)]
+    pub disabled: bool,
 }
 
 /// The space used when nobody is signed in.
@@ -330,7 +333,7 @@ pub const LOCAL_SPACE: &str = "local";
 /// differently. 0 = files from before the field existed.
 pub const VERSION: u32 = 1;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Data {
     /// [`VERSION`] of the build that last wrote the file.
@@ -459,14 +462,12 @@ impl Store {
         &self.path
     }
 
-    /// The file's contents as they should be now, secrets still in: the saver hands them to
-    /// the keychain outside the lock, then writes it compact (the file is rewritten whole, and
-    /// indenting only made that bigger).
-    pub fn snapshot(&self) -> Result<serde_json::Value, String> {
+    /// Clones the in-memory store data under the lock so JSON Value construction happens outside it.
+    pub fn clone_data(&self) -> Result<Data, String> {
         if let Some(problem) = &self.problem {
             return Err(format!("not saved: {problem}"));
         }
-        serde_json::to_value(&self.data).map_err(|e| e.to_string())
+        Ok(self.data.clone())
     }
 }
 

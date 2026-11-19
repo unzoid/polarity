@@ -1,4 +1,4 @@
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient, type UseQueryOptions, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { metaQuery } from "../net/queries";
 import { PRIORITY, type Priority } from "../net/limiter";
@@ -11,6 +11,29 @@ import { borrowsFrom, playedZip } from "./splitParts";
 import { bannerBase } from "./franchiseBanner";
 import { pickTitle } from "./format";
 import { useLinkedImdbs } from "./links";
+
+/**
+ * Runs `useQueries` once per unique `key` among the items that have one, and maps each item back to its
+ * query result (`undefined` while an item isn't ready to ask yet). Keeps `QueriesObserver` free of duplicate
+ * keys when two entries share a franchise/base/IMDb id or are still waiting on an earlier step.
+ */
+function useUniqueQueries<
+  Q extends { queryKey: readonly unknown[]; queryFn: (...args: never[]) => Promise<unknown> },
+  K extends string | number,
+>(
+  entries: readonly ({ key: K; query: () => Q } | undefined)[],
+): (UseQueryResult<Awaited<ReturnType<Q["queryFn"]>>> | undefined)[] {
+  type Data = Awaited<ReturnType<Q["queryFn"]>>;
+  const unique: Q[] = [];
+  const indexByKey = new Map<K, number>();
+  for (const entry of entries) {
+    if (!entry || indexByKey.has(entry.key)) continue;
+    indexByKey.set(entry.key, unique.length);
+    unique.push(entry.query());
+  }
+  const results = useQueries({ queries: unique as unknown as UseQueryOptions<Data>[] });
+  return entries.map((entry) => (entry ? results[indexByKey.get(entry.key)!] : undefined));
+}
 
 /** A banner's picture, logo and small label (lib/anime/franchiseBanner.ts). */
 export interface BannerArt {
@@ -40,26 +63,44 @@ export function useFranchiseBanners(
   const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const list = separate ? [] : (cards ?? []);
   const at = (i: number) => (i === 0 ? first : priority);
-  const media = useQueries({ queries: list.map((c, i) => animeQuery(c.id, pageWhenOpened(c.id, at(i)))) });
-  const walks = useQueries({ queries: list.map((c, i) => seasonsQuery(client, media[i]?.data, pageWhenOpened(c.id, at(i)))) });
-  const ids = [...new Set([...list.map((c) => c.id), ...walks.flatMap((w) => w.data?.seasons.map((s) => s.card.id) ?? [])])];
+  const media = useUniqueQueries(list.map((c, i) => ({ key: c.id, query: () => animeQuery(c.id, pageWhenOpened(c.id, at(i))) })));
+  const walks = useUniqueQueries(
+    list.map((c, i) => ({ key: c.id, query: () => seasonsQuery(client, media[i]?.data, pageWhenOpened(c.id, at(i)), c.id) })),
+  );
+  const ids = [...new Set([...list.map((c) => c.id), ...walks.flatMap((w) => w?.data?.seasons.map((s) => s.card.id) ?? [])])];
   const linked = useLinkedImdbs(ids);
   const title = (t: Parameters<typeof pickTitle>[0]) => pickTitle(t, animeTitles);
-  const bases = list.map((c, i) => (walks[i]?.data ? bannerBase(c, walks[i].data.seasons, linked, title) : undefined));
-  const zips = useQueries({ queries: bases.map((b, i) => ({ ...aniZipQuery(b?.base.id ?? 0, at(i)), enabled: !!b })) });
+  const bases = list.map((c, i) => {
+    const seasons = walks[i]?.data?.seasons;
+    return seasons ? bannerBase(c, seasons, linked, title) : undefined;
+  });
+  const zips = useUniqueQueries(bases.map((b, i) => (b ? { key: b.base.id, query: () => aniZipQuery(b.base.id, at(i)) } : undefined)));
   // Where the base has no link, the id it plays from, asked as its page asks it (#371): through the record it plays from.
   const asks = bases.map((b) => (b?.linked === null ? b.base : undefined));
   const borrowed = asks.map((a, i) => a && borrowsFrom(a, zips[i]?.data));
-  const prequels = useQueries({ queries: borrowed.map((p, i) => ({ ...aniZipQuery(p ?? 0, at(i)), enabled: p !== undefined })) });
-  const played = useQueries({
-    queries: asks.map((a, i) => animeImdbQuery(client, a ?? list[i]!, a && playedZip(a, zips[i]?.data, { data: prequels[i]?.data, failed: !!prequels[i]?.isError }))),
-  });
+  const prequels = useUniqueQueries(
+    borrowed.map((p, i) => (p !== undefined ? { key: p, query: () => aniZipQuery(p, at(i)) } : undefined)),
+  );
+  const played = useUniqueQueries(
+    asks.map((a, i) =>
+      a
+        ? {
+            key: a.id,
+            query: () => animeImdbQuery(client, a, playedZip(a, zips[i]?.data, { data: prequels[i]?.data, failed: !!prequels[i]?.isError })),
+          }
+        : undefined,
+    ),
+  );
   // A lookup that failed counts as none, as on the page.
-  const playedId = (i: number) => (played[i]?.isError ? null : played[i]?.data === undefined ? undefined : (played[i].data?.id ?? null));
+  const playedId = (i: number) => (played[i]?.isError ? null : played[i]?.data === undefined ? undefined : (played[i]?.data?.id ?? null));
   const imdbs = bases.map((b, i) => b && artTitle(b.linked, playedId(i)));
-  const metas = useQueries({
-    queries: imdbs.map((imdb, i) => ({ ...metaQuery(bases[i]?.base.format === "MOVIE" ? "movie" : "series", imdb ?? ""), enabled: !!imdb?.startsWith("tt") })),
-  });
+  const metas = useUniqueQueries(
+    imdbs.map((imdb, i) => {
+      if (!imdb?.startsWith("tt")) return undefined;
+      const type = bases[i]?.base.format === "MOVIE" ? "movie" : "series";
+      return { key: `${type}:${imdb}`, query: () => metaQuery(type, imdb) };
+    }),
+  );
 
   const result = ((): (BannerArt | null | undefined)[] | undefined => {
     if (!cards) return undefined;

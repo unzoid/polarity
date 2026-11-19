@@ -1,5 +1,6 @@
 import { ShortcutSettings } from "../../components/ShortcutSettings";
 import { usePrefs } from "../../lib/settings";
+import { useFormFactor } from "../../lib/ui";
 import { playSound } from "../../tv/sounds";
 import { setTvMode, tvModeAvailable } from "../../tv/tvMode";
 import { ActionRow, Card } from "../../components/settings/rows";
@@ -7,6 +8,7 @@ import { SettingRow } from "../../components/settings/SettingRow";
 
 export function ControlsPage() {
   const prefs = usePrefs();
+  const { touch } = useFormFactor();
 
   return (
     <>
@@ -15,7 +17,7 @@ export function ControlsPage() {
           <>
             <ActionRow
               title="TV mode"
-              caption="A fullscreen interface for the couch, made for a remote or controller."
+              caption="A fullscreen interface for a remote or controller."
               label="Open TV Mode"
               onClick={() => setTvMode(true)}
             />
@@ -30,6 +32,12 @@ export function ControlsPage() {
           <SettingRow id="uiSoundVolume" onChanged={() => playSound("select", { force: true })} />
         )}
       </Card>
+      {/* Phones and tablets: the player's swipes (components/player/useSwipeLevels.ts). */}
+      {touch && (
+        <Card title="Touch">
+          <SettingRow id="swipeGestures" />
+        </Card>
+      )}
       <ShortcutSettings />
     </>
   );

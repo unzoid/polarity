@@ -1,4 +1,4 @@
-import { type QueryClient, useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, type QueryClient, useQueries, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { libraryToggled } from "../library/libraryEvents";
 import { useCallback } from "react";
 import { api } from "../api";
@@ -10,17 +10,44 @@ import { usePrefs } from "../settings/prefs";
 import { keys } from "./queryKeys";
 import { searchMinLength } from "../catalog/searchQuery";
 import { queryClient } from "./queryClient";
-import type { ContentType, MetaPreview, Progress, Settings, StreamsResult } from "../types";
+import { catalogBound, keepWithinLimit, useViewingLimit } from "../catalog/viewingLimit";
+import type { ContentType, MetaPreview, Progress, SearchResults, Settings, StreamsResult } from "../types";
 
 export { keys };
 export { queryClient };
 
 /** `enabled` lets off-screen shelves wait until they're about to be seen. */
 export const useCatalog = (type: ContentType, id: string, genre?: string, enabled = true) =>
-  useQuery({ queryKey: keys.catalog(type, id, genre), queryFn: () => api.catalog(type, id, 0, genre), enabled });
+  useQuery({
+    queryKey: keys.catalog(type, id, genre),
+    queryFn: () => api.catalog(type, id, 0, genre, catalogBound(type)),
+    enabled,
+    select: useWithinLimit((list: MetaPreview[], keep) => keep(list)),
+  });
 
 export const useRecommend = (type: ContentType, id: string, enabled = true) =>
-  useQuery({ queryKey: keys.recommend(type, id), queryFn: () => api.recommend(type, id), enabled, staleTime: 60 * 60_000 });
+  useQuery({
+    queryKey: keys.recommend(type, id),
+    queryFn: () => api.recommend(type, id),
+    enabled,
+    staleTime: 60 * 60_000,
+    select: useWithinLimit((list: MetaPreview[], keep) => keep(list)),
+  });
+
+/**
+ * A query's `select` leaving out titles over the profile's viewing limit (lib/catalog/viewingLimit.ts); what's
+ * cached stays whole, so paging and other readers are unaffected.
+ */
+function useWithinLimit<T>(pick: (data: T, keep: <M extends MetaPreview>(list: M[]) => M[]) => T) {
+  const viewing = useViewingLimit();
+  // `pick` is written inline by each caller: the limit alone decides when the selection changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useCallback((data: T) => (viewing.limit === null ? data : pick(data, (list) => keepWithinLimit(list, viewing))), [viewing]);
+}
+
+/** A person's page (TMDB): who they are and their titles. */
+export const usePerson = (id: number) =>
+  useQuery({ queryKey: keys.person(id), queryFn: () => api.person(id), staleTime: 6 * 60 * 60_000, retry: 1 });
 
 export const useMeta = (type: ContentType, id: string, enabled = true) => useQuery({ ...metaQuery(type, id), enabled });
 
@@ -35,6 +62,32 @@ export const cachedLookup = (qc: QueryClient) => ({
 });
 
 export function useStreams(type: ContentType, videoId: string | undefined) {
+  const select = useStreamsSelect(videoId);
+  return useQuery({
+    ...streamsQuery(type, videoId ?? ""),
+    enabled: !!videoId,
+    select,
+  });
+}
+
+/**
+ * The sources found so far while a video's add-ons are still answering (`waiting` names the rest), for a list
+ * that shows them as they come; undefined before the first answers and once all have. Nothing else should act
+ * on it: a pick waits for every add-on.
+ */
+export function usePartialStreams(type: ContentType, videoId: string | undefined) {
+  const select = useStreamsSelect(videoId);
+  return useQuery({
+    queryKey: keys.streamsPartial(type, videoId ?? ""),
+    // Filled by streamsQuery, never fetched.
+    queryFn: () => null as StreamsResult | null,
+    enabled: false,
+    select: (d) => (d && select ? select(d) : d ?? undefined),
+  }).data ?? undefined;
+}
+
+/** What an anime's sources go through before they're shown (Settings → Anime); undefined for other titles. */
+function useStreamsSelect(videoId: string | undefined) {
   const anime = useIsAnime(videoId);
   const { animeNo4k } = usePrefs();
   const no4k = anime && animeNo4k;
@@ -53,11 +106,7 @@ export function useStreams(type: ContentType, videoId: string | undefined) {
     },
     [no4k],
   );
-  return useQuery({
-    ...streamsQuery(type, videoId ?? ""),
-    enabled: !!videoId,
-    select: anime ? select : undefined,
-  });
+  return anime ? select : undefined;
 }
 
 /**
@@ -66,7 +115,17 @@ export function useStreams(type: ContentType, videoId: string | undefined) {
  */
 export const streamsQuery = (type: ContentType, videoId: string) => ({
   queryKey: keys.streams(type, videoId),
-  queryFn: () => api.streams(type, videoId),
+  queryFn: async () => {
+    const partial = keys.streamsPartial(type, videoId);
+    // A message that comes in after the whole answer is already out of date.
+    let done = false;
+    try {
+      return await api.streams(type, videoId, (so) => void (!done && queryClient.setQueryData(partial, so)));
+    } finally {
+      done = true;
+      queryClient.removeQueries({ queryKey: partial });
+    }
+  },
   staleTime: ({ state }: { state: { data?: StreamsResult } }) => (state.data && state.data.streams.length + (state.data.hidden ?? 0) > 0 ? 10 * 60_000 : 0),
 });
 
@@ -94,15 +153,26 @@ export function useRatings(type: ContentType, id: string) {
   });
 }
 
+/** A show's IMDb episode ratings (the Episode Ratings chart); none until the id is known. */
+export const useImdbEpisodeRatings = (imdbId: string | undefined) =>
+  useQuery({
+    queryKey: keys.episodeRatings(imdbId ?? ""),
+    queryFn: () => api.episodeRatings(imdbId!),
+    enabled: !!imdbId,
+    staleTime: 12 * 60 * 60_000,
+  });
+
 export const useProgress = (metaId: string) =>
   useQuery({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 });
 
 /** Several titles' progress at once, flattened (the Downloads page's watched marks, #15); the same cache as useProgress. */
-export const useProgressOf = (metaIds: string[]) =>
-  useQueries({
-    queries: metaIds.map((metaId) => ({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 })),
+export const useProgressOf = (metaIds: string[]) => {
+  const unique = [...new Set(metaIds)];
+  return useQueries({
+    queries: unique.map((metaId) => ({ queryKey: keys.progress(metaId), queryFn: () => api.progressFor(metaId), staleTime: 0 })),
     combine: flatProgress,
   });
+};
 
 // Outside the hook, so the combined list keeps its identity until a result changes.
 const flatProgress = (results: { data?: Progress[] }[]) => results.flatMap((r) => r.data ?? []);
@@ -119,13 +189,16 @@ export const useAddons = () => useQuery({ queryKey: keys.addons, queryFn: api.ad
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: api.settings, staleTime: Infinity });
 
-export const useSearch = (query: string) =>
-  useQuery({
+export const useSearch = (query: string) => {
+  const select = useWithinLimit((r: SearchResults, keep) => ({ ...r, movies: keep(r.movies), series: keep(r.series) }));
+  return useQuery({
     queryKey: keys.search(query),
     queryFn: () => api.search(query),
     enabled: query.trim().length >= searchMinLength(query.trim()),
-    placeholderData: (prev) => prev, // keep old results on screen while typing
+    placeholderData: keepPreviousData,
+    select,
   });
+};
 
 export function useToggleLibrary() {
   const qc = useQueryClient();
@@ -164,6 +237,9 @@ export const prefetchMeta = (type: ContentType, id: string) =>
   });
 
 export const prefetchStreams = (type: ContentType, videoId: string) => queryClient.prefetchQuery(streamsQuery(type, videoId));
+/** A video's sources, if they've been fetched already (prefetchStreams); never asks the add-ons. */
+export const cachedStreams = (type: ContentType, videoId: string) =>
+  queryClient.getQueryData<StreamsResult>(streamsQuery(type, videoId).queryKey)?.streams;
 
 const preloaded = new Set<string>();
 export function preloadImage(src?: string) {

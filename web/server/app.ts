@@ -54,23 +54,37 @@ function toRelease(gh: GitHubRelease): Release {
 }
 
 let cache: { at: number; release: Release } | null = null;
+let inflight: Promise<Release | null> | null = null;
+
+function refreshRelease(): Promise<Release | null> {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+        headers: { accept: "application/vnd.github+json", "user-agent": "polarity-web" },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
+      const release = toRelease((await res.json()) as GitHubRelease);
+      cache = { at: Date.now(), release };
+      return release;
+    } catch (error) {
+      console.warn("[release] lookup failed:", error);
+      // Serve a stale answer rather than nothing; GitHub rate limits are common.
+      return cache?.release ?? null;
+    } finally {
+      inflight = null;
+    }
+  })();
+  return inflight;
+}
 
 async function latestRelease(): Promise<Release | null> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.release;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "polarity-web" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
-    const release = toRelease((await res.json()) as GitHubRelease);
-    cache = { at: Date.now(), release };
-    return release;
-  } catch (error) {
-    console.warn("[release] lookup failed:", error);
-    // Serve a stale answer rather than nothing; GitHub rate limits are common.
-    return cache?.release ?? null;
+  if (cache) {
+    if (Date.now() - cache.at >= TTL_MS) void refreshRelease();
+    return cache.release;
   }
+  return refreshRelease();
 }
 
 /** A recently closed issue, for the Open source card. Only what the card shows: no author, avatar or body. */

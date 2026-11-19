@@ -12,8 +12,9 @@ import {
   useUpdateDismissed,
   type WhatsNew,
 } from "../lib/updater";
+import { usePresence } from "../lib/ui";
 import { Button, IconButton } from "./ui/Button";
-import { Toast } from "./ui/Toast";
+import { TOAST_OUT_MS, Toast } from "./ui/Toast";
 
 /**
  * The bottom-centre notice for a new version. It steps through the whole flow
@@ -26,40 +27,44 @@ export function UpdateToast({ hidden }: { hidden: boolean }) {
   const [notes, setNotes] = useState(false);
 
   const version = "version" in s ? s.version : null;
-  const visible =
+  const active =
     !hidden &&
     version !== null &&
     dismissed !== version &&
-    (s.phase === "available" || s.phase === "downloading" || s.phase === "ready" || s.phase === "installing");
+    (s.phase === "available" || s.phase === "downloading" || s.phase === "ready" || s.phase === "installing")
+      ? s
+      : null;
+  const { shown, leaving } = usePresence(active, TOAST_OUT_MS);
 
   return (
     <>
-      {visible && (
+      {shown && (
         <Toast
           className="update-toast"
-          data-phase={s.phase}
+          leaving={leaving}
+          data-phase={shown.phase}
           icon={<UpdateIcon />}
           actions={
             <>
-              {(s.phase === "available" || s.phase === "ready") && s.notes && (
+              {(shown.phase === "available" || shown.phase === "ready") && shown.notes && (
                 <Button variant="glass" className="toast-action" onClick={() => setNotes(true)}>
                   What's new
                 </Button>
               )}
-              {s.phase === "available" && (
+              {shown.phase === "available" && (
                 <Button variant="primary" className="toast-action" onClick={() => void downloadUpdate()}>
                   Update
                 </Button>
               )}
-              {s.phase === "ready" && (
+              {shown.phase === "ready" && (
                 <Button variant="primary" className="toast-action" onClick={() => void installUpdate()}>
                   Restart now
                 </Button>
               )}
-              {s.phase !== "installing" && (
+              {shown.phase !== "installing" && (
                 <IconButton
-                  label={s.phase === "ready" ? "Later" : "Dismiss"}
-                  title={s.phase === "ready" ? "Later — it'll wait in the top bar" : "Dismiss"}
+                  label={shown.phase === "ready" ? "Later" : "Dismiss"}
+                  title={shown.phase === "ready" ? "Later: it waits in the top bar" : "Dismiss"}
                   onClick={dismissUpdate}
                 >
                   <Close size={18} />
@@ -68,30 +73,29 @@ export function UpdateToast({ hidden }: { hidden: boolean }) {
             </>
           }
         >
-          {s.phase === "available" && (
+          {shown.phase === "available" && (
             <>
-              <strong>{s.name} is available</strong>
-              <span>You're on an older version.</span>
+              <strong>{shown.name} is available</strong>
             </>
           )}
-          {s.phase === "downloading" && (
+          {shown.phase === "downloading" && (
             <>
-              <strong>Downloading {s.name}…</strong>
-              <span>{s.progress == null ? "Starting" : `${Math.round(s.progress * 100)}%`} · keep watching, it's in the background</span>
+              <strong>Downloading {shown.name}…</strong>
+              <span>{shown.progress == null ? "Starting" : `${Math.round(shown.progress * 100)}%`}</span>
               <span className="update-progress" aria-hidden>
-                <span style={{ transform: `scaleX(${s.progress ?? 0.04})` }} />
+                <span style={{ transform: `scaleX(${shown.progress ?? 0.04})` }} />
               </span>
             </>
           )}
-          {s.phase === "ready" && (
+          {shown.phase === "ready" && (
             <>
-              <strong>{s.name} is ready</strong>
+              <strong>{shown.name} is ready</strong>
               <span>Restart to finish. It takes a few seconds and you'll be right back.</span>
             </>
           )}
-          {s.phase === "installing" && (
+          {shown.phase === "installing" && (
             <>
-              <strong>Installing {s.name}…</strong>
+              <strong>Installing {shown.name}…</strong>
               <span>Polarity will reopen by itself.</span>
             </>
           )}
@@ -166,7 +170,7 @@ export function WhatsNewSheet() {
       open={open && !!info}
       onClose={() => setOpen(false)}
       title={`Updated to Polarity ${info?.version ?? ""}`}
-      subtitle={info ? `From ${info.previous}. Everything you had is still here.` : undefined}
+      subtitle={info ? `From ${info.previous}.` : undefined}
     >
       <div className="whats-new">
         {info?.notes ? <ReleaseNotes text={info.notes} /> : <p>Fixes and improvements.</p>}

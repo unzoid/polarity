@@ -167,12 +167,16 @@ test("Card logos: a logo that doesn't load leaves the name on the art, on the de
 
 test("TitleActions: while what Play would play is unknown, Play is busy, not just greyed out (re-test N4)", async () => {
   const { TitleActions } = await import("../../src/components/title/TitleActions");
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  // The row asks whether a movie's download is under way (it stays in view then): a query, as in the app.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queried = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
   const picker = { play: () => {}, choose: () => {} } as never;
-  const { container, rerender, unmount } = await render(<TitleActions request={undefined} picker={picker} label="Play" loading />);
+  const { container, rerender, unmount } = await render(queried(<TitleActions request={undefined} picker={picker} label="Play" loading />));
   const play = container.querySelector<HTMLButtonElement>(".detail-play")!;
   expect(play.getAttribute("aria-busy")).toBe("true");
   expect(play.title).toBe("Loading…");
-  await rerender(<TitleActions request={undefined} picker={picker} label="Play" playTitle="No episodes to play yet" />);
+  await rerender(queried(<TitleActions request={undefined} picker={picker} label="Play" playTitle="No episodes to play yet" />));
   expect(container.querySelector(".detail-play")!.hasAttribute("aria-busy")).toBe(false);
   await unmount();
 });

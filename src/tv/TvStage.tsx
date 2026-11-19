@@ -7,7 +7,7 @@ import { kindFacts } from "../lib/format";
 import { api } from "../lib/api";
 import { isAnimePreview } from "../lib/anime";
 import { keys } from "../lib/net";
-import { markImageBroken, markImageLoaded, useArtGate } from "../lib/ui";
+import { detailBackdropUrl, markImageBroken, markImageLoaded, useArtGate } from "../lib/ui";
 import type { MetaPreview } from "../lib/types";
 
 /**
@@ -23,8 +23,10 @@ export interface StageEntry {
   pending?: boolean;
 }
 
-const StageSetter = createContext<(entry: StageEntry) => void>(() => {});
-export const useStage = () => useContext(StageSetter);
+const NOOP = () => {};
+const StageSetter = createContext<((entry: StageEntry) => void) | null>(null);
+export const useStage = () => useContext(StageSetter) ?? NOOP;
+export const useHasStage = () => useContext(StageSetter) !== null;
 
 const StageSeed = createContext<(entry: StageEntry, el: HTMLElement) => void>(() => {});
 /**
@@ -79,19 +81,23 @@ export function titleFacts(item: MetaPreview, extra: (string | undefined)[] = []
   ].filter(Boolean);
 }
 
-export function Facts({ facts, className = "" }: { facts: ReactNode[]; className?: string }) {
+export function Facts({ facts, className = "", children }: { facts: ReactNode[]; className?: string; children?: ReactNode }) {
   return (
-    <p className={`tv-facts ${className}`}>
+    <p className={className ? `tv-facts ${className}` : "tv-facts"}>
       {facts.map((f, i) => (
         <span key={i}>{f}</span>
       ))}
+      {children}
     </p>
   );
 }
 
-export function TvStage({ entry }: { entry: StageEntry | null }) {
+/**
+ * The staged title, with what its card didn't carry filled in from its page: Continue Watching and
+ * the Library's history only know the name and art. `loading` while that page is on its way.
+ */
+export function useStagedTitle(entry: StageEntry | null) {
   const item = entry?.item;
-  // Continue Watching only knows the name and art; fill in the rest.
   const meta = useQuery({
     queryKey: keys.meta(item?.type ?? "movie", item?.id ?? ""),
     queryFn: () => api.meta(item!.type, item!.id),
@@ -103,19 +109,29 @@ export function TvStage({ entry }: { entry: StageEntry | null }) {
     const m = !item.description ? meta.data : undefined;
     return { ...m, ...Object.fromEntries(Object.entries(item).filter(([, v]) => v != null)) } as MetaPreview;
   }, [item, meta.data]);
+  return { shown, loading: meta.isLoading };
+}
+
+export function TvStage({ entry }: { entry: StageEntry | null }) {
+  const { shown, loading } = useStagedTitle(entry);
+  const bg = detailBackdropUrl(shown?.background, false);
   // The logo or name waits for the backdrop (#173).
-  const gate = useArtGate(shown?.background);
+  const gate = useArtGate(bg);
 
   return (
     <div className="tv-stage">
-      <TvAmbient src={shown?.background} />
-      <TvBackdrop src={shown?.background} className="tv-stage-art" />
+      <TvAmbient src={bg} />
+      <TvBackdrop src={bg} className="tv-stage-art" />
       {shown && (
         <div key={shown.id} className="tv-stage-info" aria-live="polite" {...gate}>
-          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-stage" pending={meta.isLoading || !!entry?.pending} />
-          {entry?.kicker && <p className="tv-stage-kicker">{entry.kicker}</p>}
-          <Facts facts={titleFacts(shown)} />
-          {shown.description && <p className="tv-stage-description">{shown.description}</p>}
+          <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={bg} look="tv-stage" pending={loading || !!entry?.pending} />
+          {entry?.kicker && <p className="tv-stage-kicker art-after">{entry.kicker}</p>}
+          <Facts facts={titleFacts(shown)} className="art-after" />
+          {(shown.description || loading || entry?.pending) && (
+            <p className="tv-stage-description art-after" data-loading={(!shown.description && (loading || !!entry?.pending)) || undefined}>
+              {shown.description}
+            </p>
+          )}
         </div>
       )}
     </div>

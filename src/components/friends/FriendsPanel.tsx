@@ -125,7 +125,7 @@ export function FriendsBody({ inDialog = true }: { inDialog?: boolean }) {
       {incoming.length > 0 && (
         <Section title="Requests">
           {incoming.map((e) => (
-            <Row key={e.id} entry={e} line="Wants to be friends" actions={<RequestActions entry={e} />} />
+            <Row key={e.id} entry={e} line="Wants to be friends" actions={(onError) => <RequestActions entry={e} onError={onError} />} />
           ))}
         </Section>
       )}
@@ -138,14 +138,14 @@ export function FriendsBody({ inDialog = true }: { inDialog?: boolean }) {
       {sent.length > 0 && (
         <Section title="Sent">
           {sent.map((e) => (
-            <Row key={e.id} entry={e} line="Request sent" actions={<Act label="Withdraw" run={() => friends.remove(e.id)} />} />
+            <Row key={e.id} entry={e} line="Request sent" actions={(onError) => <Act label="Withdraw" run={() => friends.remove(e.id)} onError={onError} />} />
           ))}
         </Section>
       )}
       {blocked.length > 0 && (
         <Section title="Blocked">
           {blocked.map((e) => (
-            <Row key={e.id} entry={e} line="Blocked" actions={<Act label="Unblock" run={() => friends.unblock(e.id)} />} />
+            <Row key={e.id} entry={e} line="Blocked" actions={(onError) => <Act label="Unblock" run={() => friends.unblock(e.id)} onError={onError} />} />
           ))}
         </Section>
       )}
@@ -188,6 +188,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /** This profile's code, to read out or copy. */
 function OwnCode({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const timer = useRef<number>(undefined);
   useEffect(() => () => window.clearTimeout(timer.current), []);
   const copy = () => {
@@ -198,36 +199,48 @@ function OwnCode({ code }: { code: string }) {
     });
   };
   return (
-    <div className="friends-code-row">
-      <div>
-        <span className="party-kicker">Your friend code</span>
-        <div className="friends-code tabular" aria-label={`Friend code ${code.split("").join(" ")}`}>
-          {formatFriendCode(code)}
+    <>
+      <div className="friends-code-row">
+        <div>
+          <span className="party-kicker">Your friend code</span>
+          <div className="friends-code tabular" aria-label={`Friend code ${code.split("").join(" ")}`}>
+            {formatFriendCode(code)}
+          </div>
+        </div>
+        <div className="friends-code-actions">
+          {/* The code is the lead here: copying it is a quiet icon beside it, a check for a moment once done. */}
+          <button
+            type="button"
+            className={iconButtonClass("plain")}
+            aria-label={copied ? "Copied" : "Copy friend code"}
+            title={copied ? "Copied" : "Copy friend code"}
+            onClick={copy}
+          >
+            <SwapIcon state={copied ? "copied" : "copy"}>{copied ? <Check size={18} /> : <Copy size={18} />}</SwapIcon>
+          </button>
+          <MenuRoot>
+            <MenuTrigger className={iconButtonClass("plain")} aria-label="Friend code options">
+              <More size={18} />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem
+                onClick={() => {
+                  setError(null);
+                  void friends.newCode().catch((e) => setError(errorMessage(e)));
+                }}
+              >
+                New Code (the old one stops working)
+              </MenuItem>
+            </MenuPopup>
+          </MenuRoot>
         </div>
       </div>
-      <div className="friends-code-actions">
-        {/* The code is the lead here: copying it is a quiet icon beside it, a check for a moment once done. */}
-        <button
-          type="button"
-          className={iconButtonClass("plain")}
-          aria-label={copied ? "Copied" : "Copy friend code"}
-          title={copied ? "Copied" : "Copy friend code"}
-          onClick={copy}
-        >
-          <SwapIcon state={copied ? "copied" : "copy"}>{copied ? <Check size={18} /> : <Copy size={18} />}</SwapIcon>
-        </button>
-        <MenuRoot>
-          <MenuTrigger className={iconButtonClass("plain")} aria-label="Friend code options">
-            <More size={18} />
-          </MenuTrigger>
-          <MenuPopup align="end">
-            <MenuItem onClick={() => void friends.newCode().catch((e) => console.warn("[friends] new code:", errorMessage(e)))}>
-              New Code (the old one stops working)
-            </MenuItem>
-          </MenuPopup>
-        </MenuRoot>
-      </div>
-    </div>
+      {error && (
+        <p className="friends-code-error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -285,7 +298,20 @@ function AddFriend() {
   );
 }
 
-function Row({ entry, line, online, actions }: { entry: FriendEntry; line: string; online?: boolean; actions: React.ReactNode }) {
+type ErrorSink = (msg: string | null) => void;
+
+function Row({
+  entry,
+  line,
+  online,
+  actions,
+}: {
+  entry: FriendEntry;
+  line: string;
+  online?: boolean;
+  actions: (onError: ErrorSink) => React.ReactNode;
+}) {
+  const [error, setError] = useState<string | null>(null);
   return (
     <li className="friends-row" data-online={online || undefined}>
       <span className="friends-face">
@@ -295,13 +321,28 @@ function Row({ entry, line, online, actions }: { entry: FriendEntry; line: strin
         <strong>{entry.name}</strong>
         <span>{line}</span>
       </span>
-      <span className="friends-actions">{actions}</span>
+      <span className="friends-actions">{actions(setError)}</span>
+      {error && (
+        <span className="friends-row-error" role="alert">
+          {error}
+        </span>
+      )}
     </li>
   );
 }
 
-/** A button that runs a change and shows its error, if any, in the console (the list says the rest). */
-function Act({ label, run, variant = "glass" }: { label: string; run: () => Promise<unknown>; variant?: "glass" | "primary" }) {
+/** A button that runs a change and surfaces its error inline under the row. */
+function Act({
+  label,
+  run,
+  variant = "glass",
+  onError,
+}: {
+  label: string;
+  run: () => Promise<unknown>;
+  variant?: "glass" | "primary";
+  onError: ErrorSink;
+}) {
   const [busy, setBusy] = useState(false);
   return (
     <Button
@@ -310,8 +351,9 @@ function Act({ label, run, variant = "glass" }: { label: string; run: () => Prom
       busy={busy}
       onClick={() => {
         setBusy(true);
+        onError(null);
         run()
-          .catch((e) => console.warn("[friends]", errorMessage(e)))
+          .catch((e) => onError(errorMessage(e)))
           .finally(() => setBusy(false));
       }}
     >
@@ -320,26 +362,29 @@ function Act({ label, run, variant = "glass" }: { label: string; run: () => Prom
   );
 }
 
-function RequestActions({ entry }: { entry: FriendEntry }) {
+function RequestActions({ entry, onError }: { entry: FriendEntry; onError: ErrorSink }) {
   return (
     <>
-      <Act label="Accept" variant="primary" run={() => friends.respond(entry.id, true)} />
-      <Act label="Decline" run={() => friends.respond(entry.id, false)} />
-      <MoreMenu entry={entry} remove={false} />
+      <Act label="Accept" variant="primary" run={() => friends.respond(entry.id, true)} onError={onError} />
+      <Act label="Decline" run={() => friends.respond(entry.id, false)} onError={onError} />
+      <MoreMenu entry={entry} remove={false} onError={onError} />
     </>
   );
 }
 
-function MoreMenu({ entry, remove }: { entry: FriendEntry; remove: boolean }) {
-  const warn = (e: unknown) => console.warn("[friends]", errorMessage(e));
+function MoreMenu({ entry, remove, onError }: { entry: FriendEntry; remove: boolean; onError: ErrorSink }) {
+  const run = (fn: () => Promise<unknown>) => {
+    onError(null);
+    void fn().catch((e) => onError(errorMessage(e)));
+  };
   return (
     <MenuRoot>
       <MenuTrigger className={iconButtonClass("plain")} aria-label={`More for ${entry.name}`}>
         <More size={18} />
       </MenuTrigger>
       <MenuPopup align="end">
-        {remove && <MenuItem onClick={() => void friends.remove(entry.id).catch(warn)}>Remove Friend</MenuItem>}
-        <MenuItem onClick={() => void friends.block(entry.id).catch(warn)}>Block</MenuItem>
+        {remove && <MenuItem onClick={() => run(() => friends.remove(entry.id))}>Remove Friend</MenuItem>}
+        <MenuItem onClick={() => run(() => friends.block(entry.id))}>Block</MenuItem>
       </MenuPopup>
     </MenuRoot>
   );
@@ -354,57 +399,48 @@ function FriendRow({ entry, presence }: { entry: FriendEntry; presence: FriendPr
       entry={entry}
       line={friendStatus(presence)}
       online={!!presence}
-      actions={
+      actions={(onError) => (
         <>
-          {theirs && theirs !== party?.code && <JoinButton party={theirs} />}
-          {mine && presence && theirs !== mine && <InviteButton id={entry.id} />}
-          <MoreMenu entry={entry} remove />
+          {theirs && theirs !== party?.code && <JoinButton party={theirs} onError={onError} />}
+          {mine && presence && theirs !== mine && <InviteButton id={entry.id} onError={onError} />}
+          <MoreMenu entry={entry} remove onError={onError} />
         </>
-      }
+      )}
     />
   );
 }
 
 /** Joins a friend's party: the player comes up once the host has let this profile in. */
-function JoinButton({ party }: { party: string }) {
+function JoinButton({ party, onError }: { party: string; onError: ErrorSink }) {
   const { profile } = useAccount();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   if (!profile) return null;
   return (
-    <>
-      <Button
-        variant="primary"
-        size="sm"
-        busy={busy}
-        title={error ?? undefined}
-        onClick={() => {
-          setBusy(true);
-          setError(null);
-          joinParty(party, profile).then(
-            () => {
-              setBusy(false);
-              setFriendsOpen(false);
-            },
-            (e: Error) => {
-              setBusy(false);
-              setError(e.message);
-            },
-          );
-        }}
-      >
-        Join
-      </Button>
-      {error && (
-        <span className="friends-row-error" role="alert">
-          {error}
-        </span>
-      )}
-    </>
+    <Button
+      variant="primary"
+      size="sm"
+      busy={busy}
+      onClick={() => {
+        setBusy(true);
+        onError(null);
+        joinParty(party, profile).then(
+          () => {
+            setBusy(false);
+            setFriendsOpen(false);
+          },
+          (e: unknown) => {
+            setBusy(false);
+            onError(errorMessage(e));
+          },
+        );
+      }}
+    >
+      Join
+    </Button>
   );
 }
 
-function InviteButton({ id }: { id: string }) {
+function InviteButton({ id, onError }: { id: string; onError: ErrorSink }) {
   const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
   useEffect(() => {
     if (state !== "sent") return;
@@ -419,10 +455,11 @@ function InviteButton({ id }: { id: string }) {
       disabled={state === "sent"}
       onClick={() => {
         setState("busy");
+        onError(null);
         friends.invite(id).then(
           () => setState("sent"),
           (e) => {
-            console.warn("[friends] invite:", errorMessage(e));
+            onError(errorMessage(e));
             setState("idle");
           },
         );
@@ -435,6 +472,7 @@ function InviteButton({ id }: { id: string }) {
 
 /** An invite into a friend's party: Join, or let it go. */
 export function InviteRow({ name, avatar, party, onDismiss }: { name: string; avatar: string; party: string; onDismiss: () => void }) {
+  const [error, setError] = useState<string | null>(null);
   return (
     <li className="friends-row" data-online>
       <span className="friends-face">
@@ -445,11 +483,16 @@ export function InviteRow({ name, avatar, party, onDismiss }: { name: string; av
         <span>Invited you to a watch party</span>
       </span>
       <span className="friends-actions">
-        <JoinButton party={party} />
+        <JoinButton party={party} onError={setError} />
         <Button variant="glass" size="sm" onClick={onDismiss}>
           Not Now
         </Button>
       </span>
+      {error && (
+        <span className="friends-row-error" role="alert">
+          {error}
+        </span>
+      )}
     </li>
   );
 }

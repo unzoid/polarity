@@ -67,10 +67,14 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
       <h3>Browse</h3>
       <ul>
         <li>Home with a featured hero, Continue Watching and trending rows</li>
+        <li>Hide titles you've watched, or any title, from Home and browsing; clear several from Continue Watching at once</li>
         <li>Series and Movies pages, and browsing by genre</li>
         <li>An Anime section with its own search, details and episode lists</li>
         <li>Search with recent searches</li>
         <li>IMDb ratings on cards and title pages, and trailers on the title backdrop</li>
+        <li>Age ratings on title pages, and a limit that hides titles rated above an age</li>
+        <li>Pages for the cast and directors with their other titles, and a title's extras such as featurettes and clips (with a TMDB key)</li>
+        <li>A show's episode ratings season by season, in one table</li>
         <li>A calendar built from the shows in your library and the ones you're watching</li>
         <li>Notifications when a show you follow has a new episode or season, or a download finishes (off until you turn them on)</li>
       </ul>
@@ -82,12 +86,15 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
         <li>Plays most files with mpv, inside the app window (Windows, macOS)</li>
         <li>Source, subtitles, audio and speed from the player bar</li>
         <li>Episodes in the player, and a Next Episode button</li>
+        <li>Shows in another episode order than aired (DVD, absolute, story arcs), where TMDB lists one</li>
         <li>Skip intros and recaps, and skip filler episodes in anime</li>
         <li>Subtitle, sound and picture settings that apply straight away, even mid-video</li>
         <li>Black bars inside the picture cropped away with mpv, if you turn it on</li>
         <li>Source filters, a check of each stream before it plays, and what each source carries</li>
         <li>Video files on your computer, with the rest of their folder as episodes</li>
         <li>Resume where you left off, and AirPlay on macOS</li>
+        <li>Paused for a moment, the title, its overview and cast over the dimmed picture</li>
+        <li>With Trakt or Simkl linked, a card to rate a film or show when you finish it</li>
       </ul>
     </td>
   </tr>
@@ -97,7 +104,11 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
       <h3>Library</h3>
       <ul>
         <li>Watchlist, history and your own playlists</li>
+        <li>Search, filter and sort your saved and watched titles by type, status, genre, year and rating</li>
+        <li>Export your library and history to a file, and import it on another device or profile</li>
         <li>Downloads to watch later, a single episode or a whole season</li>
+        <li>Downloads to watch later, a single episode or a whole season, in the folder you choose</li>
+        <li>Keep the next episodes of a show downloaded as you watch (while the app is open)</li>
         <li>A right-click menu on any card for quick actions</li>
       </ul>
     </td>
@@ -106,6 +117,7 @@ and on Linux as an AppImage, the app updates itself when a new version is out.
       <h3>Together</h3>
       <ul>
         <li>Optional accounts and profiles with their own avatars, synced between your devices</li>
+        <li>A PIN on a profile, and a viewing limit kept on the profile that only someone with a parent's PIN can change</li>
         <li>Watch parties that keep everyone's player in step, with a code to join and host controls</li>
         <li>Show on Discord that you're watching (the default, desktop), what you're watching, or nothing, with a button to watch the same title, and Discord's own Join for your watch party</li>
         <li>TV mode for the couch, with a controller or the arrow keys</li>

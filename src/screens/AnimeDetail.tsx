@@ -36,9 +36,11 @@ import {
 } from "../lib/anime";
 import { useMeta, useProgressOf } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { useFoldSnap, useFormFactor, usePageTogether } from "../lib/ui";
+import { detailBackdropUrl, useFoldSnap, useFormFactor, usePageTogether } from "../lib/ui";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
-import { DetailArt } from "../components/DetailArt";
+import { DetailArt, DetailFade } from "../components/DetailArt";
+import { EdgeBlur } from "../components/EdgeBlur";
+import { useDarkHero, useShowDarkHero } from "../components/title/darkHero";
 
 /**
  * An anime's page, built from AniList with ani.zip filling in episode titles,
@@ -56,7 +58,8 @@ import { DetailArt } from "../components/DetailArt";
  * among the related titles.
  */
 export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
-  const { animeSeparateEntries: separate, animeTitles } = usePrefs();
+  const { animeSeparateEntries: separate, animeTitles, pageBackdrop, pageBackdropIntensity } = usePrefs();
+  const bgIntensity = Math.min(1, Math.max(0.1, pageBackdropIntensity / 100));
   const [activeId, setActiveId] = useState(id);
   const { data: opened } = useAnime(id);
   const { data: walk, isPending: walking } = useAnimeSeasons(separate ? undefined : opened);
@@ -75,7 +78,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const shown: Card | undefined = anime ?? seasons?.find((s) => s.card.id === activeId)?.card ?? (activeId === id ? preview : loaded);
 
   const scroller = useRef<HTMLDivElement>(null);
-  useFoldSnap(scroller, !!shown);
+  useFoldSnap(scroller, !!shown && pageBackdrop);
   // A phone's page scrolls as one, the art at its top (Detail.tsx).
   const phone = useFormFactor().form === "phone";
 
@@ -123,7 +126,6 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   // covers the whole franchise and its trailer is the base title's, so only on that entry.
   const root = useRef<HTMLDivElement>(null);
   const onTop = usePageOnTop(root);
-  const [scrolledAway, setScrolledAway] = useState(false);
   const bigTrailer = !!useTrailerOpen();
   // What the hero finds is kept with the entry it's for, so an answer for the entry it showed before doesn't count.
   const heroId = source.hero;
@@ -140,7 +142,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const franchiseImdb = first && kept.current?.first === first.id ? kept.current.imdb : resolved;
   // A grouped page's trailer is the base title's on every tab, as its top is (#327).
   const trailerId = found ? (firstKnown ? franchiseImdb : undefined) : firstEntry ? imdb : undefined;
-  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, { active: onTop, paused: scrolledAway || bigTrailer });
+  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, { active: onTop, paused: bigTrailer, scroller });
   const { data: meta, isLoading: metaLoading } = useMeta(
     first?.format === "MOVIE" ? "movie" : "series",
     franchiseImdb ?? "",
@@ -149,6 +151,9 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
 
   // On a phone the page comes in whole, as a show's does (Detail.tsx).
   const together = usePageTogether(!!anime || isError);
+  const darkHero = useDarkHero();
+  const top = useRef<HTMLDivElement>(null);
+  useShowDarkHero(darkHero && onTop && !!shown, top);
 
   if (isError && !shown) return <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>;
   if (!shown)
@@ -160,16 +165,45 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
       <DetailPending />
     );
 
-  const art = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
+  const rawArt = franchiseArt({ imdb: franchiseImdb, meta, metaLoading, first: animeArt(first ?? shown, firstZip), firstLoading: !!first && firstZipPending });
+  const art = { ...rawArt, background: detailBackdropUrl(rawArt.background, phone) ?? rawArt.background };
+  const coverFallbacks = [
+    meta?.poster,
+    first?.coverImage.extraLarge,
+    first?.coverImage.large,
+    shown.coverImage.extraLarge,
+    shown.coverImage.large,
+  ].filter((u): u is string => !!u);
   const franchise = seasons && { seasons, active: activeId, select: setActiveId, loading: seasonsLoading, order: found && walk?.order };
+  const pinnedBackdrop = !phone && pageBackdrop;
   const backdrop = (
     <DetailArt src={art.background}>
-      <Img src={art.background} alt="" loading="eager" className="detail-bg-sharp" />
+      <Img src={art.background} alt="" loading="eager" fetchPriority="high" className="detail-bg-sharp" />
       {trailer.node}
-      <Img src={art.background} alt="" loading="eager" className="detail-bg-blur" />
+      {/* No backdrop (or it fails): the cover, blurred, rather than plain black. */}
+      <Img src={art.background} fallbacks={coverFallbacks} alt="" loading="eager" className="detail-bg-blur" />
+      {!pinnedBackdrop && <DetailFade />}
       <div className="detail-bg-scrim" />
     </DetailArt>
   );
+  const hero =
+    heroFranchise && base ? (
+      <AnimeHero
+        item={base.card}
+        anime={baseAnime}
+        logo={art.logo}
+        logos={art.logos}
+        logoPending={art.pending}
+        background={art.background}
+        fallbacks={coverFallbacks}
+        name={title(base.card.title)}
+        onImdb={onImdb}
+        trailer={trailer}
+        franchise={heroFranchise}
+      />
+    ) : (
+      <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} logoPending={art.pending} background={art.background} fallbacks={coverFallbacks} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+    );
 
   return (
     <div
@@ -180,35 +214,41 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
         together.ref(node);
       }}
       data-trailer={trailer.visible}
+      data-page-backdrop={pageBackdrop ? "on" : "off"}
       data-ready={phone ? together.state : undefined}
-      style={{ "--cover": shown.coverImage.color ?? undefined } as React.CSSProperties}
+      style={
+        {
+          "--cover": shown.coverImage.color ?? undefined,
+          "--detail-bg-intensity": String(bgIntensity),
+        } as React.CSSProperties
+      }
     >
       {phone && <DetailSkeleton />}
-      {!phone && backdrop}
+      {phone && pageBackdrop && (
+        <div className="detail-bg-ambient" aria-hidden>
+          <Img src={art.background} fallbacks={coverFallbacks} alt="" loading="eager" className="detail-bg-blur" />
+        </div>
+      )}
+      {pinnedBackdrop && backdrop}
       <div
         className="scroll detail-scroll"
         ref={scroller}
-        onScroll={(e) => setScrolledAway(e.currentTarget.scrollTop > e.currentTarget.clientHeight * 0.25)}
       >
-        {phone && backdrop}
-        {heroFranchise && base ? (
-          <AnimeHero
-            item={base.card}
-            anime={baseAnime}
-            logo={art.logo}
-            logos={art.logos}
-            logoPending={art.pending}
-            background={art.background}
-            name={title(base.card.title)}
-            onImdb={onImdb}
-            trailer={trailer}
-            franchise={heroFranchise}
-          />
+        {/* The art and the hero share one box, as on a show's page (Detail.tsx). */}
+        {darkHero ? (
+          <div className="detail-top scheme-dark" ref={top}>
+            {backdrop}
+            {hero}
+          </div>
         ) : (
-          <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} logoPending={art.pending} background={art.background} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+          <>
+            {!pinnedBackdrop && backdrop}
+            {hero}
+          </>
         )}
         {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} />}
       </div>
+      {pinnedBackdrop && <EdgeBlur className="detail-fold" />}
     </div>
   );
 }
@@ -233,7 +273,7 @@ function Body({ anime, franchise, switching }: { anime: Anime; franchise?: Franc
         </section>
       )}
       <AnimeListPanels key={`list-${anime.id}`} anime={anime} />
-      {anime.characters.edges.length > 0 && <AnimeCharacters anime={anime} />}
+      {(anime.characters.edges.length > 0 || anime.staff.edges.length > 0) && <AnimeCharacters anime={anime} />}
       <h2 className="t-title2 anime-section-title">Details</h2>
       <AnimeDetails anime={anime} />
       {hasRelated && <AnimeRelated anime={anime} franchise={franchise} />}

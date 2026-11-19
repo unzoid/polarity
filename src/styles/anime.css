@@ -428,7 +428,10 @@
   padding: 0 var(--gutter) 3rem var(--content-start);
 }
 .anime-characters-wrap[data-expanded="false"] {
-  padding-bottom: 0;
+  padding-bottom: 0.5rem;
+}
+.anime-characters-wrap[data-expanded="false"] .anime-cast-heading {
+  margin-bottom: 0;
 }
 .anime-cast-heading {
   display: flex;

@@ -1,5 +1,5 @@
-import { cloneElement, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type Ref } from "react";
-import { useArtGate, useNameWait } from "../../lib/ui";
+import { cloneElement, useMemo, useState, type HTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode, type Ref } from "react";
+import { cardArtUrl, cardLogoUrl, useArtGate, useNameWait } from "../../lib/ui";
 import { Img } from "../Img";
 import { TitleLogo } from "../TitleLogo";
 import { Skeleton } from "../ui/Skeleton";
@@ -59,11 +59,16 @@ export function Card({
   ref,
   ...root
 }: CardProps) {
-  const gate = useArtGate(art, artFallbacks);
+  const sizedArtUrl = cardArtUrl(art, shape);
+  const sizedFallbacks = useMemo(
+    () => artFallbacks?.map((u) => cardArtUrl(u, shape)).filter((u): u is string => !!u),
+    [artFallbacks, shape],
+  );
+  const gate = useArtGate(sizedArtUrl, sizedFallbacks);
   const body = (
     <>
       <div className={frameClass ? `card-frame ${frameClass}` : "card-frame"} {...gate}>
-        <CardArt src={art} fallbacks={artFallbacks} fallback={fallback} />
+        <CardArt src={sizedArtUrl} fallbacks={sizedFallbacks} fallback={fallback} />
         {children}
         {actions}
       </div>
@@ -110,7 +115,7 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
   const { shown, onError } = useCardArt(src);
   return (
     <>
-      {shown && <Img src={shown} fallbacks={fallbacks} alt="" className="card-img" onFail={onError} />}
+      {shown && <Img src={shown} fallbacks={fallbacks} alt="" fetchPriority="low" className="card-img" onFail={onError} />}
       {!shown && fallback}
     </>
   );
@@ -121,17 +126,35 @@ export function CardArt({ src, fallbacks, fallback }: { src?: string; fallbacks?
  * `logos` are the title's other logos, `logo` first: the first shaped like a logo that reads is drawn (TitleLogo).
  * While `pending` (the logo isn't known yet) neither shows, for at most `NAME_WAIT` (#343).
  */
-export function ArtTitle({ name, logo, logos, pending }: { name: string; logo?: string; logos?: string[]; pending?: boolean }) {
+export function ArtTitle({
+  name,
+  logo,
+  logos,
+  pending,
+  decorative,
+}: {
+  name: string;
+  logo?: string;
+  logos?: string[];
+  pending?: boolean;
+  /** Hidden from screen readers when `.card-title` already names the card button. */
+  decorative?: boolean;
+}) {
   return (
     <>
-      <div className="card-art-scrim art-after" />
+      <div className="card-art-scrim art-after" aria-hidden />
       <LogoOrName
         logo={logo}
         logos={logos}
         pending={pending}
         alt={name}
+        decorative={decorative}
         logoClass="card-logo"
-        name={<span className="card-art-title t-title2 art-after">{name}</span>}
+        name={
+          <span className="card-art-title t-title2 art-after" aria-hidden={decorative || undefined}>
+            {name}
+          </span>
+        }
       />
     </>
   );
@@ -146,6 +169,7 @@ export function LogoOrName({
   logos,
   pending = false,
   alt,
+  decorative,
   logoClass,
   name,
 }: {
@@ -153,20 +177,38 @@ export function LogoOrName({
   logos?: string[];
   pending?: boolean;
   alt: string;
+  decorative?: boolean;
   logoClass: string;
   name: ReactElement<HTMLAttributes<HTMLElement>>;
 }) {
-  const { shown, onError } = useCardArt(logo);
-  const waiting = useNameWait(pending && !logo, alt);
-  if (shown) return <TitleLogo src={shown} logos={logos} alt={alt} className={`${logoClass} art-after`} onFail={onError} />;
+  const isCardLogo = logoClass === "card-logo" || logoClass === "tv-card-logo";
+  const sizedLogo = isCardLogo ? cardLogoUrl(logo) : logo;
+  const sizedLogos = useMemo(
+    () => (isCardLogo ? logos?.map((u) => cardLogoUrl(u) ?? u) : logos),
+    [isCardLogo, logos],
+  );
+  const { shown, onError } = useCardArt(sizedLogo);
+  const waiting = useNameWait(pending && !sizedLogo, alt);
+  if (shown)
+    return (
+      <TitleLogo
+        src={shown}
+        logos={sizedLogos}
+        alt={decorative ? "" : alt}
+        aria-hidden={decorative || undefined}
+        className={`${logoClass} art-after`}
+        onFail={onError}
+      />
+    );
   return waiting ? cloneElement(name, { "data-name-wait": "" } as HTMLAttributes<HTMLElement>) : name;
 }
 
 /** A stripe along the bottom of the art for how far in you are (0–1). */
 export function ProgressBar({ fraction }: { fraction: number }) {
+  const clamped = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0;
   return (
     <div className="progress-track">
-      <div className="progress-fill" style={{ transform: `scaleX(${fraction})` }} />
+      <div className="progress-fill" style={{ transform: `scaleX(${clamped})` }} />
     </div>
   );
 }

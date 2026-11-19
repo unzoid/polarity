@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -23,6 +24,8 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.widget.FrameLayout
+import androidx.activity.BackEventCompat
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -45,6 +48,9 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     keepAboveKeyboard()
+    // Makes the app's own folder on each storage volume (an SD card), which downloads may be moved to
+    // without a storage permission (downloads_volumes in src-tauri/src/downloads.rs lists them).
+    runCatching { getExternalFilesDirs(null) }
     launchNote = intent?.getStringExtra(Notes.EXTRA)
     // Recreated (turned, resized): the link that started it was already handed over.
     if (savedInstanceState == null) IncomingLinks.offer(intent)
@@ -81,8 +87,58 @@ class MainActivity : TauriActivity() {
     webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('polar-deep-link', { detail: $links }))", null)
   }
 
+  // Android 14 and later's back gesture, step by step into the page's main frame as `polar-back` events
+  // (src/lib/platform/back.ts onPredictiveBack, #483), so the page moves with the finger. On only while the page
+  // hears it; it then takes every Back, a press too, ahead of Tauri's back button event (AppPlugin), which has
+  // no steps. Off, Back goes to Tauri's callback as before. Android 13 and older send only the press.
+  private val predictiveBack = object : OnBackPressedCallback(false) {
+    private var moving = false
+
+    override fun handleOnBackStarted(backEvent: BackEventCompat) {
+      moving = true
+      sendBack("begin", backEvent.progress)
+    }
+
+    override fun handleOnBackProgressed(backEvent: BackEventCompat) {
+      if (moving) sendBack("move", backEvent.progress)
+    }
+
+    override fun handleOnBackCancelled() {
+      if (moving) sendBack("cancel", 0f)
+      moving = false
+    }
+
+    override fun handleOnBackPressed() {
+      moving = false
+      sendBack("back", 1f)
+    }
+  }
+
+  private fun sendBack(phase: String, progress: Float) {
+    val step = JSONObject().put("phase", phase).put("progress", progress.toDouble())
+    webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('polar-back', { detail: $step }))", null)
+  }
+
+  fun setPredictiveBack(on: Boolean) {
+    predictiveBack.isEnabled = on
+    if (on) putPredictiveBackOnTop()
+  }
+
+  // The dispatcher asks the callback added last first. Tauri's is tied to the activity's lifecycle, so it is added
+  // again each time the activity starts: this one goes back above it once the activity is resumed.
+  private fun putPredictiveBackOnTop() {
+    predictiveBack.remove()
+    onBackPressedDispatcher.addCallback(predictiveBack)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    if (predictiveBack.isEnabled) putPredictiveBackOnTop()
+  }
+
   // The torrent engine never runs unseen (#207, src-tauri/src/torrent.rs): after half a minute in the
-  // background it stops, whatever is playing. Coming back sooner keeps it. No foreground service.
+  // background it stops, whatever is playing. Coming back sooner keeps it. The playback service (#461,
+  // PlaybackService.kt) keeps the app running for mpv's sound, not for the engine.
   private val background = Handler(Looper.getMainLooper())
   private val stopTorrents = Runnable { TorrentEngine.background() }
 
@@ -181,11 +237,27 @@ open class PolarDevice(private val context: Context, private val tv: Boolean) {
   // Nothing is shared after playback while battery saver is on (#207).
   @JavascriptInterface
   fun batterySaver(): Boolean = context.getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+
+  // Where the player's brightness swipe starts (src/lib/platform/brightness.ts), 0 to 1: the level the player set on
+  // this window, else the system's (readable without a permission; its scale is 0 to 255 on most devices).
+  @JavascriptInterface
+  fun brightness(): Float {
+    val own = (context as? Activity)?.window?.attributes?.screenBrightness ?: -1f
+    if (own >= 0f) return own
+    val system = try {
+      Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+    } catch (e: Settings.SettingNotFoundException) {
+      return 0.5f
+    }
+    return (system / 255f).coerceIn(0f, 1f)
+  }
 }
 
 /**
  * The window and app changes, as messages from the app's own pages (src/lib/platform/back.ts, deepLinks.ts):
- * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, and notifications' `notes:…` (NotesWorker.kt).
+ * `leave`, `immersive:on|off`, `awake:on|off`, `links-ready`, `stremio-links:on|off`, `predictive-back:on|off`,
+ * `brightness:<0 to 1>|off`, and
+ * notifications' `notes:…` (NotesWorker.kt).
  */
 class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessageListener {
   override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
@@ -200,7 +272,12 @@ class DeviceActions(private val activity: MainActivity) : WebViewCompat.WebMessa
       "links-ready" -> linksReady(activity)
       "stremio-links:on" -> setStremioLinks(activity, true)
       "stremio-links:off" -> setStremioLinks(activity, false)
-      else -> if (data.startsWith("notes:")) noteAction(activity, data.removePrefix("notes:"))
+      "predictive-back:on" -> activity.runOnUiThread { activity.setPredictiveBack(true) }
+      "predictive-back:off" -> activity.runOnUiThread { activity.setPredictiveBack(false) }
+      "brightness:off" -> setBrightness(activity, null)
+      else ->
+        if (data.startsWith("notes:")) noteAction(activity, data.removePrefix("notes:"))
+        else if (data.startsWith("brightness:")) data.removePrefix("brightness:").toFloatOrNull()?.let { setBrightness(activity, it) }
     }
   }
 }
@@ -221,6 +298,10 @@ class PolarDeviceWithActions(private val activity: Activity, tv: Boolean) : Pola
 
   @JavascriptInterface
   fun setStremioLinks(on: Boolean) = setStremioLinks(activity, on)
+
+  // Below 0: back to the system's brightness.
+  @JavascriptInterface
+  fun setBrightness(level: Float) = setBrightness(activity, if (level < 0f) null else level)
 }
 
 // Back at the root (src/lib/platform/back.ts): to the background, as Android 12 and later do for a
@@ -249,6 +330,17 @@ private fun keepAwake(activity: Activity, on: Boolean) {
   }
 }
 
+// The player's swipe on the left half (src/lib/platform/brightness.ts): this window's own brightness, which needs no
+// permission and holds only while the app is in front (the system's comes back in the background by itself). Null
+// gives the system's back, as when the player closes. Never quite 0, which some screens take as off.
+private fun setBrightness(activity: Activity, level: Float?) {
+  activity.runOnUiThread {
+    val attributes = activity.window.attributes
+    attributes.screenBrightness = level?.coerceIn(0.01f, 1f) ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+    activity.window.attributes = attributes
+  }
+}
+
 // The page listens for stremio:// links (#163): the ones waiting come as a `polar-deep-link` event
 // (MainActivity.deliverLinks), untrusted text for src/lib/deepLink.
 private fun linksReady(activity: Activity) {
@@ -266,6 +358,8 @@ private fun setStremioLinks(activity: Activity, on: Boolean) {
 /**
  * Links meant for Stremio that reached the activity (#163), kept until the page takes them: the one
  * that started the app comes before the page listens. Only stremio:// links, not too long, latest few.
+ * And a TV's QR code (#133), `polarity://tv-sign-in/<code>`, the one Polarity link a phone receives
+ * (AndroidManifest.xml); the page parses it (src/lib/deepLink) and only asks.
  */
 object IncomingLinks {
   private const val MAX_LEN = 4096
@@ -276,7 +370,8 @@ object IncomingLinks {
   fun offer(intent: Intent?): Boolean {
     if (intent?.action != Intent.ACTION_VIEW) return false
     val link = intent.dataString ?: return false
-    val ours = link.startsWith("stremio://", ignoreCase = true) && link.length <= MAX_LEN && link.all { it in '!'..'~' }
+    val scheme = link.startsWith("stremio://", ignoreCase = true) || link.startsWith("polarity://tv-sign-in/")
+    val ours = scheme && link.length <= MAX_LEN && link.all { it in '!'..'~' }
     if (!ours) return false
     waiting.addLast(link)
     while (waiting.size > MAX_WAITING) waiting.removeFirst()

@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight, type Icon as IconT } from "../icons";
+import { PAGE_SECTIONS, type PageId } from "../../lib/settings/pages";
+import { SECTION_ICONS } from "./pages";
 import { SliderField } from "../SliderField";
 import { Button, type ButtonVariant } from "../ui/Button";
 import { Switch } from "../ui/Switch";
@@ -213,6 +215,7 @@ export type Expandable = { open: boolean; onToggle: () => void };
 /** A row that opens in place to show its controls. */
 export function ExpandRow({
   icon: Icon,
+  lead,
   title,
   caption,
   value,
@@ -220,22 +223,27 @@ export function ExpandRow({
   onToggle,
   setting,
   accessory,
+  handle,
   children,
 }: Expandable & {
   /** The schema id (lib/settings/schema.ts) or another name the page finds the row by. */
   setting?: string;
   icon?: IconT;
+  /** A picture of its own where the icon goes (an add-on's logo), when a glyph won't do. */
+  lead?: ReactNode;
   title: string;
   caption?: ReactNode;
   /** Short current state on the right ("On", a server address…). */
   value?: ReactNode;
-  /** A small button of its own beside the chevron (an add-on's Copy Link): over the row, not inside its button. */
+  /** Small buttons of their own beside the chevron (an add-on's Copy Link): over the row, not inside its button. */
   accessory?: ReactNode;
+  /** A control of its own at the row's start, over its edge (an add-on's drag handle). */
+  handle?: ReactNode;
   children: ReactNode;
 }) {
   const row = (
     <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle} data-accessory={accessory ? "" : undefined}>
-      {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
+      {lead ?? (Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />)}
       <RowText title={title} caption={caption} />
       {value != null && <span className="settings-row-value">{value}</span>}
       <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
@@ -243,10 +251,11 @@ export function ExpandRow({
   );
   return (
     <div className="settings-expand" data-open={open} data-setting={setting}>
-      {accessory ? (
+      {accessory || handle ? (
         <div className="settings-expand-head">
           {row}
-          <div className="settings-expand-accessory">{accessory}</div>
+          {handle && <div className="settings-expand-handle">{handle}</div>}
+          {accessory && <div className="settings-expand-accessory">{accessory}</div>}
         </div>
       ) : (
         row
@@ -257,13 +266,27 @@ export function ExpandRow({
 }
 
 /** A row that leads somewhere else. */
-export function LinkRow({ icon: Icon, title, caption, onClick }: { icon: IconT; title: string; caption?: string; onClick: () => void }) {
+export function LinkRow({ icon: Icon, title, caption, onClick }: { icon?: IconT; title: string; caption?: string; onClick: () => void }) {
   return (
     <button className="settings-row settings-row-button" onClick={onClick}>
-      <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />
+      {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
       <RowText title={title} caption={caption} />
       <ChevronRight className="settings-chevron" size={18} strokeWidth={2.25} />
     </button>
+  );
+}
+
+/** What a page split into sections (PAGE_SECTIONS) is given: the section open (null: its list), and how to open one. */
+export type SectionProps = { section: string | null; openSection: (id: string) => void };
+
+/** A long page's list of sections, each opening a view of its own. */
+export function SectionList({ page, openSection }: { page: PageId; openSection: (id: string) => void }) {
+  return (
+    <Card>
+      {(PAGE_SECTIONS[page] ?? []).map((s) => (
+        <LinkRow key={s.id} icon={SECTION_ICONS[s.id]} title={s.label} caption={s.caption} onClick={() => openSection(s.id)} />
+      ))}
+    </Card>
   );
 }
 

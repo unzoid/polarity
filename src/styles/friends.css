@@ -19,12 +19,22 @@
   color: var(--text-3);
 }
 .friends-body {
+  --friends-cutout: var(--tone-3);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   width: 100%;
   margin-top: 1.25rem;
   text-align: left;
+}
+.profile-pop .friends-body {
+  --friends-cutout: var(--tone-sunk);
+}
+.profile-sheet .friends-body {
+  --friends-cutout: var(--tone-2);
+}
+:root[data-scheme="light"] .friends-body {
+  --friends-cutout: var(--tone-sunk);
 }
 
 /* Own code: read out, copied, or swapped for a new one. */
@@ -46,6 +56,11 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+.friends-code-error {
+  margin: -0.75rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--danger);
 }
 .friends-add .party-join-note,
 .friends-add .party-join-error {
@@ -86,7 +101,7 @@
   width: 2.5rem;
   border-radius: 28%;
 }
-/* Online: a dot on the face's corner. */
+/* Online: a dot on the face's corner, cut cleanly into the backing surface. */
 .friends-row[data-online] .friends-face::after {
   content: "";
   position: absolute;
@@ -96,7 +111,7 @@
   height: 0.75rem;
   border-radius: 50%;
   background: var(--online);
-  box-shadow: 0 0 0 2px var(--glass-heavy);
+  box-shadow: 0 0 0 2px var(--friends-cutout);
 }
 .friends-who {
   display: flex;
@@ -132,6 +147,29 @@
 }
 .friends-dialog .party-join-note {
   text-align: center;
+}
+.friends-settings-link {
+  align-self: center;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-3);
+  text-align: center;
+  transition:
+    color var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .friends-settings-link:hover {
+    color: var(--text-2);
+    background: var(--fill-1);
+  }
+}
+.friends-settings-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  color: var(--text);
 }
 
 /* The invite toast's face, where the toast's icon goes. */

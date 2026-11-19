@@ -1,37 +1,55 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
 import { NameList } from "../components/title/NameList";
-import { Check, Edit, Episodes, Play, PlaylistIcon, Plus, Reset, Sources } from "../components/icons";
+import { Check, Edit, Episodes, Hidden, Info, Play, PlaylistIcon, Plus, Reset, Sources, Star, Trailer, Volume, VolumeMuted } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
-import { TitleDetails } from "../components/title/TitleDetails";
-import { Info } from "../components/icons";
-import { episodeState, progressMap, renamePlaylist, seasonsOf, upNext, usePlaylists, watchedFraction } from "../lib/library";
+import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
+import { episodeState, hideTitle, progressMap, renamePlaylist, seasonsOf, unhideTitle, upNext, useIsHidden, usePlaylists, watchedFraction } from "../lib/library";
+import { shelfGroupOf, shelfGroups, useEpisodeOrders } from "../lib/library";
+import { TvEpisodeOrders } from "./TvEpisodeOrders";
+import { TvExtrasPanel } from "./TvExtras";
 import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
 import { TitleHeading } from "../components/title/TitleHeading";
 import { ProgressBar } from "../components/title/Card";
 import { Still } from "../components/StillPlaceholder";
 import { animeEntries, entryMeta, pickTitle, stillFor } from "../lib/anime";
 import { StreamList } from "../components/StreamList";
-import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, seasonLabel, shortRuntime } from "../lib/format";
+import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, shortRuntime } from "../lib/format";
 import { usePlayTarget, useTitlePlayback } from "../lib/playback";
-import { useLibrary, useMeta, useProgress, useStreams, useToggleLibrary } from "../lib/net";
+import { useLibrary, useMeta, useProgress, useRatings, useStreams, useToggleLibrary } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { useArtGate } from "../lib/ui";
+import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
+import { useArtGate, usePresence } from "../lib/ui";
 import type { ContentType, Meta, MetaPreview, RankedStream, Video } from "../lib/types";
-import { useBack, useFocusTrap, usePageActive } from "./shell";
+import { PanelLeaving, useBack, useFocusTrap, usePageActive } from "./shell";
+import { playSound } from "./sounds";
 import { reveal } from "./spatial";
 import { glideScroll, glideTarget } from "./follow";
 import { TvKeyboard } from "./TvKeyboard";
 import { Facts, TvBackdrop, titleFacts } from "./TvStage";
 import { Skeleton } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
+import { TvDescription, TvOverviewMore, TvRatingsPanel, TvTextPanel, useHasEpisodeRatings } from "./TvMore";
 
 type Panel =
   | { kind: "episodes" }
   | { kind: "details" }
+  | { kind: "extras" }
   | { kind: "sources"; videoId: string; subtitle: string }
   | { kind: "playlists" }
+  /** A description in full (TvMore.tsx). */
+  | { kind: "text"; heading: string; sub?: string; text: string }
+  | { kind: "ratings" }
   /** Name a playlist: rename `playlistId`, or create one holding the title. */
   | { kind: "name"; playlistId?: string };
+
+const PANEL_OUT_MS = 160;
+let panelSeq = 0;
+
+interface PanelEntry {
+  id: number;
+  panel: Panel;
+  open: boolean;
+}
 
 /**
  * A title, TV-style: art across the screen, the logo, facts and synopsis on
@@ -46,15 +64,26 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
     const record = loaded && entry !== undefined && animeSeparateEntries ? animeEntries.entry(id, entry) : undefined;
     return record && loaded ? entryMeta(loaded, record, pickTitle(record.title, animeTitles) || loaded.name) : loaded;
   }, [loaded, entry, animeSeparateEntries, animeTitles, id]);
-  const shown: MetaPreview | undefined = meta ?? preview;
+  // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
+  const verdict = useTitleVerdict(loaded ?? preview, !!loaded || isError);
+  const shown: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
+  const target = usePlayTarget(shown ?? { id, type, name: "" }, verdict === "show" ? meta : undefined);
+  const hidden = useIsHidden(id);
   const active = usePageActive();
-  const [panels, setPanels] = useState<Panel[]>([]);
-  const push = (p: Panel) => setPanels((ps) => [...ps, p]);
-  const pop = () => setPanels((ps) => ps.slice(0, -1));
-  useBack(active && panels.length > 0, pop);
+  const [panels, setPanels] = useState<PanelEntry[]>([]);
+  const push = (panel: Panel) => setPanels((ps) => [...ps, { id: ++panelSeq, panel, open: true }]);
+  const pop = () =>
+    setPanels((ps) => {
+      const last = ps.findLastIndex((e) => e.open);
+      return last < 0 ? ps : ps.map((e, i) => (i === last ? { ...e, open: false } : e));
+    });
+  const removePanel = (panelId: number) => setPanels((ps) => ps.filter((e) => e.id !== panelId));
+  const openCount = panels.reduce((n, e) => n + (e.open ? 1 : 0), 0);
+  const topOpenId = panels.findLast((e) => e.open)?.id;
+  useBack(active && openCount > 0, pop);
 
   // The trailer behind the art, while nothing's open over the page.
-  const trailer = useBackdropTrailer(id, { active: active && panels.length === 0 });
+  const trailer = useBackdropTrailer(id, { active: active && openCount === 0 && verdict === "show" });
   // The logo or name waits for the backdrop (#173).
   const gate = useArtGate(shown?.background);
 
@@ -62,11 +91,18 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
   const playback = useTitlePlayback(
     (req) => push({ kind: "sources", videoId: req.videoId, subtitle: req.subtitle ?? "" }),
     // Coming back from the player returns to the episode list, not a source picker.
-    () => setPanels((ps) => ps.filter((p) => p.kind !== "sources")),
+    () => setPanels((ps) => ps.filter((e) => e.panel.kind !== "sources")),
   );
   const play = (videoId: string, subtitle: string, opts: { stream?: RankedStream; resumable?: boolean } = {}) =>
     playback({ type, metaId: id, videoId, subtitle, resumable: opts.resumable }, opts.stream);
 
+  if (verdict === "hide") {
+    return (
+      <div className="tv-note">
+        <EmptyState variant="tv">{LIMIT_NOTICE}</EmptyState>
+      </div>
+    );
+  }
   if (!shown) {
     return isError ? (
       <div className="tv-note">
@@ -84,12 +120,22 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
       </TvBackdrop>
       <div className="tv-detail-body" {...gate}>
         <TitleHeading name={shown.name} logo={shown.logo} logos={shown.logos} backdrop={shown.background} look="tv-detail" pending={!meta && !isError} />
-        <Facts facts={titleFacts(shown, [formatRuntime(meta?.runtime)])} />
-        {shown.description && <p className="tv-detail-description">{shown.description}</p>}
+        <Facts
+          facts={[
+            ...titleFacts(shown, [formatRuntime(meta?.runtime)]),
+            ...(shown.certification ? [<AgeRatingBadge key="rated" certification={shown.certification} />] : []),
+          ]}
+        >
+          <FormatBadges type={type} videoId={target.videoId} />
+        </Facts>
+        {shown.description && (
+          <TvDescription text={shown.description} onMore={() => push({ kind: "text", heading: shown.name, text: shown.description ?? "" })} />
+        )}
         <Credits meta={meta} />
+        {hidden && <p className="tv-detail-hidden">Hidden from Home, Movies, Series and recommendations.</p>}
         {/* A series' Play depends on watch history: wait for it, or focus would land on the wrong button. */}
         {type === "movie" || meta ? (
-          <Actions item={shown} meta={meta} play={play} push={push} />
+          <Actions item={shown} meta={meta} target={target} trailer={trailer} play={play} push={push} />
         ) : (
           <div className="tv-actions" aria-hidden>
             <Skeleton as="span" className="tv-pill tv-pill-skeleton" />
@@ -97,63 +143,117 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
         )}
       </div>
 
-      {panels.map((p, i) =>
-        p.kind === "episodes" && meta ? (
-          <EpisodesPanel
-            key={i}
-            meta={meta}
-            onPlay={(v, resumable) => play(v.id, episodeLine(v), { resumable })}
-            onSources={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })}
-          />
-        ) : p.kind === "details" && meta ? (
-          <DetailsPanel key={i} meta={meta} />
-        ) : p.kind === "playlists" ? (
-          <PlaylistsPanel
-            key={i}
-            item={shown}
-            onRename={(playlistId) => push({ kind: "name", playlistId })}
-            onNew={() => push({ kind: "name" })}
-          />
-        ) : p.kind === "name" ? (
-          <NamePanel key={i} item={shown} playlistId={p.playlistId} active={active && i === panels.length - 1} onDone={pop} />
-        ) : p.kind === "sources" ? (
-          <SourcesPanel
-            key={i}
-            type={type}
-            videoId={p.videoId}
-            subtitle={p.subtitle}
-            onPick={(s) => play(p.videoId, p.subtitle, { stream: s })}
-          />
-        ) : null,
-      )}
+      {panels.map((entry) => {
+        const p = entry.panel;
+        const body =
+          p.kind === "episodes" && meta ? (
+            <EpisodesPanel
+              meta={meta}
+              onPlay={(v, resumable) => play(v.id, episodeLine(v), { resumable })}
+              onSources={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })}
+              onMore={(v) => push({ kind: "text", heading: v.title || `Episode ${v.episode}`, sub: `${meta.name} · ${episodeCode(v.season, v.episode)}`, text: v.overview ?? "" })}
+            />
+          ) : p.kind === "text" ? (
+            <TvTextPanel heading={p.heading} sub={p.sub} text={p.text} />
+          ) : p.kind === "ratings" && meta ? (
+            <TvRatingsPanel videos={meta.videos} onOpen={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })} />
+          ) : p.kind === "details" && meta ? (
+            <DetailsPanel meta={meta} />
+          ) : p.kind === "extras" && meta ? (
+            <TvExtrasPanel meta={meta} />
+          ) : p.kind === "playlists" ? (
+            <PlaylistsPanel
+              item={shown}
+              onRename={(playlistId) => push({ kind: "name", playlistId })}
+              onNew={() => push({ kind: "name" })}
+            />
+          ) : p.kind === "name" ? (
+            <NamePanel item={shown} playlistId={p.playlistId} active={active && entry.open && entry.id === topOpenId} onDone={pop} />
+          ) : p.kind === "sources" ? (
+            <SourcesPanel
+              type={type}
+              videoId={p.videoId}
+              subtitle={p.subtitle}
+              onPick={(s) => play(p.videoId, p.subtitle, { stream: s })}
+            />
+          ) : null;
+        return body && <PresentPanel key={entry.id} open={entry.open} onGone={() => removePanel(entry.id)}>{body}</PresentPanel>;
+      })}
     </div>
   );
 }
 
+function PresentPanel({ open, onGone, children }: { open: boolean; onGone: () => void; children: ReactNode }) {
+  const { shown, leaving } = usePresence(open ? true : null, PANEL_OUT_MS);
+  const goneRef = useRef(onGone);
+  goneRef.current = onGone;
+  useEffect(() => {
+    if (!open && !shown) goneRef.current();
+  }, [open, shown]);
+  if (!shown) return null;
+  return (
+    <PanelLeaving.Provider value={leaving}>
+      <div className="tv-panel-slot" data-leaving={leaving || undefined} inert={leaving || undefined}>
+        {children}
+      </div>
+    </PanelLeaving.Provider>
+  );
+}
+
+const NO_VIDEOS: Video[] = [];
 const episodeLine = (v: Video) => `${episodeCode(v.season, v.episode)} · ${v.title}`;
 
 function Actions({
   item,
   meta,
+  target,
+  trailer,
   play,
   push,
 }: {
   item: MetaPreview;
   meta?: Meta;
+  target: ReturnType<typeof usePlayTarget>;
+  trailer: { visible: boolean; muted: boolean; toggleMute: () => void };
   play: (videoId: string, subtitle: string, opts?: { resumable?: boolean }) => void;
   push: (p: Panel) => void;
 }) {
-  const { next, videoId, resumeAt, label } = usePlayTarget(item, meta);
+  const { next, videoId, resumeAt, label } = target;
   const { data: library } = useLibrary();
   const toggle = useToggleLibrary();
   const inLibrary = library?.some((l) => l.id === item.id);
   const inPlaylist = usePlaylistChecklist(item).inAny;
+  const hidden = useIsHidden(item.id);
   const subtitle = item.type === "series" && next?.video ? episodeLine(next.video) : item.name;
   // Warm the sources for Play while the page is read.
   useStreams(item.type, videoId);
+  const ratings = useHasEpisodeRatings(meta?.videos ?? NO_VIDEOS);
 
   return (
     <div className="tv-actions" data-nav-memory>
+      {/* The lesser actions, side by side above Play (as Netflix puts its rating and list buttons): round icons,
+          the focused one opening into a pill with its name. */}
+      <div className="tv-quick-actions" role="group" aria-label="More for this title">
+        {item.type === "series" && ratings && <QuickAction icon={<Star size={26} />} label="Episode Ratings" onClick={() => push({ kind: "ratings" })} />}
+        <QuickAction
+          icon={inPlaylist ? <Check size={26} /> : <PlaylistIcon size={26} />}
+          label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
+          onClick={() => push({ kind: "playlists" })}
+        />
+        <QuickAction
+          icon={<Hidden size={26} />}
+          label={hidden ? "Unhide" : "Hide This Title"}
+          pressed={hidden}
+          onClick={() => (hidden ? unhideTitle(item.id) : hideTitle(item))}
+        />
+        {trailer.visible && (
+          <QuickAction
+            icon={trailer.muted ? <VolumeMuted size={26} /> : <Volume size={26} />}
+            label={trailer.muted ? "Unmute Trailer" : "Mute Trailer"}
+            onClick={trailer.toggleMute}
+          />
+        )}
+      </div>
       <ActionPill
         icon={resumeAt ? <Reset size={26} /> : <Play size={26} />}
         label={label}
@@ -169,15 +269,11 @@ function Actions({
         onClick={() => videoId && push({ kind: "sources", videoId, subtitle })}
       />
       {meta && <ActionPill icon={<Info size={26} />} label="Details" onClick={() => push({ kind: "details" })} />}
+      {meta?.extras?.length ? <ActionPill icon={<Trailer size={26} />} label="Extras" onClick={() => push({ kind: "extras" })} /> : null}
       <ActionPill
         icon={inLibrary ? <Check size={26} /> : <Plus size={26} />}
         label={inLibrary ? "In Library" : "Add to Library"}
         onClick={() => toggle.mutate(item)}
-      />
-      <ActionPill
-        icon={<PlaylistIcon size={26} />}
-        label={inPlaylist ? "In a Playlist" : "Add to Playlist"}
-        onClick={() => push({ kind: "playlists" })}
       />
     </div>
   );
@@ -215,14 +311,14 @@ export function PlaylistsPanel({
               data-nav-default={i === 0 || undefined}
               onClick={() => toggle(row)}
             >
-              <span className="tv-playlist-check">{row.has && <Check size={22} />}</span>
+              <span className="tv-playlist-check">{row.has && <Check size={16} />}</span>
               <span className="tv-playlist-name">{row.name}</span>
               <span className="tv-playlist-count tabular">
                 {row.count} {row.count === 1 ? "title" : "titles"}
               </span>
             </button>
             <button className="tv-playlist-rename" aria-label={`Rename ${row.name}`} onClick={() => onRename(row.id)}>
-              <Edit size={30} />
+              <Edit size={22} />
             </button>
           </div>
         ))}
@@ -233,7 +329,7 @@ export function PlaylistsPanel({
             onClick={onNew}
           >
             <span className="tv-playlist-check">
-              <Plus size={22} />
+              <Plus size={16} />
             </span>
             <span className="tv-playlist-name">New Playlist</span>
           </button>
@@ -313,6 +409,19 @@ function ActionPill({
   );
 }
 
+/** One of the round actions above Play: its name shows beside the icon while it has focus. */
+function QuickAction({ icon, label, onClick, pressed }: { icon: ReactNode; label: string; onClick: () => void; pressed?: boolean }) {
+  return (
+    <button className="tv-quick" onClick={onClick} aria-label={label} aria-pressed={pressed}>
+      {icon}
+      <span className="tv-quick-label" aria-hidden>
+        <span>{label}</span>
+      </span>
+    </button>
+  );
+}
+
+/** Plain text above Play so Up from the action row never catches on inline actor links; Cast in Details opens people. */
 function Credits({ meta }: { meta?: Meta }) {
   if (!meta?.cast?.length && !meta?.director?.length) return null;
   return (
@@ -341,20 +450,35 @@ function EpisodesPanel({
   meta,
   onPlay,
   onSources,
+  onMore,
 }: {
   meta: Meta;
   onPlay: (v: Video, resumable: boolean) => void;
   onSources: (v: Video) => void;
+  /** The episode's synopsis in full, when the row cuts it off. */
+  onMore: (v: Video) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const seasonList = useRef<HTMLDivElement>(null);
   useFocusTrap(ref);
   const { data: progress } = useProgress(meta.id);
+  const orders = useEpisodeOrders(meta);
+  const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
-  const next = useMemo(() => upNext(meta, progress ?? []), [meta, progress]);
-  const [season, setSeason] = useState(next.video?.season ?? seasons[0]);
-  const episodes = meta.videos.filter((v) => v.season === season);
+  // The seasons, or the chosen episode order's groups (lib/library/episodeOrder.ts).
+  const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
+  const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
+  const [season, setSeason] = useState((next.video && shelfGroupOf(next.video, view)) ?? seasons[0]);
+  // Another order lists other groups: open on the one up next is in.
+  const shownOrder = useRef(view?.id);
+  useEffect(() => {
+    if (shownOrder.current === view?.id) return;
+    shownOrder.current = view?.id;
+    setSeason((next.video && shelfGroupOf(next.video, view)) ?? groups[0]?.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+  const episodes = groups.find((g) => g.id === season)?.videos ?? [];
   const map = useMemo(() => progressMap(progress), [progress]);
   const entryId = (episodes.find((v) => v.id === next.video?.id) ?? episodes.find(isReleased))?.id;
   // A long season draws only the episodes on and near the screen (#436).
@@ -375,22 +499,38 @@ function EpisodesPanel({
     // Only on open: once you're moving through seasons, focus keeps them in view.
   }, []);
 
+  // A held D-pad glides past seasons without rebuilding every season's episode list along the way.
+  const seasonTimer = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(seasonTimer.current), []);
+  const focusSeason = (id: number) => {
+    window.clearTimeout(seasonTimer.current);
+    if (document.documentElement.hasAttribute("data-nav-held")) {
+      seasonTimer.current = window.setTimeout(() => setSeason(id), 180);
+    } else {
+      setSeason(id);
+    }
+  };
+
   return (
     <div className="tv-panel tv-episodes" ref={ref} data-nav-scope role="dialog" aria-label="Episodes">
       <aside className="tv-episodes-side">
         <TitleHeading name={meta.name} logo={meta.logo} logos={meta.logos} look="tv-panel" />
+        <TvEpisodeOrders orders={orders} />
         <div className="tv-seasons" ref={seasonList} data-nav-scroll="center" data-nav-memory data-nav-prefer-entry>
-          {seasons.map((s) => (
+          {groups.map((g) => (
             <button
-              key={s}
+              key={g.id}
               className="tv-season"
-              aria-current={s === season || undefined}
-              data-nav-entry={s === season || undefined}
-              onFocus={() => setSeason(s)}
-              onClick={() => setSeason(s)}
+              aria-current={g.id === season || undefined}
+              data-nav-entry={g.id === season || undefined}
+              onFocus={() => focusSeason(g.id)}
+              onClick={() => {
+                window.clearTimeout(seasonTimer.current);
+                setSeason(g.id);
+              }}
             >
-              <span>{seasonLabel(s)}</span>
-              <span className="tv-season-count">{meta.videos.filter((v) => v.season === s).length} episodes</span>
+              <span>{g.label}</span>
+              <span className="tv-season-count">{g.videos.length} episodes</span>
             </button>
           ))}
         </div>
@@ -428,15 +568,18 @@ function EpisodesPanel({
                 </span>
                 <span className="tv-episode-text">
                   <span className="tv-episode-kicker">
-                    {v.id === next.video?.id && next.kind !== "start" ? `Up Next · Episode ${v.episode}` : `Episode ${v.episode}`}
+                    {v.id === next.video?.id && next.kind !== "start"
+                      ? `Up Next · Episode ${view?.number.get(v.id) ?? v.episode}`
+                      : `Episode ${view?.number.get(v.id) ?? v.episode}`}
                   </span>
                   <span className="tv-episode-title">{v.title}</span>
                   {v.overview && <span className="tv-episode-overview">{v.overview}</span>}
                   <span className="tv-episode-status">{status}</span>
                 </span>
               </button>
+              <TvOverviewMore episode={v.episode} text={v.overview} onMore={() => onMore(v)} />
               {openable && (
-                <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${v.episode}`}>
+                <button className="tv-episode-sources" onClick={() => onSources(v)} aria-label={`Sources for episode ${view?.number.get(v.id) ?? v.episode}`}>
                   <Sources size={26} />
                 </button>
               )}
@@ -516,33 +659,50 @@ function useEpisodeWindow(list: RefObject<HTMLDivElement | null>, key: string, c
   return { from, to, pitch: pitch?.row, space, focused };
 }
 
-/** Cast, scores and the facts, full screen. The links out are buttons like any other. */
+/** Cast, scores and the facts, full screen. Summary sits above TitleDetails so spatial focus reaches every cast button. */
 function DetailsPanel({ meta }: { meta: Meta }) {
   const ref = useRef<HTMLDivElement>(null);
   useFocusTrap(ref);
+  const { data: ratings } = useRatings(meta.type, meta.id);
+  const readOnlyRatings = useMemo(() => (ratings ? { ...ratings, links: undefined } : undefined), [ratings]);
   return (
     <div className="tv-panel tv-sources tv-details" ref={ref} data-nav-scope role="dialog" aria-label="Details">
       <header className="tv-sources-head">
         <h2 className="tv-heading">{meta.name}</h2>
         <p className="tv-sources-sub">Details</p>
       </header>
-      {/* Focusable, so the arrows scroll it even where there's nothing to press. */}
       <div
         className="tv-scroll tv-sources-list tv-details-body"
-        data-nav-scroll
-        tabIndex={0}
-        data-nav-default
+        data-nav-scroll="center"
         onKeyDown={(e) => {
-          // On the page itself, up and down read on; at the end, down reaches the links.
-          if (e.target !== e.currentTarget || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
-          const el = e.currentTarget;
+          if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+          const body = e.currentTarget;
           const down = e.key === "ArrowDown";
-          if (down ? el.scrollTop + el.clientHeight >= el.scrollHeight - 4 : el.scrollTop <= 0) return;
+          const hasCast = !!body.querySelector(".person-open");
+          const onLead = (e.target as HTMLElement).classList.contains("tv-details-lead");
+          // Let spatial navigation step from the summary header into Cast, and back up once Cast is in view.
+          if (down && onLead && hasCast) return;
+          if (!down && !onLead) {
+            const people = body.querySelector<HTMLElement>(".people");
+            if (!people || people.getBoundingClientRect().top >= body.getBoundingClientRect().top) return;
+          }
+          if (down ? body.scrollTop + body.clientHeight >= body.scrollHeight - 4 : body.scrollTop <= 0) return;
           e.preventDefault();
-          // One glide that a held key keeps steering, not a smooth scroll restarted per press.
-          glideScroll(el, "y", (glideTarget(el, "y") ?? el.scrollTop) + (down ? 1 : -1) * el.clientHeight * 0.4);
+          glideScroll(body, "y", (glideTarget(body, "y") ?? body.scrollTop) + (down ? 1 : -1) * body.clientHeight * 0.4);
+          playSound("move");
         }}
       >
+        <div className="tv-details-lead" tabIndex={0} data-nav-default>
+          <Facts
+            facts={[
+              ...titleFacts(meta, [formatRuntime(meta.runtime)]),
+              ...(meta.certification ? [<AgeRatingBadge key="rated" certification={meta.certification} />] : []),
+            ]}
+          >
+            <FormatBadges type={meta.type} videoId={meta.type === "movie" ? meta.id : undefined} />
+          </Facts>
+          <ScoreRow ratings={readOnlyRatings} />
+        </div>
         <TitleDetails meta={meta} links={false} />
       </div>
     </div>

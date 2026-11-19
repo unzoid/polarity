@@ -66,6 +66,8 @@ relative to `src/`; each primitive's CSS is `styles/ui/<name>.css`, the title pa
 | `useSourcePicker(onOpen?)` + `SourcePicker` | `picker` | Play-or-choose with the sources sheet, once per page |
 | `SeasonPicker` | `value`, `options` {id, label}, `onChange` | Season tabs (up to 6) or a large dropdown |
 | `EpisodeCard`, `EpisodeShelf` | see the files | Desktop episodes; state from `episodeState` (`lib/library/episodeState.ts`) |
+| `EpisodeRatings`, `RatingsTable` | `videos`, `onOpen`, `tv` | A show's ratings per season as a table (`lib/library/episodeRatings.ts`); TV draws `RatingsTable` in a panel (`tv/TvMore.tsx`) |
+| `OverviewMore` | `video` | "More" under an episode card's cut-off synopsis (`useClamped`, `lib/ui/clamped.ts`), the whole text in a `Sheet` |
 | `usePlaylistChecklist(item)` + `PlaylistChecklist` | `look` menu/popover | Add to playlists (TV draws its rows from the hook) |
 | `TitleDetails`, `DetailsSection`, `DetailsColumns`, `FactList`, `DetailsLinks` | | The Details tab and its parts |
 
@@ -148,7 +150,7 @@ markup rather than a shared component.
 | `ProfileMenu` | `components/ProfileMenu.tsx:18` | Base UI menu, `.profile-menu`. |
 | `WindowControls` | `components/WindowControls.tsx:7` | Three hand-drawn SVG buttons. |
 | `UpdateToast`, `UpdatePill`, `WhatsNewSheet`, `ReleaseNotes` | `components/Updates.tsx:21,114,143,186` | The toast reuses `.tv-prompt`. It has its own progress bar `.update-progress` and a small Markdown renderer. |
-| Account frame | `screens/account/AccountShell.tsx:5` | Drag region and window controls. |
+| Account frame | `screens/account/AccountShell.tsx:6` | Drag region and window controls. Backdrop: `FlutedGlow` (`components/FlutedGlow.tsx`), the accent glow through star-shaped fluted glass in WebGL, over `.account-glow`'s gradient fallback. Picking a profile hands over to the app: `Gate` (`App.tsx`) keeps `ProfilesScreen` on top with `leaving` while it fades, and `screens/account/profileHandoff.ts` flies the avatar into the navbar's. |
 
 ### 2.2 Cards, rails and grids
 

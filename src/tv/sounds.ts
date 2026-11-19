@@ -519,11 +519,22 @@ export function playSound(sound: Sound, { force = false } = {}) {
   const { ctx, out } = audio();
   const buf = bufferFor(ctx, uiSoundPack, sound);
   if (!buf) return; // this pack has no such sound (most have no startup chime)
+  const held = sound === "move" && typeof document !== "undefined" && document.documentElement.hasAttribute("data-nav-held");
   const start = () => {
     out.gain.value = uiSoundVolume * 0.6;
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    src.connect(out);
+    if (held) {
+      const cents = (Math.random() * 2 - 1) * 12;
+      if (src.detune) src.detune.value = cents;
+      else src.playbackRate.value = 2 ** (cents / 1200);
+      const soften = ctx.createGain();
+      soften.gain.value = 0.65;
+      src.connect(soften);
+      soften.connect(out);
+    } else {
+      src.connect(out);
+    }
     src.start();
   };
   if (ctx.state === "running") return start();

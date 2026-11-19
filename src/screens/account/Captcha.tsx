@@ -21,7 +21,7 @@ export function Captcha({ onToken }: { onToken: (token: string) => void }) {
         if (gone || !box.current) return;
         id = t.render(box.current, {
           sitekey: CAPTCHA_SITE_KEY!,
-          theme: "dark",
+          theme: document.documentElement.dataset.scheme === "light" ? "light" : "dark",
           callback: (token) => done.current(token),
           "error-callback": () => setFailed("The check didn't go through. Try again."),
           "expired-callback": () => setFailed("The check expired. Try again."),

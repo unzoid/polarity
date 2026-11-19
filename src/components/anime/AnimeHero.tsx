@@ -16,7 +16,9 @@ import {
 } from "../../lib/anime";
 import { joinFacts } from "../../lib/format";
 import { usePrefs } from "../../lib/settings";
-import { Star, Volume, VolumeMuted } from "../icons";
+import type { BackdropTrailerHandle } from "../BackdropTrailer";
+import { Reset, Star, Volume, VolumeMuted } from "../icons";
+import { SwapIcon } from "../SwapIcon";
 import { IconButton } from "../ui/Button";
 import { useArtGate, useReadyTogether } from "../../lib/ui";
 import { HeroSkeleton } from "../title/HeroSkeleton";
@@ -55,6 +57,7 @@ export function AnimeHero({
   logos,
   logoPending,
   background,
+  fallbacks,
   name,
   onImdb,
   trailer,
@@ -73,10 +76,12 @@ export function AnimeHero({
   logoPending?: boolean;
   /** The page's backdrop: the logo or name waits for it (#173), and the logo is measured against it (#215). */
   background?: string;
+  /** Cover fallbacks when the backdrop is missing or fails to load. */
+  fallbacks?: string[];
   name: string;
   /** The id it plays from: undefined until known, null when there's none (the page's backdrop trailer is that title's). */
   onImdb?: (id: string | null | undefined) => void;
-  trailer?: { visible: boolean; muted: boolean; toggleMute: () => void };
+  trailer?: BackdropTrailerHandle;
   franchise?: HeroFranchise;
   /** The series pick sits under the season tabs instead (a grouped page, #327). */
   pickInTabs?: boolean;
@@ -124,7 +129,7 @@ export function AnimeHero({
         studio,
       ];
   const paragraphs = cleanDescription(anime?.description);
-  const gate = useArtGate(background);
+  const gate = useArtGate(background, fallbacks);
   // The page loads together (as a title page does, Detail.tsx): the art, the heading, the entry's details and
   // what Play plays come in as one, over a skeleton until then.
   const heading = useHeadingReady({ logo, logos, backdrop: background, look: "detail", pending: logoPending });
@@ -189,15 +194,23 @@ export function AnimeHero({
           }
           item={pb.meta}
         >
-          {trailer?.visible && (
+          {trailer && trailer.state !== "idle" && (
             <IconButton
               variant="glass"
               className="detail-mute"
-              onClick={trailer.toggleMute}
-              label={trailer.muted ? "Turn trailer sound on" : "Mute trailer"}
-              title={trailer.muted ? "Sound on" : "Mute"}
+              onClick={trailer.state === "ended" ? trailer.replay : trailer.toggleMute}
+              label={
+                trailer.state === "ended"
+                  ? "Replay trailer"
+                  : trailer.muted
+                    ? "Turn trailer sound on"
+                    : "Mute trailer"
+              }
+              title={trailer.state === "ended" ? "Replay trailer" : trailer.muted ? "Sound on" : "Mute"}
             >
-              {trailer.muted ? <VolumeMuted size={20} /> : <Volume size={20} />}
+              <SwapIcon state={trailer.state === "ended" ? "ended" : trailer.muted ? "muted" : "sound"}>
+                {trailer.state === "ended" ? <Reset size={20} /> : trailer.muted ? <VolumeMuted size={20} /> : <Volume size={20} />}
+              </SwapIcon>
             </IconButton>
           )}
         </TitleActions>

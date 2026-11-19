@@ -13,17 +13,25 @@ export const usePageActive = () => useContext(PageActive);
  */
 export const useBack = useDismiss;
 
+/** Whether a panel or menu is in its exit transition: focus leaves it at once, before unmount. */
+export const PanelLeaving = createContext(false);
+
 /**
  * For panels and menus: take focus when opened, and hand it back to whatever
  * opened them when closed, so Back lands you where you were.
  */
-export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
+export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) {
+  const leaving = useContext(PanelLeaving);
+  const trapped = active && !leaving;
   useEffect(() => {
+    if (!trapped) return;
     const opener = document.activeElement;
     const cancel = focusWhenReady(ref.current);
     return () => {
       cancel();
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+      if (opener instanceof HTMLElement && opener.isConnected && !opener.closest("[inert]")) {
+        opener.focus({ preventScroll: true });
+      }
     };
-  }, [ref]);
+  }, [ref, trapped]);
 }

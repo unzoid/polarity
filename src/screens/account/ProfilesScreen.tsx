@@ -1,21 +1,31 @@
-import { ArrowLeft, Check, Edit, Plus } from "../../components/icons";
-import { useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { ArrowLeft, Check, Edit, Lock, Plus } from "../../components/icons";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Button } from "../../components/ui/Button";
 import { TextField } from "../../components/ui/TextField";
 import { BusyRing } from "../../components/BusyLabel";
 import { AVATAR_GROUPS, type AvatarId, AVATARS, nextAvatar, type Profile, useAccount } from "../../lib/account";
+import { hasPin } from "../../lib/account/profileRules";
 import { errorMessage } from "../../lib/errors";
+import { prefersReducedMotion } from "../../lib/ui";
 import { AccountShell } from "./AccountShell";
+import { flyToNavbar } from "./profileHandoff";
+import { preloadRoute } from "../lazyScreens";
+import { useGuard } from "../../components/profileLock/useGuard";
+import { ProfileLockRows } from "../../components/profileLock/ProfileLockRows";
+import { isTvMode } from "../../tv/tvMode";
 
 const MAX_PROFILES = 5;
 
 type View = { name: "pick" | "manage" } | { name: "edit"; profile: Profile | null };
 
-/** Left/right (and up/down) move between tiles, like a TV remote. */
+/**
+ * Left/right (and up/down) move between tiles, like a TV remote. In TV mode the arrows move around the
+ * whole screen instead (AccountShell), so up and down reach Sign Out and Manage Profiles.
+ */
 function moveFocus(e: KeyboardEvent<HTMLElement>) {
   const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-  if (!step) return;
+  if (!step || isTvMode()) return;
   const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[data-tile]:not(:disabled)")];
   const i = items.indexOf(document.activeElement as HTMLElement);
   const next = items[i === -1 ? 0 : (i + step + items.length) % items.length];
@@ -26,11 +36,49 @@ function moveFocus(e: KeyboardEvent<HTMLElement>) {
 }
 
 /** "Who's watching?" plus managing profiles (add, rename, icon, delete). */
-export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manage" }) {
+export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?: "pick" | "manage"; leaving?: boolean }) {
   const account = useAccount();
   const [view, setView] = useState<View>({ name: initial });
   const [entering, setEntering] = useState<string | null>(null);
+  const guard = useGuard();
+  const chosenArt = useRef<HTMLSpanElement>(null);
+  const flown = useRef(false);
+  const [handoffGo, setHandoffGo] = useState(false);
   const managing = view.name === "manage";
+
+  // Warm the Home chunk while on "Who's watching?" so first-boot handoff doesn't stall on module loading.
+  useEffect(() => {
+    preloadRoute({ name: "home" });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!leaving) {
+      flown.current = false;
+      setHandoffGo(false);
+      return;
+    }
+    const avatar = chosenArt.current?.querySelector<HTMLElement>(".avatar");
+    if (!avatar || flown.current || prefersReducedMotion()) {
+      setHandoffGo(true);
+      return;
+    }
+    document.documentElement.dataset.profileHandoff = "";
+    // Let MainApp + Home finish their first-boot mount & paint before starting the 500ms flight and fade,
+    // so frame 0 isn't eaten by initial layout.
+    let f2 = 0;
+    const f1 = requestAnimationFrame(() => {
+      f2 = requestAnimationFrame(() => {
+        setHandoffGo(true);
+        if (flyToNavbar(avatar)) flown.current = true;
+        else delete document.documentElement.dataset.profileHandoff;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(f1);
+      cancelAnimationFrame(f2);
+      if (!flown.current) delete document.documentElement.dataset.profileHandoff;
+    };
+  }, [leaving]);
 
   if (view.name === "edit") {
     return (
@@ -45,12 +93,16 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
   }
 
   const choose = async (p: Profile) => {
-    if (managing) return setView({ name: "edit", profile: p });
+    if (managing) return (await guard.manage()) && setView({ name: "edit", profile: p });
+    // Its PIN first, if it has one (the profile's tile stays as it is until then).
+    if (!(await guard.enter(p))) return;
     setEntering(p.id);
     try {
       await account.chooseProfile(p);
-    } finally {
+    } catch (e) {
+      // Only a failure brings the others back; once in, the chosen one stays alone while the screen leaves.
       setEntering(null);
+      throw e;
     }
   };
 
@@ -58,6 +110,8 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
 
   return (
     <AccountShell
+      leaving={leaving}
+      handoffGo={handoffGo}
       header={
         <button className="account-bar-link" onClick={() => void account.signOut()}>
           Sign Out
@@ -65,11 +119,11 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
       }
     >
       {/* Managing is a mode of the same screen: Done and Manage Profiles change it in place (#93). */}
-      <div className="profiles">
+      <div className="profiles" data-choosing={!!entering || undefined}>
         <h1 className="profiles-title">{managing ? "Manage Profiles" : "Who's watching?"}</h1>
         <ul className="profiles-grid" onKeyDown={moveFocus}>
           {account.profiles.map((p, i) => (
-            <li key={p.id} style={{ "--i": i } as CSSProperties}>
+            <li key={p.id} style={{ "--i": i } as CSSProperties} data-chosen={entering === p.id || undefined}>
               <button
                 data-tile
                 className="profile-tile"
@@ -78,17 +132,23 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
                 onClick={() => void choose(p)}
                 disabled={!!entering}
                 autoFocus={p.id === highlighted}
+                data-nav-default={p.id === highlighted || undefined}
                 aria-label={managing ? `Edit ${p.name}` : p.name}
               >
-                <span className="profile-tile-art">
+                <span className="profile-tile-art" ref={entering === p.id ? chosenArt : undefined}>
                   <Avatar id={p.avatar} />
+                  {hasPin(p) && (
+                    <span className="profile-tile-lock" aria-hidden>
+                      <Lock size={12} />
+                    </span>
+                  )}
                   <span className="profile-tile-overlay profile-tile-edit" aria-hidden>
                     <span className="profile-tile-pencil">
                       <Edit size={22} strokeWidth={2.25} />
                     </span>
                   </span>
-                  {entering === p.id && (
-                    <span className="profile-tile-overlay">
+                  {entering === p.id && !leaving && (
+                    <span className="profile-tile-overlay profile-tile-busy">
                       <BusyRing size={28} />
                     </span>
                   )}
@@ -102,7 +162,7 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
               <button
                 data-tile
                 className="profile-tile profile-add"
-                onClick={() => setView({ name: "edit", profile: null })}
+                onClick={() => void guard.manage().then((ok) => ok && setView({ name: "edit", profile: null }))}
                 disabled={!!entering}
               >
                 <span className="profile-tile-art">
@@ -113,16 +173,18 @@ export function ProfilesScreen({ initial = "pick" }: { initial?: "pick" | "manag
             </li>
           )}
         </ul>
-        {managing ? (
-          <Button variant="primary" size="sm" onClick={() => setView({ name: "pick" })}>
-            Done
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm" onClick={() => setView({ name: "manage" })}>
-            <Edit size={16} strokeWidth={2.25} />
-            Manage Profiles
-          </Button>
-        )}
+        <div className="profiles-actions">
+          {managing ? (
+            <Button variant="primary" size="sm" onClick={() => setView({ name: "pick" })}>
+              Done
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => void guard.manage().then((ok) => ok && setView({ name: "manage" }))}>
+              <Edit size={16} strokeWidth={2.25} />
+              Manage Profiles
+            </Button>
+          )}
+        </div>
       </div>
     </AccountShell>
   );
@@ -223,6 +285,8 @@ export function ProfileEditor({
           )}
         </div>
       </div>
+      {/* Kept as each is changed, apart from Save: the profile as the account has it now. */}
+      {profile && <ProfileLockRows profile={account.profiles.find((p) => p.id === profile.id) ?? profile} />}
       <div className="profile-editor-actions">
         <Button variant="primary" size="sm" type="submit" disabled={busy} busy={busy}>
           Save
@@ -250,6 +314,24 @@ export function ProfileEditor({
  * Full-page icon chooser, grouped into rows. `bare`: the icons alone, inside something that has its own header and
  * Back (the profile sheet's Edit Profile, ProfileEditSheet.tsx).
  */
+function moveRadioFocus(e: KeyboardEvent<HTMLElement>) {
+  if (isTvMode()) return;
+  const cols = getComputedStyle(e.currentTarget).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+  const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+  if (!step) return;
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=radio]:not(:disabled)")];
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  if (i < 0) return;
+  const next =
+    e.key === "ArrowRight" || e.key === "ArrowLeft"
+      ? items[(i + step + items.length) % items.length]
+      : items[i + step];
+  if (next) {
+    e.preventDefault();
+    next.focus();
+  }
+}
+
 export function IconPicker({
   name,
   current,
@@ -265,6 +347,7 @@ export function IconPicker({
   onBack: () => void;
   bare?: boolean;
 }) {
+  const [stops, setStops] = useState<Record<string, AvatarId>>({});
   return (
     <div className="icon-picker" data-bare={bare || undefined}>
       {!bare && (
@@ -282,35 +365,41 @@ export function IconPicker({
         </div>
       </header>
       )}
-      {AVATAR_GROUPS.map((g) => (
-        <section key={g.id} className="icon-picker-group">
-          <h2>{g.name}</h2>
-          <div className="icon-picker-row" role="radiogroup" aria-label={g.name} onKeyDown={moveFocus}>
-            {AVATARS.filter((a) => a.group === g.id).map((a) => (
-              <button
-                type="button"
-                key={a.id}
-                data-tile
-                role="radio"
-                aria-checked={a.id === current}
-                aria-label={a.id}
-                className="icon-choice"
-                onClick={() => onPick(a.id)}
-                autoFocus={a.id === current}
-              >
-                <Avatar id={a.id} />
-                {a.id === current ? (
-                  <span className="icon-choice-check">
-                    <Check size={14} strokeWidth={3} />
-                  </span>
-                ) : (
-                  taken.includes(a.id) && <span className="icon-choice-taken">In use</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+      {AVATAR_GROUPS.map((g) => {
+        const items = AVATARS.filter((a) => a.group === g.id);
+        const stop = stops[g.id] ?? (items.some((a) => a.id === current) ? current : items[0]?.id);
+        return (
+          <section key={g.id} className="icon-picker-group">
+            <h2>{g.name}</h2>
+            <div className="icon-picker-row" role="radiogroup" aria-label={g.name} onKeyDown={moveRadioFocus}>
+              {items.map((a) => (
+                <button
+                  type="button"
+                  key={a.id}
+                  data-tile
+                  role="radio"
+                  aria-checked={a.id === current}
+                  aria-label={a.id}
+                  tabIndex={a.id === stop ? 0 : -1}
+                  className="icon-choice"
+                  onFocus={() => setStops((s) => (s[g.id] === a.id ? s : { ...s, [g.id]: a.id }))}
+                  onClick={() => onPick(a.id)}
+                  autoFocus={a.id === current}
+                >
+                  <Avatar id={a.id} />
+                  {a.id === current ? (
+                    <span className="icon-choice-check">
+                      <Check size={14} strokeWidth={3} />
+                    </span>
+                  ) : (
+                    taken.includes(a.id) && <span className="icon-choice-taken">In use</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

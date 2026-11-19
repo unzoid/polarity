@@ -1,9 +1,9 @@
-import { motion } from "motion/react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { motion, useIsPresent } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sources, Trailer as TrailerIcon } from "../icons";
 import { Img } from "../Img";
 import { Button } from "../ui/Button";
-import { ease, imageBroken, markImageBroken, useNameWait } from "../../lib/ui";
+import { ease, imageBroken, markImageBroken, prefersReducedMotion, useNameWait } from "../../lib/ui";
 import { useLogoChoice } from "../TitleLogo";
 import { osName } from "../../lib/platform";
 import { appVersion } from "../../lib/updater";
@@ -11,9 +11,12 @@ import { failedStage, formatReport, STAGE_LABEL, type StartStage, type StartStep
 import type { useSource } from "./useSource";
 import { watchLog } from "../../lib/playback/watchLog";
 import { watchLogText } from "./useWatchLog";
+import { usePrefs } from "../../lib/settings/prefs";
 
-/** How far the logo has filled in for each loading stage (0–100). */
+/** How far the logo has filled in at the ceiling of each loading stage (0–100). */
 const FILL = { searching: 34, resolving: 66, starting: 92, done: 100 } as const;
+const STAGE_FLOOR = { searching: 20, resolving: 46, starting: 74 } as const;
+const MAX_CREEP_TICKS = 10;
 
 /** Past this many characters a name without a logo is set smaller, so its words fit whole on two lines. */
 const LONG_NAME = 24;
@@ -23,7 +26,8 @@ const LONG_NAME = 24;
  * and fills with colour left to right as loading advances — finding a source,
  * connecting, buffering the first frames. Real stages, not a fake timer: each
  * one moves the fill further, and a slow creep within a stage shows life
- * while a slow server answers.
+ * while a slow server answers, completing to 100% as the screen dissolves into
+ * the first frame.
  *
  * Under it, the steps as they happen (lib/playback/startLog); on failure, which step
  * failed, and a button that copies the whole log for a bug report.
@@ -35,6 +39,7 @@ export function PlayerStatus({
   logos,
   artPending = false,
   name,
+  episode,
   background,
   steps,
   backend,
@@ -51,6 +56,8 @@ export function PlayerStatus({
   /** The page's art isn't known yet: nothing shows in the logo's place, for at most `NAME_WAIT`. */
   artPending?: boolean;
   name?: string;
+  /** Optional episode kicker ("S1, E3 · Title") shown beneath the show mark. */
+  episode?: string;
   background?: string;
   steps: StartStep[];
   backend: string;
@@ -63,6 +70,7 @@ export function PlayerStatus({
   /** A YouTube video that can't play here (Android): open it in YouTube. */
   onYouTube?: () => void;
 }) {
+  const isPresent = useIsPresent();
   // A logo that doesn't load leaves the name, never a broken-image icon (#360).
   const [, setBroken] = useState(0);
   const candidate = logo && !imageBroken(logo) ? logo : undefined;
@@ -78,8 +86,32 @@ export function PlayerStatus({
   const stageAt = failed ? failedStage(steps) : undefined;
   // Failed, the screen leads with what to do next; the log waits behind Show Steps (Copy Details has it all).
   const [log, setLog] = useState(false);
+  // Loading, the message line changes in place; the steps with their times are a setting (#469).
+  const { loadingDetails } = usePrefs();
 
+  const markRef = useRef<HTMLDivElement>(null);
   const stage = state.status === "searching" ? "searching" : state.status === "resolving" || state.status === "notice" ? "resolving" : "starting";
+  const floor = STAGE_FLOOR[stage];
+  const ceiling = FILL[stage];
+  const stepFraction = Math.min(0.25, steps.length * 0.03);
+  const baseFill = failed ? 0 : !isPresent ? FILL.done : Math.round(floor + (ceiling - floor) * stepFraction);
+
+  // Smooth intra-stage creep written straight to `--fill` on `.load-mark` so slow servers show life without React re-renders.
+  useEffect(() => {
+    const el = markRef.current;
+    if (!el || failed || !isPresent || prefersReducedMotion()) return;
+    let tick = 0;
+    let timer = 0;
+    const step = () => {
+      tick++;
+      const frac = Math.min(1, 1 - Math.exp(-tick * 0.28) + stepFraction);
+      el.style.setProperty("--fill", `${Math.round(floor + (ceiling - floor) * frac)}%`);
+      if (tick < MAX_CREEP_TICKS && el.isConnected) timer = window.setTimeout(step, 600);
+    };
+    timer = window.setTimeout(step, 600);
+    return () => window.clearTimeout(timer);
+  }, [stage, floor, ceiling, stepFraction, failed, isPresent]);
+
   const message = failed
     ? (error ?? (state.status === "failed" ? state.reason : ""))
     : stage === "searching"
@@ -92,15 +124,17 @@ export function PlayerStatus({
     <motion.div
       className="player-status"
       data-failed={failed}
-      exit={{ opacity: 0, transition: { duration: 0.26, ease: ease.out } }}
+      data-exiting={(!isPresent && !failed) || undefined}
+      exit={{ opacity: 0, transition: { duration: 0.42, ease: ease.out } }}
     >
       {background && <Img src={background} alt="" className="player-status-bg" />}
       <div className="player-status-content">
         <div
+          ref={markRef}
           className="load-mark"
           data-long={!mark && (name?.length ?? 0) > LONG_NAME}
           data-name-wait={hidden ? "" : undefined}
-          style={{ "--fill": `${failed ? 0 : FILL[stage]}%` } as React.CSSProperties}
+          style={{ "--fill": `${baseFill}%` } as React.CSSProperties}
         >
           {mark ? (
             <>
@@ -125,6 +159,7 @@ export function PlayerStatus({
             </>
           )}
         </div>
+        {episode && <p className="player-status-kicker">{episode}</p>}
         <p key={message} className="player-status-message t-callout" role="status">
           {message}
         </p>
@@ -138,7 +173,7 @@ export function PlayerStatus({
             )}
           </div>
         )}
-        {(!failed || log) && <StartSteps steps={steps} all={failed} />}
+        {(failed ? log : loadingDetails) && <StartSteps steps={steps} all={failed} />}
         {failed && (
           <div className="player-status-actions">
             {/* Focused, so Enter (or a controller's A) picks it straight away. */}

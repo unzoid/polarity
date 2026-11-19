@@ -3,8 +3,12 @@ import type { Transition } from "motion/react";
 /** The CSS easing tokens (tokens.css), for Motion's tweens. */
 export const ease = {
   out: [0.23, 1, 0.32, 1],
+  inOut: [0.77, 0, 0.175, 1],
   drawer: [0.32, 0.72, 0, 1],
 } as const;
+
+/** An `ease` curve as a CSS easing string, for the Web Animations API. */
+export const cssEase = (curve: readonly number[]) => `cubic-bezier(${curve.join(", ")})`;
 
 /**
  * Springs, in Apple's two designer-facing parameters (bounce ≈ 1 − damping,
@@ -16,8 +20,20 @@ export const springs = {
   ui: { type: "spring", bounce: 0, duration: 0.4 },
   /** Sheets opened by a button press — no momentum, so no bounce. */
   sheet: { type: "spring", bounce: 0, duration: 0.35 },
+  /**
+   * A phone's bottom sheet: it travels the screen's height, not a side panel's width, and a hand watches it come
+   * up, so it takes longer to settle (Netflix's and iOS's own take about half a second).
+   */
+  bottomSheet: { type: "spring", bounce: 0, duration: 0.5 },
+  /**
+   * The profile sheet and the page stepping back under it, as Netflix's (measured from its app: 48% of the way in
+   * 68ms, 78% in 137ms, 93% in 204ms): a critically damped spring, ω 20/s.
+   */
+  profileSheet: { type: "spring", stiffness: 400, damping: 40, mass: 1 },
   /** A step settling into place (sign-in): a hint of overshoot, nothing more. */
   settle: { type: "spring", bounce: 0.15, duration: 0.45 },
+  /** One panel of tabs giving way to the next (Episode Ratings' views): quick, no overshoot. */
+  tabs: { type: "spring", bounce: 0, duration: 0.3 },
 } satisfies Record<string, Transition>;
 
 /**

@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "./icons";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { EdgeBlur } from "./EdgeBlur";
-import { useOffscreenMark, useTogether } from "../lib/ui";
+import { prefersReducedMotion, useOffscreenMark, useTogether } from "../lib/ui";
 
 /**
  * A horizontal shelf. Native scrolling (wheel, trackpad momentum, scroll-snap)
@@ -40,10 +40,16 @@ export function Row({
   // higher up are taken out of it as they load; without this, scroll-snap
   // keeps the card it was on in view and the shelf opens part-way along.
   const touched = useRef(false);
+  // A shelf that has just mounted is at its start already: reading scrollLeft then would only force a layout.
+  const mounted = useRef(false);
   useLayoutEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
     const el = scroller.current;
     if (el && !placed && !touched.current && el.scrollLeft !== 0) el.scrollLeft = 0;
-  });
+  }, [children, placed]);
 
   // Resuming a title moves it to the front of Continue Watching; the shelf kept
   // its scroll offset, which now shows whatever took the title's old place.
@@ -72,7 +78,8 @@ export function Row({
       const end = el.scrollLeft + el.clientWidth > el.scrollWidth - 4;
       setEdges((e) => (e.start === start && e.end === end ? e : { start, end }));
     };
-    update();
+    // No first read here: the ResizeObserver's first callback comes in the same frame, after layout, so it
+    // doesn't force one (nor lay out a shelf that content-visibility is skipping).
     const touch = () => (touched.current = true);
     const events = ["wheel", "pointerdown", "touchstart", "keydown", "focusin"] as const;
     for (const e of events) el.addEventListener(e, touch, { passive: true });
@@ -89,7 +96,25 @@ export function Row({
   const page = (dir: 1 | -1) => {
     const el = scroller.current;
     touched.current = true;
-    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: "smooth" });
+    if (!el) return;
+    const style = getComputedStyle(el);
+    const padStart = parseFloat(style.paddingLeft) || 0;
+    const padEnd = parseFloat(style.paddingRight) || 0;
+    const gap = parseFloat(style.columnGap) || 0;
+    const first = el.firstElementChild as HTMLElement | null;
+    const cardW = first?.offsetWidth ?? 0;
+    const stride = cardW > 0 ? cardW + gap : 0;
+    const inner = el.clientWidth - padStart - padEnd;
+    const behavior = prefersReducedMotion() ? "auto" : "smooth";
+    if (stride > 0 && inner > 0) {
+      const perPage = Math.max(1, Math.floor((inner + gap) / stride));
+      const base = dir > 0 ? Math.floor(el.scrollLeft / stride + 0.05) : Math.ceil(el.scrollLeft / stride - 0.05);
+      const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+      const target = Math.max(0, Math.min(maxScroll, (base + dir * perPage) * stride));
+      el.scrollTo({ left: target, behavior });
+    } else {
+      el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior });
+    }
   };
 
   return (
@@ -113,11 +138,11 @@ export function Row({
       )}
       {/* The shelf's pictures come in as one (lib/ui/together.ts). */}
       <div className="row-viewport" data-start={edges.start} data-end={edges.end} {...together}>
-        <RowPaddle dir="prev" onPage={page} />
+        <RowPaddle dir="prev" visible={!edges.start} onPage={page} />
         <div className="row-scroller" ref={scroller}>
           {children}
         </div>
-        <RowPaddle dir="next" onPage={page} />
+        <RowPaddle dir="next" visible={!edges.end} onPage={page} />
       </div>
     </section>
   );
@@ -130,18 +155,28 @@ export function Row({
  * or holds the keyboard focus, and hides each at its end. It never takes the focus itself, so
  * the arrow keys go on from the card they were on.
  */
-export function RowPaddle({ dir, onPage }: { dir: "prev" | "next"; onPage: (dir: 1 | -1) => void }) {
+export function RowPaddle({
+  dir,
+  visible,
+  onPage,
+}: {
+  dir: "prev" | "next";
+  visible?: boolean;
+  onPage: (dir: 1 | -1) => void;
+}) {
   const prev = dir === "prev";
   return (
     <button
       className="row-paddle"
       data-dir={dir}
+      data-visible={visible}
       onPointerDown={(e) => e.preventDefault()}
       onClick={() => onPage(prev ? -1 : 1)}
       aria-label={prev ? "Scroll left" : "Scroll right"}
       tabIndex={-1}
     >
-      <EdgeBlur />
+      {/* Barely blurred where it starts, gathering toward the edge, so it has no visible inner line. */}
+      <EdgeBlur edge={prev ? "left" : "right"} layers={6} step={0.9} curve={1.6} />
       {prev ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
     </button>
   );

@@ -16,6 +16,7 @@ import { TraktImport } from "../../components/settings/TraktImport";
 import { TraktSignIn } from "../../components/settings/TraktSignIn";
 import { SimklImport } from "../../components/settings/SimklImport";
 import { SimklSignIn } from "../../components/settings/SimklSignIn";
+import { SettingRow } from "../../components/settings/SettingRow";
 import {
   anilistAuthorizeUrl,
   linkAniList,
@@ -55,8 +56,16 @@ export function ServicesPage() {
       <MalRow {...expand("mal")} />
       <TraktRow {...expand("trakt")} />
       <SimklRow {...expand("simkl")} />
+      <AskRatingRow />
     </Card>
   );
+}
+
+/** "Ask for a rating after finishing" (components/player/RatingPrompt.tsx): only with Trakt or Simkl linked. */
+function AskRatingRow() {
+  const trakt = useTraktLink().state === "linked";
+  const simkl = useSimklLink().state === "linked";
+  return trakt || simkl ? <SettingRow id="askRating" /> : null;
 }
 
 /** Rotten Tomatoes, Metacritic and Letterboxd scores, from MDBList and/or OMDb. */
@@ -445,7 +454,7 @@ function ArtworkRow(props: Expandable) {
       {...props}
     >
       <p className="settings-expand-text">
-        Free key from themoviedb.org (Settings → API). Adds logos, better posters and episode details.
+        Free key from themoviedb.org (Settings → API).
       </p>
       <FormRow
         look="expand"

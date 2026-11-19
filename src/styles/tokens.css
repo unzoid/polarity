@@ -65,16 +65,41 @@
   --shadow-deep: rgb(0 0 0 / 0.85);
   --focus: color-mix(in srgb, var(--accent) 65%, white);
 
-  /* Glass: one recipe, two weights. Heavy for structure, light for controls (the ink fills, below). */
-  --glass: color-mix(in srgb, var(--tone-5) 46%, transparent);
-  --glass-heavy: color-mix(in srgb, var(--tone-3) 70%, transparent);
-  /* Menus and the navbar's dropdowns (party, profile, right-click): near-black with a subtle blur, the
-     settings window's border and shadow. One surface for all of them. */
-  --surface-menu: color-mix(in srgb, var(--tone-sunk) 80%, transparent);
-  /* Menus and popovers; toasts and floating player buttons. */
-  --surface-popover: color-mix(in srgb, var(--tone-5) 82%, transparent);
-  --surface-float: color-mix(in srgb, var(--tone-3) 88%, transparent);
-  --surface-float-glass: color-mix(in srgb, var(--tone-1) 78%, transparent);
+  /* Native macOS solid/matte surfaces (3-layer AppKit rim + diffused elevation, no murky blur). */
+  --selection-bg: var(--accent);
+  --glass: var(--tone-2);
+  --glass-heavy: var(--tone-2);
+  /* Menus, popovers, search suggestions, profile menu, side sheets: rich macOS dark graphite. */
+  --surface-menu: color-mix(in srgb, var(--tone-4) 76%, #28282c);
+  --surface-popover: color-mix(in srgb, var(--tone-4) 76%, #28282c);
+  --surface-float: color-mix(in srgb, var(--tone-3) 96%, transparent);
+  --surface-float-glass: color-mix(in srgb, var(--tone-3) 92%, transparent);
+  --menu-highlight: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  /* Native macOS bezel controls & recessed wells (dark). */
+  --bezel-bg: rgb(255 255 255 / 0.1);
+  --bezel-bg-hover: rgb(255 255 255 / 0.15);
+  --bezel-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.16),
+    0 0 0 0.5px rgb(0 0 0 / 0.55),
+    0 1px 2px rgb(0 0 0 / 0.28);
+  --well-bg: rgb(255 255 255 / 0.075);
+  --well-shadow:
+    inset 0 0.5px 1px rgb(0 0 0 / 0.36),
+    0 0 0 0.5px rgb(255 255 255 / 0.08);
+  /* Player dock menus: crisp solid native macOS dark HUD charcoal with 3-layer AppKit edge. */
+  --dock-surface: color-mix(in srgb, var(--tone-3) 78%, #242428);
+  --dock-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 0 0 1px rgb(0 0 0 / 0.8),
+    0 2px 6px rgb(0 0 0 / 0.44),
+    0 18px 46px -6px rgb(0 0 0 / 0.68),
+    0 30px 72px -12px rgb(0 0 0 / 0.5);
+  --shadow-menu:
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 0 0 1px rgb(0 0 0 / 0.78),
+    0 2px 6px rgb(0 0 0 / 0.42),
+    0 14px 36px -4px rgb(0 0 0 / 0.58),
+    0 28px 64px -10px rgb(0 0 0 / 0.45);
 }
 /* A part that stays dark is built on the theme's own near-black, whatever the scheme: the player (on
    video), Home's featured card and every poster or still's frame (what's drawn on artwork). A frame with no
@@ -107,22 +132,42 @@
   --field-glass: rgb(255 255 255 / 0.82);
   --field-edge: rgb(0 0 0 / 0.12);
   --nav-tint: 78%;
-  /* Glass controls frost white, with a hairline to hold their edge on a pale page. */
-  --glass-control: rgb(255 255 255 / 0.6);
-  --glass-control-hover: rgb(255 255 255 / 0.85);
-  --glass-edge: rgb(0 0 0 / 0.08);
-  --glass-highlight: inset 0 0 0 1px rgb(0 0 0 / 0.06);
-  /* On a light page a black ring reads as a drawn border: a hairline and a soft shadow instead. */
-  --ring-outer: rgb(0 0 0 / 0.08);
-  --shadow-deep: rgb(0 0 0 / 0.22);
+  /* Clean matte light controls with crisp hairline border (no murky web blur). */
+  --glass-control: rgb(255 255 255 / 0.92);
+  --glass-control-hover: #ffffff;
+  --glass-edge: rgb(0 0 0 / 0.1);
+  --glass-highlight: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  --menu-highlight: inset 0 0 0 0 transparent;
+  /* Native macOS light elevation: warm ceramic off-white surface, crisp white inner rim,
+     sharp 1px dark outer keyline, and 3-tier AppKit shadow. */
+  --selection-bg: color-mix(in oklab, var(--accent) 82%, #12121a);
+  --ring-outer: rgb(0 0 0 / 0.17);
+  --shadow-deep: rgb(0 0 0 / 0.16);
   --focus: var(--accent);
 
-  --glass: color-mix(in srgb, var(--tone-sunk) 62%, transparent);
-  --glass-heavy: color-mix(in srgb, var(--tone-sunk) 82%, transparent);
-  --surface-menu: color-mix(in srgb, var(--tone-sunk) 88%, transparent);
-  --surface-popover: color-mix(in srgb, var(--tone-sunk) 88%, transparent);
-  --surface-float: color-mix(in srgb, var(--tone-sunk) 92%, transparent);
-  --surface-float-glass: color-mix(in srgb, var(--tone-sunk) 80%, transparent);
+  --glass: #f2f2f5;
+  --glass-heavy: #f8f8f9;
+  --surface-menu: #f8f8f9;
+  --surface-popover: #f8f8f9;
+  --surface-float: #f8f8f9;
+  --surface-float-glass: #f8f8f9;
+  --menu-highlight: inset 0 0 0 1px rgb(255 255 255 / 0.96);
+  --bezel-bg: #ffffff;
+  --bezel-bg-hover: #fbfbfc;
+  --bezel-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.16),
+    0 1px 1.5px rgb(0 0 0 / 0.08),
+    inset 0 0.5px 0 rgb(255 255 255 / 0.95);
+  --well-bg: rgb(0 0 0 / 0.055);
+  --well-shadow:
+    inset 0 0.5px 1.5px rgb(0 0 0 / 0.08),
+    0 0.5px 0 rgb(255 255 255 / 0.85);
+  --shadow-menu:
+    inset 0 0 0 1px rgb(255 255 255 / 0.96),
+    0 0 0 1px rgb(0 0 0 / 0.17),
+    0 1px 3px rgb(0 0 0 / 0.08),
+    0 10px 28px -4px rgb(0 0 0 / 0.15),
+    0 24px 56px -10px rgb(0 0 0 / 0.11);
 }
 
 /*
@@ -173,28 +218,38 @@
   --fill-2: rgb(var(--ink) / 0.06);
   --fill-3: rgb(var(--ink) / 0.1);
   --fill-4: rgb(var(--ink) / 0.14);
-  --glass-control: rgb(var(--ink) / 0.13);
-  --glass-control-hover: rgb(var(--ink) / 0.2);
-  --glass-edge: rgb(var(--ink) / 0.13);
-  --glass-highlight: inset 0 1px 0 rgb(var(--ink) / 0.1);
+  --glass-control: rgb(var(--ink) / 0.12);
+  --glass-control-hover: rgb(var(--ink) / 0.19);
+  --glass-edge: rgb(var(--ink) / 0.11);
+  --glass-highlight: inset 0 0 0 1px rgb(var(--ink) / 0.1);
+}
+.themed.scheme-light {
+  --glass-control: rgb(255 255 255 / 0.92);
+  --glass-control-hover: #ffffff;
+  --glass-edge: rgb(0 0 0 / 0.1);
+  --glass-highlight: inset 0 0 0 1px rgb(0 0 0 / 0.08);
 }
 
 :root {
   /* "Twemoji Country Flags" first: it covers only flag emoji, and only exists where the system draws
-     none (Windows, main.tsx); every other character skips it. */
-  --font: "Twemoji Country Flags", "Inter Variable", "Inter", system-ui, "Segoe UI Variable Text", sans-serif;
+     none (Windows, main.tsx); every other character skips it. Instrument Sans is the app's font; the
+     others are a setting away (base.css, data-font). */
+  --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, "Segoe UI Variable Text", sans-serif;
 
   /* A poster or still's frame before its picture is in: the page's own surface (the frame itself is
      dark-styled, for what's drawn on the picture, so it can't use --surface-1). */
   --frame-bg: var(--surface-1);
+  /* Focus ring around a card's frame on the page: resolved on :root (#f5f5f7 in dark, #1d1d1f in light)
+     before .card-frame rebinds --ink-text. */
+  --page-focus-ring: var(--text);
   /* Progress over artwork and video: always white. */
   --progress: #f5f5f7;
   --danger: #ff6b5e;
   --online: #30d158; /* system green: a friend online (#135) */
   --good: #5ed39a;
 
-  --blur-glass: blur(32px) saturate(180%);
-  --blur-control: blur(16px) saturate(160%);
+  --blur-glass: none;
+  --blur-control: none;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -225,12 +280,9 @@
   --scrim-2: rgb(0 0 0 / 0.5);
   --scrim-3: rgb(0 0 0 / 0.7);
 
-  --blur-menu: blur(10px);
-  --edge-menu: 1px solid var(--fill-3);
-  --shadow-menu:
-    0 0 0 1px var(--ring-outer),
-    0 24px 64px -16px var(--shadow-deep);
-  --blur-popover: blur(40px) saturate(160%);
+  --blur-menu: none;
+  --edge-menu: 0;
+  --blur-popover: none;
 
   /* Rating sites, in their own colours. */
   --brand-imdb: #f5c518;
@@ -256,7 +308,7 @@
      panels never stack on each other, whatever their layer: one is up at a time (lib/party/surface.ts). */
   --z-nav: 20;
   --z-player: 30;
-  --z-toast: 30; /* same layer as the player today; ui-components §5.2 plans 35 */
+  --z-toast: 35;
   --z-sheet: 40;
   --z-overlay: 50;
   --z-popover: 60;
@@ -297,6 +349,8 @@
   --safe-right: 0px;
   /* The smallest target a finger hits reliably (Apple 44pt, Material 48dp): 0 = no minimum. */
   --hit: 0px;
+  /* What a bottom sheet at its full height leaves between its top and the status bar (sheet.css). */
+  --sheet-gap: 0.625rem;
 }
 :root[data-form="phone"],
 :root[data-form="tablet"] {
@@ -352,7 +406,7 @@
 
 /* Settings → Appearance → Reduce motion: "On" regardless of Windows. Motion's
    springs follow via <MotionConfig>; this covers CSS transitions and keyframes. */
-:root[data-reduce-motion="on"] *,
+:root[data-reduce-motion="on"] *:not(.skip-countdown, .next-up-countdown),
 :root[data-reduce-motion="on"] *::before,
 :root[data-reduce-motion="on"] *::after {
   animation-duration: 1ms !important;
@@ -360,12 +414,20 @@
   transition-duration: 1ms !important;
   scroll-behavior: auto !important;
 }
+/* Functional player countdowns keep their real seconds so auto-skip / Next Up
+   still wait for the viewer; they brighten in place instead of sweeping. */
+:root[data-reduce-motion="on"] :is(.skip-countdown, .next-up-countdown) {
+  animation-name: countdown-fade !important;
+}
 /* Except what says work is going on: the spinner's bars and the update dot only
    fade (no movement), and stopped after one turn they read as stuck. */
 :root[data-reduce-motion="on"] .spinner-bar,
 :root[data-reduce-motion="on"] .navbar-update[data-busy] .navbar-update-dot {
   animation-duration: 1.2s !important;
   animation-iteration-count: infinite !important;
+}
+:root[data-reduce-motion="on"] .hero-dot-fill {
+  animation: none !important;
 }
 
 /* Settings → Browsing → Spoilers: unwatched episodes keep their stills and
@@ -388,13 +450,17 @@
   .scheme-dark,
   .player,
   .hero-card,
-  .card-frame {
+  .card-frame:not(.frame-page) {
     --glass: var(--tone-4);
     --glass-heavy: var(--tone-3);
     --glass-control: color-mix(in srgb, rgb(var(--ink)) 22%, var(--tone-0));
     --glass-control-hover: color-mix(in srgb, rgb(var(--ink)) 28%, var(--tone-0));
+    --surface-menu: var(--tone-sunk);
+    --surface-popover: var(--tone-4);
     --blur-glass: none;
     --blur-control: none;
+    --blur-menu: none;
+    --blur-popover: none;
   }
 }
 
@@ -405,7 +471,7 @@
   .scheme-dark,
   .player,
   .hero-card,
-  .card-frame {
+  .card-frame:not(.frame-page) {
     --text-2: rgb(var(--ink-text) / 0.88);
     --text-3: rgb(var(--ink-text) / 0.72);
     --hairline: rgb(var(--ink) / 0.3);
@@ -414,4 +480,20 @@
     --glass-heavy: var(--tone-0);
     --glass-edge: rgb(var(--ink) / 0.45);
   }
+}
+
+/* Episode Ratings (components/title/EpisodeRatings.tsx): a colour per RATING_STEPS step
+   (lib/library/episodeRatings.ts), from Garbage (purple) through Bad, Average, Good and Great to Awesome
+   (deep green) and Absolute Cinema (blue). The same in both schemes; Average and Good are written in dark
+   ink, the rest in white. */
+:root {
+  --rating-0: #6c3fa3;
+  --rating-1: #d9443a;
+  --rating-2: #f0961c;
+  --rating-3: #f2cf3c;
+  --rating-4: #2bb05b;
+  --rating-5: #18703f;
+  --rating-6: #1e9bf0;
+  --rating-ink-light: #fff;
+  --rating-ink-dark: #161616;
 }
