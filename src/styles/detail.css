@@ -775,6 +775,8 @@
    little there, and the one on top takes the tap. */
 .episode-card .btn.btn-icon:is(.episode-sources, .episode-download) {
   position: absolute;
+  /* Above the still, which a hovered or focused card lifts over its neighbours (cards.css, z-index 1). */
+  z-index: 2;
   width: 32px;
   height: 32px;
   color: #fff;
