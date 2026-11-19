@@ -10,7 +10,8 @@
 // A CADisplayLink on the main thread asks for a frame each screen refresh;
 // drawing runs on a serial queue of its own with the GL context current there.
 // iOS ends apps that use OpenGL ES in the background, so drawing stops before
-// the app goes there and starts again when it comes back.
+// the app goes there and starts again when it comes back; Rust turns the video
+// track off meanwhile, and the sound plays on (player/background.rs, #461).
 //
 // Rust drives this mpv over its JSON IPC, through a socket pair it hands over
 // as --input-ipc-client (player/mod.rs).
@@ -25,6 +26,9 @@
 #pragma clang diagnostic ignored "-Wdeprecated-declarations" // OpenGL ES: deprecated, still what libmpv's render API offers here
 
 #include "../apple/libmpv.h"
+
+// player/background.rs: the app went to the background (1) or came back (0).
+extern void polar_mpv_background(int background);
 
 static void *gl_proc_address(void *ctx, const char *name) {
     (void)ctx;
@@ -119,11 +123,13 @@ static void *gl_proc_address(void *ctx, const char *name) {
         glFinish();
         [EAGLContext setCurrentContext:nil];
     });
+    polar_mpv_background(1);
 }
 
 - (void)willForeground {
     atomic_store(&_active, true);
     atomic_store(&_redraw, true);
+    polar_mpv_background(0);
 }
 
 - (void)setShown:(BOOL)shown {
