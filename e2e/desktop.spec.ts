@@ -281,8 +281,10 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   await app.mouse.click((audio!.x + audio!.width + subs!.x) / 2, audio!.y + 40);
   await expect(overlay).toBeVisible();
   // The subtitle preview is set like the built-in player's cues (#228): ::cue's
-  // clamp(1.5rem, 3vw, 4rem) at the bottom, following a resized window.
-  await app.getByRole("button", { name: "Subtitle settings" }).click();
+  // clamp(1.5rem, 3vw, 4rem) at the bottom, following a resized window. In the dock the subtitles' Tracks | Style
+  // switch opens their style.
+  const subsView = app.getByRole("radiogroup", { name: "Subtitles view" });
+  await subsView.getByRole("radio", { name: "Style" }).click();
   const sample = app.locator(".sub-preview-text");
   const cueSize = () => sample.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   await expect.poll(cueSize).toBeCloseTo(1440 * 0.03, 1);
@@ -293,8 +295,8 @@ test("a movie plays in the built-in player, pauses and closes", async ({ app }) 
   const dockBottom = parseFloat(await overlay.evaluate((el) => getComputedStyle(el).getPropertyValue("--dock-bottom")));
   expect(Math.abs(line!.y + line!.height - (700 - dockBottom - 72))).toBeLessThan(1);
   await app.setViewportSize({ width: 1440, height: 900 });
-  // In the dock the settings take the subtitles' place, and their button leads back.
-  await app.getByRole("button", { name: "Back to subtitles" }).click();
+  // Tracks leads back to the list.
+  await subsView.getByRole("radio", { name: "Tracks" }).click();
   // A click on the picture closes the menu and nothing else: it stays paused.
   await app.mouse.click(300, 300);
   await expect(app.locator(".options-overlay")).toHaveCount(0);
