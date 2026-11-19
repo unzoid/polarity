@@ -28,33 +28,43 @@ const questions = [
   },
 ];
 
+/** Every answer open at once, two columns wide. */
 export function Faq() {
   return (
-    <section id="faq" class="px-gutter scroll-mt-0 pt-16 md:pt-[88px]">
-      <div class="grid gap-x-14 gap-y-8 md:grid-cols-2">
-        <h2 ref={reveal} class="reveal text-headline max-w-[8em]">
-          FAQ
-        </h2>
-        <div ref={reveal} class="reveal rule-t">
-          <For each={questions}>
-            {(item) => (
-              <details class="faq-item group rule-b">
-                <summary class="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-[21px] leading-tight font-extrabold tracking-[-0.02em] [&::-webkit-details-marker]:hidden">
-                  {item.q}
-                  <svg
-                    viewBox="0 0 16 16"
-                    aria-hidden="true"
-                    class="size-5 shrink-0 transition-transform duration-200 ease-[var(--ease-out-strong)] group-open:rotate-45"
-                  >
-                    <path d="M8 1.5v13M1.5 8h13" stroke="currentColor" stroke-width="2.5" />
-                  </svg>
-                </summary>
-                <p class="max-w-[32em] pb-6 text-[19px]">{item.a}</p>
-              </details>
-            )}
-          </For>
-        </div>
+    <section id="faq" class="mx-auto mt-24 max-w-[1200px] px-6 sm:mt-32 sm:px-8">
+      <h2 ref={reveal} class="reveal text-headline">
+        FAQ
+      </h2>
+      {/* Phones: an accordion, so six answers don't fill the screen. Wider: every answer showing. */}
+      <div ref={reveal} class="reveal mt-8 border-t border-hair md:hidden">
+        <For each={questions}>
+          {(item) => (
+            <details class="faq-item group border-b border-hair">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-[1.0625rem] font-semibold tracking-[-0.016em] [&::-webkit-details-marker]:hidden">
+                {item.q}
+                <svg
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                  class="size-4 shrink-0 text-faint transition-transform duration-200 ease-[var(--ease-out-strong)] group-open:rotate-45"
+                >
+                  <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </summary>
+              <p class="pb-5 text-mute">{item.a}</p>
+            </details>
+          )}
+        </For>
       </div>
+      <dl ref={reveal} class="reveal mt-12 hidden gap-x-14 gap-y-10 border-t border-hair pt-10 md:grid md:grid-cols-2">
+        <For each={questions}>
+          {(item) => (
+            <div>
+              <dt class="text-[1.1875rem] font-semibold tracking-[-0.02em]">{item.q}</dt>
+              <dd class="mt-2 max-w-[34rem] text-mute">{item.a}</dd>
+            </div>
+          )}
+        </For>
+      </dl>
     </section>
   );
 }

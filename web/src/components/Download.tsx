@@ -1,4 +1,5 @@
 import { Show } from "solid-js";
+import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line";
 import { REPO_URL } from "./GitHub";
 import { DOWNLOAD_PAGE, PLATFORM_NAMES, platform, primaryInstaller, release } from "../lib/release";
 
@@ -14,8 +15,12 @@ export function DownloadButton(props: { size?: "sm" | "lg" }) {
     return installer() && platform ? `Download for ${PLATFORM_NAMES[platform]}` : "Download Polarity";
   };
   return (
-    <a href={installer()?.url ?? DOWNLOAD_PAGE} class="btn btn-solid" classList={{ "btn-lg": big(), "btn-sm": !big() }}>
-      <Show when={platform === "windows" && installer()}>
+    <a
+      href={installer()?.url ?? DOWNLOAD_PAGE}
+      class="press inline-flex items-center justify-center gap-2 rounded-full bg-accent font-medium whitespace-nowrap text-accent-ink select-none hover:bg-accent-hover"
+      classList={{ "h-12 px-6 text-[1.0625rem]": big(), "h-8 px-3.5 text-sm": !big() }}
+    >
+      <Show when={platform === "windows" && installer()} fallback={<ArrowDownToLine class={big() ? "size-[18px]" : "size-3.5"} stroke-width={2.2} />}>
         <WindowsGlyph class={big() ? "size-4" : "size-3"} />
       </Show>
       {label()}
@@ -23,12 +28,12 @@ export function DownloadButton(props: { size?: "sm" | "lg" }) {
   );
 }
 
-/** "Free and open source (MIT) · Version 0.17.0 · Other platforms" next to a download button. */
+/** "Free and open source (MIT) · Version 0.17.0 · Other platforms" under a download button. */
 export function ReleaseNote(props: { class?: string }) {
   return (
-    <p class={`text-base font-semibold ${props.class ?? ""}`}>
+    <p class={`text-sm text-mute ${props.class ?? ""}`}>
       Free and open source (
-      <a href={`${REPO_URL}/blob/master/LICENSE`} class="link">
+      <a href={`${REPO_URL}/blob/master/LICENSE`} class="underline-offset-4 hover:text-ink hover:underline">
         MIT
       </a>
       )
@@ -36,14 +41,14 @@ export function ReleaseNote(props: { class?: string }) {
         {(version) => (
           <>
             {" · "}
-            <a href={release()!.notes} class="link">
+            <a href={release()!.notes} class="underline-offset-4 hover:text-ink hover:underline">
               Version {version()}
             </a>
           </>
         )}
       </Show>
       {" · "}
-      <a href={DOWNLOAD_PAGE} class="link">
+      <a href={DOWNLOAD_PAGE} class="underline-offset-4 hover:text-ink hover:underline">
         Other platforms
       </a>
     </p>
