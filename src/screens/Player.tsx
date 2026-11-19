@@ -1492,7 +1492,11 @@ export function Player({
   const dock = !tv && form === "desktop" && !mini;
   const dockZoom = useDockZoom(dock);
   // The dock's popup menus (Cast, More) share its panels' look and scale (player.css `.menu-dock`).
-  const dockMenu = dock ? { className: "scheme-dark menu-dock", style: { "--pz": dockZoom } as React.CSSProperties } : {};
+  // Zoomed only past 1× (player.css data-zoomed): at 1× nothing carries a zoom, which WebKit doesn't treat as a no-op.
+  const zoomed = dock && dockZoom > 1;
+  const dockMenu = dock
+    ? { className: zoomed ? "scheme-dark menu-dock menu-dock-zoomed" : "scheme-dark menu-dock", style: zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined }
+    : {};
   const barFit = useBarFit(
     topBar,
     actionRow,
@@ -1833,7 +1837,8 @@ export function Player({
       data-options={!!options}
       data-options-instant={optionsByKey}
       data-dock={dock || undefined}
-      style={dock ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined}
+      data-zoomed={zoomed || undefined}
+      style={zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined}
       data-started={started}
       onPointerMove={() => poke()}
       onPointerDown={() => poke()}

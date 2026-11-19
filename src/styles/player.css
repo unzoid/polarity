@@ -3455,8 +3455,13 @@ body:has(.player[data-started="true"]) .menu {
 .player[data-dock] .player-bottom {
   padding-top: 7rem;
 }
-/* The dock's controls grow with the window (--pz, useDockZoom.ts), so they aren't tiny on a big fullscreen. */
-.player[data-dock] :is(.player-bottom, .player-top) {
+/* The dock's controls grow with the window (--pz, useDockZoom.ts), so they aren't tiny on a big fullscreen.
+   Only when the window is bigger than the dock's own size (data-zoomed): at 1× nothing carries a zoom at all, which
+   WebKit doesn't treat as a no-op. */
+.player[data-dock][data-zoomed] :is(.player-bottom, .player-top) {
+  zoom: var(--pz, 1);
+}
+.player[data-dock][data-zoomed] .options-overlay[data-place="dock"] .options-columns {
   zoom: var(--pz, 1);
 }
 /* Only the controls hold the controls up and take clicks: the gradient's room and the title above them let the
@@ -3568,9 +3573,8 @@ body:has(.player[data-started="true"]) .menu {
 }
 .options-overlay[data-place="dock"] .options-columns {
   position: absolute;
-  /* Scaled with the dock (--pz, useDockZoom.ts); the placement Player measured is in window pixels, so it's
-     divided back out of the zoom. */
-  zoom: var(--pz, 1);
+  /* Scaled with the dock when the window is big (--pz, data-zoomed above); the placement Player measured is in
+     window pixels, so it's divided back out of the zoom. */
   right: calc(var(--dock-right, 40px) / var(--pz, 1));
   bottom: calc(var(--dock-bottom, 160px) / var(--pz, 1));
   display: flex;
@@ -4411,8 +4415,10 @@ body:has(.player[data-started="true"]) .menu {
 
 /* The player's More menu (Player.tsx `moreMenu`, in a portal outside the player): the same panel and rows,
    scaled with the dock (--pz). */
-.menu.menu-dock {
+.menu.menu-dock-zoomed {
   zoom: var(--pz, 1);
+}
+.menu.menu-dock {
   min-width: 260px;
   max-width: 400px;
   padding: 8px;
