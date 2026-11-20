@@ -6,7 +6,7 @@
 @property --tint {
   syntax: "<color>";
   inherits: true;
-  initial-value: rgb(var(--ink) / 0.07);
+  initial-value: #141414;
 }
 
 :root[data-phone-ui] {
@@ -45,14 +45,14 @@
   -webkit-font-smoothing: antialiased;
 }
 /* A phone draws no scrollbars: lists show they scroll by moving. */
-:root[data-phone-ui] *,
-:root[data-phone-ui] *::before {
+:root[data-phone-ui] :is(.ph-main, .sheet) *,
+:root[data-phone-ui] :is(.ph-main, .sheet) *::before {
   scrollbar-width: none;
 }
-:root[data-phone-ui] ::-webkit-scrollbar {
+:root[data-phone-ui] :is(.ph-main, .sheet) ::-webkit-scrollbar {
   display: none;
 }
-.ph button {
+.ph-main button {
   font: inherit;
   color: inherit;
   -webkit-tap-highlight-color: transparent;

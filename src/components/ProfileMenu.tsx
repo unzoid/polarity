@@ -103,7 +103,7 @@ export function ProfileMenu({ trigger = true }: { trigger?: boolean } = {}) {
     ...(me && partyAvailable() ? [{ id: "party", label: "Join Watch Party", icon: <WatchParty />, run: () => setJoinPartyOpen(true), stay: true, view: true }] : []),
     ...(me && friendsAvailable() ? [{ id: "friends", label: "Friends", count: requests, icon: <Users />, run: () => setFriendsOpen(true), stay: true, view: true }] : []),
     ...(canOpenFiles ? [{ id: "open-file", label: "Open File…", icon: <OpenFile />, run: () => setOpenFilesOpen(true) }] : []),
-    ...(!settings?.showCalendar ? [{ id: "calendar", label: "Calendar", icon: <Calendar />, run: () => tab({ name: "calendar" }) }] : []),
+    ...(!settings?.showCalendar || phone ? [{ id: "calendar", label: "Calendar", icon: <Calendar />, run: () => tab({ name: "calendar" }) }] : []),
     { id: "settings", label: "Settings", icon: <Settings />, run: () => openSettings(), stay: true },
     ...(me ? [{ id: "account", label: "Account", icon: <Profile />, run: () => openSettings("account"), stay: true }] : []),
     // The bug form in the browser, filled in with this device (#205); Settings → About has the other kinds.

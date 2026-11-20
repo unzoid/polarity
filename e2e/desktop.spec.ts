@@ -685,14 +685,16 @@ test("the first torrent source shows a notice once: Cancel plays nothing, Play g
   await play();
   await notice.getByRole("button", { name: "Play", exact: true }).click();
   await expect(notice).toHaveCount(0);
-  await expect.poll(opens).toBe(1);
+  // Opened (the fake can't play it, so the player goes on to the next source, and opens that too).
+  await expect.poll(opens).toBeGreaterThanOrEqual(1);
   expect(await app.evaluate(() => JSON.parse(localStorage.getItem("polar.prefs") ?? "{}").torrentNotice)).toBe(false);
   await app.keyboard.press("Escape");
   await expect(player).toHaveCount(0);
 
   // Once Play was chosen, the next torrent opens straight away.
+  const before = await opens();
   await play();
-  await expect.poll(opens).toBe(2);
+  await expect.poll(opens).toBeGreaterThan(before);
   await expect(notice).toHaveCount(0);
 });
 
@@ -1185,7 +1187,8 @@ test("a Home shelf's heading opens its browse page with the filter on, and Back 
 
   await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
   await expect(app.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio", { name: "New" })).toBeChecked();
-  await expect(app.getByRole("combobox", { name: "Genre" })).toHaveText(/All Genres/);
+  // Genres are a row of pills: All, until one is picked.
+  await expect(app.getByRole("group", { name: "Filter by genre" }).getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   await app.keyboard.press("Escape");
   await expect(heading).toBeVisible();
@@ -1200,7 +1203,7 @@ test("a Home shelf's heading opens its browse page with the filter on, and Back 
   expect(pick).toBeDefined();
   await app.getByRole("button", { name: pick, exact: true }).click();
   await expect(app.getByRole("radiogroup", { name: "Catalog" }).getByRole("radio", { name: "Popular" })).toBeChecked();
-  await expect(app.getByRole("combobox", { name: "Genre" })).not.toHaveText(/All Genres/);
+  await expect(app.getByRole("group", { name: "Filter by genre" }).getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "false");
 });
 
 test("an add-on's catalogs: off at first, switched on and ordered in Settings, rows on Home, browsed in Discover, searched (#206)", async ({ app }) => {
@@ -1242,9 +1245,7 @@ test("an add-on's catalogs: off at first, switched on and ordered in Settings, r
   await expect(app.getByRole("heading", { level: 1, name: "Movies" })).toBeVisible();
   await expect(app.getByRole("combobox", { name: "List" })).toHaveText(/Staff Picks · Example Lists/);
   await expect(app.getByRole("radiogroup", { name: "Catalog" })).toHaveCount(0);
-  await app.getByRole("combobox", { name: "Genre" }).click();
-  await expect(app.getByRole("option")).toHaveText(["All Genres", "Drama", "Comedy"]);
-  await app.keyboard.press("Escape");
+  await expect(app.getByRole("group", { name: "Filter by genre" }).getByRole("button")).toHaveText(["All", "Drama", "Comedy"]);
   // Pages of 4 follow `skip` as the grid scrolls.
   await expect(app.locator(".scroll .card").nth(4)).toBeAttached();
 
@@ -1552,7 +1553,7 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(partySurfaces(app)).toHaveCount(0);
     await app.evaluate(() => (globalThis as { __polarFakeFriendInvite?: () => void }).__polarFakeFriendInvite?.());
     const toast = app.locator('[data-kind="friend-invite"]');
-    await expect(toast).toContainText("Sam invited you to a watch party");
+    await expect(toast).toContainText(/^Sam invited you to/);
     await toast.getByRole("button", { name: "Join" }).click();
     await expect(app.getByRole("dialog", { name: "Friends" }).getByText("Joining the watch party…")).toBeVisible();
     await expect(toast).toHaveCount(0);

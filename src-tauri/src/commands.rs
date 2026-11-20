@@ -140,7 +140,8 @@ pub struct SearchResults {
 #[tauri::command]
 pub async fn search(state: State<'_, AppState>, query: String) -> Result<SearchResults> {
     let ix: Arc<Indexer> = state.indexer();
-    let (movies, series, people) = tokio::join!(ix.search("movie", &query), ix.search("series", &query), ix.search_people(&query));
+    let (movies, series, people) =
+        tokio::join!(ix.search("movie", &query), ix.search("series", &query), ix.search_people(&query));
     // Partial results beat a dead search: only fail when neither movies nor series answered.
     let (movies, series) = match (movies, series) {
         (Ok(m), Ok(s)) => (m, s),

@@ -386,7 +386,7 @@ function AddonRow({ catalog }: { catalog: AddonCatalog }) {
   const data = useBrowseVisible(useListable(found));
   const { navigate } = useNavigation();
   return (
-    <div ref={ref} className="ph-row-slot">
+    <div ref={ref} className="ph-row-slot" data-addon-row={catalog.id}>
       {!isError && !(data && !data.length) && (
         <Row
           title={catalogTitle(catalog)}

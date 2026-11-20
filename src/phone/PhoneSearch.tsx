@@ -59,6 +59,7 @@ export function PhoneSearch({ active }: { active: boolean }) {
             <input
               ref={input}
               type="search"
+              aria-label="Search"
               enterKeyHint="search"
               autoComplete="off"
               autoCorrect="off"
