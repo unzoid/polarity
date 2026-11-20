@@ -49,7 +49,7 @@ function readNarrowDiscover() {
     : false;
 }
 
-const CATALOGS = [
+export const CATALOGS = [
   { id: "trending", label: "Trending" },
   { id: "popular", label: "Popular" },
   { id: "top_rated", label: "Top Rated" },
@@ -113,87 +113,34 @@ export function Discover({
 }) {
   const phone = useFormFactor().form === "phone";
   const narrow = useSyncExternalStore(subscribeNarrowDiscover, readNarrowDiscover, () => false);
-  const viewing = useViewingLimit();
   const { navigate } = useNavigation();
-  const taste = useTasteProfile();
-  const { data: watching } = useContinueWatching();
-  const { data: history } = useWatchHistory();
-  const [catalog, setCatalog] = useState(() => (CATALOGS.some((c) => c.id === initialCatalog) ? initialCatalog! : "trending"));
-  const [picked, setGenre] = useState(initialGenre);
-  const [era, setEra] = useState<Era>("");
-  const [minRating, setMinRating] = useState<MinRating>("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const lists = useAddonCatalogs().filter((c) => c.type === type && browsable(c));
-  const [list, setList] = useState(() => (initialAddon && initialCatalog ? catalogKey({ addon: initialAddon, type, id: initialCatalog }) : ""));
-  // Movies and Series share this screen: a list or genre from one may not exist in the other.
-  const own = lists.find((c) => catalogKey(c) === list);
-  const genres = own ? own.genres : BROWSE_GENRES[type];
-  const genre = picked && genres.includes(picked) ? picked : own?.genreRequired ? own.genres[0] : undefined;
-
-  const query = useInfiniteQuery({
-    queryKey: own ? keys.addonCatalogPages(own.addon, type, own.id, genre) : keys.discover(type, catalog, genre),
-    queryFn: ({ pageParam }) =>
-      own ? api.addonCatalog(own.addon, type, own.id, catalogExtra(own, { genre, skip: pageParam })) : api.catalog(type, catalog, pageParam, genre, catalogBound(type)),
-    initialPageParam: 0,
-    // An add-on without `skip` answers with its whole list; one that ignores `skip` would repeat its page forever.
-    getNextPageParam: (last: MetaPreview[], pages) => {
-      if (!last.length || (own && !own.pages)) return undefined;
-      const before = new Set(pages.slice(0, -1).flat().map((m) => m.id));
-      return last.some((m) => !before.has(m.id)) ? pages.flat().length : undefined;
-    },
-    // Switching catalogs quickly: keep the last grid up (dimmed) instead of
-    // collapsing to skeletons and back, which jolts the page each time.
-    placeholderData: keepPreviousData,
-  });
-
-  // Dedupe across pages — upstream catalogs occasionally repeat items.
-  const seen = new Set<string>();
-  // Titles over the profile's viewing limit stay out; pages are still counted whole for `skip`.
-  const all = keepWithinLimit(query.data?.pages.flat() ?? [], viewing);
-  // Nothing to play and nothing to show (#337) stays out.
-  // Hidden titles too, and watched ones when asked (lib/catalog/browseFilter.ts); the grid's pager fills a short page.
-  const visibleItems = useBrowseVisible(useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id))));
-  const baseItems = visibleItems ?? [];
-  const items = useMemo(
-    () => (era || minRating ? baseItems.filter((m) => matchesEra(m, era) && matchesRating(m, minRating)) : baseItems),
-    [baseItems, era, minRating],
-  );
-  const watchedIds = useMemo(
-    () => new Set([...(watching ?? []).map((p) => p.metaId), ...(history ?? []).map((p) => p.metaId)]),
-    [watching, history],
-  );
-  const refinedCount = (era ? 1 : 0) + (minRating ? 1 : 0);
-  const hasFilters = !!genre || refinedCount > 0 || !!own;
-  const resetFilters = () => {
-    setList("");
-    setGenre(undefined);
-    setEra("");
-    setMinRating("");
-    setCatalog("trending");
-    setFiltersOpen(false);
-  };
-  const surprise = () => {
-    const chosen = pickForMe(items, watchedIds, taste);
-    if (chosen) navigate({ name: "detail", type: chosen.type, id: chosen.id, preview: chosen });
-  };
-  const empty =
-    !query.isPending &&
-    !query.isFetchingNextPage &&
-    !query.isError &&
-    visibleItems !== undefined &&
-    items.length === 0 &&
-    (!query.hasNextPage || refinedCount > 0);
-
-  // Editorial spotlight at the top of Discovery when browsing cleanly (no Era/Rating narrow-down or add-on list).
-  const catalogLabel = CATALOGS.find((c) => c.id === catalog)?.label ?? "Trending";
-  const spotlight = useMemo(() => {
-    if (own || refinedCount > 0 || items.length < 4) return null;
-    return items.find((m) => !!m.background) ?? null;
-  }, [own, refinedCount, items]);
-  const gridItems = useMemo(
-    () => (spotlight ? items.filter((m) => m.id !== spotlight.id) : items),
-    [items, spotlight],
-  );
+  const {
+    own,
+    lists,
+    list,
+    setList,
+    catalog,
+    setCatalog,
+    genres,
+    genre,
+    setGenre,
+    era,
+    setEra,
+    minRating,
+    setMinRating,
+    filtersOpen,
+    setFiltersOpen,
+    query,
+    items,
+    refinedCount,
+    hasFilters,
+    resetFilters,
+    surprise,
+    empty,
+    catalogLabel,
+    spotlight,
+    gridItems,
+  } = useDiscover({ type, catalog: initialCatalog, genre: initialGenre, addon: initialAddon });
 
   return (
     <div className="scroll">
@@ -361,6 +308,133 @@ export function Discover({
       )}
     </div>
   );
+}
+
+/**
+ * What a Discover view shows, for any layout of it (this page and the phone shell's section page): Polarity's
+ * catalogs or one of an add-on's, a genre, the Era and Rating narrow-downs, its titles page by page, the spotlight
+ * at its top and the grid under it.
+ */
+export function useDiscover({
+  type,
+  catalog: initialCatalog,
+  genre: initialGenre,
+  addon: initialAddon,
+}: {
+  type: ContentType;
+  catalog?: string;
+  genre?: string;
+  addon?: string;
+}) {
+  const viewing = useViewingLimit();
+  const { navigate } = useNavigation();
+  const taste = useTasteProfile();
+  const { data: watching } = useContinueWatching();
+  const { data: history } = useWatchHistory();
+  const [catalog, setCatalog] = useState(() => (CATALOGS.some((c) => c.id === initialCatalog) ? initialCatalog! : "trending"));
+  const [picked, setGenre] = useState(initialGenre);
+  const [era, setEra] = useState<Era>("");
+  const [minRating, setMinRating] = useState<MinRating>("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const lists = useAddonCatalogs().filter((c) => c.type === type && browsable(c));
+  const [list, setList] = useState(() => (initialAddon && initialCatalog ? catalogKey({ addon: initialAddon, type, id: initialCatalog }) : ""));
+  // Movies and Series share this screen: a list or genre from one may not exist in the other.
+  const own = lists.find((c) => catalogKey(c) === list);
+  const genres = own ? own.genres : BROWSE_GENRES[type];
+  const genre = picked && genres.includes(picked) ? picked : own?.genreRequired ? own.genres[0] : undefined;
+
+  const query = useInfiniteQuery({
+    queryKey: own ? keys.addonCatalogPages(own.addon, type, own.id, genre) : keys.discover(type, catalog, genre),
+    queryFn: ({ pageParam }) =>
+      own ? api.addonCatalog(own.addon, type, own.id, catalogExtra(own, { genre, skip: pageParam })) : api.catalog(type, catalog, pageParam, genre, catalogBound(type)),
+    initialPageParam: 0,
+    // An add-on without `skip` answers with its whole list; one that ignores `skip` would repeat its page forever.
+    getNextPageParam: (last: MetaPreview[], pages) => {
+      if (!last.length || (own && !own.pages)) return undefined;
+      const before = new Set(pages.slice(0, -1).flat().map((m) => m.id));
+      return last.some((m) => !before.has(m.id)) ? pages.flat().length : undefined;
+    },
+    // Switching catalogs quickly: keep the last grid up (dimmed) instead of
+    // collapsing to skeletons and back, which jolts the page each time.
+    placeholderData: keepPreviousData,
+  });
+
+  // Dedupe across pages — upstream catalogs occasionally repeat items.
+  const seen = new Set<string>();
+  // Titles over the profile's viewing limit stay out; pages are still counted whole for `skip`.
+  const all = keepWithinLimit(query.data?.pages.flat() ?? [], viewing);
+  // Nothing to play and nothing to show (#337) stays out.
+  // Hidden titles too, and watched ones when asked (lib/catalog/browseFilter.ts); the grid's pager fills a short page.
+  const visibleItems = useBrowseVisible(useListable(own ? catalogItems(own, all) : all.filter((m) => !seen.has(m.id) && seen.add(m.id))));
+  const baseItems = visibleItems ?? [];
+  const items = useMemo(
+    () => (era || minRating ? baseItems.filter((m) => matchesEra(m, era) && matchesRating(m, minRating)) : baseItems),
+    [baseItems, era, minRating],
+  );
+  const watchedIds = useMemo(
+    () => new Set([...(watching ?? []).map((p) => p.metaId), ...(history ?? []).map((p) => p.metaId)]),
+    [watching, history],
+  );
+  const refinedCount = (era ? 1 : 0) + (minRating ? 1 : 0);
+  const hasFilters = !!genre || refinedCount > 0 || !!own;
+  const resetFilters = () => {
+    setList("");
+    setGenre(undefined);
+    setEra("");
+    setMinRating("");
+    setCatalog("trending");
+    setFiltersOpen(false);
+  };
+  const surprise = () => {
+    const chosen = pickForMe(items, watchedIds, taste);
+    if (chosen) navigate({ name: "detail", type: chosen.type, id: chosen.id, preview: chosen });
+  };
+  const empty =
+    !query.isPending &&
+    !query.isFetchingNextPage &&
+    !query.isError &&
+    visibleItems !== undefined &&
+    items.length === 0 &&
+    (!query.hasNextPage || refinedCount > 0);
+
+  // Editorial spotlight at the top of Discovery when browsing cleanly (no Era/Rating narrow-down or add-on list).
+  const catalogLabel = CATALOGS.find((c) => c.id === catalog)?.label ?? "Trending";
+  const spotlight = useMemo(() => {
+    if (own || refinedCount > 0 || items.length < 4) return null;
+    return items.find((m) => !!m.background) ?? null;
+  }, [own, refinedCount, items]);
+  const gridItems = useMemo(
+    () => (spotlight ? items.filter((m) => m.id !== spotlight.id) : items),
+    [items, spotlight],
+  );
+
+  return {
+    own,
+    lists,
+    list,
+    setList,
+    catalog,
+    setCatalog,
+    genres,
+    genre,
+    setGenre,
+    era,
+    setEra,
+    minRating,
+    setMinRating,
+    filtersOpen,
+    setFiltersOpen,
+    query,
+    items,
+    refinedCount,
+    hasFilters,
+    resetFilters,
+    surprise,
+    empty,
+    catalogLabel,
+    spotlight,
+    gridItems,
+  };
 }
 
 /** Compact editorial spotlight banner giving Discover a real curated presence above the grid. */

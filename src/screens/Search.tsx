@@ -120,7 +120,7 @@ function SearchHeader() {
 }
 
 /** Nothing typed on the phone's page: your last searches, then genres as tiles, one tap from their titles. */
-function SearchStart() {
+export function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
   const { data: animeArt, isPending: animeArtPending } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);

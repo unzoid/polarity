@@ -546,6 +546,7 @@ function NavItem({
   return (
     <button
       className="t3s-nav-item"
+      data-page={page.id}
       data-active={active}
       aria-current={active ? "page" : undefined}
       aria-label={page.label}

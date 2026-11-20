@@ -37,6 +37,7 @@ export function DownloadButton({
   className = buttonClass("glass", true),
   size = 20,
   labelled = false,
+  text,
 }: {
   item: MetaPreview;
   /** The episode, for a show; a movie downloads itself. */
@@ -45,6 +46,8 @@ export function DownloadButton({
   size?: number;
   /** The title page's button (#26): names what it downloads, "Download S2 E5" or "Download Movie". */
   labelled?: boolean;
+  /** Words after the glyph, in `className`'s button, before anything is downloading (the phone sheet's wide button). */
+  text?: string;
 }) {
   const videoId = video?.id ?? item.id;
   const { download: d, pending } = useDownload(videoId);
@@ -101,6 +104,7 @@ export function DownloadButton({
       >
         {glyph(failed ? <AlertCircle size={labelled ? 18 : size} /> : <Download size={labelled ? 18 : size} />)}
         {labelled && `Download ${what}`}
+        {!labelled && text}
       </button>
     );
   } else if (d.state === "done") {

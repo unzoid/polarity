@@ -66,6 +66,34 @@ const NO_TITLES: MetaPreview[] = [];
 const EAGER_SHELVES = 2;
 
 export function Home() {
+  const { items, shelves, excludes, settings, addonRows, surpriseMe } = useHomeFeed();
+
+  return (
+    <div className="scroll home">
+      {items?.length !== 0 && <HeroCarousel items={items} onSurprise={surpriseMe} />}
+      <div className="rows home-rows">
+        {(settings?.showContinueWatching ?? true) && <ContinueRow />}
+        {addonRows.map((c) => (
+          <AddonShelf key={catalogKey(c)} catalog={c} />
+        ))}
+        {shelves.map((shelf, i) => (
+          <LazyShelf
+            key={shelfKey(shelf).join("/")}
+            shelf={shelf}
+            eager={i < EAGER_SHELVES}
+            exclude={excludes[i]}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What Home shows, for any layout of it (this page, and the phone shell's): the featured titles, the shelves and
+ * what each leaves out, the add-ons' rows, and Surprise Me.
+ */
+export function useHomeFeed() {
   // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
   const items = useBrowseFeatured(useFeatured().data);
   const seeds = useSeeds();
@@ -98,25 +126,7 @@ export function Home() {
     if (chosen) navigate({ name: "detail", type: chosen.type, id: chosen.id, preview: chosen });
   }, [items, shelves, qc, watched, taste, navigate]);
 
-  return (
-    <div className="scroll home">
-      {items?.length !== 0 && <HeroCarousel items={items} onSurprise={surpriseMe} />}
-      <div className="rows home-rows">
-        {(settings?.showContinueWatching ?? true) && <ContinueRow />}
-        {addonRows.map((c) => (
-          <AddonShelf key={catalogKey(c)} catalog={c} />
-        ))}
-        {shelves.map((shelf, i) => (
-          <LazyShelf
-            key={shelfKey(shelf).join("/")}
-            shelf={shelf}
-            eager={i < EAGER_SHELVES}
-            exclude={excludes[i]}
-          />
-        ))}
-      </div>
-    </div>
-  );
+  return { items, shelves, excludes, settings, addonRows, surpriseMe };
 }
 
 // --- Hero ----------------------------------------------------------------
@@ -556,17 +566,16 @@ function HeroContent({ item }: { item: MetaPreview }) {
 /** With fewer fresh titles than this, a shelf shows its full list, repeats and all. */
 const MIN_FRESH = 6;
 
-function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
-  const { title } = shelf;
-  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
-  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
-  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
+/**
+ * A shelf's titles once `enabled` (near the screen): what its catalog or recommendations give, without what's
+ * hidden, watched or already above (`exclude`) unless that leaves too few. `skip`: the shelf stays out (its catalog
+ * failed, or there's too little worth recommending).
+ */
+export function useShelfItems(shelf: HomeShelf, enabled: boolean, exclude: Set<string>) {
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
   const { data, isLoading, isError } = isCatalog ? catalog : recommended;
-  const { navigate } = useNavigation();
-  const to = shelfRoute(shelf);
   // Nothing to play and nothing to show (#337) stays out.
   // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
   const shown = useBrowseShelf(useListable(data), isCatalog ? { type: shelf.type, id: shelf.id, genre: shelf.genre } : undefined);
@@ -574,17 +583,27 @@ function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: bo
     const fresh = (shown ?? []).filter((m) => !exclude.has(m.id));
     return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (shown ?? []);
   }, [shown, exclude, shelf.kind]);
+  // One failing catalog shouldn't break the page; nothing good to recommend leaves the row out rather than a stub.
+  const skip = isError || (shelf.kind === "because" && !!data && items.length < 4);
+  return { items: isLoading || !enabled ? undefined : items, skip };
+}
 
-  if (isError) return null; // one failing catalog shouldn't break the page
-  // Nothing good to recommend: leave the row out rather than show a stub.
-  if (shelf.kind === "because" && data && items.length < 4) return null;
+function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
+  const { title } = shelf;
+  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
+  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
+  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
+  const { items, skip } = useShelfItems(shelf, enabled, exclude);
+  const { navigate } = useNavigation();
+  const to = shelfRoute(shelf);
+  if (skip) return null;
   const TitleCard = shape === "landscape" ? LandscapeCard : PosterCard;
   return (
     <Shelf
       title={title}
       onOpen={to && (() => navigate(to))}
       shape={shape}
-      items={isLoading || !enabled ? undefined : items}
+      items={items}
       card={(item) => <TitleCard key={item.id} item={item} />}
     />
   );
@@ -623,7 +642,7 @@ function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   );
 }
 
-function ContinueRow() {
+export function ContinueRow() {
   const entries = useUpNextContinueWatching();
   const items = useMemo(() => entries.map((e) => e.progress), [entries]);
   const byVideo = useMemo(() => new Map(entries.map((e) => [e.progress.videoId, e])), [entries]);

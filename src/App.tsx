@@ -70,6 +70,7 @@ import { LockedKeysToast } from "./components/LockedKeysToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
 import { HiddenTitleToast } from "./components/HiddenTitleToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
+import { PhoneApp } from "./phone/PhoneApp";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
@@ -312,6 +313,8 @@ function GateScreen() {
 /** The desktop app or, in TV mode, the 10-foot one — over the same navigation stack. */
 function MainApp() {
   const tv = useTvMode();
+  // A phone has its own app (src/phone): Netflix's layout and motion over the same pages and navigation.
+  const phone = useFormFactor().form === "phone";
 
   // Interface size is this screen's, so it's a device pref.
   const { uiScale, animeEnabled } = usePrefs();
@@ -391,6 +394,8 @@ function MainApp() {
         <Suspense fallback={null}>
           <TvApp />
         </Suspense>
+      ) : phone ? (
+        <PhoneApp Screen={Screen} />
       ) : (
         <DesktopApp />
       )}

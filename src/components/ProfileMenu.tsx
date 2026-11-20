@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Calendar, Check, ChevronLeft, ChevronRight, Edit, Feedback, Lock, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
+import { Calendar, ChevronLeft, ChevronRight, Edit, Feedback, Lock, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { api } from "../lib/api";
 import { appVersion } from "../lib/updater";
 import { feedbackContext, feedbackUrl } from "../lib/feedback";
@@ -21,7 +21,7 @@ import { hasPin } from "../lib/account/profileRules";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
-import { lazyNamed, useFormFactor } from "../lib/ui";
+import { lazyNamed, useFormFactor, whenIdle } from "../lib/ui";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { useGuard } from "./profileLock/useGuard";
@@ -31,6 +31,7 @@ import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./ui/Popover";
 import { FitHeight, backOnEscape, useViewSlide } from "./ViewStack";
 import { anchorOf, buildChannel, nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
+import { IconPencil } from "../phone/icons";
 
 /** Settings, as the profile sheet's next view on a phone: loaded when it's first opened, as the window is (App.tsx). */
 const SettingsOverlay = lazyNamed(() => import("./SettingsOverlay"), "SettingsOverlay");
@@ -64,7 +65,16 @@ const VIEW_TITLES = { friends: "Friends", join: "Join a Watch Party", settings: 
  * system's own menu. The popover and the sheet show Friends and Join as views
  * inside themselves.
  */
-export function ProfileMenu() {
+/** Who wants the phone's profile sheet up (the phone shell's profile in its bar and its tab). */
+const sheetOpeners = new Set<() => void>();
+
+/** Opens the phone's profile sheet, wherever its ProfileMenu is mounted. */
+export function openProfileSheet() {
+  sheetOpeners.forEach((open) => open());
+}
+
+/** `trigger`: false leaves the avatar button out (the phone shell has its own ways in: `openProfileSheet`). */
+export function ProfileMenu({ trigger = true }: { trigger?: boolean } = {}) {
   const account = useAccount();
   const phone = useFormFactor().form === "phone";
   const signedIn = account.enabled && account.status !== "guest" && !!account.profile;
@@ -135,7 +145,7 @@ export function ProfileMenu() {
 
   const status = me ? undefined : !account.enabled && buildChannel === "dev" ? "No database connected" : "Not signed in";
   const props = { name, avatar, me, meLocked, badgeCount, email: me ? account.user?.email : undefined, status, profiles, manage: manage[0], groups: [actions, session] };
-  return phone ? <ProfileSheet {...props} /> : <ProfilePopover {...props} />;
+  return phone ? <ProfileSheet {...props} trigger={trigger} /> : <ProfilePopover {...props} />;
 }
 
 type MenuProps = {
@@ -370,7 +380,7 @@ function ProfilePopList({ name, avatar, me, meLocked, email, status, profiles, m
  * as views inside it, with a Back to the list; the sheet is the screen's full height throughout, as Netflix's account
  * sheet is, so a view comes in without the sheet changing size under it. Any other choice closes it as it runs.
  */
-function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, status, profiles, manage, groups }: MenuProps) {
+function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, status, profiles, manage, groups, trigger = true }: MenuProps & { trigger?: boolean }) {
   const settingsOpen = useSettingsOverlay().open;
   // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
   const [managing, setManaging] = useState(false);
@@ -400,6 +410,13 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
     list(!!c.stay);
     c.run();
   };
+  useEffect(() => {
+    const open = () => list(true);
+    sheetOpeners.add(open);
+    return () => void sheetOpeners.delete(open);
+  }, [list]);
+  // Settings is loaded once the app has settled, so opening it later shows it at once instead of a spinner.
+  useEffect(() => whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 1500), []);
   // The sheet sits in its own place beside the pages and the top bar (App.tsx `.sheet-host`), not among the bar's
   // actions: anything that scales them or the pages under it (the actions once scrolled, the pages stepping back as
   // it opens) would otherwise hold the sheet's fixed layers inside its box.
@@ -423,18 +440,20 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
     );
   return (
     <>
-      <button
-        type="button"
-        className="navbar-profile pressable"
-        aria-label={badgeCount ? `Profile: ${name} (${badgeCount} pending)` : `Profile: ${name}`}
-        aria-haspopup="dialog"
-        onClick={() => list(true)}
-      >
-        <Avatar id={avatar} />
-        {badgeCount > 0 && <span className="navbar-profile-badge" aria-hidden />}
-      </button>
+      {trigger && (
+        <button
+          type="button"
+          className="navbar-profile pressable"
+          aria-label={badgeCount ? `Profile: ${name} (${badgeCount} pending)` : `Profile: ${name}`}
+          aria-haspopup="dialog"
+          onClick={() => list(true)}
+        >
+          <Avatar id={avatar} />
+          {badgeCount > 0 && <span className="navbar-profile-badge" aria-hidden />}
+        </button>
+      )}
       {bar && createPortal(
-      <Sheet open={open} onClose={shut} title={title} full>
+      <Sheet open={open} onClose={shut} title={title} full closeButton={!trigger}>
         <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
           {view === "friends" && (
             <Suspense fallback={null}>
@@ -509,76 +528,79 @@ function ProfileList({
   onEdit: (id: string) => void;
   meId?: string;
 }) {
-  // Managing, a tap on a profile opens its page instead of switching to it.
-  const Me = managing && meId ? "button" : "div";
+  // Netflix's account sheet: the profile you're on in a card (its pencil edits it), the others a tap each to switch
+  // to, Manage Profiles (a pencil on each, the rest dimmed, until Done), then each choice a row of its own and the
+  // version at the foot.
+  const [version, setVersion] = useState<string>();
+  useEffect(() => {
+    void appVersion()
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
   return (
-    <div className="profile-sheet-profiles" data-managing={managing || undefined}>
-      <Me className="profile-sheet-me" {...(Me === "button" ? { type: "button" as const, onClick: () => onEdit(meId!), "aria-label": `Edit ${name}` } : {})}>
-        <span className="profile-sheet-face">
+    <div className="nfp" data-managing={managing || undefined}>
+      <div className="nfp-me">
+        {meId && (
+          <button type="button" className="nfp-me-edit" aria-label={`Edit ${name}`} onClick={() => onEdit(meId)}>
+            <PhonePencil />
+          </button>
+        )}
+        <span className="nfp-face">
           <Avatar id={avatar} />
           {meLocked && (
-            <span className="profile-sheet-lock" aria-hidden>
+            <span className="nfp-lock" aria-hidden>
               <Lock size={12} />
             </span>
           )}
-          <EditMark />
         </span>
         <strong>{name}</strong>
-        <span>{email ?? "Not signed in"}</span>
-      </Me>
-      {(profiles.length > 0 || manage) && (
-        <div className="profile-sheet-others">
+        {!meId && <span className="nfp-status">{email ?? "Not signed in"}</span>}
+      </div>
+      {profiles.length > 0 && (
+        <div className="nfp-others">
           {profiles.map((c) => (
             <button
               key={c.id}
-              className="profile-sheet-other pressable"
-              aria-label={managing ? `Edit ${c.label}` : undefined}
+              type="button"
+              className="nfp-other"
+              aria-label={managing ? `Edit ${c.label}` : c.label}
               onClick={() => (managing ? onEdit(c.id.replace(/^profile:/, "")) : pick(c))}
             >
-              <span className="profile-sheet-face">
+              <span className="nfp-face">
                 {c.icon}
                 {c.locked && (
-                  <span className="profile-sheet-lock" aria-hidden>
+                  <span className="nfp-lock" aria-hidden>
                     <Lock size={11} />
                   </span>
                 )}
-                <EditMark />
+                <span className="nfp-pencil" aria-hidden>
+                  <PhonePencil />
+                </span>
               </span>
-              <span>{c.label}</span>
+              <span className="nfp-other-name">{c.label}</span>
             </button>
           ))}
-          {manage && (
-            <button className="profile-sheet-other pressable" aria-pressed={managing} onClick={onManage}>
-              <span className="profile-sheet-manage" aria-hidden>
-                {managing ? <Check size={22} /> : <Edit size={22} />}
-              </span>
-              <span>{managing ? "Done" : "Manage"}</span>
-            </button>
-          )}
         </div>
       )}
-      {groups
-        .filter((g) => g.length)
-        .map((g) => (
-          <div key={g[0].id} className="profile-sheet-card">
-            {g.map((c) => (
-              <button key={c.id} className="profile-sheet-row" onClick={() => pick(c)}>
-                {c.icon}
-                <span>{labelOf(c)}</span>
-                <ChevronRight size={18} aria-hidden />
-              </button>
-            ))}
-          </div>
+      {manage && (
+        <button type="button" className="nfp-manage" aria-pressed={managing} onClick={onManage}>
+          {managing ? "Done" : "Manage Profiles"}
+        </button>
+      )}
+      <div className="nfp-rows">
+        {groups.flat().map((c) => (
+          <button key={c.id} type="button" className="nfp-row" data-id={c.id} onClick={() => pick(c)}>
+            <span className="nfp-row-glyph">{c.icon}</span>
+            <span>{c.id === "settings" ? "App Settings" : labelOf(c)}</span>
+            <ChevronRight size={20} aria-hidden />
+          </button>
         ))}
+      </div>
+      {version && <p className="nfp-version">Version: {version}</p>}
     </div>
   );
 }
 
-/** A profile's pencil while the list is managed: it fades in over the picture (account.css). */
-function EditMark() {
-  return (
-    <span className="profile-sheet-edit" aria-hidden>
-      <Edit size={20} />
-    </span>
-  );
+function PhonePencil() {
+  return <IconPencil size={24} />;
 }

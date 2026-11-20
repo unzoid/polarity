@@ -48,7 +48,10 @@ export function Sheet({
   modal = true,
   forgiveMisses = false,
   full = false,
+  closeButton = false,
 }: {
+  /** A round close at the header's end (the phone shell's sheets, as Netflix's have). */
+  closeButton?: boolean;
   open: boolean;
   onClose: () => void;
   title: ReactNode;
@@ -86,7 +89,8 @@ export function Sheet({
   // as Netflix's does, on the sheet's own spring. They're left as they were once back: a scale left on them would
   // hold anything fixed inside them in their box.
   useLayoutEffect(() => {
-    const main = back && open && !prefersReducedMotion() ? document.querySelector<HTMLElement>(".main") : null;
+    // `.ph-stage`: the phone shell's tabs (src/phone), which step back the same way.
+    const main = back && open && !prefersReducedMotion() ? document.querySelector<HTMLElement>(".main, .ph-stage") : null;
     if (!main) return;
     const step = ++stepsBack;
     // On the compositor (the Web Animations API, the spring sampled), the corners set once rather than animated:
@@ -215,6 +219,14 @@ export function Sheet({
                 <h2 className="t-title2">{title}</h2>
                 {subtitle && <p className="t-caption muted">{subtitle}</p>}
               </div>
+              {/* The phone shell's sheets all have one, the shared ones (Sources, Download) too. */}
+              {(closeButton || (bottom && document.documentElement.dataset.phoneUi !== undefined)) && (
+                <button type="button" className="sheet-close" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </svg>
+                </button>
+              )}
             </header>
             <div
               className="sheet-body"

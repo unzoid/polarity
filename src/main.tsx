@@ -46,6 +46,7 @@ import "./styles/pin.css";
 import "./styles/anime.css";
 import "./styles/tv.css";
 import "./styles/updates.css";
+import "./styles/phone.css";
 import { installGamepad } from "./tv/gamepad";
 import { polyfillCountryFlagEmojis } from "country-flag-emoji-polyfill";
 import flagFont from "country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url";
