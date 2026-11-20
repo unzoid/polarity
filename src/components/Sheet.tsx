@@ -19,6 +19,19 @@ import { type Detent, ease, mediumOffset, missMargin, prefersReducedMotion, proj
  *   the screen, its header pulls it up to nearly all of it or down to close, scrolling the list expands it, and
  *   the grabber toggles between the two.
  */
+/** Each time a full sheet has the pages step back: a close that lands after the next open leaves them be. */
+let stepsBack = 0;
+/** The pages stepping back, on the sheet's spring (springs.profileSheet: critically damped, ω 20/s), sampled. */
+const STEP_BACK_MS = 420;
+function stepBackFrames(from: number, to: number): Keyframe[] {
+  const n = 24;
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const u = (20 * STEP_BACK_MS * i) / n / 1000;
+    const p = i === n ? 1 : 1 - (1 + u) * Math.exp(-u);
+    return { offset: i / n, transform: `scale(${from + (to - from) * p})` };
+  });
+}
+
 /** Estimate initial iOS detent sheet height to avoid a double-render layout pass on frame 0. */
 function estimateStops() {
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
@@ -68,6 +81,36 @@ export function Sheet({
   const fade = prefersReducedMotion() ? 0 : 1;
 
   useLayer(panel, open, onClose, { modal });
+
+  // A phone's full sheet (the profile sheet) has the pages and the top bar step back under it, smaller and rounded,
+  // as Netflix's does, on the sheet's own spring. They're left as they were once back: a scale left on them would
+  // hold anything fixed inside them in their box.
+  useLayoutEffect(() => {
+    const main = back && open && !prefersReducedMotion() ? document.querySelector<HTMLElement>(".main") : null;
+    if (!main) return;
+    const step = ++stepsBack;
+    // On the compositor (the Web Animations API, the spring sampled), the corners set once rather than animated:
+    // the main thread laying out or painting anything meanwhile doesn't hold the pages' step back up.
+    main.dataset.stepBack = "";
+    const ease = { duration: STEP_BACK_MS, easing: "linear", fill: "forwards" } as const;
+    const from = main.getAnimations().find((a) => a.id === "step-back");
+    from?.cancel();
+    const out = main.animate(stepBackFrames(1, 0.92), { ...ease, id: "step-back" });
+    return () => {
+      // From wherever it is, if it closes before it's all the way back.
+      const now = getComputedStyle(main).transform;
+      const at = now && now !== "none" ? new DOMMatrix(now).a : 0.92;
+      out.cancel();
+      const home = main.animate(stepBackFrames(at, 1), { ...ease, id: "step-back" });
+      void home.finished
+        .then(() => {
+          if (step !== stepsBack) return; // opened again meanwhile
+          home.cancel();
+          delete main.dataset.stepBack;
+        })
+        .catch(() => {});
+    };
+  }, [back, open]);
 
   /** The kind of pointer that pressed on the dim: a finger gets a wider margin than a mouse. */
   const pointer = useRef("mouse");

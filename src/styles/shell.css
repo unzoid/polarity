@@ -93,22 +93,10 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: rgb(0 0 0 / 0.42);
+  background: #000;
   opacity: 0;
   pointer-events: none;
   will-change: opacity;
-}
-.drag-scrim[data-drag-active="card"] {
-  background: rgb(0 0 0 / 0.54);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .drag-scrim[data-drag-active="card"] {
-    background: rgb(0 0 0 / 0.72);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }
 .drag-scrim[data-drag-settle] {
   transition: opacity 220ms var(--ease-out);
@@ -399,6 +387,7 @@
   left: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   transform-origin: 50% 0%;
   will-change: transform;
 }
@@ -410,26 +399,22 @@
   object-fit: cover;
   opacity: 0;
 }
+/* Static GPU Gaussian blur on the full-resolution poster (opacity-only animation; zero CORS or downscale pixelation). */
+.card-ghost-soft {
+  filter: blur(18px);
+  transform: scale(1.14);
+}
 
-/* Depth-of-field blur + dim over the static underlying page during the card zoom transition, matching
-   Netflix's iOS 18 zoom backdrop: constant blur radius with compositor-only opacity animation (0..1 / 1..0). */
+/* Pure compositor dim over the underlying page during the card zoom transition (no full-screen backdrop-filter
+   re-blur stall on WKWebView frame 0). */
 .card-scrim {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: rgb(0 0 0 / 0.56);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: var(--bg);
   pointer-events: none;
   opacity: 0;
   will-change: opacity;
-}
-@media (prefers-reduced-transparency: reduce) {
-  .card-scrim {
-    background: rgb(0 0 0 / 0.74);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }
 /* Less motion: the pair crossfades in place (unless Settings → Reduce motion is explicitly "Off"). */
 @media (prefers-reduced-motion: reduce) {

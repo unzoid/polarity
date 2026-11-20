@@ -105,16 +105,17 @@ test("a title page from a card shrinks uniformly with the finger, hides its card
   // Dedicated leaf scrim fades directly so Home (`under`) incurs zero subtree style recalc.
   expect(p.under.style.transform).toBe("");
   expect(p.under.style.getPropertyValue("--drag-in")).toBe("");
-  expect(Number(scrim.style.opacity)).toBeCloseTo(0.46, 2);
+  expect(Number(scrim.style.opacity)).toBeCloseTo(0.36, 2);
 
   drag.end(true, 0.9);
   expect(backs).toBe(0);
   t.run();
+  // Card slot visibility is restored synchronously right before back() runs so the slot never flashes black.
+  expect(slot.style.visibility).toBe("");
   expect(backs).toBe(1);
   t.run();
   expect(p.top.dataset.drag).toBeUndefined();
   expect(p.top.style.transform).toBe("");
   expect(scrim.style.opacity).toBe("");
   expect(scrim.dataset.dragActive).toBeUndefined();
-  expect(slot.style.visibility).toBe("");
 });

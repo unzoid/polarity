@@ -13,7 +13,7 @@ const CARD_SHRINK = 0.24;
 const CARD_FOLLOW = 0.42;
 /** Constant iPhone-bezel rounded corner set ONCE on drag begin (never mutated per frame, zero edge pop). */
 const CARD_DRAG_RADIUS = 38;
-const SCRIM_MAX = 0.92;
+const SCRIM_MAX = 0.72;
 
 /** `card`: the card the top page grew out of (`cardOrigin`); `scrim`: dedicated leaf overlay (0 children = 0 style recalc on under). */
 export type DragPages = { top: HTMLElement; under: HTMLElement; card?: CardRect; scrim?: HTMLElement | null };
@@ -212,9 +212,11 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
       later(() => {
         settling = false;
         if (goBack) {
+          // Reveal the underlying card slot synchronously BEFORE unmounting Detail so the slot never flashes black.
+          if (p.card?.el) p.card.el.style.removeProperty("visibility");
           skipNextPageMotion();
           back();
-          // Clear inline drag styles once React commits the Back route (next frame instead of 50ms stall).
+          // Clear inline drag styles once React commits the Back route.
           later(() => clear(p), 16);
         } else {
           clear(p);

@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Check, Filters, Info, Instant, Puzzle, Reset } from "./icons";
 import { useNavigation } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
@@ -19,6 +19,10 @@ import { TvSourceMenu, useSourceInfo, useSourceRowPress } from "./SourceInfo";
  * language, size, tags) and the sort. Sorted by best match, the top pick
  * stands out above the rest; any other sort is one plain list.
  */
+/** Initial source rows rendered when opening the drawer; additional batches load seamlessly as you scroll. */
+const INITIAL_SOURCES = 24;
+const SOURCES_STEP = 24;
+
 export function StreamList({
   type,
   videoId,
@@ -63,6 +67,27 @@ export function StreamList({
     [],
   );
   const openMenu = useCallback((s: RankedStream, anchor: HTMLElement) => setMenu({ s, anchor }), []);
+  // Cap initial DOM rows to keep opening the Sources drawer instant even when add-ons return 200+ streams;
+  // scrolling near the bottom automatically appends the next batch via IntersectionObserver.
+  const [visible, setVisible] = useState(INITIAL_SOURCES);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const filterSig = `${videoId}|${f.sort}|${JSON.stringify(f.filter)}`;
+  useEffect(() => setVisible(INITIAL_SOURCES), [filterSig]);
+  const totalCount = f.view.length;
+  const remaining = Math.max(0, totalCount - visible);
+  useEffect(() => {
+    const node = moreRef.current;
+    if (!node || remaining <= 0 || typeof IntersectionObserver === "undefined") return;
+    const root = node.closest<HTMLElement>(".sheet-body") ?? null;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setVisible((n) => Math.min(totalCount, n + SOURCES_STEP));
+      },
+      { root, rootMargin: "260px 0px" },
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [remaining, totalCount, visible]);
 
   if (isLoading) {
     return (
@@ -159,6 +184,18 @@ export function StreamList({
   const rest = shown.filter((_, i) => i !== pickAt);
   const bestSummary = grouped && best ? featuredMatchSummary(f.match(best)) : null;
 
+  // Budget the currently visible row cap across groups in display order so at most `visible` rows mount at once.
+  let budget = visible;
+  const showBest = grouped && !!best && budget > 0;
+  if (showBest) budget--;
+  const visibleRest = grouped ? rest.slice(0, budget) : [];
+  if (grouped) budget = Math.max(0, budget - visibleRest.length);
+  const visibleFlat = !grouped ? shown.slice(0, budget) : [];
+  if (!grouped) budget = Math.max(0, budget - visibleFlat.length);
+  const visibleOthers = others.slice(0, budget);
+  budget = Math.max(0, budget - visibleOthers.length);
+  const visibleOtherEpisodes = otherEpisodes.slice(0, budget);
+
   return (
     <div className="stream-list">
       <SourceFilterBar f={f} tv={tv} />
@@ -174,7 +211,7 @@ export function StreamList({
 
       {/* Sorted by best match, the top pick is set apart; the quality control
           above already sorts by picture, so the rest is one plain list. */}
-      {grouped && best && (
+      {showBest && best && (
         <>
           <div className="stream-group-label t-micro faint">Best Match</div>
           <StreamRow
@@ -187,29 +224,37 @@ export function StreamList({
             onInfo={showInfo}
             onMenu={tv ? openMenu : undefined}
           />
-          {rest.length > 0 && <div className="stream-group-label t-micro faint">More Sources</div>}
-          {rest.map((s) => (
+          {visibleRest.length > 0 && <div className="stream-group-label t-micro faint">More Sources</div>}
+          {visibleRest.map((s) => (
             <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />
           ))}
         </>
       )}
-      {!grouped && shown.map((s) => <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />)}
-      {others.length > 0 && (
+      {!grouped && visibleFlat.map((s) => <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />)}
+      {visibleOthers.length > 0 && (
         <>
           <div className="stream-group-label t-micro faint">Other Sources</div>
-          {others.map((s) => (
+          {visibleOthers.map((s) => (
             <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />
           ))}
         </>
       )}
 
-      {otherEpisodes.length > 0 && (
+      {visibleOtherEpisodes.length > 0 && (
         <>
           <div className="stream-group-label t-micro faint">Other Episodes</div>
-          {otherEpisodes.map((s) => (
+          {visibleOtherEpisodes.map((s) => (
             <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />
           ))}
         </>
+      )}
+
+      {remaining > 0 && (
+        <div ref={moreRef} className="stream-more">
+          <Button variant="plain" size="sm" onClick={() => setVisible((n) => Math.min(totalCount, n + SOURCES_STEP))}>
+            Show more ({remaining} left)
+          </Button>
+        </div>
       )}
 
       <div className="stream-footer" aria-live="polite">

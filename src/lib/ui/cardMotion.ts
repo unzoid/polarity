@@ -2,44 +2,33 @@ import type { CardRect } from "./pageMotion";
 
 /**
  * 1:1 Netflix / iOS 18 `UIViewController.Transition.zoom` for opening a title out of its card and closing
- * back into it on a phone, matched frame-by-frame against uncompressed 60fps/120fps iOS screen recordings:
+ * back into it on a phone, matched frame-by-frame against uncompressed 60fps/120fps iOS screen recordings.
  *
- * - Open (`460ms`, critically damped spring ω = 12.2/s):
- *   The source card lifts cleanly out of its hidden slot (`sharp` -> lush 3-pass Gaussian-blurred poster over
- *   `10..75ms`), expands gracefully with uniform scale + continuous `clip-path` (zero vertical squishing) while
- *   Home softens & dims behind it (`0..220ms`), keeps the creamy blurred poster rich through ~`170ms`, and
- *   dissolves directly into the crisp Detail page (`175..385ms`) with no flat grey wall.
- * - Close (`380ms`, critically damped spring ω = 12.5/s):
- *   Matches Netflix's exact 60fps close trajectory (~90% at 33ms, ~78% at 66ms, ~66% at 100ms, ~54% at 133ms,
- *   ~44% at 166ms, ~36% at 200ms, ~31% at 233ms, seated at ~320..380ms). The live Detail page shrinks cleanly
- *   with smooth rounded corners (`0..110ms`), transitions seamlessly through the opaque dark backing + creamy
- *   blurred poster (`85..195ms`, preventing any Detail UI bleed-through), de-blurs into the crisp sharp poster
- *   (`205..305ms`), and seats pixel-exact into the hidden card slot while Home comes back into sharp focus.
- * - Swipe-back release (`playCardRelease`):
- *   Shares the exact same uniform-scale + clip-path + bokeh-to-sharp landing from the live finger position,
- *   seeded with the user's release velocity (`240..360ms`, ω = 13.0/s).
+ * Key physics insight from frame-by-frame analysis:
+ * A zero-initial-velocity spring `1 - (1 + ωt)e^(-ωt)` has `f'(0) = 0`, which causes ~45ms of dead startup
+ * followed by a rushed linear middle. Apple's zoom transition uses an immediate-launch exponential decay
+ * `p(t) = (1 - e^(-k·t)) / (1 - e^(-k·T))`:
+ * - Frame 0 launches instantaneously (zero perceived lag on tap or back press),
+ * - Velocity strictly decelerates from millisecond 0 through the finish (never linear),
+ * - The final ~180–200ms forms a long, silky ease-out tail gently settling into the card slot or fullscreen.
  */
-export const CARD_OPEN_MS = 460;
-export const CARD_CLOSE_MS = 380;
+export const CARD_OPEN_MS = 480;
+export const CARD_CLOSE_MS = 440;
 
-/** Critically damped spring from 0 to 1 with optional normalized initial velocity `v0` (in 1/s), `t` in ms. */
-const spring = (omega: number, v0 = 0) => {
-  const vel = Math.max(0, Math.min(v0, omega * 1.05));
-  return (t: number) => {
-    const s = t / 1000;
-    return 1 - (1 + (omega - vel) * s) * Math.exp(-omega * s);
-  };
+/**
+ * Normalized exponential ease-out curve from 0 to 1 over `ms` with decay rate `k` (1/s).
+ * Immediate non-zero initial velocity (`f'(0) > 0`), monotonic deceleration, long silky settling tail.
+ */
+const expEaseOut = (k: number, ms: number) => {
+  const end = 1 - Math.exp((-k * ms) / 1000) || 1;
+  return (t: number) => (1 - Math.exp((-k * t) / 1000)) / end;
 };
 
-const OPEN_CURVE = spring(12.2);
-const CLOSE_CURVE = spring(12.5);
-
 /** `n` samples of `curve` over `ms`, normalized so offset 0 is 0 and offset 1 is 1. */
-function samples(curve: (t: number) => number, ms: number, n = 28) {
-  const end = curve(ms) || 1;
+function samples(curve: (t: number) => number, ms: number, n = 40) {
   return Array.from({ length: n + 1 }, (_, i) => ({
     offset: i / n,
-    p: i === 0 ? 0 : i === n ? 1 : Math.min(1, Math.max(0, curve((ms * i) / n) / end)),
+    p: i === 0 ? 0 : i === n ? 1 : Math.min(1, Math.max(0, curve((ms * i) / n))),
   }));
 }
 
@@ -52,7 +41,7 @@ const fade = (from: number, to: number, t0: number, t1: number, ms: number): Key
 ];
 
 /** Smooth ease-out curve for cancelling a swipe-back back to fullscreen. */
-export const CARD_CANCEL_EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
+export const CARD_CANCEL_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 /**
  * Uniform-scale + aspect-ratio clip geometry between a full-screen page (`width` × `height`) and `card`.
@@ -81,7 +70,7 @@ function sizeGhostMedia(media: HTMLElement | null | undefined, mediaW: number, m
 
 /**
  * Visual corner radius curve matching iOS 18 zoom transition:
- * `0` at flush fullscreen (`k = 0`), ramping immediately to smooth iPhone display corner curvature (`~42px`
+ * `0` at flush fullscreen (`k = 0`), ramping immediately to smooth iPhone display corner curvature (`~40px`
  * visual off the screen edges) and smoothly blending down to the card's exact corner radius (`8px`/`14px`) at `k = 1`.
  */
 function cornerRadius(k: number, s: number, cardRadius: number): number {
@@ -105,8 +94,7 @@ export function playCardMotion({ page, scrim, card, open, width, height }: Parts
   if (typeof page.animate !== "function") return () => {};
   const { w, h, sEnd, mediaW, mediaH, clipR, clipB, cardRadius } = cardGeometry(card, width, height);
   const ms = open ? CARD_OPEN_MS : CARD_CLOSE_MS;
-  const curve = open ? OPEN_CURVE : CLOSE_CURVE;
-  const pts = samples(curve, ms);
+  const pts = samples(expEaseOut(open ? 8.4 : 8.2, ms), ms, 40);
   const opts: KeyframeAnimationOptions = { duration: ms, easing: "linear", fill: "both" };
 
   // Hide the source card in its shelf slot while in flight so a duplicate poster never shows underneath.
@@ -154,19 +142,19 @@ export function playCardMotion({ page, scrim, card, open, width, height }: Parts
   }
 
   if (open) {
-    // Crisp card lifts -> creamy bokeh poster stays bold across expansion -> blooms directly into Detail.
+    // Crisp card lifts -> true GPU Gaussian-blurred poster stays lush through expansion -> blooms into Detail.
     play(panel, fade(1, 1, 0, ms, ms));
-    play(sharp, fade(1, 0, 10, 75, ms));
-    play(soft, fade(1, 0, 165, 320, ms));
-    play(ghost, fade(1, 0, 175, 385, ms));
-    play(scrim, fade(0, 1, 0, 220, ms));
+    play(sharp, fade(1, 0, 8, 65, ms));
+    play(soft, fade(1, 0, 155, 320, ms));
+    play(ghost, fade(1, 0, 165, 370, ms));
+    play(scrim, fade(0, 0.72, 0, 210, ms));
   } else {
-    // Live Detail shrinks cleanly -> opaque dark floor + creamy bokeh poster veil UI -> sharpens into slot.
+    // Immediate launch -> opaque dark floor + Gaussian bokeh poster veil Detail -> gently sharpens into slot.
     play(ghost, fade(1, 1, 0, ms, ms));
-    play(panel, fade(0, 1, 85, 185, ms));
-    play(soft, fade(0, 1, 95, 195, ms));
-    play(sharp, fade(0, 1, 205, 305, ms));
-    play(scrim, fade(1, 0, 35, 280, ms));
+    play(panel, fade(0, 1, 65, 160, ms));
+    play(soft, fade(0, 1, 75, 175, ms));
+    play(sharp, fade(0, 1, 185, 345, ms));
+    play(scrim, fade(0.72, 0, 0, 280, ms));
   }
 
   return () => {
@@ -189,19 +177,19 @@ export type CardRelease = {
 
 /**
  * Finishes an interactive swipe-back into `card` starting from the finger's exact live `(x, y, scale, radius)`
- * with velocity handoff and the exact same uniform-scale + clip-path + bokeh-to-sharp landing as tap-Back.
+ * with velocity-weighted exponential ease-out so it launches immediately and glides gently into the card slot.
  */
 export function playCardRelease({ page, scrim, ghost, card, width, height, from, velocity }: CardRelease): { ms: number; animations: Animation[] } {
   const { w, h, sEnd, mediaW, mediaH, clipR, clipB, cardRadius } = cardGeometry(card, width, height);
-  const remain = Math.max(0.2, Math.min(1, (from.scale - sEnd) / Math.max(0.01, 1 - sEnd)));
-  const speedBoost = Math.min(0.28, Math.max(0, velocity) / 3800);
-  const ms = Math.round(Math.max(240, Math.min(CARD_CLOSE_MS, CARD_CLOSE_MS * (0.62 + 0.38 * remain) * (1 - speedBoost))));
+  const remain = Math.max(0.25, Math.min(1, (from.scale - sEnd) / Math.max(0.01, 1 - sEnd)));
+  const speedBoost = Math.min(0.26, Math.max(0, velocity) / 4000);
+  const ms = Math.round(Math.max(280, Math.min(CARD_CLOSE_MS, CARD_CLOSE_MS * (0.64 + 0.36 * remain) * (1 - speedBoost))));
 
   if (typeof page.animate !== "function") return { ms, animations: [] };
 
-  const omega = 13.0;
-  const v0 = Math.max(0, velocity / Math.max(200, width)) * 2.0;
-  const pts = samples(spring(omega, v0), ms, 24);
+  // Higher flick velocity starts faster while preserving the long silky exponential settling tail.
+  const k = 8.2 + Math.min(3.2, Math.max(0, velocity) / 600);
+  const pts = samples(expEaseOut(k, ms), ms, 36);
   const opts: KeyframeAnimationOptions = { duration: ms, easing: "linear", fill: "forwards" };
 
   const panel = ghost?.querySelector<HTMLElement>(":scope > .card-ghost-panel");
@@ -242,9 +230,9 @@ export function playCardRelease({ page, scrim, ghost, card, width, height, from,
   }
 
   play(ghost, fade(1, 1, 0, ms, ms));
-  play(panel, fade(0, 1, ms * 0.14, ms * 0.44, ms));
-  play(soft, fade(0, 1, ms * 0.16, ms * 0.48, ms));
-  play(sharp, fade(0, 1, ms * 0.5, ms * 0.82, ms));
+  play(panel, fade(0, 1, ms * 0.1, ms * 0.38, ms));
+  play(soft, fade(0, 1, ms * 0.12, ms * 0.42, ms));
+  play(sharp, fade(0, 1, ms * 0.44, ms * 0.82, ms));
   if (scrim) {
     play(scrim, fade(from.scrimOpacity, 0, 0, ms * 0.72, ms));
   }

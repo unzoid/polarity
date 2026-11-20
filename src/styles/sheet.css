@@ -12,7 +12,7 @@
   background: rgb(0 0 0 / 0.6);
 }
 .sheet-scrim[data-edge="bottom"][data-full] {
-  background: rgb(0 0 0 / 0.72);
+  background: rgb(0 0 0 / 0.82);
 }
 .sheet {
   position: fixed;
@@ -212,6 +212,11 @@
 .stream-row-wrap {
   content-visibility: auto;
   contain-intrinsic-size: auto 66px;
+}
+.stream-more {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0 0.25rem;
 }
 :root[data-scheme="light"] .stream-row[data-featured="true"] {
   background: #ffffff;

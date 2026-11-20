@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { cardGhostParts } from "../../src/lib/ui/cardGhost";
 import { CARD_CLOSE_MS, CARD_OPEN_MS, cardGeometry, playCardRelease } from "../../src/lib/ui/cardMotion";
 
 test("cardGeometry uses uniform scale and exact aspect clip-path so cards never squish vertically", () => {
@@ -28,9 +29,14 @@ test("cardGeometry uses uniform scale and exact aspect clip-path so cards never 
   expect(landscape.clipR).toBeGreaterThan(500);
 });
 
-test("card motion durations match Netflix 60fps open/close and release speeds up on fast flicks", () => {
-  expect(CARD_OPEN_MS).toBe(460);
-  expect(CARD_CLOSE_MS).toBe(380);
+test("card motion uses Netflix exponential ease-out durations and full-res GPU blur ghost images", () => {
+  expect(CARD_OPEN_MS).toBe(480);
+  expect(CARD_CLOSE_MS).toBe(440);
+
+  const ghost = cardGhostParts("https://media.example.com/poster.jpg");
+  expect(ghost.soft.tagName).toBe("IMG");
+  expect(ghost.sharp.tagName).toBe("IMG");
+  expect(ghost.soft.className).toBe("card-ghost-soft");
 
   const page = document.createElement("section");
   const card = { x: 24, y: 112, w: 120, h: 180, src: "https://media.example.com/poster.jpg", radius: 8 };
@@ -41,7 +47,7 @@ test("card motion durations match Netflix 60fps open/close and release speeds up
     card,
     width: 402,
     height: 874,
-    from: { x: 108, y: 40, scale: 0.88, radius: 38, scrimOpacity: 0.46 },
+    from: { x: 108, y: 40, scale: 0.88, radius: 38, scrimOpacity: 0.36 },
     velocity: 0,
   });
   const flick = playCardRelease({
@@ -51,10 +57,10 @@ test("card motion durations match Netflix 60fps open/close and release speeds up
     card,
     width: 402,
     height: 874,
-    from: { x: 108, y: 40, scale: 0.88, radius: 38, scrimOpacity: 0.46 },
+    from: { x: 108, y: 40, scale: 0.88, radius: 38, scrimOpacity: 0.36 },
     velocity: 1400,
   });
   expect(flick.ms).toBeLessThan(slow.ms);
-  expect(flick.ms).toBeGreaterThanOrEqual(240);
+  expect(flick.ms).toBeGreaterThanOrEqual(280);
   expect(slow.ms).toBeLessThanOrEqual(CARD_CLOSE_MS);
 });
