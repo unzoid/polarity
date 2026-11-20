@@ -61,10 +61,11 @@ const SCROLLED_AT = 8;
 export function NavBar() {
   const { stack, current, tab, back } = useRouter();
   const active = rootTab(stack);
-  const isActive = (r: TabRoute) => JSON.stringify(r) === JSON.stringify(active);
   // On a phone search is a page of its own (screens/Search.tsx), left with Back like any other. Elsewhere its
   // results are closed by clearing the navbar's field, not with Back.
   const phone = useFormFactor().form === "phone";
+  // On desktop, don't leave the previous tab (e.g. Series) highlighted while Search results are on screen.
+  const isActive = (r: TabRoute) => (phone || current.name !== "search") && JSON.stringify(r) === JSON.stringify(active);
   const canGoBack = stack.length > 1 && (phone || current.name !== "search");
   // Back to a top-level page with focus on Back: it hides, so focus moves off it first (test report 1, item 25).
   const backButton = useRef<HTMLButtonElement>(null);
@@ -358,6 +359,18 @@ function SearchBox() {
     setActiveIndex(-1);
   }, [suggestShown, recent.length, animeEnabled]);
 
+  // Switching tabs/routes while the search field is open and empty closes the input & suggestions popover cleanly.
+  const routeKey = `${current.name}:${"type" in current ? current.type : ""}`;
+  const prevRouteKey = useRef(routeKey);
+  useEffect(() => {
+    if (prevRouteKey.current !== routeKey) {
+      prevRouteKey.current = routeKey;
+      if (!text && open) {
+        input.current?.blur();
+        setOpen(false);
+      }
+    }
+  }, [routeKey, text, open]);
   useEffect(() => {
     if (resume) return;
     setSearchText("");
@@ -457,7 +470,7 @@ function SearchBox() {
           if (text) change("");
           else input.current?.blur();
         }}
-        placeholder="Titles, genres…"
+        placeholder="Titles, people, genres…"
         spellCheck={false}
         aria-label="Search"
         tabIndex={open ? 0 : -1}
@@ -482,7 +495,7 @@ function SearchBox() {
 }
 
 /** The recent searches shown above the genres. */
-const RECENT_SHOWN = 3;
+const RECENT_SHOWN = 6;
 const SUGGEST_OUT_MS = 150;
 
 /** The suggestions panel's width, and the least room it keeps from the window's edges. */

@@ -227,12 +227,16 @@ function roomTrouble(party: PartyState) {
   return null;
 }
 
-/** The invite to share, and copying it ("Copied" for a moment). */
+/** The invite to share, and copying it ("Copied" for a moment). Includes a clickable deep link and what's playing. */
 function useInviteCopy(party: PartyState) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<number>(undefined);
   useEffect(() => () => window.clearTimeout(timer.current), []);
-  const invite = `Watch with me on Polarity. Party code: ${party.code}`;
+  const label = party.playback?.media.label?.trim();
+  const deepLink = `polarity://party/${party.code}`;
+  const invite = label
+    ? `Watch ${label} with me on Polarity · ${deepLink} (Party code: ${party.code})`
+    : `Watch with me on Polarity · ${deepLink} (Party code: ${party.code})`;
   const copy = () => {
     void navigator.clipboard.writeText(invite).then(() => {
       setCopied(true);

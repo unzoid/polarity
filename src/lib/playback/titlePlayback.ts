@@ -11,6 +11,8 @@ export interface PlayRequest {
   resumable?: boolean;
   /** Start a shuffle of the show from this episode (lib/playback/shuffle.ts). */
   shuffle?: boolean;
+  /** Open a Watch Party room automatically as soon as playback starts. */
+  startParty?: boolean;
 }
 
 /**

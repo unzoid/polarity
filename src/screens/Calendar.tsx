@@ -90,11 +90,15 @@ export function Calendar() {
   );
 }
 
-const aired = (v: { released?: string }) => !!v.released && Date.parse(v.released) <= Date.now();
+const todayMidnight = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
 
-function CalendarItem({ entry: { show, video } }: { entry: CalendarEntry }) {
+function CalendarItem({ entry: { show, video, day } }: { entry: CalendarEntry }) {
   const { navigate } = useNavigation();
-  const isAired = aired(video);
+  const isAired = day <= todayMidnight();
   return (
     <button
       className="calendar-item"

@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   type Anime,
   aniZipQuery,
@@ -16,11 +16,13 @@ import {
   useAnimeTitle,
   useEpisodeFlags,
 } from "../../lib/anime";
+import { episodeEntry } from "../../lib/library";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../../lib/settings";
 import { useFormFactor } from "../../lib/ui";
 import type { PlayRequest } from "../../lib/playback";
 import type { Video } from "../../lib/types";
 import { BatchDownload } from "../BatchDownload";
+import { cardMenu } from "../CardMenu";
 import { Dropdown } from "../Dropdown";
 import { Check, LayoutList, LayoutRow } from "../icons";
 import { Segmented } from "../Segmented";
@@ -54,9 +56,13 @@ const SEARCH_FROM = 40;
 export function AnimeEpisodes({
   anime,
   franchise,
+  onSheet,
+  episode,
 }: {
   anime: Anime;
   franchise?: Franchise;
+  onSheet?: (open: boolean) => void;
+  episode?: string;
 }) {
   const pb = useAnimePlayback(anime);
   const prefs = usePrefs();
@@ -65,7 +71,7 @@ export function AnimeEpisodes({
   const pick = franchise && <PartPick anime={anime} pb={pb} />;
   const { data: flags } = useEpisodeFlags(pb.malId, [anime.title.english, anime.title.romaji]);
   const [layout, setLayout] = useEpisodeLayout();
-  const sources = useSourcePicker();
+  const sources = useSourcePicker(onSheet);
   useFranchiseStills(franchise ? franchise.seasons.map((s) => s.card.id) : [anime.id], pb.metaId, pb.meta?.videos);
 
   const hasFiller = !!flags && [...flags.values()].some((f) => f.filler);
@@ -118,6 +124,17 @@ export function AnimeEpisodes({
           resumable: pb.byVideo.has(v.id),
           subtitle: `Episode ${v.episode}${v.title ? ` · ${v.title}` : ""}`,
         };
+
+  const offered = useRef(false);
+  useEffect(() => {
+    if (!episode || offered.current || !pb.metaId) return;
+    const linked = list.find((v) => v.id === episode);
+    const req = linked ? request(linked) : undefined;
+    if (!req) return;
+    offered.current = true;
+    sources.choose(req);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episode, list, pb.metaId]);
 
   if (!list.length) {
     const coming = comesOut(anime);
@@ -227,6 +244,14 @@ export function AnimeEpisodes({
           const req = request(v);
           if (req) sources.choose(req);
         }}
+        menu={
+          pb.meta
+            ? (v) =>
+                v.id.startsWith(PENDING_EPISODE)
+                  ? { onContextMenu: () => {} }
+                  : cardMenu(pb.meta!, episodeEntry(pb.meta!, v, pb.byVideo.get(v.id)), { episode: true })
+            : undefined
+        }
       />
       {found && !found.length && <EmptyState>No episode matches “{query.trim()}”.</EmptyState>}
       {capped && (

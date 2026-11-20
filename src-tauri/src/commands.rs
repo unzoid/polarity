@@ -134,13 +134,37 @@ pub async fn recommend(state: State<'_, AppState>, ty: String, id: String) -> Re
 pub struct SearchResults {
     movies: Vec<MetaPreview>,
     series: Vec<MetaPreview>,
+    people: Vec<polar_index::PersonHit>,
 }
 
 #[tauri::command]
 pub async fn search(state: State<'_, AppState>, query: String) -> Result<SearchResults> {
     let ix: Arc<Indexer> = state.indexer();
-    let (movies, series) = tokio::join!(ix.search("movie", &query), ix.search("series", &query));
-    Ok(SearchResults { movies: movies?, series: series? })
+    let (movies, series, people) = tokio::join!(ix.search("movie", &query), ix.search("series", &query), ix.search_people(&query));
+    // Partial results beat a dead search: only fail when neither movies nor series answered.
+    let (movies, series) = match (movies, series) {
+        (Ok(m), Ok(s)) => (m, s),
+        (Ok(m), Err(e)) => {
+            tracing::warn!("series search failed, returning movies only: {e}");
+            (m, Vec::new())
+        }
+        (Err(e), Ok(s)) => {
+            tracing::warn!("movie search failed, returning series only: {e}");
+            (Vec::new(), s)
+        }
+        (Err(e), Err(_)) => return Err(e.into()),
+    };
+    let people = people.unwrap_or_else(|e| {
+        tracing::warn!("people search failed: {e}");
+        Vec::new()
+    });
+    Ok(SearchResults { movies, series, people })
+}
+
+/// Films in a TMDB collection / franchise (`/collection/{id}`); empty without a TMDB key.
+#[tauri::command]
+pub async fn collection(state: State<'_, AppState>, id: u64) -> Result<Vec<MetaPreview>> {
+    Ok(state.indexer().collection(id).await?)
 }
 
 /// Films only, narrowed to a release year where the catalog can: what an

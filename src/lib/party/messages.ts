@@ -72,6 +72,10 @@ export const DEFAULT_RULES: RoomRules = { v: 0, host: null, locked: false, contr
 /** Why a joiner was turned away. */
 export type Refusal = "locked" | "denied";
 
+/** Reaction emojis allowed over the watch-party broadcast channel. */
+export const PARTY_REACTIONS = ["🔥", "😂", "😱", "😭", "❤️", "👏"] as const;
+export type PartyReactionEmoji = (typeof PARTY_REACTIONS)[number];
+
 export type PartyMessage =
   /** `seq`: the sender's newest presence entry, so a stale copy of it shows (#203). */
   | { t: "ping"; from: string; sent: number; seq?: number }
@@ -91,7 +95,11 @@ export type PartyMessage =
   /** "Your presence entry is missing or out of date here: send it again" (#203). */
   | { t: "presence"; from: string; to: string }
   /** Where this member's player is, for "3 s behind". */
-  | { t: "at"; from: string; videoId: string; position: number; paused: boolean; lag: number; stalled?: boolean };
+  | { t: "at"; from: string; videoId: string; position: number; paused: boolean; lag: number; stalled?: boolean }
+  /** A quick emoji reaction floated across everyone's video. */
+  | { t: "react"; from: string; emoji: PartyReactionEmoji }
+  /** An ephemeral chat line for this watch-party session. */
+  | { t: "chat"; from: string; id: string; text: string };
 
 const ID_MAX = 64;
 /** More removals than any real party makes; the oldest drop off. */
@@ -227,6 +235,15 @@ export function parseMessage(x: unknown): PartyMessage | null {
       // Stalled mid-video (#238); older apps leave it out.
       const stalled = typeof x.stalled === "boolean" ? { stalled: x.stalled } : {};
       return { t: "at", from, videoId, position: clamp(x.position, 0, POSITION_MAX), paused: x.paused, lag, ...stalled };
+    }
+    case "react": {
+      if (typeof x.emoji !== "string" || !(PARTY_REACTIONS as readonly string[]).includes(x.emoji)) return null;
+      return { t: "react", from, emoji: x.emoji as PartyReactionEmoji };
+    }
+    case "chat": {
+      const msgId = id(x.id);
+      const body = text(x.text, 240);
+      return msgId && body ? { t: "chat", from, id: msgId, text: body } : null;
     }
     default:
       return null;

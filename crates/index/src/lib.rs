@@ -20,7 +20,7 @@ mod tmdb;
 pub use episode_order::{EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo};
 mod person;
 
-pub use person::PersonPage;
+pub use person::{PersonHit, PersonPage};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -100,6 +100,8 @@ pub struct Indexer {
     orders: episode_order::Cache,
     /// People's pages by TMDB id.
     people: TtlCache<u64, PersonPage>,
+    /// People search hits by normalized query.
+    people_search: TtlCache<String, Vec<PersonHit>>,
 }
 
 impl Indexer {
@@ -116,6 +118,7 @@ impl Indexer {
             numbering: cinemeta::Cinemeta::new(),
             orders: episode_order::Cache::new(),
             people: TtlCache::new(Duration::from_secs(6 * 60 * 60), 256),
+            people_search: TtlCache::new(Duration::from_secs(60 * 60), 128),
         }
     }
 
@@ -241,6 +244,34 @@ impl Indexer {
         };
         self.catalogs.insert(key, metas.clone());
         Ok(metas)
+    }
+
+    /// People matching `query` (TMDB); empty without a TMDB key.
+    pub async fn search_people(&self, query: &str) -> Result<Vec<PersonHit>> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let Backend::Tmdb(t) = &self.backend else { return Ok(Vec::new()) };
+        let key = query.to_lowercase();
+        if let Some(hit) = self.people_search.get(&key) {
+            return Ok(hit);
+        }
+        let found = t.search_people(query).await?;
+        self.people_search.insert(key, found.clone());
+        Ok(found)
+    }
+
+    /// Films in a TMDB collection / franchise (`/collection/{id}`); empty without a TMDB key.
+    pub async fn collection(&self, id: u64) -> Result<Vec<MetaPreview>> {
+        let Backend::Tmdb(t) = &self.backend else { return Ok(Vec::new()) };
+        let key = format!("collection/{id}");
+        if let Some(hit) = self.catalogs.get(&key) {
+            return Ok(hit);
+        }
+        let items = t.collection(id).await?;
+        self.catalogs.insert(key, items.clone());
+        Ok(items)
     }
 
     pub async fn meta(&self, ty: &str, id: &str) -> Result<Meta> {

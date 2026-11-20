@@ -290,6 +290,7 @@ pub fn run() {
             commands::store_problem,
             commands::catalog,
             commands::recommend,
+            commands::collection,
             commands::search,
             commands::search_movies,
             commands::meta,

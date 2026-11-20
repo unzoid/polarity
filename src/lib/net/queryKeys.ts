@@ -36,6 +36,8 @@ export const keys = {
   settings: ["settings"] as const,
   search: (q: string) => ["search", q] as const,
   recommend: (type: ContentType, id: string) => ["recommend", type, id] as const,
+  /** Films in a TMDB collection / franchise, by collection id. */
+  collection: (id: number) => ["collection", id] as const,
   /** A person's page, by TMDB id. */
   person: (id: number) => ["person", id] as const,
   featured: ["featured"] as const,

@@ -4,7 +4,8 @@ import { Img } from "../components/Img";
 import { LogoOrName, ProgressBar, useCardArt } from "../components/title/Card";
 import { isAnimePreview, useEntryShown, type EntryAt } from "../lib/anime";
 import { episodeCode, formatRemaining } from "../lib/format";
-import { prefetchMeta, preloadImage, useCatalog, useContinueWatching, useMeta, useRecommend } from "../lib/net";
+import { prefetchMeta, preloadImage, useCatalog, useMeta, useRecommend } from "../lib/net";
+import { useUpNextContinueWatching, type ContinueEntry } from "../lib/library";
 import { useNavigation } from "../lib/router";
 import { cardArtUrl, detailBackdropUrl, useArtGate, useCardIntent } from "../lib/ui";
 import { useBrowseShelf, useListable, type Shape, type Shelf } from "../lib/catalog";
@@ -304,12 +305,12 @@ export function TvShelfRail({ shelf, enabled, exclude }: { shelf: Shelf; enabled
 
 /** Pick up where you left off: straight into the player, no detour. */
 export function TvContinueRail() {
-  const { data } = useContinueWatching();
-  if (!data?.length) return null;
+  const entries = useUpNextContinueWatching();
+  if (!entries.length) return null;
   return (
     <TvRail title="Continue Watching">
-      {data.map((p) => (
-        <TvContinueCard key={p.videoId} p={p} />
+      {entries.map((cw) => (
+        <TvContinueCard key={cw.progress.videoId} cw={cw} />
       ))}
     </TvRail>
   );
@@ -320,7 +321,8 @@ export function TvContinueRail() {
  * art, as desktop's Continue Watching (#437): the title page's logos, checked by `TitleLogo`; nothing in its place while
  * the title loads (#343), the name where there's none. An entry of a show goes by its own name.
  */
-function TvContinueCard({ p }: { p: Progress }) {
+function TvContinueCard({ cw }: { cw: ContinueEntry }) {
+  const { progress: p, upNext } = cw;
   const { navigate } = useNavigation();
   const plain = useMemo(() => continueItem(p), [p]);
   const { entry } = useEntryShown(plain, p.videoId);
@@ -334,9 +336,9 @@ function TvContinueCard({ p }: { p: Progress }) {
       item={stored}
       logoPending={!entry && meta.isLoading}
       shape="landscape"
-      progress={p.duration ? p.position / p.duration : 0}
-      kicker={continueKicker(p, entry)}
-      chip={continueChip(p, entry)}
+      progress={!upNext && p.duration ? p.position / p.duration : undefined}
+      kicker={continueKicker(p, entry, upNext)}
+      chip={continueChip(p, entry, upNext)}
       entry={p}
       onOpen={() => navigate({ name: "player", type: p.type, metaId: p.metaId, videoId: p.videoId })}
     />
@@ -353,15 +355,15 @@ const continueItem = (p: Progress): MetaPreview => ({
 
 const episodeOf = (p: Progress, entry?: EntryAt) => (entry ? `Episode ${entry.number}` : p.season != null ? episodeCode(p.season, p.episode) : null);
 
-/** The short form for the card itself: episode code (shows only) and time left. */
-function continueChip(p: Progress, entry?: EntryAt) {
-  return [episodeOf(p, entry), formatRemaining(p.position, p.duration)].filter(Boolean).join(" · ");
+/** The short form for the card itself: episode code (shows only) and time left (or Up Next). */
+function continueChip(p: Progress, entry?: EntryAt, upNext?: boolean) {
+  return [episodeOf(p, entry), upNext ? "Up Next" : formatRemaining(p.position, p.duration)].filter(Boolean).join(" · ");
 }
 
-function continueKicker(p: Progress, entry?: EntryAt) {
+function continueKicker(p: Progress, entry?: EntryAt, upNext?: boolean) {
   const episode = episodeOf(p, entry);
   const where = episode ? `${episode}${p.episodeTitle ? ` · ${p.episodeTitle}` : ""}` : null;
-  return [where, formatRemaining(p.position, p.duration)].filter(Boolean).join(" · ");
+  return [upNext ? "Up Next" : null, where, upNext ? null : formatRemaining(p.position, p.duration)].filter(Boolean).join(" · ");
 }
 
 /** Rows ahead of the focused one that load in advance, so moving down never waits. */

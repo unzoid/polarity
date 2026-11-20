@@ -22,8 +22,10 @@ import { SwapIcon } from "../SwapIcon";
 import { IconButton } from "../ui/Button";
 import { useArtGate, useReadyTogether } from "../../lib/ui";
 import { HeroSkeleton } from "../title/HeroSkeleton";
+import { HiddenTitleNote, HideTitleButton } from "../title/HiddenTitleControls";
 import { SourcePicker, useSourcePicker } from "../title/SourcePicker";
 import { TitleActions } from "../title/TitleActions";
+import { FormatBadges } from "../title/TitleDetails";
 import { SimklPanel } from "../title/SimklPanel";
 import { TraktNotSent } from "../title/TraktRating";
 import { TitleHeading, useHeadingReady } from "../title/TitleHeading";
@@ -60,6 +62,7 @@ export function AnimeHero({
   fallbacks,
   name,
   onImdb,
+  onSheet,
   trailer,
   franchise,
   pickInTabs = !!franchise,
@@ -81,6 +84,7 @@ export function AnimeHero({
   name: string;
   /** The id it plays from: undefined until known, null when there's none (the page's backdrop trailer is that title's). */
   onImdb?: (id: string | null | undefined) => void;
+  onSheet?: (open: boolean) => void;
   trailer?: BackdropTrailerHandle;
   franchise?: HeroFranchise;
   /** The series pick sits under the season tabs instead (a grouped page, #327). */
@@ -92,7 +96,7 @@ export function AnimeHero({
   const pb = franchise?.following && first.next.finished ? after : first;
   const summary = useMemo(() => franchise && franchiseSummary(franchise.parts), [franchise]);
   useEffect(() => onImdb?.(pb.loading ? undefined : (pb.metaId ?? null)), [onImdb, pb.loading, pb.metaId]);
-  const picker = useSourcePicker();
+  const picker = useSourcePicker(onSheet);
   const prefs = usePrefs();
 
   const target = pb.isMovie ? pb.metaId : pb.next.ep?.video?.id;
@@ -157,6 +161,7 @@ export function AnimeHero({
             </span>
           )}
           {joinFacts(factsLine)}
+          {target && <FormatBadges type={pb.isMovie ? "movie" : "series"} videoId={target} />}
         </p>
         {next && (
           <p className="anime-next t-callout tabular" title={new Date(next.airingAt * 1000).toLocaleString()}>
@@ -193,6 +198,9 @@ export function AnimeHero({
               : undefined
           }
           item={pb.meta}
+          playlist={!!pb.meta}
+          download={!!pb.meta && pb.isMovie}
+          more={pb.meta && <HideTitleButton item={pb.meta} />}
         >
           {trailer && trailer.state !== "idle" && (
             <IconButton
@@ -214,6 +222,7 @@ export function AnimeHero({
             </IconButton>
           )}
         </TitleActions>
+        {pb.meta && <HiddenTitleNote item={pb.meta} />}
         {/* A grouped page picks each part's series under its season tabs (AnimeEpisodes.tsx). */}
         {(unavailable || (pb.pickable && !pickInTabs)) && (
           <p className="anime-unavailable t-caption">

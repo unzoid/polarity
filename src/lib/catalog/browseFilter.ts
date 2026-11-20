@@ -5,6 +5,7 @@ import { useHiddenIds } from "../library/hiddenTitles";
 import { isWatched, showEntries } from "../library/watched";
 import { keys, metaQuery, useCatalog } from "../net/queries";
 import { usePrefs } from "../settings/prefs";
+import { catalogBound, keepWithinLimit, useViewingLimit } from "./viewingLimit";
 import type { ContentType, Meta, MetaPreview, Progress } from "../types";
 
 /**
@@ -116,19 +117,21 @@ export function useBrowseShelf(
   more?: { type: ContentType; id: string; genre?: string },
 ): MetaPreview[] | undefined {
   const rules = useBrowseRules();
+  const viewing = useViewingLimit();
   const visible = useMemo(() => browseVisible(items, rules), [items, rules]);
   const skip = items?.length ?? 0;
   const short = !!more && skip > 0 && rulesActive(rules) && (visible?.length ?? 0) < TOP_UP_BELOW;
   const { data: next } = useQuery({
     queryKey: [...keys.catalog(more?.type ?? "movie", more?.id ?? "", more?.genre), "more", skip],
-    queryFn: () => api.catalog(more!.type, more!.id, skip, more!.genre),
+    queryFn: () => api.catalog(more!.type, more!.id, skip, more!.genre, catalogBound(more!.type)),
     enabled: short,
   });
   return useMemo(() => {
     if (!short || !next?.length || !visible) return visible;
     const seen = new Set(items!.map((m) => m.id));
-    return [...visible, ...(browseVisible(next.filter((m) => !seen.has(m.id)), rules) ?? [])];
-  }, [short, next, visible, items, rules]);
+    const bounded = keepWithinLimit(next.filter((m) => !seen.has(m.id)), viewing);
+    return [...visible, ...(browseVisible(bounded, rules) ?? [])];
+  }, [short, next, visible, items, rules, viewing]);
 }
 
 /** Fewer featured titles than this left, and trending fills the carousel up. */

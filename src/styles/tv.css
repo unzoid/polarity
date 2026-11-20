@@ -951,6 +951,13 @@
   grid-template-columns: repeat(6, 1fr);
   gap: 0.35rem;
 }
+.tv-osk-keys[data-layout="qwerty"] {
+  grid-template-columns: repeat(10, 1fr);
+}
+.tv-osk-keys[data-layout="qwerty"] .tv-key {
+  font-size: 1rem;
+  height: 2.35rem;
+}
 .tv-key {
   display: grid;
   place-items: center;
@@ -1305,6 +1312,51 @@
 }
 .tv-settings-row:focus .tv-settings-value svg[data-dim="true"] {
   opacity: 0.2;
+}
+.tv-settings-help {
+  position: fixed;
+  left: max(4rem, calc((100% - 56rem) / 2));
+  right: max(4rem, calc((100% - 56rem) / 2));
+  bottom: 2.25rem;
+  margin: 0;
+  padding: 0.7rem 1.25rem;
+  border-radius: 0.85rem;
+  background: rgb(20 20 24 / 0.82);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 0.98rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.tv-addons-install {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+  border-radius: 1rem;
+  background: var(--fill-1);
+  border: 1px solid var(--hairline);
+}
+.tv-addon-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.tv-settings-row-sub {
+  min-height: 2.75rem;
+  font-size: 0.98rem;
+  color: var(--text-3);
+  padding-left: 2.25rem;
+}
+.tv-settings-error {
+  margin: 0.25rem 1.25rem;
+  color: var(--danger);
+  font-size: 0.95rem;
+}
+.tv-settings-empty {
+  margin: 0.75rem 1.25rem;
+  color: var(--text-2);
+  font-size: 1rem;
 }
 .tv-pill-skeleton {
   display: block;

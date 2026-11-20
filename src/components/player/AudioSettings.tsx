@@ -26,15 +26,22 @@ export function AudioSettings({ delay, onDelay }: { delay: number; onDelay: (sec
               : "Sound plays earlier than before"
         }
       >
-        <Stepper
-          value={delay}
-          step={0.05}
-          min={-10}
-          max={10}
-          format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}s`}
-          onChange={onDelay}
-          label="Audio delay"
-        />
+        <div className="sub-delay-row">
+          <Stepper
+            value={delay}
+            step={0.05}
+            min={-10}
+            max={10}
+            format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}s`}
+            onChange={onDelay}
+            label="Audio delay"
+          />
+          {delay !== 0 && (
+            <button type="button" className="sub-delay-zero" onClick={() => onDelay(0)} aria-label="Reset audio delay">
+              0s
+            </button>
+          )}
+        </div>
       </Setting>
       <Setting label="Boost dialogue" caption="Clearer voices on 5.1 and 7.1 sound">
         <Chips value={dialogueBoost ? 1 : 0} options={ON_OFF} onChange={(v) => setPrefs({ dialogueBoost: v === 1 })} />

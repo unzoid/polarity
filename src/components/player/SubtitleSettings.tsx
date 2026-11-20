@@ -281,15 +281,22 @@ export function SubtitleSettings({
                 : "Subtitles show earlier than before"
           }
         >
-          <Stepper
-            value={delay}
-            step={0.1}
-            min={-30}
-            max={30}
-            format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}s`}
-            onChange={onDelay}
-            label="Delay"
-          />
+          <div className="sub-delay-row">
+            <Stepper
+              value={delay}
+              step={0.1}
+              min={-30}
+              max={30}
+              format={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}s`}
+              onChange={onDelay}
+              label="Delay"
+            />
+            {delay !== 0 && (
+              <button type="button" className="sub-delay-zero" onClick={() => onDelay(0)} aria-label="Reset subtitle delay">
+                0s
+              </button>
+            )}
+          </div>
         </Setting>
       )}
       {onStepLine && (
@@ -566,16 +573,66 @@ export function Stepper({
   label: string;
 }) {
   // Round so repeated 0.1 steps don't drift (0.30000000000000004).
-  const set = (v: number) => onChange(Math.round(Math.max(min, Math.min(max, v)) * 100) / 100);
+  const clamp = (v: number) => Math.round(Math.max(min, Math.min(max, v)) * 100) / 100;
+  const latest = useRef({ value, onChange });
+  latest.current = { value, onChange };
+  const holdDelay = useRef<number>(undefined);
+  const holdTick = useRef<number>(undefined);
+  const heldFired = useRef(false);
+  const stopHold = () => {
+    window.clearTimeout(holdDelay.current);
+    window.clearInterval(holdTick.current);
+    holdDelay.current = undefined;
+    holdTick.current = undefined;
+  };
+  useEffect(() => stopHold, []);
+  const startHold = (dir: -1 | 1) => {
+    stopHold();
+    heldFired.current = false;
+    holdDelay.current = window.setTimeout(() => {
+      heldFired.current = true;
+      holdTick.current = window.setInterval(() => {
+        const next = clamp(latest.current.value + dir * step);
+        if (next === latest.current.value) return stopHold();
+        latest.current.value = next;
+        latest.current.onChange(next);
+      }, 75);
+    }, 350);
+  };
+  const stepOnce = (dir: -1 | 1) => {
+    if (heldFired.current) {
+      heldFired.current = false;
+      return;
+    }
+    onChange(clamp(value + dir * step));
+  };
   return (
     <div className="sub-stepper" role="group" aria-label={label}>
-      <button aria-label={`Less ${label.toLowerCase()}`} disabled={value <= min} onClick={() => set(value - step)}>
+      <button
+        type="button"
+        aria-label={`Less ${label.toLowerCase()}`}
+        disabled={value <= min}
+        onPointerDown={(e) => e.button === 0 && startHold(-1)}
+        onPointerUp={stopHold}
+        onPointerLeave={stopHold}
+        onPointerCancel={stopHold}
+        onClick={() => stepOnce(-1)}
+      >
         <Minus size={16} strokeWidth={2.5} />
       </button>
       <span className="sub-stepper-value tabular" aria-live="polite">
         {format(value)}
       </span>
-      <button aria-label={`More ${label.toLowerCase()}`} disabled={value >= max} onClick={() => set(value + step)}>
+      <button
+        type="button"
+        aria-label={`More ${label.toLowerCase()}`}
+        disabled={value >= max}
+        onPointerDown={(e) => e.button === 0 && startHold(1)}
+        onPointerUp={stopHold}
+        onPointerLeave={stopHold}
+        onPointerCancel={stopHold}
+        onClick={() => stepOnce(1)}
+      >
         <Plus size={16} strokeWidth={2.5} />
       </button>
     </div>

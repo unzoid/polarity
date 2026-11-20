@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimeCard, AnimeLandscapeCard, useAnimeHandlers, useOpenAnime } from "../components/anime/AnimeCard";
 import { Dropdown } from "../components/Dropdown";
 import { Calendar, Close, Filters, Grid, Play } from "../components/icons";
@@ -272,6 +272,8 @@ function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview;
         : undefined,
     [linkedId, item, card.coverImage.extraLarge, card.coverImage.large],
   );
+  const lead = card.format ? FORMAT_LABEL[card.format] : "Anime";
+  const phoneTags = (card.genres ?? []).slice(0, 3);
   return (
     <div className="hero-content">
       <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
@@ -279,12 +281,26 @@ function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview;
       {part && <p className="hero-part t-caption">{part}</p>}
       <p className="hero-kind t-callout tabular">
         <span className="hero-kind-text">
-          {joinFacts([
-            card.format && FORMAT_LABEL[card.format],
-            ...(card.genres ?? []).slice(0, 2),
-            year,
-            next && `Episode ${next.episode} in ${countdown(untilAiring(next.airingAt))}`,
-          ])}
+          {phone ? (
+            <>
+              <span className="hero-kind-lead">{lead}</span>
+              {(phoneTags.length ? phoneTags : year ? [String(year)] : []).map((tag) => (
+                <Fragment key={tag}>
+                  <span className="hero-kind-dot" aria-hidden>
+                    •
+                  </span>
+                  <span>{tag}</span>
+                </Fragment>
+              ))}
+            </>
+          ) : (
+            joinFacts([
+              card.format && FORMAT_LABEL[card.format],
+              ...(card.genres ?? []).slice(0, 2),
+              year,
+              next && `Episode ${next.episode} in ${countdown(untilAiring(next.airingAt))}`,
+            ])
+          )}
         </span>
       </p>
       <p className="hero-description t-body">{item.description}</p>

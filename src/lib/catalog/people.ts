@@ -60,21 +60,23 @@ export function lifeFacts(p: Pick<PersonPage, "born" | "died" | "birthplace" | "
 }
 
 export interface Filmography {
-  key: "acting" | "directing";
+  key: "acting" | "directing" | "writing";
   title: string;
   items: MetaPreview[];
 }
 
 /**
- * A person's titles in rows, those they're known for first: a director's directing comes before the films
- * they appear in. Empty rows are left out.
+ * A person's titles in rows, those they're known for first: a director's directing or a writer's writing
+ * comes before the films they appear in. Empty rows are left out.
  */
-export function filmography(p: Pick<PersonPage, "acting" | "directing" | "knownFor">): Filmography[] {
+export function filmography(p: Pick<PersonPage, "acting" | "directing" | "writing" | "knownFor">): Filmography[] {
   const rows: Filmography[] = [
     { key: "acting", title: "Acting", items: p.acting ?? [] },
     { key: "directing", title: "Directing", items: p.directing ?? [] },
+    { key: "writing", title: "Writing", items: p.writing ?? [] },
   ];
-  if (p.knownFor === "Directing" || p.knownFor === "Creator") rows.reverse();
+  const lead = p.knownFor === "Directing" || p.knownFor === "Creator" ? "directing" : p.knownFor === "Writing" ? "writing" : "acting";
+  rows.sort((a, b) => Number(b.key === lead) - Number(a.key === lead));
   return rows.filter((r) => r.items.length > 0);
 }
 

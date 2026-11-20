@@ -25,6 +25,8 @@ interface Target {
   entry?: Progress;
   /** Opened on an episode of the show's own page, not a Continue Watching card. */
   episode?: boolean;
+  /** Custom remover for Continue Watching Up Next cards (dismisses until a newer episode finishes). */
+  onRemoveContinue?: () => void;
   /** Where "Go to Show" leads, when not the title's own page (an anime's AniList page). */
   open?: () => void;
   /** False when the title has no id the library knows (an anime with no IMDb or Kitsu link): only "Go to Show". */
@@ -59,12 +61,16 @@ export function openCardMenu(item: MetaPreview, at: { x: number; y: number }, op
 }
 
 /** Spread on a card: `<button {...cardMenu(item)}>`. */
-export function cardMenu(item: MetaPreview, entry?: Progress, { episode = false } = {}) {
+export function cardMenu(
+  item: MetaPreview,
+  entry?: Progress,
+  { episode = false, onRemoveContinue }: { episode?: boolean; onRemoveContinue?: () => void } = {},
+) {
   return {
     onContextMenu: (e: ReactMouseEvent<HTMLElement>) => {
       e.preventDefault();
       e.stopPropagation();
-      set({ item, entry, episode, ...menuPoint(e), key: ++opened });
+      set({ item, entry, episode, onRemoveContinue, ...menuPoint(e), key: ++opened });
     },
   };
 }
@@ -146,13 +152,16 @@ function useLinkedChoices(target: Target): Choices {
     disabled: !a.canToggleWatched,
     run: a.toggleWatched,
   });
-  if (a.entryInProgress)
+  if (a.entryInProgress || target.onRemoveContinue)
     watched.push({
       id: "reset-entry",
       label: episode ? `Reset ${a.episodeLabel} Progress` : "Remove from Continue Watching",
       icon: episode ? <Reset /> : <Close />,
       destructive: !episode,
-      run: a.resetEntry,
+      run: () => {
+        if (target.onRemoveContinue) target.onRemoveContinue();
+        else a.resetEntry();
+      },
     });
   if (a.hasProgress && !a.allWatched)
     watched.push({ id: "reset-all", label: a.isSeries ? "Reset Show Progress" : "Reset Progress", icon: <Reset />, run: a.resetAll });

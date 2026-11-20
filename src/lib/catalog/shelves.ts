@@ -2,10 +2,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { catalogBound, getViewingLimit, keepWithinLimit, useViewingLimit } from "./viewingLimit";
 import { api } from "../api";
-import { keys, useCatalog, useContinueWatching, useLibrary } from "../net/queries";
+import { keys, useCatalog, useContinueWatching, useLibrary, useWatchHistory } from "../net/queries";
 import type { ContentType, MetaPreview, Progress } from "../types";
 import type { Route } from "../router";
 import { watchedFraction } from "../library/watched";
+import { tasteGenreRank, type TasteProfile } from "./taste";
 
 /**
  * What the home screens show, shared by the desktop and TV layouts: the
@@ -59,15 +60,31 @@ export interface Seed {
   type: ContentType;
   id: string;
   name: string;
+  /** Whether the user watched it or only saved it to their library (keeps "Because you …" honest). */
+  source?: "watched" | "saved";
 }
 
-export function todaysShelves(seeds: Seed[]): Shelf[] {
+export function todaysShelves(seeds: Seed[], taste?: TasteProfile): Shelf[] {
   const day = Math.floor(Date.now() / 86_400_000);
-  const genres = [...GENRES].sort((a, b) => dailyNoise(day, a.type + a.genre) - dailyNoise(day, b.type + b.genre));
+  const genres = [...GENRES].sort(
+    (a, b) =>
+      tasteGenreRank(a.type, a.genre, taste, dailyNoise(day, a.type + a.genre)) -
+      tasteGenreRank(b.type, b.genre, taste, dailyNoise(day, b.type + b.genre)),
+  );
   const genre = (i: number, shape: Shape): Shelf => ({ kind: "catalog", id: "popular", shape, ...genres[i] });
   const catalog = (type: ContentType, id: string, title: string, shape: Shape): Shelf => ({ kind: "catalog", type, id, title, shape });
   const because = (i: number, shape: Shape): Shelf[] =>
-    seeds[i] ? [{ kind: "because", type: seeds[i].type, seed: seeds[i].id, title: `Because you watched ${seeds[i].name}`, shape }] : [];
+    seeds[i]
+      ? [
+          {
+            kind: "because",
+            type: seeds[i].type,
+            seed: seeds[i].id,
+            title: `${seeds[i].source === "saved" ? "Because you saved" : "Because you watched"} ${seeds[i].name}`,
+            shape,
+          },
+        ]
+      : [];
 
   return [
     ...because(0, "landscape"),
@@ -92,18 +109,20 @@ export function todaysShelves(seeds: Seed[]): Shelf[] {
   ];
 }
 
-/** The two titles you were most recently into (watching, else saved). */
+/** The two titles you were most recently into: watched/watching first, else saved in Library. */
 export function useSeeds(): Seed[] {
   const { data: watching } = useContinueWatching();
+  const { data: history } = useWatchHistory();
   const { data: library } = useLibrary();
   return useMemo(() => {
+    const activity = [...(watching ?? []), ...(history ?? [])].sort((a, b) => b.updatedAt - a.updatedAt);
     const candidates: Seed[] = [
-      ...[...(watching ?? [])].sort((a, b) => b.updatedAt - a.updatedAt).map((p) => ({ type: p.type, id: p.metaId, name: p.name })),
-      ...[...(library ?? [])].sort((a, b) => b.addedAt - a.addedAt).map((l) => ({ type: l.type, id: l.id, name: l.name })),
+      ...activity.map((p) => ({ type: p.type, id: p.metaId, name: p.name, source: "watched" as const })),
+      ...[...(library ?? [])].sort((a, b) => b.addedAt - a.addedAt).map((l) => ({ type: l.type, id: l.id, name: l.name, source: "saved" as const })),
     ];
     const seen = new Set<string>();
     return candidates.filter((s) => !seen.has(s.id) && seen.add(s.id)).slice(0, 2);
-  }, [watching, library]);
+  }, [watching, history, library]);
 }
 
 /**

@@ -9,13 +9,17 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{str_of, Item, Lookup, Tmdb, IMG};
-use crate::person::PersonPage;
+use crate::person::{PersonHit, PersonPage};
 use crate::Result;
 
 /// Titles a person acts in that their page keeps.
 const ACTING: usize = 30;
 /// Titles a person directed or created that their page keeps.
 const DIRECTING: usize = 15;
+/// Titles a person wrote that their page keeps.
+const WRITING: usize = 15;
+/// People returned by a search query.
+const MAX_PEOPLE_HITS: usize = 12;
 /// IMDb-id lookups for a person's titles in flight at once: fewer than a catalog's, so a page of
 /// 45 titles never arrives at TMDB as one burst.
 const LOOKUPS_AT_ONCE: usize = 6;
@@ -34,7 +38,7 @@ struct Credits {
     crew: Vec<Credit>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Credit {
     #[serde(default)]
     media_type: String,
@@ -82,10 +86,46 @@ impl Credit {
     fn directs(&self) -> bool {
         matches!(self.job.as_deref(), Some("Director" | "Creator"))
     }
+
+    fn writes(&self) -> bool {
+        matches!(self.job.as_deref(), Some("Screenplay" | "Writer" | "Story" | "Novel" | "Teleplay"))
+    }
+}
+
+#[derive(Deserialize)]
+struct PeoplePaged {
+    #[serde(default)]
+    results: Vec<Value>,
 }
 
 impl Tmdb {
-    /// A person's page: who they are, then the titles they act in and those they directed, each most
+    /// People matching `query`, most popular first (adult entries skipped).
+    pub async fn search_people(&self, query: &str) -> Result<Vec<PersonHit>> {
+        let list: PeoplePaged = self.get("/search/person", &[("query", query), ("include_adult", "false")]).await?;
+        let mut hits: Vec<(f64, PersonHit)> = list
+            .results
+            .into_iter()
+            .filter(|p| !p["adult"].as_bool().unwrap_or(false))
+            .filter_map(|p| {
+                let id = p["id"].as_u64()?;
+                let name = str_of(&p["name"])?;
+                let pop = p["popularity"].as_f64().unwrap_or(0.0);
+                Some((
+                    pop,
+                    PersonHit {
+                        id,
+                        name,
+                        photo: str_of(&p["profile_path"]).map(|path| format!("{IMG}/w185{path}")),
+                        known_for: str_of(&p["known_for_department"]),
+                    },
+                ))
+            })
+            .collect();
+        hits.sort_by(|a, b| b.0.total_cmp(&a.0));
+        Ok(hits.into_iter().take(MAX_PEOPLE_HITS).map(|(_, h)| h).collect())
+    }
+
+    /// A person's page: who they are, then the titles they act in, directed, and wrote, each most
     /// notable first (by TMDB's vote count) and kept to those with an IMDb id. The titles' ids come from
     /// the same cached lookup as list results; any lookup that fails fails the page, so a thinned page is
     /// never cached.
@@ -93,13 +133,14 @@ impl Tmdb {
         let d: Value = self.get(&format!("/person/{id}"), &[("append_to_response", "combined_credits")]).await?;
         let credits: Credits = serde_json::from_value(d["combined_credits"].clone()).unwrap_or_default();
         let acting = notable(credits.cast, ACTING, Credit::is_role);
-        let directing = notable(credits.crew, DIRECTING, Credit::directs);
+        let directing = notable(credits.crew.clone(), DIRECTING, Credit::directs);
+        let writing = notable(credits.crew, WRITING, Credit::writes);
 
-        // A title in both lists is looked up once. Keyed by (is a show, id), owned values only: a closure
+        // A title in multiple lists is looked up once. Keyed by (is a show, id), owned values only: a closure
         // over a borrow makes the future not `Send` enough for a command (rust-lang/rust#64552).
         let mut seen = HashSet::new();
         let wanted: Vec<(bool, u64)> =
-            acting.iter().chain(&directing).map(|c| c.key()).filter(|k| seen.insert(*k)).collect();
+            acting.iter().chain(&directing).chain(&writing).map(|c| c.key()).filter(|k| seen.insert(*k)).collect();
         let found: Vec<Lookup> = stream::iter(wanted.clone())
             .map(|(series, tmdb_id)| self.lookup(if series { "series" } else { "movie" }, tmdb_id))
             .buffered(LOOKUPS_AT_ONCE)
@@ -108,7 +149,8 @@ impl Tmdb {
         let found: HashMap<(bool, u64), Lookup> = wanted.into_iter().zip(found).collect();
         let acting = previews(acting, &found);
         let directing = previews(directing, &found);
-        Ok(person_page(id, &d, acting, directing))
+        let writing = previews(writing, &found);
+        Ok(person_page(id, &d, acting, directing, writing))
     }
 }
 
@@ -134,7 +176,13 @@ fn notable(list: Vec<Credit>, take: usize, keep: fn(&Credit) -> bool) -> Vec<Cre
     kept
 }
 
-fn person_page(id: u64, d: &Value, acting: Vec<MetaPreview>, directing: Vec<MetaPreview>) -> PersonPage {
+fn person_page(
+    id: u64,
+    d: &Value,
+    acting: Vec<MetaPreview>,
+    directing: Vec<MetaPreview>,
+    writing: Vec<MetaPreview>,
+) -> PersonPage {
     PersonPage {
         id,
         name: str_of(&d["name"]).unwrap_or_default(),
@@ -146,6 +194,7 @@ fn person_page(id: u64, d: &Value, acting: Vec<MetaPreview>, directing: Vec<Meta
         known_for: str_of(&d["known_for_department"]),
         acting,
         directing,
+        writing,
     }
 }
 
@@ -239,6 +288,33 @@ mod tests {
         let first = &extras(&videos, Some("main"))[0];
         assert_eq!((first.name.as_str(), first.kind.as_str()), ("Trailer second", "Trailer"));
         assert!(extras(&json!(null), None).is_empty());
+    }
+
+    #[test]
+    fn writing_credits_match_writer_jobs() {
+        let mk = |job: &str| Credit {
+            media_type: "movie".into(),
+            vote_count: Some(100.0),
+            character: None,
+            job: Some(job.into()),
+            item: Item {
+                id: 1,
+                title: Some("Example".into()),
+                name: None,
+                poster_path: None,
+                backdrop_path: None,
+                overview: None,
+                release_date: None,
+                first_air_date: None,
+                vote_average: None,
+                genre_ids: vec![],
+            },
+        };
+        assert!(mk("Screenplay").writes());
+        assert!(mk("Writer").writes());
+        assert!(mk("Story").writes());
+        assert!(mk("Teleplay").writes());
+        assert!(!mk("Director").writes());
     }
 
     #[test]

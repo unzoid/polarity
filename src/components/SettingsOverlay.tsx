@@ -270,6 +270,21 @@ export function SettingsOverlay({
     }
   };
 
+  const [resetArmed, setResetArmed] = useState(false);
+  useEffect(() => {
+    if (!resetArmed) return;
+    const t = window.setTimeout(() => setResetArmed(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [resetArmed]);
+  const triggerReset = () => {
+    if (!resetArmed) {
+      setResetArmed(true);
+      return;
+    }
+    setResetArmed(false);
+    resetPrefs();
+  };
+
   // The sections and the page, the same in the window and in the sheet; only the chrome round them differs.
   const body = (
     <>
@@ -356,9 +371,14 @@ export function SettingsOverlay({
         {/* A phone's list of sections: the device's defaults back, once there's something to restore (#455). */}
         {phone && prefsCustomized(prefs) && (
           <div className="t3s-group">
-            <button className="t3s-nav-item" onClick={resetPrefs} title="Interface sounds and controller notices on this device">
+            <button
+              className={resetArmed ? "t3s-nav-item t3s-nav-danger" : "t3s-nav-item"}
+              onClick={triggerReset}
+              onBlur={() => setResetArmed(false)}
+              title="Resets all preferences saved on this device (playback, layout, downloads, sounds)"
+            >
               <Reset size={16} strokeWidth={2} />
-              <span>Restore device defaults</span>
+              <span>{resetArmed ? "Tap again to reset device defaults" : "Restore device defaults"}</span>
             </button>
           </div>
         )}
@@ -433,13 +453,15 @@ export function SettingsOverlay({
                       it's at the foot of the list of sections there. */}
               {!phone && (
                 <button
-                  className="t3s-ghost"
+                  className={resetArmed ? "t3s-ghost btn-danger" : "t3s-ghost"}
                   disabled={!prefsCustomized(prefs)}
-                  onClick={resetPrefs}
-                  title="Interface sounds and controller notices on this device"
+                  onClick={triggerReset}
+                  onBlur={() => setResetArmed(false)}
+                  data-armed={resetArmed || undefined}
+                  title="Resets all preferences saved on this device (playback, layout, downloads, sounds)"
                 >
                   <Reset size={14} strokeWidth={2.2} />
-                  <span className="t3s-ghost-label">Restore device defaults</span>
+                  <span className="t3s-ghost-label">{resetArmed ? "Confirm reset?" : "Restore device defaults"}</span>
                 </button>
               )}
               <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">

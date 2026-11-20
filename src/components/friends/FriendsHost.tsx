@@ -50,7 +50,7 @@ export function FriendsHost() {
  * Friends, where the invite is joined.
  */
 function InviteToast({ tv }: { tv: boolean }) {
-  const { invites } = useFriends();
+  const { invites, presence } = useFriends();
   const { profile } = useAccount();
   const surface = usePartySurface();
   const invite = invites.at(-1) ?? null;
@@ -58,6 +58,7 @@ function InviteToast({ tv }: { tv: boolean }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setError(null), [invite?.id]);
   if (!shown) return null;
+  const watchingTitle = presence[shown.from]?.watching?.title;
   const join = () => {
     if (!profile) return;
     joinParty(shown.party, profile).then(
@@ -86,7 +87,7 @@ function InviteToast({ tv }: { tv: boolean }) {
       className="friends-toast"
       data-kind="friend-invite"
     >
-      <strong>{shown.name} invited you to a watch party</strong>
+      <strong>{watchingTitle ? `${shown.name} invited you to watch ${watchingTitle}` : `${shown.name} invited you to a watch party`}</strong>
       <span>{error ?? (tv ? "Join from Friends in the menu." : "Join to watch together.")}</span>
     </Toast>
   );

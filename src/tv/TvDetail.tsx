@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
 import { NameList } from "../components/title/NameList";
-import { Check, Edit, Episodes, Hidden, Info, Play, PlaylistIcon, Plus, Reset, Sources, Star, Trailer, Volume, VolumeMuted } from "../components/icons";
+import { Check, Edit, Episodes, Grid, Hidden, Info, Play, PlaylistIcon, Plus, Reset, Sources, Star, Trailer, Volume, VolumeMuted } from "../components/icons";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { AgeRatingBadge, FormatBadges, ScoreRow, TitleDetails } from "../components/title/TitleDetails";
 import { episodeState, hideTitle, progressMap, renamePlaylist, seasonsOf, unhideTitle, upNext, useIsHidden, usePlaylists, watchedFraction } from "../lib/library";
@@ -15,9 +15,9 @@ import { animeEntries, entryMeta, pickTitle, stillFor } from "../lib/anime";
 import { StreamList } from "../components/StreamList";
 import { airLabel, episodeCode, formatDate, formatRemaining, formatRuntime, isReleased, shortRuntime } from "../lib/format";
 import { usePlayTarget, useTitlePlayback } from "../lib/playback";
-import { useLibrary, useMeta, useProgress, useRatings, useStreams, useToggleLibrary } from "../lib/net";
+import { useCollection, useLibrary, useMeta, useProgress, useRatings, useRecommend, useStreams, useToggleLibrary } from "../lib/net";
 import { usePrefs } from "../lib/settings";
-import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
+import { LIMIT_NOTICE, useBrowseVisible, useTitleVerdict } from "../lib/catalog";
 import { useArtGate, usePresence } from "../lib/ui";
 import type { ContentType, Meta, MetaPreview, RankedStream, Video } from "../lib/types";
 import { PanelLeaving, useBack, useFocusTrap, usePageActive } from "./shell";
@@ -26,6 +26,7 @@ import { reveal } from "./spatial";
 import { glideScroll, glideTarget } from "./follow";
 import { TvKeyboard } from "./TvKeyboard";
 import { Facts, TvBackdrop, titleFacts } from "./TvStage";
+import { TvCard, TvRail } from "./TvRails";
 import { Skeleton } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
 import { TvDescription, TvOverviewMore, TvRatingsPanel, TvTextPanel, useHasEpisodeRatings } from "./TvMore";
@@ -33,6 +34,7 @@ import { TvDescription, TvOverviewMore, TvRatingsPanel, TvTextPanel, useHasEpiso
 type Panel =
   | { kind: "episodes" }
   | { kind: "details" }
+  | { kind: "similar" }
   | { kind: "extras" }
   | { kind: "sources"; videoId: string; subtitle: string }
   | { kind: "playlists" }
@@ -159,6 +161,8 @@ export function TvDetail({ type, id, preview, entry }: { type: ContentType; id: 
             <TvRatingsPanel videos={meta.videos} onOpen={(v) => push({ kind: "sources", videoId: v.id, subtitle: episodeLine(v) })} />
           ) : p.kind === "details" && meta ? (
             <DetailsPanel meta={meta} />
+          ) : p.kind === "similar" && meta ? (
+            <SimilarPanel meta={meta} />
           ) : p.kind === "extras" && meta ? (
             <TvExtrasPanel meta={meta} />
           ) : p.kind === "playlists" ? (
@@ -269,6 +273,7 @@ function Actions({
         onClick={() => videoId && push({ kind: "sources", videoId, subtitle })}
       />
       {meta && <ActionPill icon={<Info size={26} />} label="Details" onClick={() => push({ kind: "details" })} />}
+      {meta && <ActionPill icon={<Grid size={26} />} label="More Like This" onClick={() => push({ kind: "similar" })} />}
       {meta?.extras?.length ? <ActionPill icon={<Trailer size={26} />} label="Extras" onClick={() => push({ kind: "extras" })} /> : null}
       <ActionPill
         icon={inLibrary ? <Check size={26} /> : <Plus size={26} />}
@@ -730,6 +735,45 @@ function SourcesPanel({
       </header>
       <div className="tv-scroll tv-sources-list" data-nav-scroll="center">
         <StreamList type={type} videoId={videoId} onPick={onPick} tv />
+      </div>
+    </div>
+  );
+}
+
+/** Collection & More Like This rails in TV mode so title pages never dead-end. */
+function SimilarPanel({ meta }: { meta: Meta }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusTrap(ref);
+  const collection = useCollection(meta.details?.collection?.id);
+  const recommended = useRecommend(meta.type, meta.id);
+  const more = useBrowseVisible(recommended.data)?.filter((m) => m.id !== meta.id) ?? [];
+  const colItems = collection.data && collection.data.length >= 2 ? collection.data : [];
+  const loading = recommended.isPending || (meta.details?.collection != null && collection.isPending);
+
+  return (
+    <div className="tv-panel tv-sources tv-similar" ref={ref} data-nav-scope role="dialog" aria-label="More Like This">
+      <header className="tv-sources-head">
+        <h2 className="tv-heading">{meta.name}</h2>
+        <p className="tv-sources-sub">More Like This</p>
+      </header>
+      <div className="tv-scroll tv-sources-list" data-nav-scroll="start">
+        {colItems.length > 0 && meta.details?.collection && (
+          <TvRail title={meta.details.collection.name}>
+            {colItems.map((item) => (
+              <TvCard key={item.id} item={item} shape="poster" />
+            ))}
+          </TvRail>
+        )}
+        {more.length > 0 && (
+          <TvRail title="More Like This">
+            {more.map((item) => (
+              <TvCard key={item.id} item={item} shape="poster" />
+            ))}
+          </TvRail>
+        )}
+        {!loading && !colItems.length && !more.length && (
+          <EmptyState variant="tv">No related titles to show yet.</EmptyState>
+        )}
       </div>
     </div>
   );

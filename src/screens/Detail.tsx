@@ -3,7 +3,9 @@ import { SwapIcon } from "../components/SwapIcon";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";
 import { NameList } from "../components/title/NameList";
 import { ExtrasShelf } from "../components/title/ExtrasShelf";
-import { personIds } from "../lib/catalog";
+import { PosterCard } from "../components/PosterCard";
+import { Shelf } from "../components/title/Shelf";
+import { personIds, useBrowseVisible, useListable } from "../lib/catalog";
 import { detailBackdropUrl, sizedArt, useArtGate, useFoldSnap, useFormFactor, usePageTogether, useReadyTogether } from "../lib/ui";
 import { DetailPending, HeroSkeleton } from "../components/title/HeroSkeleton";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
@@ -26,7 +28,7 @@ import { Segmented } from "../components/Segmented";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
 import { episodeCode, formatRuntime, joinFacts } from "../lib/format";
 import { type PlayRequest, trailerFor, useFileTrailer, usePlayTarget } from "../lib/playback";
-import { prefetchStreams, useMeta, useProgress, useRatings, useStreams } from "../lib/net";
+import { prefetchStreams, useCollection, useMeta, useProgress, useRatings, useRecommend, useStreams } from "../lib/net";
 import type { ContentType, Meta, MetaPreview, Video } from "../lib/types";
 import { IconButton } from "../components/ui/Button";
 import { SimklPanel } from "../components/title/SimklPanel";
@@ -146,6 +148,8 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
         )}
         {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
         {meta && <ExtrasShelf meta={meta} />}
+        {meta?.details?.collection && <CollectionShelf collection={meta.details.collection} currentId={meta.id} />}
+        {meta && <MoreLikeThisShelf type={type} id={meta.id} />}
         {type === "movie" && meta && (
           <section className="about">
             <h2 className="t-title2">About</h2>
@@ -178,7 +182,7 @@ function DetailHero({
   const isSeries = item.type === "series";
   const { next, videoId, resumeAt, label: primaryLabel } = usePlayTarget(item, meta);
   const { data: fileTrailer } = useFileTrailer(item.id);
-  const { data: ratings, isLoading: ratingsLoading } = useRatings(item.type, item.id);
+  const { data: ratings } = useRatings(item.type, item.id);
   // Which season a show opens on waits for this too (Seasons): the page below the fold comes in with the rest.
   const { data: progress } = useProgress(item.id);
 
@@ -202,11 +206,10 @@ function DetailHero({
   const facts = joinFacts([item.releaseInfo, formatRuntime(meta?.runtime)]);
   // The logo or name waits for the backdrop (or the poster blurred in its place, as the page draws it; #173).
   const gate = useArtGate(item.background, [item.poster]);
-  // The page loads together: the art, the heading, the details, the scores and the episodes come in as one,
-  // over a skeleton until then (detail.css, `[data-ready]`). Sources aren't waited for: they take seconds.
+  // The page loads together without waiting on slow third-party external ratings (MDBList/OMDb) or sources.
   const heading = useHeadingReady({ logo: item.logo, logos: item.logos, backdrop: item.background, look: "detail", pending: metaPending });
   const ready = useReadyTogether(
-    !metaPending && !ratingsLoading && gate["data-art"] === "ready" && heading.ready && (!isSeries || progress !== undefined),
+    !metaPending && gate["data-art"] === "ready" && heading.ready && (!isSeries || progress !== undefined),
     item.id,
   );
 
@@ -375,7 +378,7 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
             picker.play({ ...request(v), resumable: false, shuffle: true });
           }}
           onOpenEpisode={(v) => {
-            setSeason(v.season);
+            setSeason(shelfGroupOf(v, view));
             picker.choose(request(v));
           }}
         />
@@ -403,5 +406,38 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
       />
       <SourcePicker picker={picker} />
     </section>
+  );
+}
+
+/** Films in the same TMDB franchise / collection, in chronological release order. */
+function CollectionShelf({ collection, currentId }: { collection: { id: number; name: string }; currentId: string }) {
+  const { data, isError } = useCollection(collection.id);
+  const items = useListable(data);
+  if (isError || !items || items.length < 2) return null;
+  return (
+    <div className="detail-shelf">
+      <Shelf
+        title={collection.name}
+        items={items}
+        card={(item) => (
+          <div key={item.id} className="detail-collection-card" data-current={item.id === currentId || undefined}>
+            <PosterCard item={item} />
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
+/** "More Like This" recommendations so no title page is a dead end. */
+function MoreLikeThisShelf({ type, id }: { type: ContentType; id: string }) {
+  const { data, isError } = useRecommend(type, id);
+  const visible = useBrowseVisible(useListable(data));
+  const items = useMemo(() => (visible ?? []).filter((m) => m.id !== id), [visible, id]);
+  if (isError || !data || !items.length) return null;
+  return (
+    <div className="detail-shelf">
+      <Shelf title="More Like This" items={items} card={(item) => <PosterCard key={item.id} item={item} />} />
+    </div>
   );
 }

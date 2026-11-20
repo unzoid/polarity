@@ -47,9 +47,25 @@ export function ProfileLockRows({ profile }: { profile: Profile }) {
   const me = account.profile;
   const offerPinFor = me && me.id !== profile.id && !isRestricted(me) && !hasPin(me) ? me : null;
   const advise = isRestricted(profile) && needsGuardianAdvice(profile, account.profiles);
+  const isKidsPreset = lock.viewingLimit === 10 && lock.hideUnrated;
 
   return (
     <section className="profile-lock" aria-label="PIN and viewing limit">
+      <label className="profile-lock-row">
+        <span className="profile-lock-text">
+          <span className="profile-lock-title">Kids profile</span>
+          <span className="profile-lock-caption">Family-friendly titles (up to 10+) and hides unrated titles</span>
+        </span>
+        <Switch
+          checked={isKidsPreset}
+          disabled={busy}
+          onChange={(on) =>
+            void change(() =>
+              account.setProfileLock(profile.id, on ? { viewingLimit: 10, hideUnrated: true } : { viewingLimit: null, hideUnrated: false }),
+            )
+          }
+        />
+      </label>
       <div className="profile-lock-row">
         <span className="profile-lock-text">
           <span className="profile-lock-title">PIN</span>

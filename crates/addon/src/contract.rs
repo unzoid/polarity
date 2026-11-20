@@ -93,6 +93,8 @@ fn field_names_match_contract() {
     add("ManifestCatalog", keys(&catalog()));
     add("CatalogExtra", keys(&catalog().extra[0]));
     add("MetaPreview", keys(&preview()));
+    let collection = CollectionInfo { id: 1, name: "C".into() };
+    add("CollectionInfo", keys(&collection));
     let details = MetaDetails {
         tagline: s("t"),
         status: s("Ended"),
@@ -109,6 +111,7 @@ fn field_names_match_contract() {
         episodes: Some(1),
         votes: Some(1),
         tmdb_id: Some(1),
+        collection: Some(collection),
     };
     add("MetaDetails", keys(&details));
     let person = Person { name: "P".into(), character: s("C"), photo: s("p"), tmdb_id: Some(1) };

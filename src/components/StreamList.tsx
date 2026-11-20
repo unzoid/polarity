@@ -143,7 +143,11 @@ export function StreamList({
   // Files that name another episode than this one (#225): last, under their own heading.
   const otherEpisodes = f.view.slice(f.otherEpisodes).map(({ r }) => r);
   const grouped = f.sort === "best";
-  const [best, ...rest] = shown;
+  // Don't feature a known-dead source as Best Match when a working source exists right below it.
+  const bestIndex = grouped ? shown.findIndex((s) => ready.get(streamKey(s))?.state !== "notReady") : -1;
+  const pickAt = bestIndex >= 0 ? bestIndex : 0;
+  const best = shown[pickAt];
+  const rest = shown.filter((_, i) => i !== pickAt);
   const bestSummary = grouped && best ? featuredMatchSummary(f.match(best)) : null;
 
   return (

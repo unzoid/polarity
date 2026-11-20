@@ -1,63 +1,94 @@
-/** Pixels across the canvas a blurred copy is drawn back up into, smoothly, so the screen's own stretch adds no steps. */
-const SOFT_W = 64;
+/** Width of the cached tiny blur canvas: 24px across (~864 pixels), so painting and copying takes <0.05ms. */
+const BLUR_W = 24;
+/** Output canvas width drawn smoothly up from BLUR_W so GPU scaling has zero banding. */
+const SOFT_W = 48;
+const CACHE_LIMIT = 24;
 
-/**
- * The blurred copies of a card's picture, from the most blurred: pixels across the picture once shrunk (the fewer,
- * the softer it is when drawn the page's size), and how much darker it is than the card's. Faded one over the other
- * they read as the picture coming into focus, or going out of it, rather than one copy swapped for another.
- */
-const BLURS = { soft: { across: 10, dim: 0.55 }, medium: { across: 30, dim: 0.2 } };
+/** Cached tiny pre-blurred canvases by image URL (copying a tainted canvas via drawImage never throws). */
+const blurCache = new Map<string, HTMLCanvasElement>();
 
-/**
- * A blurred, darkened copy of a card's picture for its title page's motion (shell.css `.card-ghost`), painted once
- * into `canvas`: the picture shrunk to a few pixels and drawn back up, which blurs it. A blur filter on the picture
- * instead would be worked out again on every frame as the page scales, over the whole screen; this is a still
- * picture the compositor only stretches. A canvas shows a picture from another site as well (only reading its
- * pixels back is barred), so any card's works. Waits for `img` to load when it hasn't yet.
- */
-function paintBlurred(canvas: HTMLCanvasElement, img: HTMLImageElement, across: number, dim: number) {
-  const paint = () => {
-    if (!img.naturalWidth || !img.naturalHeight) return;
-    const h = Math.max(1, Math.round((across * img.naturalHeight) / img.naturalWidth));
-    const small = document.createElement("canvas");
-    small.width = across;
-    small.height = h;
-    const s = small.getContext("2d");
-    if (!s) return;
-    s.imageSmoothingQuality = "high";
-    s.drawImage(img, 0, 0, across, h);
-    canvas.width = SOFT_W;
-    canvas.height = Math.max(1, Math.round((SOFT_W * h) / across));
-    const c = canvas.getContext("2d");
-    if (!c) return;
-    c.imageSmoothingQuality = "high";
-    c.drawImage(small, 0, 0, canvas.width, canvas.height);
-    c.fillStyle = `rgba(0, 0, 0, ${dim})`;
-    c.fillRect(0, 0, canvas.width, canvas.height);
-  };
-  if (img.complete && img.naturalWidth) paint();
-  else img.addEventListener("load", paint, { once: true });
+function cachePut(src: string, canvas: HTMLCanvasElement) {
+  if (blurCache.has(src)) blurCache.delete(src);
+  else if (blurCache.size >= CACHE_LIMIT) {
+    const oldest = blurCache.keys().next().value;
+    if (oldest !== undefined) blurCache.delete(oldest);
+  }
+  blurCache.set(src, canvas);
+}
+
+function buildBlurCanvas(img: HTMLImageElement): HTMLCanvasElement | null {
+  if (!img.naturalWidth || !img.naturalHeight) return null;
+  const smallH = Math.max(1, Math.round((BLUR_W * img.naturalHeight) / img.naturalWidth));
+  const small = document.createElement("canvas");
+  small.width = BLUR_W;
+  small.height = smallH;
+  const s = small.getContext("2d");
+  if (!s) return null;
+  s.imageSmoothingQuality = "medium";
+  s.drawImage(img, 0, 0, BLUR_W, smallH);
+  s.fillStyle = "rgba(0, 0, 0, 0.28)";
+  s.fillRect(0, 0, BLUR_W, smallH);
+  return small;
+}
+
+function blitSoft(target: HTMLCanvasElement, source: HTMLCanvasElement) {
+  target.width = SOFT_W;
+  target.height = Math.max(1, Math.round((SOFT_W * source.height) / source.width));
+  const c = target.getContext("2d");
+  if (!c) return;
+  c.imageSmoothingQuality = "medium";
+  c.drawImage(source, 0, 0, target.width, target.height);
 }
 
 /**
- * The card's picture for a title page's motion (cardMotion.ts), bottom to top: a plain panel in the page's grey,
- * the picture blurred a lot, blurred a little, and sharp, each faded by the motion.
+ * Pre-warms the tiny blurred poster copy on pointerdown (0 network requests, <0.05ms), using the
+ * already-decoded <img> on the card so frame 0 of open and close never does decode/blur work.
  */
-export function cardGhostParts(src: string) {
+export function warmCardGhost(src: string, sourceImg?: HTMLImageElement | null) {
+  if (!src || blurCache.has(src)) return;
+  if (!sourceImg || !sourceImg.complete || !sourceImg.naturalWidth) return;
+  const built = buildBlurCanvas(sourceImg);
+  if (built) cachePut(src, built);
+}
+
+/**
+ * The card's picture layers for the Netflix zoom transition (cardMotion.ts):
+ * - `panel`: calm dark page surface behind the poster
+ * - `media`: aspect-matched wrapper holding `soft` (cached blurred canvas) and `sharp` (card poster)
+ *   that scales uniformly as the card expands/shrinks, eliminating vertical squash and per-frame blur cost.
+ */
+export function cardGhostParts(src: string, sourceImg?: HTMLImageElement | null) {
   const panel = document.createElement("div");
   panel.className = "card-ghost-panel";
+
+  const media = document.createElement("div");
+  media.className = "card-ghost-media";
+
+  const soft = document.createElement("canvas");
+  soft.className = "card-ghost-soft";
+
   const sharp = document.createElement("img");
   sharp.className = "card-ghost-sharp";
   sharp.src = src;
   sharp.alt = "";
   sharp.draggable = false;
-  // The card shows this picture already: drawn in the first frame, so the page under it at the card never shows.
   sharp.decoding = "sync";
-  const blurred = (kind: keyof typeof BLURS) => {
-    const canvas = document.createElement("canvas");
-    canvas.className = `card-ghost-${kind}`;
-    paintBlurred(canvas, sharp, BLURS[kind].across, BLURS[kind].dim);
-    return canvas;
-  };
-  return { panel, soft: blurred("soft"), medium: blurred("medium"), sharp };
+
+  const cached = blurCache.get(src);
+  if (cached) {
+    blitSoft(soft, cached);
+  } else {
+    const paint = (img: HTMLImageElement) => {
+      const built = blurCache.get(src) ?? buildBlurCanvas(img);
+      if (!built) return;
+      cachePut(src, built);
+      blitSoft(soft, built);
+    };
+    if (sourceImg?.complete && sourceImg.naturalWidth) paint(sourceImg);
+    else if (sharp.complete && sharp.naturalWidth) paint(sharp);
+    else sharp.addEventListener("load", () => paint(sharp), { once: true });
+  }
+
+  media.append(soft, sharp);
+  return { panel, media, soft, sharp };
 }

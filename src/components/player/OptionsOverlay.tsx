@@ -77,6 +77,7 @@ export function OptionsOverlay({
   foreground,
   beside = false,
   dockedTo,
+  live = false,
 }: {
   open: boolean;
   /** The playing video, frosted behind the options. */
@@ -96,6 +97,8 @@ export function OptionsOverlay({
    * The picture and the rest of the controls stay as they are; a click outside closes it.
    */
   dockedTo?: string;
+  /** Keep the live video unobstructed on the left (e.g. while tuning audio or subtitle delay when not docked). */
+  live?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const docked = !!dockedTo && !beside;
@@ -272,6 +275,7 @@ export function OptionsOverlay({
       data-open={open}
       data-tabbed={tabbed || undefined}
       data-place={beside ? "beside" : docked ? "dock" : undefined}
+      data-live={live && !beside && !docked ? "true" : undefined}
       role="dialog"
       aria-modal={!beside && !docked}
       aria-label={beside || docked ? columns.map((c) => c.title).join(" & ") : undefined}
@@ -294,9 +298,10 @@ export function OptionsOverlay({
       onPointerCancel={() => (press.current = null)}
     >
       {/* On Android mpv draws on a surface behind the clear page: a frosted snapshot over it jumped every
-          time it was retaken (#181), so the live picture shows through the shade instead. */}
-      {!beside && !docked && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
-      {!beside && !docked && <div className="options-shade" aria-hidden />}
+          time it was retaken (#181), so the live picture shows through the shade instead. Live mode (delay
+          tuning) also leaves the playing video clear when not docked. */}
+      {!beside && !docked && !live && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
+      {!beside && !docked && !live && <div className="options-shade" aria-hidden />}
       {!docked && (
         <IconButton variant="player" className="options-close" onClick={onClose} label="Close" title="Close (Esc)">
           <Close size={26} />

@@ -118,6 +118,7 @@ export function PlayerLayer({ player, leaving }: { player: PlayerRoute | null; l
               videoId={player.videoId}
               stream={player.stream}
               shuffle={!!player.shuffle}
+              startParty={!!player.startParty}
               leaving={leaving}
             />
           </Suspense>

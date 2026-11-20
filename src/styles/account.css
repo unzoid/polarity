@@ -950,6 +950,7 @@
 
 /* --- Navbar profile button & menu */
 .navbar-profile {
+  position: relative;
   display: grid;
   place-items: center;
   width: 36px;
@@ -957,6 +958,17 @@
   margin-left: 0.25rem;
   border-radius: var(--r-sm);
   transition: box-shadow var(--dur-fast) var(--ease-std);
+}
+.navbar-profile-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg);
+  pointer-events: none;
 }
 .navbar-profile .avatar {
   width: 32px;

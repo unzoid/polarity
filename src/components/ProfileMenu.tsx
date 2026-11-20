@@ -75,9 +75,10 @@ export function ProfileMenu() {
   const { tab } = useNavigation();
   // While Settings → Browsing → Show the Calendar makes it a navbar tab, it isn't listed here too (#92).
   const { data: settings } = useSettings();
-  // Requests waiting for an answer show on the Friends item (#135).
-  const { entries } = useFriends();
+  // Requests waiting for an answer show on the Friends item and on the navbar avatar (#135).
+  const { entries, invites } = useFriends();
   const requests = entries.filter((e) => e.state === "pending" && e.incoming).length;
+  const badgeCount = requests + invites.length;
 
   const profiles: Choice[] = others.map((p) => ({
     id: `profile:${p.id}`,
@@ -119,14 +120,21 @@ export function ProfileMenu() {
         .catch(warnFailed("profile menu"));
     };
     return (
-      <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="menu" onClick={(e) => open(e.currentTarget)}>
+      <button
+        type="button"
+        className="navbar-profile pressable"
+        aria-label={badgeCount ? `Profile: ${name} (${badgeCount} pending)` : `Profile: ${name}`}
+        aria-haspopup="menu"
+        onClick={(e) => open(e.currentTarget)}
+      >
         <Avatar id={avatar} />
+        {badgeCount > 0 && <span className="navbar-profile-badge" aria-hidden />}
       </button>
     );
   }
 
   const status = me ? undefined : !account.enabled && buildChannel === "dev" ? "No database connected" : "Not signed in";
-  const props = { name, avatar, me, meLocked, email: me ? account.user?.email : undefined, status, profiles, manage: manage[0], groups: [actions, session] };
+  const props = { name, avatar, me, meLocked, badgeCount, email: me ? account.user?.email : undefined, status, profiles, manage: manage[0], groups: [actions, session] };
   return phone ? <ProfileSheet {...props} /> : <ProfilePopover {...props} />;
 }
 
@@ -135,6 +143,7 @@ type MenuProps = {
   avatar: string;
   me: Me | null;
   meLocked?: boolean;
+  badgeCount?: number;
   email?: string;
   /** Under the name when there's no account: why. */
   status?: string;
@@ -210,7 +219,7 @@ function JoinView({ me, done }: { me: Me; done: () => void }) {
  * click each), then the rest as rows. Friends and Join open as views inside it, with a Back (and Escape) to
  * the list; its height follows the view. Any other choice closes it as it runs.
  */
-function ProfilePopover({ name, avatar, me, meLocked, email, status, profiles, manage, groups }: MenuProps) {
+function ProfilePopover({ name, avatar, me, meLocked, badgeCount = 0, email, status, profiles, manage, groups }: MenuProps) {
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me);
   const pick = (c: Choice) => {
     // A view's choice keeps the menu open through its surface; the rest close it.
@@ -231,8 +240,13 @@ function ProfilePopover({ name, avatar, me, meLocked, email, status, profiles, m
   }, [open, view]);
   return (
     <PopoverRoot open={open} onOpenChange={(o) => (o ? list(true) : close())}>
-      <PopoverTrigger className="navbar-profile pressable" aria-label={`Profile: ${name}`} title={name}>
+      <PopoverTrigger
+        className="navbar-profile pressable"
+        aria-label={badgeCount ? `Profile: ${name} (${badgeCount} pending)` : `Profile: ${name}`}
+        title={badgeCount ? `${name} · ${badgeCount} pending` : name}
+      >
         <Avatar id={avatar} />
+        {badgeCount > 0 && <span className="navbar-profile-badge" aria-hidden />}
       </PopoverTrigger>
       <PopoverPopup sideOffset={10} align="end" collisionPadding={12} className="profile-pop" aria-label={view === "list" ? `Profile: ${name}` : VIEW_TITLES[view]}>
         <FitHeight>
@@ -356,11 +370,12 @@ function ProfilePopList({ name, avatar, me, meLocked, email, status, profiles, m
  * as views inside it, with a Back to the list; the sheet is the screen's full height throughout, as Netflix's account
  * sheet is, so a view comes in without the sheet changing size under it. Any other choice closes it as it runs.
  */
-function ProfileSheet({ name, avatar, me, meLocked, email, status, profiles, manage, groups }: MenuProps) {
+function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, status, profiles, manage, groups }: MenuProps) {
   const settingsOpen = useSettingsOverlay().open;
   // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
   const [managing, setManaging] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [editHead, setEditHead] = useState<{ label: string; back: () => void }>();
   // From a restricted profile, Manage asks first (lib/account/profileRules.ts).
   const guard = useGuard();
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me, settingsOpen ? "settings" : editing ? "edit" : undefined);
@@ -399,17 +414,24 @@ function ProfileSheet({ name, avatar, me, meLocked, email, status, profiles, man
           className="profile-sheet-back pressable"
           aria-label="Back"
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={view === "settings" ? (settingsHead?.back ?? leaveSettings) : toList}
+          onClick={view === "settings" ? (settingsHead?.back ?? leaveSettings) : view === "edit" && editHead ? editHead.back : toList}
         >
           <ChevronLeft size={22} strokeWidth={2.25} />
         </button>
-        {view === "settings" ? (settingsHead?.label ?? VIEW_TITLES.settings) : VIEW_TITLES[view]}
+        {view === "settings" ? (settingsHead?.label ?? VIEW_TITLES.settings) : view === "edit" && editHead ? editHead.label : VIEW_TITLES[view]}
       </span>
     );
   return (
     <>
-      <button type="button" className="navbar-profile pressable" aria-label={`Profile: ${name}`} aria-haspopup="dialog" onClick={() => list(true)}>
+      <button
+        type="button"
+        className="navbar-profile pressable"
+        aria-label={badgeCount ? `Profile: ${name} (${badgeCount} pending)` : `Profile: ${name}`}
+        aria-haspopup="dialog"
+        onClick={() => list(true)}
+      >
         <Avatar id={avatar} />
+        {badgeCount > 0 && <span className="navbar-profile-badge" aria-hidden />}
       </button>
       {bar && createPortal(
       <Sheet open={open} onClose={shut} title={title} full>
@@ -433,7 +455,7 @@ function ProfileSheet({ name, avatar, me, meLocked, email, status, profiles, man
           )}
           {view === "edit" && editing && (
             <Suspense fallback={null}>
-              <ProfileEditSheet id={editing} onDone={() => setEditing(null)} />
+              <ProfileEditSheet id={editing} onDone={() => setEditing(null)} onHead={setEditHead} />
             </Suspense>
           )}
           {view === "list" && (
