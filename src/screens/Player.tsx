@@ -1542,8 +1542,10 @@ export function Player({
       );
   };
 
-  /** "More" has items of its own (screenshots, Picture in Picture, other players), so it shows whatever fits. */
-  const moreItems = canShoot || canMini || canHandOff;
+  /** On a phone, secondary actions (Sleep Timer, Watch Party) live in the top-right "…" menu so the bottom bar never clips. */
+  const phoneMore = !tv && form === "phone";
+  /** "More" has items of its own (screenshots, Picture in Picture, other players, phone overflow), so it shows whatever fits. */
+  const moreItems = canShoot || canMini || canHandOff || phoneMore;
 
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
@@ -1564,16 +1566,17 @@ export function Player({
         // The same smoked glass as the dock's panels: a frosted copy of the picture behind the menu.
         backdrop: <VideoBackdrop media={media} className="options-frost" crop cropSize={[192, 168]} fade />,
       }
-    : {};
+    : { className: "scheme-dark" };
   const barFit = useBarFit(
     topBar,
     actionRow,
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact && !dock,
-    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join(
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems, phoneMore].join(
       "|",
     ),
     !!watchLog || moreItems,
+    !tv && !dock,
   );
   const more = barFit.more;
   // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
@@ -1851,9 +1854,14 @@ export function Player({
             {`Crop: ${cropModeLabel(crop)}`}
           </MenuCheckItem>
         )}
-        {dock && (
+        {(dock || phoneMore) && (
           <MenuItem onClick={() => setOptions("sleep")} meta={sleep.left != null ? sleepLabel(sleep.left) : undefined}>
             Sleep Timer
+          </MenuItem>
+        )}
+        {phoneMore && canParty && !castingAway && (
+          <MenuItem onClick={() => setOptions("party")} meta={party ? `${party.members.length}` : undefined}>
+            Watch Party
           </MenuItem>
         )}
         {canMini && (
@@ -2356,14 +2364,14 @@ export function Player({
             {!party && (
               <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
             )}
-            <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
+            {!phoneMore && <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />}
             {type === "series" && (
               <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
             )}
             {/* YouTube's player keeps its own captions and audio. */}
             {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
             {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
-            {canParty && !castingAway && (
+            {!phoneMore && canParty && !castingAway && (
               <ActionButton
                 icon={<WatchParty size={22} />}
                 label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
@@ -2473,7 +2481,7 @@ export function Player({
       <OptionsOverlay
         open={options === "tracks"}
         dockedTo={dock ? "tracks" : undefined}
-        live={audioSettingsOpen || subSettingsOpen}
+        live={form !== "phone" && (audioSettingsOpen || subSettingsOpen)}
         onClose={() => {
           setOptions(null);
           setSubSettingsOpen(false);

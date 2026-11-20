@@ -11,9 +11,9 @@ export const DRAG_SETTLE_MS = 220;
 /** A title page from a card: uniform shrink & follow during the interactive swipe-back track phase. */
 const CARD_SHRINK = 0.24;
 const CARD_FOLLOW = 0.42;
-/** Constant rounded corner set ONCE on drag begin (never mutated per frame, avoiding per-frame rasterization). */
-const CARD_DRAG_RADIUS = 28;
-const SCRIM_MAX = 0.36;
+/** Constant iPhone-bezel rounded corner set ONCE on drag begin (never mutated per frame, zero edge pop). */
+const CARD_DRAG_RADIUS = 38;
+const SCRIM_MAX = 0.92;
 
 /** `card`: the card the top page grew out of (`cardOrigin`); `scrim`: dedicated leaf overlay (0 children = 0 style recalc on under). */
 export type DragPages = { top: HTMLElement; under: HTMLElement; card?: CardRect; scrim?: HTMLElement | null };
@@ -78,8 +78,12 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
       el.style.removeProperty("clip-path");
       el.style.removeProperty("--drag-in");
     }
+    if (p.card?.el) {
+      p.card.el.style.removeProperty("visibility");
+    }
     if (p.scrim) {
       delete p.scrim.dataset.dragSettle;
+      delete p.scrim.dataset.dragActive;
       p.scrim.style.removeProperty("opacity");
     }
     for (const a of running) a.cancel();
@@ -174,11 +178,13 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
       p.under.dataset.drag = "under";
       if (p.scrim) {
         p.under.dataset.dragScrim = "";
+        p.scrim.dataset.dragActive = p.card ? "card" : "slide";
         p.scrim.style.opacity = String(SCRIM_MAX);
       }
       if (p.card) {
         p.top.style.transformOrigin = "0 0";
         p.top.style.borderRadius = `${CARD_DRAG_RADIUS}px`;
+        if (p.card.el?.isConnected) p.card.el.style.visibility = "hidden";
       }
       return true;
     },

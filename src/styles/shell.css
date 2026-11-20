@@ -93,10 +93,22 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: #000;
+  background: rgb(0 0 0 / 0.42);
   opacity: 0;
   pointer-events: none;
   will-change: opacity;
+}
+.drag-scrim[data-drag-active="card"] {
+  background: rgb(0 0 0 / 0.54);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .drag-scrim[data-drag-active="card"] {
+    background: rgb(0 0 0 / 0.72);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 .drag-scrim[data-drag-settle] {
   transition: opacity 220ms var(--ease-out);
@@ -377,7 +389,7 @@
 .card-ghost-panel {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--bg), rgb(var(--ink)) 7%);
+  background: var(--bg);
   opacity: 0;
 }
 /* Aspect-matched poster media box scaled uniformly from the card's exact aspect ratio to full-viewport cover. */
@@ -399,15 +411,25 @@
   opacity: 0;
 }
 
-/* What's behind fades towards the page's own colour (Netflix's goes black), without a blur: a blur over the whole
-   screen, taken again every frame the page above it moves, is what a phone drops frames over. */
+/* Depth-of-field blur + dim over the static underlying page during the card zoom transition, matching
+   Netflix's iOS 18 zoom backdrop: constant blur radius with compositor-only opacity animation (0..1 / 1..0). */
 .card-scrim {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: var(--bg);
+  background: rgb(0 0 0 / 0.56);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   pointer-events: none;
   opacity: 0;
+  will-change: opacity;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .card-scrim {
+    background: rgb(0 0 0 / 0.74);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 /* Less motion: the pair crossfades in place (unless Settings → Reduce motion is explicitly "Off"). */
 @media (prefers-reduced-motion: reduce) {
@@ -792,8 +814,8 @@ html[data-os="mac"] {
 :root[data-form="phone"] .navbar-back {
   transition:
     transform var(--dur-press) var(--ease-out),
-    opacity 220ms var(--ease-std),
-    margin-left 280ms var(--ease-out);
+    opacity 280ms var(--ease-std),
+    margin-left 360ms var(--ease-out);
 }
 /* On iOS the system draws Back (NativeBack.tsx) over this one: it keeps its place, unseen. */
 [data-native-back] {

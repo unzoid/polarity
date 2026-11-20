@@ -1,36 +1,41 @@
 import type { CardRect } from "./pageMotion";
 
 /**
- * Netflix / iOS 18 Zoom Transition for opening a title out of its card and closing back into it on a phone,
- * measured frame-by-frame at 50fps from Netflix's iOS app:
+ * 1:1 Netflix / iOS 18 `UIViewController.Transition.zoom` for opening a title out of its card and closing
+ * back into it on a phone, matched frame-by-frame against uncompressed 60fps/120fps iOS screen recordings:
  *
- * - Open (380ms): critically damped zoom spring (ω = 16.5/s) expanding uniformly from the card's exact rect
- *   with a continuous aspect-ratio clip-path so content never squishes. Sharp poster dissolves into cached
- *   soft blur (10..55ms -> 55..165ms) -> calm dark surface -> detail page revealed cleanly (170..330ms).
- * - Close (280ms): snappy critically damped spring (ω = 19.5/s). The live detail page immediately shrinks
- *   uniformly with rounded corners (0..55ms), crossfades directly into the blurred poster (45..135ms) and
- *   sharp poster (105..195ms), landing pixel-exact on the card slot while Home brightens (0..130ms).
- * - Swipe-back release (`playCardRelease`): shares the exact same uniform-scale + clip-path morph from the
- *   live finger position, seeded with the user's release velocity so flicks land effortlessly in ~180..265ms.
+ * - Open (`460ms`, critically damped spring ω = 12.2/s):
+ *   The source card lifts cleanly out of its hidden slot (`sharp` -> lush 3-pass Gaussian-blurred poster over
+ *   `10..75ms`), expands gracefully with uniform scale + continuous `clip-path` (zero vertical squishing) while
+ *   Home softens & dims behind it (`0..220ms`), keeps the creamy blurred poster rich through ~`170ms`, and
+ *   dissolves directly into the crisp Detail page (`175..385ms`) with no flat grey wall.
+ * - Close (`380ms`, critically damped spring ω = 12.5/s):
+ *   Matches Netflix's exact 60fps close trajectory (~90% at 33ms, ~78% at 66ms, ~66% at 100ms, ~54% at 133ms,
+ *   ~44% at 166ms, ~36% at 200ms, ~31% at 233ms, seated at ~320..380ms). The live Detail page shrinks cleanly
+ *   with smooth rounded corners (`0..110ms`), transitions seamlessly through the opaque dark backing + creamy
+ *   blurred poster (`85..195ms`, preventing any Detail UI bleed-through), de-blurs into the crisp sharp poster
+ *   (`205..305ms`), and seats pixel-exact into the hidden card slot while Home comes back into sharp focus.
+ * - Swipe-back release (`playCardRelease`):
+ *   Shares the exact same uniform-scale + clip-path + bokeh-to-sharp landing from the live finger position,
+ *   seeded with the user's release velocity (`240..360ms`, ω = 13.0/s).
  */
-export const CARD_OPEN_MS = 380;
-export const CARD_CLOSE_MS = 280;
+export const CARD_OPEN_MS = 460;
+export const CARD_CLOSE_MS = 380;
 
 /** Critically damped spring from 0 to 1 with optional normalized initial velocity `v0` (in 1/s), `t` in ms. */
 const spring = (omega: number, v0 = 0) => {
-  // Clamp v0 so the spring never overshoots past the target card slot.
-  const vel = Math.max(0, Math.min(v0, omega * 1.1));
+  const vel = Math.max(0, Math.min(v0, omega * 1.05));
   return (t: number) => {
     const s = t / 1000;
     return 1 - (1 + (omega - vel) * s) * Math.exp(-omega * s);
   };
 };
 
-const OPEN_CURVE = spring(16.5);
-const CLOSE_CURVE = spring(19.5);
+const OPEN_CURVE = spring(12.2);
+const CLOSE_CURVE = spring(12.5);
 
 /** `n` samples of `curve` over `ms`, normalized so offset 0 is 0 and offset 1 is 1. */
-function samples(curve: (t: number) => number, ms: number, n = 24) {
+function samples(curve: (t: number) => number, ms: number, n = 28) {
   const end = curve(ms) || 1;
   return Array.from({ length: n + 1 }, (_, i) => ({
     offset: i / n,
@@ -46,7 +51,7 @@ const fade = (from: number, to: number, t0: number, t1: number, ms: number): Key
   { offset: 1, opacity: to },
 ];
 
-/** Fast ease-out curve for cancelling a swipe-back cleanly back to fullscreen. */
+/** Smooth ease-out curve for cancelling a swipe-back back to fullscreen. */
 export const CARD_CANCEL_EASE = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 /**
@@ -63,7 +68,7 @@ export function cardGeometry(card: CardRect, width: number, height: number) {
   const clipB = Math.max(0, h - mediaH);
   const mediaCover = Math.max(w / Math.max(1, mediaW), h / Math.max(1, mediaH));
   const cardRadius = card.radius ?? 8;
-  return { sEnd, mediaW, mediaH, clipR, clipB, mediaCover, cardRadius };
+  return { w, h, sEnd, mediaW, mediaH, clipR, clipB, mediaCover, cardRadius };
 }
 
 /** Sizes `.card-ghost-media` to the card's exact unscaled aspect box so at `k=1` it matches the card 1:1. */
@@ -74,24 +79,39 @@ function sizeGhostMedia(media: HTMLElement | null | undefined, mediaW: number, m
   media.style.transformOrigin = clipR > 0 ? "0% 50%" : "50% 0%";
 }
 
-/** Smoothly interpolated visual corner radius (0 at fullscreen, soft iOS ~20px mid-flight, exact cardRadius at card). */
+/**
+ * Visual corner radius curve matching iOS 18 zoom transition:
+ * `0` at flush fullscreen (`k = 0`), ramping immediately to smooth iPhone display corner curvature (`~42px`
+ * visual off the screen edges) and smoothly blending down to the card's exact corner radius (`8px`/`14px`) at `k = 1`.
+ */
 function cornerRadius(k: number, s: number, cardRadius: number): number {
   if (k <= 0.001) return 0;
-  const ramp = Math.min(1, k * 8);
-  const visual = ramp * (cardRadius * k + 22 * (1 - k));
+  const ramp = Math.min(1, k * 10);
+  const visual = ramp * (cardRadius * k + 40 * (1 - k));
   return visual / Math.max(0.05, s);
+}
+
+/** Exact uniform scale so `.card-ghost-media` covers 100% of the live clipped box `(w - clipR*k) × (h - clipB*k)` at every `k`. */
+function mediaScaleAt(k: number, w: number, h: number, mediaW: number, mediaH: number, clipR: number, clipB: number) {
+  const visW = Math.max(1, w - clipR * k);
+  const visH = Math.max(1, h - clipB * k);
+  return Math.max(1, visW / Math.max(1, mediaW), visH / Math.max(1, mediaH));
 }
 
 type Parts = { page: HTMLElement; scrim: HTMLElement | null; card: CardRect; open: boolean; width: number; height: number };
 
-/** Plays a title page's Netflix zoom morph out of its card (`open`) or back into it; returns a stop callback. */
+/** Plays a title page's 1:1 Netflix zoom morph out of its card (`open`) or back into it; returns a stop callback. */
 export function playCardMotion({ page, scrim, card, open, width, height }: Parts): () => void {
   if (typeof page.animate !== "function") return () => {};
-  const { sEnd, mediaW, mediaH, clipR, clipB, mediaCover, cardRadius } = cardGeometry(card, width, height);
+  const { w, h, sEnd, mediaW, mediaH, clipR, clipB, cardRadius } = cardGeometry(card, width, height);
   const ms = open ? CARD_OPEN_MS : CARD_CLOSE_MS;
   const curve = open ? OPEN_CURVE : CLOSE_CURVE;
   const pts = samples(curve, ms);
   const opts: KeyframeAnimationOptions = { duration: ms, easing: "linear", fill: "both" };
+
+  // Hide the source card in its shelf slot while in flight so a duplicate poster never shows underneath.
+  const slot = card.el?.isConnected ? card.el : null;
+  if (slot) slot.style.visibility = "hidden";
 
   const ghost = page.querySelector<HTMLElement>(":scope > .card-ghost");
   const panel = ghost?.querySelector<HTMLElement>(":scope > .card-ghost-panel");
@@ -121,34 +141,37 @@ export function playCardMotion({ page, scrim, card, open, width, height }: Parts
     }),
   );
 
-  // Uniformly zoom the poster media inside the expanding/shrinking clipped box so the poster fills 100% with zero distortion.
+  // Uniformly scale poster media so it fills 100% of the live clipped rect on every single frame.
   if (media) {
     play(
       media,
       pts.map(({ offset, p }) => {
         const k = open ? 1 - p : p;
-        const msScale = 1 + (mediaCover - 1) * (1 - k);
+        const msScale = mediaScaleAt(k, w, h, mediaW, mediaH, clipR, clipB);
         return { offset, transform: `scale(${msScale.toFixed(4)})` };
       }),
     );
   }
 
   if (open) {
+    // Crisp card lifts -> creamy bokeh poster stays bold across expansion -> blooms directly into Detail.
     play(panel, fade(1, 1, 0, ms, ms));
-    play(soft, fade(1, 0, 55, 165, ms));
-    play(sharp, fade(1, 0, 10, 55, ms));
-    play(ghost, fade(1, 0, 170, 330, ms));
-    play(scrim, fade(0, 0.72, 0, 170, ms));
+    play(sharp, fade(1, 0, 10, 75, ms));
+    play(soft, fade(1, 0, 165, 320, ms));
+    play(ghost, fade(1, 0, 175, 385, ms));
+    play(scrim, fade(0, 1, 0, 220, ms));
   } else {
-    // Live detail page shrinks cleanly first, then dissolves directly into soft -> sharp poster (no heavy grey curtain).
-    play(panel, fade(0, 0.45, 35, 110, ms));
-    play(soft, fade(0, 1, 45, 135, ms));
-    play(sharp, fade(0, 1, 105, 195, ms));
-    play(scrim, fade(0.32, 0, 0, 130, ms));
+    // Live Detail shrinks cleanly -> opaque dark floor + creamy bokeh poster veil UI -> sharpens into slot.
+    play(ghost, fade(1, 1, 0, ms, ms));
+    play(panel, fade(0, 1, 85, 185, ms));
+    play(soft, fade(0, 1, 95, 195, ms));
+    play(sharp, fade(0, 1, 205, 305, ms));
+    play(scrim, fade(1, 0, 35, 280, ms));
   }
 
   return () => {
     running.forEach((a) => a.cancel());
+    if (slot) slot.style.removeProperty("visibility");
   };
 }
 
@@ -166,20 +189,19 @@ export type CardRelease = {
 
 /**
  * Finishes an interactive swipe-back into `card` starting from the finger's exact live `(x, y, scale, radius)`
- * with velocity handoff and the same uniform-scale + clip-path morph as tap-Back. Returns duration (ms) & animations.
+ * with velocity handoff and the exact same uniform-scale + clip-path + bokeh-to-sharp landing as tap-Back.
  */
 export function playCardRelease({ page, scrim, ghost, card, width, height, from, velocity }: CardRelease): { ms: number; animations: Animation[] } {
-  const { sEnd, mediaW, mediaH, clipR, clipB, mediaCover, cardRadius } = cardGeometry(card, width, height);
-  const remain = Math.max(0.15, Math.min(1, (from.scale - sEnd) / Math.max(0.01, 1 - sEnd)));
-  const speedBoost = Math.min(0.32, Math.max(0, velocity) / 3600);
-  const ms = Math.round(Math.max(175, Math.min(CARD_CLOSE_MS, CARD_CLOSE_MS * (0.55 + 0.45 * remain) * (1 - speedBoost))));
+  const { w, h, sEnd, mediaW, mediaH, clipR, clipB, cardRadius } = cardGeometry(card, width, height);
+  const remain = Math.max(0.2, Math.min(1, (from.scale - sEnd) / Math.max(0.01, 1 - sEnd)));
+  const speedBoost = Math.min(0.28, Math.max(0, velocity) / 3800);
+  const ms = Math.round(Math.max(240, Math.min(CARD_CLOSE_MS, CARD_CLOSE_MS * (0.62 + 0.38 * remain) * (1 - speedBoost))));
 
   if (typeof page.animate !== "function") return { ms, animations: [] };
 
-  // Seed critically damped spring with normalized velocity along the remaining scale travel.
-  const omega = 19.5;
-  const v0 = Math.max(0, velocity / Math.max(200, width)) * 2.4;
-  const pts = samples(spring(omega, v0), ms, 20);
+  const omega = 13.0;
+  const v0 = Math.max(0, velocity / Math.max(200, width)) * 2.0;
+  const pts = samples(spring(omega, v0), ms, 24);
   const opts: KeyframeAnimationOptions = { duration: ms, easing: "linear", fill: "forwards" };
 
   const panel = ghost?.querySelector<HTMLElement>(":scope > .card-ghost-panel");
@@ -213,17 +235,18 @@ export function playCardRelease({ page, scrim, ghost, card, width, height, from,
     play(
       media,
       pts.map(({ offset, p }) => {
-        const msScale = mediaCover + (1 - mediaCover) * p;
+        const msScale = mediaScaleAt(p, w, h, mediaW, mediaH, clipR, clipB);
         return { offset, transform: `scale(${msScale.toFixed(4)})` };
       }),
     );
   }
 
-  play(panel, fade(0, 0.45, ms * 0.1, ms * 0.4, ms));
-  play(soft, fade(0, 1, ms * 0.12, ms * 0.48, ms));
-  play(sharp, fade(0, 1, ms * 0.35, ms * 0.72, ms));
+  play(ghost, fade(1, 1, 0, ms, ms));
+  play(panel, fade(0, 1, ms * 0.14, ms * 0.44, ms));
+  play(soft, fade(0, 1, ms * 0.16, ms * 0.48, ms));
+  play(sharp, fade(0, 1, ms * 0.5, ms * 0.82, ms));
   if (scrim) {
-    play(scrim, fade(from.scrimOpacity, 0, 0, ms * 0.55, ms));
+    play(scrim, fade(from.scrimOpacity, 0, 0, ms * 0.72, ms));
   }
 
   return { ms, animations };

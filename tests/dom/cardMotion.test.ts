@@ -28,9 +28,9 @@ test("cardGeometry uses uniform scale and exact aspect clip-path so cards never 
   expect(landscape.clipR).toBeGreaterThan(500);
 });
 
-test("card motion durations match Netflix snappy open/close and release speeds up on fast flicks", () => {
-  expect(CARD_OPEN_MS).toBe(380);
-  expect(CARD_CLOSE_MS).toBe(280);
+test("card motion durations match Netflix 60fps open/close and release speeds up on fast flicks", () => {
+  expect(CARD_OPEN_MS).toBe(460);
+  expect(CARD_CLOSE_MS).toBe(380);
 
   const page = document.createElement("section");
   const card = { x: 24, y: 112, w: 120, h: 180, src: "https://media.example.com/poster.jpg", radius: 8 };
@@ -41,7 +41,7 @@ test("card motion durations match Netflix snappy open/close and release speeds u
     card,
     width: 402,
     height: 874,
-    from: { x: 108, y: 40, scale: 0.88, radius: 28, scrimOpacity: 0.18 },
+    from: { x: 108, y: 40, scale: 0.88, radius: 38, scrimOpacity: 0.46 },
     velocity: 0,
   });
   const flick = playCardRelease({
@@ -51,10 +51,10 @@ test("card motion durations match Netflix snappy open/close and release speeds u
     card,
     width: 402,
     height: 874,
-    from: { x: 108, y: 40, scale: 0.88, radius: 28, scrimOpacity: 0.18 },
+    from: { x: 108, y: 40, scale: 0.88, radius: 38, scrimOpacity: 0.46 },
     velocity: 1400,
   });
   expect(flick.ms).toBeLessThan(slow.ms);
-  expect(flick.ms).toBeGreaterThanOrEqual(175);
+  expect(flick.ms).toBeGreaterThanOrEqual(240);
   expect(slow.ms).toBeLessThanOrEqual(CARD_CLOSE_MS);
 });

@@ -79,6 +79,7 @@ export function useBarFit(
   enabled: boolean,
   signature: string,
   moreStays = false,
+  fitActions = enabled,
 ): BarFit {
   const [fit, setFit] = useState(FULL_FIT);
   const latest = useRef({ fit, movable });
@@ -87,65 +88,73 @@ export function useBarFit(
   const sliderWidth = useRef(100);
 
   useLayoutEffect(() => {
-    if (!enabled) {
+    if (!enabled && !fitActions) {
       setFit(FULL_FIT);
       return;
     }
     const measure = () => {
       const bar = top.current;
       const row = actions.current;
-      if (!bar || !row) return;
       const { fit: now, movable } = latest.current;
       const next = { ...now };
 
-      const back = bar.querySelector<HTMLElement>(":scope > .player-back");
-      const end = bar.querySelector<HTMLElement>(".player-top-end");
-      const cluster = bar.querySelector<HTMLElement>(".player-top-actions");
-      if (back && end && cluster) {
-        const gap = px(getComputedStyle(cluster).columnGap);
-        const slider = bar.querySelector<HTMLElement>(".player-volume-slider");
-        if (slider && now.slider) sliderWidth.current = slider.offsetWidth + gap;
-        const sliderW = slider ? sliderWidth.current : 0;
-        const moreButton = now.more && !moreStays ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
-        // Back stands at the navbar's spot (#348): its inset is part of what it takes.
-        const backW = back.offsetWidth + px(getComputedStyle(back).marginLeft);
-        const icon = cluster.querySelector<HTMLElement>(".player-icon")?.offsetWidth ?? ICON_W;
-        const movableW = movable * (icon + gap);
-        const title = Math.max(0, ...Array.from(bar.querySelectorAll<HTMLElement>(".player-heading > *"), (el) => el.scrollWidth));
-        const s = getComputedStyle(bar);
-        Object.assign(
-          next,
-          fitTop({
-            room: innerWidth(bar),
-            gaps: 2 * px(s.columnGap),
-            back: backW,
-            title,
-            end: end.offsetWidth + (now.slider ? 0 : sliderW) + (now.more ? movableW - moreButton : 0),
-            slider: sliderW,
-            movable: movable ? movableW - (moreStays ? 0 : icon + gap) : 0,
-          }),
-        );
+      if (enabled && bar) {
+        const back = bar.querySelector<HTMLElement>(":scope > .player-back");
+        const end = bar.querySelector<HTMLElement>(".player-top-end");
+        const cluster = bar.querySelector<HTMLElement>(".player-top-actions");
+        if (back && end && cluster) {
+          const gap = px(getComputedStyle(cluster).columnGap);
+          const slider = bar.querySelector<HTMLElement>(".player-volume-slider");
+          if (slider && now.slider) sliderWidth.current = slider.offsetWidth + gap;
+          const sliderW = slider ? sliderWidth.current : 0;
+          const moreButton = now.more && !moreStays ? (bar.querySelector<HTMLElement>(".player-more")?.offsetWidth ?? 0) + gap : 0;
+          // Back stands at the navbar's spot (#348): its inset is part of what it takes.
+          const backW = back.offsetWidth + px(getComputedStyle(back).marginLeft);
+          const icon = cluster.querySelector<HTMLElement>(".player-icon")?.offsetWidth ?? ICON_W;
+          const movableW = movable * (icon + gap);
+          const title = Math.max(0, ...Array.from(bar.querySelectorAll<HTMLElement>(".player-heading > *"), (el) => el.scrollWidth));
+          const s = getComputedStyle(bar);
+          Object.assign(
+            next,
+            fitTop({
+              room: innerWidth(bar),
+              gaps: 2 * px(s.columnGap),
+              back: backW,
+              title,
+              end: end.offsetWidth + (now.slider ? 0 : sliderW) + (now.more ? movableW - moreButton : 0),
+              slider: sliderW,
+              movable: movable ? movableW - (moreStays ? 0 : icon + gap) : 0,
+            }),
+          );
+        }
+      } else if (!enabled) {
+        next.slider = true;
+        next.more = false;
       }
 
-      // Each action as it'd be with its words: a hidden label is out of the flow, so it adds its width and the gap.
-      const widths = Array.from(row.querySelectorAll<HTMLElement>(":scope > .player-action"), (b) => {
-        const label = b.querySelector<HTMLElement>(":scope > span");
-        if (now.labels || !label) return b.offsetWidth;
-        return b.offsetWidth + label.scrollWidth + px(getComputedStyle(b).columnGap);
-      });
-      next.labels = fitLabels(widths, innerWidth(row));
+      if (fitActions && row) {
+        // Each action as it'd be with its words: a hidden label is out of the flow, so it adds its width and the gap.
+        const widths = Array.from(row.querySelectorAll<HTMLElement>(":scope > .player-action"), (b) => {
+          const label = b.querySelector<HTMLElement>(":scope > span");
+          if (now.labels || !label) return b.offsetWidth;
+          return b.offsetWidth + label.scrollWidth + px(getComputedStyle(b).columnGap);
+        });
+        next.labels = fitLabels(widths, innerWidth(row));
+      } else if (!fitActions) {
+        next.labels = true;
+      }
 
       if (next.labels !== now.labels || next.slider !== now.slider || next.more !== now.more) setFit(next);
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
-    if (top.current) observer.observe(top.current);
-    if (actions.current) observer.observe(actions.current);
+    if (enabled && top.current) observer.observe(top.current);
+    if (fitActions && actions.current) observer.observe(actions.current);
     // The interface font arriving changes every width.
     void document.fonts?.ready.then(measure);
     return () => observer.disconnect();
-  }, [top, actions, enabled, signature, fit, moreStays]);
+  }, [top, actions, enabled, fitActions, signature, fit, moreStays]);
 
-  return enabled ? fit : FULL_FIT;
+  return enabled || fitActions ? fit : FULL_FIT;
 }

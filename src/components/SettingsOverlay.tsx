@@ -195,10 +195,12 @@ export function SettingsOverlay({
   const searching = query.trim() !== "";
   const results = useMemo(
     () =>
-      searchSettings(query, (id) => pageOf(id).label, new Set(pages.map((p) => p.id))).filter(
-        (entry) => (tvModeAvailable || !TV_ONLY.has(entry.id)) && (touch || !TOUCH_ONLY.has(entry.id)),
-      ),
-    [query, pages, touch], // eslint-disable-line react-hooks/exhaustive-deps
+      searching
+        ? searchSettings(query, (id) => pageOf(id).label, new Set(pages.map((p) => p.id))).filter(
+            (entry) => (tvModeAvailable || !TV_ONLY.has(entry.id)) && (touch || !TOUCH_ONLY.has(entry.id)),
+          )
+        : [],
+    [searching, query, pages, touch], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const [selected, setSelected] = useState(0);
   const resultsList = useRef<HTMLDivElement>(null);
@@ -472,9 +474,11 @@ export function SettingsOverlay({
         )}
 
         <div className="t3s-scroll" ref={scroller}>
-          <div className="t3s-page" key={`${page}/${sectionId ?? ""}`} data-move={move ?? undefined}>
-            <SettingsPageBody page={page} section={section?.id ?? null} openSection={openSection} />
-          </div>
+          {(!phone || view === "page") && (
+            <div className="t3s-page" key={`${page}/${sectionId ?? ""}`} data-move={move ?? undefined}>
+              <SettingsPageBody page={page} section={section?.id ?? null} openSection={openSection} />
+            </div>
+          )}
         </div>
       </div>
     </>

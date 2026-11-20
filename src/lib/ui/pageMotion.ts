@@ -23,7 +23,7 @@ function settleOf(m: PageMotion, phone: boolean) {
 }
 
 /** A card's place on the screen, in CSS pixels, its corner radius, and the picture on it. */
-export type CardRect = { x: number; y: number; w: number; h: number; src?: string; el?: Element; img?: HTMLImageElement; radius?: number };
+export type CardRect = { x: number; y: number; w: number; h: number; src?: string; el?: HTMLElement; img?: HTMLImageElement; radius?: number };
 
 /**
  * A page change on a phone, for shell.css to play: `enter` is the page coming in, `leave` the one going, `dir`
@@ -60,9 +60,9 @@ export function cardOrigin(key: number): CardRect | undefined {
  * the picture showing on it riding along.
  */
 export function cardAt(target: Element | null): CardRect | undefined {
-  const banner = target?.closest(".hero-card");
-  const card = banner ?? target?.closest(".card");
-  const frame = banner ?? card?.querySelector(".card-frame") ?? card;
+  const banner = target?.closest<HTMLElement>(".hero-card");
+  const card = banner ?? target?.closest<HTMLElement>(".card");
+  const frame = banner ?? card?.querySelector<HTMLElement>(".card-frame") ?? card;
   const r = frame?.getBoundingClientRect();
   if (!r || r.width <= 0) return undefined;
   const img = banner ? banner.querySelector<HTMLImageElement>('.hero-backdrop[data-current="true"]') : frame?.querySelector("img");

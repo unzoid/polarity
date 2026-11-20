@@ -447,7 +447,11 @@ test.describe("signed in, on a fresh profile", () => {
     await card(app, "The Glass Orchard").tap();
     await app.getByRole("button", { name: "Play", exact: true }).tap();
     await expect(app.locator(".player")).toHaveAttribute("data-started", "true");
-    await app.getByRole("button", { name: "Watch Party", exact: true }).tap();
+    // On a phone, Watch Party and Sleep Timer live inside the top-right More ("…") menu so the bottom bar fits.
+    await expect(app.locator(".player-actions").getByRole("button", { name: "Watch Party" })).toHaveCount(0);
+    await expect(app.locator(".player-actions").getByRole("button", { name: "Sleep Timer" })).toHaveCount(0);
+    await app.locator(".player-top").getByRole("button", { name: "More", exact: true }).tap();
+    await app.getByRole("menuitem", { name: "Watch Party" }).tap();
     await expect(partySurfaces(app)).toHaveCount(1);
     await app.getByRole("button", { name: "Start a Watch Party" }).tap();
     await expect(app.getByRole("button", { name: "End Party" })).toBeVisible();

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import { AlertCircle, Check, Filters, Info, Instant, Puzzle, Reset } from "./icons";
 import { useNavigation } from "../lib/router";
 import { openSettings, type PageId } from "../lib/settings";
@@ -52,8 +52,17 @@ export function StreamList({
   // A source's "i" panel (#229); on TV, the row's menu that leads to it.
   const info = useSourceInfo(tv);
   const [menu, setMenu] = useState<{ s: RankedStream; anchor: HTMLElement } | null>(null);
-  const showInfo = (s: RankedStream, anchor: HTMLElement) =>
-    info.show(s, sourceRow(s).title, { filter: f.filter, sort: f.sort, match: f.match(s) }, anchor);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+  const handlePick = useCallback((s: RankedStream) => onPickRef.current(s), []);
+  const infoRef = useRef({ info, f });
+  infoRef.current = { info, f };
+  const showInfo = useCallback(
+    (s: RankedStream, anchor: HTMLElement) =>
+      infoRef.current.info.show(s, sourceRow(s).title, { filter: infoRef.current.f.filter, sort: infoRef.current.f.sort, match: infoRef.current.f.match(s) }, anchor),
+    [],
+  );
+  const openMenu = useCallback((s: RankedStream, anchor: HTMLElement) => setMenu({ s, anchor }), []);
 
   if (isLoading) {
     return (
@@ -174,22 +183,22 @@ export function StreamList({
             matchSummary={bestSummary}
             current={currentKey === streamKey(best)}
             readiness={ready.get(streamKey(best))}
-            onPick={onPick}
+            onPick={handlePick}
             onInfo={showInfo}
-            onMenu={tv ? (a) => setMenu({ s: best, anchor: a }) : undefined}
+            onMenu={tv ? openMenu : undefined}
           />
           {rest.length > 0 && <div className="stream-group-label t-micro faint">More Sources</div>}
           {rest.map((s) => (
-            <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={onPick} onInfo={showInfo} onMenu={tv ? (a) => setMenu({ s: s, anchor: a }) : undefined} />
+            <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />
           ))}
         </>
       )}
-      {!grouped && shown.map((s) => <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={onPick} onInfo={showInfo} onMenu={tv ? (a) => setMenu({ s: s, anchor: a }) : undefined} />)}
+      {!grouped && shown.map((s) => <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />)}
       {others.length > 0 && (
         <>
           <div className="stream-group-label t-micro faint">Other Sources</div>
           {others.map((s) => (
-            <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={onPick} onInfo={showInfo} onMenu={tv ? (a) => setMenu({ s: s, anchor: a }) : undefined} />
+            <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />
           ))}
         </>
       )}
@@ -198,7 +207,7 @@ export function StreamList({
         <>
           <div className="stream-group-label t-micro faint">Other Episodes</div>
           {otherEpisodes.map((s) => (
-            <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={onPick} onInfo={showInfo} onMenu={tv ? (a) => setMenu({ s: s, anchor: a }) : undefined} />
+            <StreamRow key={streamKey(s)} s={s} current={currentKey === streamKey(s)} readiness={ready.get(streamKey(s))} onPick={handlePick} onInfo={showInfo} onMenu={tv ? openMenu : undefined} />
           ))}
         </>
       )}
@@ -239,7 +248,7 @@ export function StreamList({
   );
 }
 
-function StreamRow({
+const StreamRow = memo(function StreamRow({
   s,
   featured,
   matchSummary,
@@ -259,7 +268,7 @@ function StreamRow({
   /** The source's "i" panel (#229), opened from this row. */
   onInfo: (s: RankedStream, anchor: HTMLElement) => void;
   /** TV: the row's menu (Info, Play), from holding OK or the options button. */
-  onMenu?: (anchor: HTMLElement) => void;
+  onMenu?: (s: RankedStream, anchor: HTMLElement) => void;
 }) {
   const row = sourceRow(s);
   const badges = sourceBadges(s);
@@ -270,7 +279,7 @@ function StreamRow({
   // The release name is for the curious: on hover, not in the row.
   const release = s.stream.title ?? s.stream.description;
   const ref = useRef<HTMLButtonElement>(null);
-  const press = useSourceRowPress({ onPick: () => onPick(s), onInfo: (a) => onInfo(s, a), onMenu });
+  const press = useSourceRowPress({ onPick: () => onPick(s), onInfo: (a) => onInfo(s, a), onMenu: onMenu ? (a) => onMenu(s, a) : undefined });
   const button = (
     <button
       ref={ref}
@@ -315,7 +324,7 @@ function StreamRow({
       </button>
     </div>
   );
-}
+});
 
 export function streamKey(s: RankedStream | { stream: RankedStream["stream"] }) {
   return sourceKey(s.stream);

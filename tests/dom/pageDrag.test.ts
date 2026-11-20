@@ -77,10 +77,11 @@ test("let go early, both pages slide back and nothing goes back; nothing under, 
   expect(none.begin()).toBe(false);
 });
 
-test("a title page from a card shrinks uniformly with the finger, keeps constant corners, and zooms back into the card once let go", () => {
+test("a title page from a card shrinks uniformly with the finger, hides its card slot, and zooms back cleanly once let go", () => {
   const scrim = document.createElement("div");
-  document.body.append(scrim);
-  const p = { ...pages(), scrim, card: { x: 20, y: 300, w: 120, h: 180, src: "https://media.example.com/poster.jpg" } };
+  const slot = document.createElement("div");
+  document.body.append(scrim, slot);
+  const p = { ...pages(), scrim, card: { x: 20, y: 300, w: 120, h: 180, src: "https://media.example.com/poster.jpg", el: slot } };
   p.top.getBoundingClientRect = () => ({ width: 400, height: 800 }) as DOMRect;
   const t = clock();
   let backs = 0;
@@ -92,16 +93,19 @@ test("a title page from a card shrinks uniformly with the finger, keeps constant
   expect(drag.begin()).toBe(true);
   expect(p.top.dataset.drag).toBe("card");
   expect(p.top.style.transformOrigin).toBe("0 0");
-  // Constant rounded corners set ONCE on drag begin (never mutated per frame).
-  expect(p.top.style.borderRadius).toBe("28px");
+  // Constant iPhone-bezel rounded corners set ONCE on drag begin (never mutated per frame).
+  expect(p.top.style.borderRadius).toBe("38px");
+  // Source card slot hides in flight so no duplicate poster shows underneath.
+  expect(slot.style.visibility).toBe("hidden");
+  expect(scrim.dataset.dragActive).toBe("card");
   // Half way (200/400): uniform scale 0.88, GPU translate3d tracking, borderRadius untouched.
   drag.move(200, 400);
   expect(p.top.style.transform).toBe("translate3d(108px, 40px, 0) scale(0.88)");
-  expect(p.top.style.borderRadius).toBe("28px");
+  expect(p.top.style.borderRadius).toBe("38px");
   // Dedicated leaf scrim fades directly so Home (`under`) incurs zero subtree style recalc.
   expect(p.under.style.transform).toBe("");
   expect(p.under.style.getPropertyValue("--drag-in")).toBe("");
-  expect(Number(scrim.style.opacity)).toBeCloseTo(0.18, 2);
+  expect(Number(scrim.style.opacity)).toBeCloseTo(0.46, 2);
 
   drag.end(true, 0.9);
   expect(backs).toBe(0);
@@ -111,4 +115,6 @@ test("a title page from a card shrinks uniformly with the finger, keeps constant
   expect(p.top.dataset.drag).toBeUndefined();
   expect(p.top.style.transform).toBe("");
   expect(scrim.style.opacity).toBe("");
+  expect(scrim.dataset.dragActive).toBeUndefined();
+  expect(slot.style.visibility).toBe("");
 });
