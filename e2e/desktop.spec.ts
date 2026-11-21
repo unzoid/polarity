@@ -1043,12 +1043,25 @@ test("the season toolbar stays where it is whichever tab is chosen, and nothing 
   const download = seasons.getByRole("button", { name: /^Download Season/ });
   const layout = seasons.getByRole("radiogroup", { name: "Episode layout" });
   // Where Download Season and the layout switch are, from the season tabs' top left (the page may scroll).
+  // Read all three rects in one frame so a scroll or transition can't shift one between IPC calls.
   const place = async () => {
-    const [t, d, l] = [await seasons.locator(".seasons-tabs").boundingBox(), await download.boundingBox(), await layout.boundingBox()];
-    return { download: [d!.x - t!.x, d!.y - t!.y, d!.height], layout: [l!.x - t!.x, l!.y - t!.y, l!.height] };
+    const handles = await Promise.all([
+      seasons.locator(".seasons-tabs").elementHandle(),
+      download.elementHandle(),
+      layout.elementHandle(),
+    ]);
+    try {
+      return await app.evaluate(([t, d, l]) => {
+        const [tr, dr, lr] = [t!.getBoundingClientRect(), d!.getBoundingClientRect(), l!.getBoundingClientRect()];
+        return { download: [dr.x - tr.x, dr.y - tr.y, dr.height], layout: [lr.x - tr.x, lr.y - tr.y, lr.height] };
+      }, handles);
+    } finally {
+      await Promise.all(handles.map((h) => h?.dispose()));
+    }
   };
   await expect(seasons.locator(".episode-card")).toHaveCount(SAGA.first.episodes, { timeout: 15_000 });
   await expect(download).toBeVisible();
+  await expect(app.locator(".page[data-motion]")).toHaveCount(0);
   const first = await place();
   // The long series' tab adds the episode ranges, the search and Skip Filler.
   await seasons.locator(".seasons-tabs").getByRole("radio", { name: "The Long Road" }).click();
