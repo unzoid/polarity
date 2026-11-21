@@ -99,11 +99,12 @@ if (!inShell) {
   );
 } else {
   installGamepad();
-  // Warm stored settings and the active UI shell chunk alongside the account backend so App() renders with zero waterfall.
+  // Start fetching the active UI shell chunk right away in parallel with boot init so there is no waterfall,
+  // without holding back root.render() (so theme application, account state and launch effects start immediately).
+  void preloadActiveShell();
   await Promise.all([
     startAccountBackend().catch(() => undefined),
     queryClient.prefetchQuery({ queryKey: keys.settings, queryFn: api.settings }).catch(() => undefined),
-    preloadActiveShell(),
   ]);
   root.render(
     <StrictMode>
