@@ -467,7 +467,7 @@ export function useTracks(
     [video],
   );
 
-  const subtitles: TrackOption[] = [{ id: OFF, label: "Off" }, ...embedded, ...addonOptions(addonSubs)];
+  const subtitles: TrackOption[] = useMemo(() => [{ id: OFF, label: "Off" }, ...embedded, ...addonOptions(addonSubs)], [embedded, addonSubs]);
 
   return {
     audio,

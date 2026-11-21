@@ -137,8 +137,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 18rem;
-  margin-top: max(1rem, calc(27.5vh - var(--nav-h)));
+  width: min(18rem, calc(100vw - 2rem));
+  margin-top: max(1rem, calc(27.5dvh - var(--nav-h)));
   text-align: center;
 }
 .auth-form {
@@ -190,10 +190,11 @@
   display: grid;
   place-items: center;
   margin: 0 0 1rem;
-  font-size: calc(var(--fs-lg) * 2);
+  font-size: clamp(1.375rem, 7vw, calc(var(--fs-lg) * 2));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.12em;
+  max-width: 100%;
   color: var(--text);
   min-height: calc(var(--fs-lg) * 2.6);
 }
@@ -229,7 +230,7 @@
   aspect-ratio: 1;
 }
 :root[data-tv="true"] .auth-device-qr :is(svg, .auth-device-qr-skeleton) {
-  width: min(13rem, 30vh);
+  width: min(13rem, 30dvh);
 }
 .auth-device-qr .auth-fine {
   margin-top: 0.75rem;
@@ -515,7 +516,7 @@
   gap: 1.25rem;
   width: min(100%, 520px);
   align-self: start;
-  margin-top: clamp(0.5rem, 5vh, 4rem);
+  margin-top: clamp(0.5rem, 5dvh, 4rem);
   animation: auth-form-in 320ms var(--ease-out);
 }
 .onboard-head {
@@ -1363,7 +1364,7 @@ button.profile-pop-profile:active {
 /* The others in a row, a tap each; more than fit scroll sideways. */
 .profile-sheet-others {
   display: flex;
-  justify-content: center;
+  justify-content: safe center;
   gap: 1.25rem;
   overflow-x: auto;
   overscroll-behavior-x: contain;

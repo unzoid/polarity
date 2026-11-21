@@ -28,18 +28,19 @@ export function PlayerClock({
   fps?: number | null;
   active?: boolean;
 }) {
-  // "Ends at" depends on the clock as well: select whole seconds left at this speed, format with the time now.
-  const shown = useMediaTime(active ? media : null, (t) =>
-    fps
-      ? `${formatTime(t.current)} · Frame ${frameAt(t.current, fps)}`
-      : display === "elapsed"
-      ? `${formatTime(t.current)} / ${formatTime(t.duration)}`
-      : display === "endsAt"
-        ? Math.round((t.duration - t.current) / (rate || 1))
-        : formatTime(t.duration - t.current),
-  );
-  // A live stream has no end (and an Infinity date would throw).
-  const text = typeof shown !== "number" ? shown : Number.isFinite(shown) ? `Ends at ${clock.format(Date.now() + shown * 1000)}` : "Live";
+  // "Ends at" only displays hour + minute: quantize to the wall-clock minute so it renders once per minute, not 60x.
+  const shown = useMediaTime(active ? media : null, (t) => {
+    if (fps) return `${formatTime(t.current)} · Frame ${frameAt(t.current, fps)}`;
+    if (display === "elapsed") return `${formatTime(t.current)} / ${formatTime(t.duration)}`;
+    if (display === "endsAt") {
+      const rem = (t.duration - t.current) / (rate || 1);
+      if (!Number.isFinite(rem)) return "Live";
+      const endMin = Math.round((Date.now() + rem * 1000) / 60_000) * 60_000;
+      return `Ends at ${clock.format(endMin)}`;
+    }
+    return formatTime(t.duration - t.current);
+  });
+  const text = shown;
   return (
     <button className="player-remaining tabular" onClick={onCycle} title="Change what the clock shows" aria-label={`${text}. Change what the clock shows`}>
       {text}

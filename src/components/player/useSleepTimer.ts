@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MediaLike } from "./mpvMedia";
 import {
   extendSleep,
@@ -8,6 +8,7 @@ import {
   sleepLeft,
   sleepWarns,
   startSleep,
+  WARN_MS,
   type SleepChoice,
   type SleepTimer,
 } from "../../lib/playback/sleepTimer";
@@ -21,18 +22,36 @@ export function useSleepTimer(media: MediaLike | null) {
   const [choice, setChoice] = useState<SleepChoice>("off");
   const [timer, setTimer] = useState<SleepTimer | null>(null);
   const [asleep, setAsleep] = useState(false);
+  const [tickActive, setTickActiveState] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+
+  const setTickActive = useCallback((active: boolean) => {
+    setTickActiveState((prev) => {
+      if (prev === active) return prev;
+      if (active) setNow(Date.now());
+      return active;
+    });
+  }, []);
 
   const left = timer && media ? sleepLeft(timer, now, media.duration - media.currentTime, media.playbackRate) : null;
   const fading = left != null && left < FADE_MS + 1000;
+  const warningZone = left != null && left <= WARN_MS + 2000;
 
-  // A second at a time; four times a second while the sound fades, so it goes down smoothly.
+  // When the countdown UI isn't visible and >1 min remains, sleep until the warning window instead of re-rendering
+  // Player every second during playback. During the final minute or when chrome is open, tick smoothly.
   useEffect(() => {
     if (!timer) return;
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), fading ? 250 : 1000);
-    return () => window.clearInterval(t);
-  }, [timer, fading]);
+    if (fading || warningZone || tickActive) {
+      const t = window.setInterval(() => setNow(Date.now()), fading ? 250 : 1000);
+      return () => window.clearInterval(t);
+    }
+    const wait =
+      timer.kind === "at"
+        ? Math.max(1000, Math.min(30_000, (left ?? WARN_MS) - WARN_MS - 1000))
+        : 5000;
+    const t = window.setTimeout(() => setNow(Date.now()), wait);
+    return () => window.clearTimeout(t);
+  }, [timer, fading, warningZone, tickActive, left]);
 
   const fallAsleep = () => {
     setTimer(null);
@@ -79,5 +98,7 @@ export function useSleepTimer(media: MediaLike | null) {
     wake() {
       setAsleep(false);
     },
+    /** Whether the countdown label is currently on screen (suppresses background 1 Hz Player re-renders). */
+    setTickActive,
   };
 }

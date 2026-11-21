@@ -125,15 +125,19 @@
   background: var(--surface-1);
   pointer-events: none;
 }
-/* No fade under the header: at rest it shaded the first card's top edge. */
+/* No fade under the header: at rest it shaded the first card's top edge. Pad horizontally for landscape notches. */
 .sheet[data-edge="bottom"] .sheet-body {
   mask-image: none;
+  padding-left: max(0.75rem, var(--safe-left));
+  padding-right: max(0.75rem, var(--safe-right));
   contain: layout style;
   -webkit-overflow-scrolling: touch;
 }
 .sheet[data-edge="bottom"] .sheet-header {
   position: relative;
   padding-top: 1.5rem;
+  padding-left: max(1.25rem, var(--safe-left));
+  padding-right: max(1.25rem, var(--safe-right));
   touch-action: none;
 }
 .sheet[data-edge="bottom"] .sheet-grabber {
@@ -383,7 +387,7 @@
   z-index: var(--z-modal);
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: max(1rem, var(--safe-top)) max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom)) max(1rem, var(--safe-left));
   background: var(--scrim-2);
   outline: none;
   animation: fade-in var(--dur-base) var(--ease-out);
@@ -590,8 +594,18 @@
 /* Filters is its glyph alone on a phone, right after the quality switch on its row. */
 :root[data-form="phone"] .srcf-filters {
   justify-content: center;
-  width: 36px;
+  width: 44px;
+  height: 44px;
   padding: 0;
+}
+:root[data-touch="true"] .srcf-bar .segmented-item {
+  min-height: 40px;
+  height: 40px;
+}
+:root[data-touch="true"] .srcf-addon .select-trigger,
+:root[data-touch="true"] .srcf-filters {
+  min-height: var(--hit);
+  height: var(--hit);
 }
 :root[data-form="phone"] .srcf-filters-label {
   display: none;

@@ -1692,8 +1692,24 @@
   font-size: var(--fs-sm);
 }
 
-/* Narrow screens (#151): the season picker gets a row of its own, and Download Season and the
-   row/list switch go under it. Beside them the picker was squeezed to its first letter. */
+/* Narrow screens (#151) and phones in landscape: the season picker gets a row of its own, and Download Season
+   and the row/list switch go under it. Beside them the picker was squeezed to its first letter. */
+:root[data-form="phone"] .seasons-bar {
+  flex-wrap: wrap;
+  row-gap: 0.75rem;
+}
+:root[data-form="phone"] .seasons-bar > .seasons-tabs,
+:root[data-form="phone"] .anime-seasons-bar > .seasons-picker {
+  flex: 1 0 100%;
+}
+:root[data-form="phone"] .seasons-tabs:has(> :is(.batch-download, .batch-download-start)) {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+:root[data-form="phone"] .seasons-tabs > :is(.batch-download, .batch-download-start) {
+  flex: none;
+}
 @media (max-width: 600px) {
   .seasons-bar {
     flex-wrap: wrap;
@@ -1886,8 +1902,9 @@
   -webkit-line-clamp: 3;
 }
 /* Download and Sources stand to the right of the title, level with the still's middle: plain glyphs on the
-   page, not chips on the picture. The text column gives them their room (more with Show in Folder there too). */
-:root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main {
+   page, not chips on the picture. Declare `--episode-buttons` on `.episode-card` so `:has(.download-reveal)`
+   isn't shadowed by `.episode-card-main`. */
+:root[data-form="phone"] .episode-card[data-layout="list"] {
   --episode-buttons: 4.5rem;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main:active {

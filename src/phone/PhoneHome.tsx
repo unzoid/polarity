@@ -27,7 +27,7 @@ import { PlayNow } from "./PlayNow";
 import { Row } from "./Rows";
 import { ContinueRow } from "../screens/Home";
 import { categories } from "./store";
-import { useArtTint } from "./tint";
+import { TintBackdrop, useTintBus } from "./tint";
 
 /** What Home shows: everything, one kind (Shows, Movies), or one genre picked from Categories. */
 export type HomeView = { kind: "all" } | { kind: "type"; type: ContentType } | { kind: "genre"; genre: string; type?: ContentType };
@@ -45,6 +45,7 @@ const ADVANCE_MS = 8000;
  */
 export function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeView) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLElement | null>(null);
   const { items, shelves, excludes, settings, addonRows } = useHomeFeed();
   const typed = view.kind === "type" ? view.type : view.kind === "genre" ? view.type : undefined;
 
@@ -54,8 +55,6 @@ export function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeVi
     const withGenre = view.kind === "genre" ? of.filter((m) => m.genres?.includes(view.genre)) : of;
     return (withGenre.length ? withGenre : view.kind === "all" ? of : []).slice(0, FEATURED);
   }, [items, typed, view]);
-  const [shown, setShown] = useState(0);
-  const current = featured[Math.min(shown, featured.length - 1)];
 
   const rows = useMemo((): { shelf: Shelf; exclude: Set<string> }[] => {
     if (view.kind === "genre") return genreShelves(view.genre, view.type).map((shelf) => ({ shelf, exclude: NONE }));
@@ -65,18 +64,18 @@ export function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeVi
     return [...own, ...typeExtras(typed, own.map((r) => r.shelf)).map((shelf) => ({ shelf, exclude: NONE }))];
   }, [view, shelves, excludes, typed]);
 
-  const tint = useArtTint(current ? sizedArt(current.background ?? current.poster, "w300") : undefined);
+  const tintBus = useTintBus(featured);
 
   return (
-    <div className="ph-tab-page ph-home" style={tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined}>
-      <TabHeader scroller={scroller} lead={<img className="ph-wordmark" src={logo} alt="Polarity" draggable={false} />}>
+    <div className="ph-tab-page ph-home">
+      <TabHeader scroller={scroller} headRef={headRef} lead={<img className="ph-wordmark" src={logo} alt="Polarity" draggable={false} />}>
         {view.kind !== "all" && <span className="ph-head-sub">{view.kind === "type" ? (view.type === "movie" ? "Movies" : "Shows") : view.genre}</span>}
       </TabHeader>
       <div className="ph-scroll" ref={scroller}>
-        <div className="ph-tint" aria-hidden />
+        <TintBackdrop bus={tintBus} headRef={headRef} />
         <Chips view={view} onView={onView} />
         {featured.length ? (
-          <Carousel key={`${view.kind}:${typed ?? ""}:${view.kind === "genre" ? view.genre : ""}`} items={featured} onShown={setShown} />
+          <Carousel key={`${view.kind}:${typed ?? ""}:${view.kind === "genre" ? view.genre : ""}`} items={featured} onShown={tintBus.onShown} />
         ) : items === undefined ? (
           <div className="ph-carousel">
             <div className="ph-hero ph-skeleton" aria-hidden />
@@ -174,6 +173,7 @@ export function Carousel({
   kicker?: (index: number) => string | undefined;
 }) {
   const card = useRef<HTMLDivElement>(null);
+  const track = useRef<HTMLDivElement>(null);
   const [{ index, prev, dir }, setState] = useState({ index: 0, prev: -1, dir: 1 });
   const go = useCallback(
     (step: 1 | -1) => setState((s) => ({ index: (s.index + step + items.length) % items.length, prev: s.index, dir: step })),
@@ -187,30 +187,47 @@ export function Carousel({
     if (url) new Image().src = url;
   }, [index, items]);
 
-  // Turning by itself: only while Home is the page in view, nothing's over it, and no finger is on the card. A turn
-  // that can't happen now waits a whole turn again (`tick`); so does the title a finger just chose.
+  // Turning by itself: only while Home is the page in view, nothing's over it, and no finger is on the card.
+  // Uses an interval + timestamp ref so inactive tabs / covered Home perform zero React re-renders.
   const touching = useRef(false);
-  const [tick, setTick] = useState(0);
+  const lastInteraction = useRef(0);
   useEffect(() => {
     if (items.length < 2 || prefersReducedMotion()) return;
-    const t = window.setTimeout(() => {
+    lastInteraction.current = Date.now();
+    const t = window.setInterval(() => {
+      if (touching.current || document.hidden) return;
+      if (Date.now() - lastInteraction.current < ADVANCE_MS - 100) return;
       const page = card.current?.closest<HTMLElement>(".ph-tab");
-      const free = !touching.current && !document.hidden && page?.dataset.active === "true" && !document.querySelector(".ps-layer, .sheet, .ph-pushed, .ph-list-overlay, .ph-sources-overlay");
-      if (free) go(1);
-      else setTick((n) => n + 1);
-    }, ADVANCE_MS);
-    return () => window.clearTimeout(t);
-  }, [index, tick, items.length, go]);
+      const free =
+        (!page || page.dataset.active === "true") &&
+        !document.querySelector(".ps-layer, .sheet, .ph-pushed, .ph-list-overlay, .ph-sources-overlay, .player-layer");
+      if (free) {
+        lastInteraction.current = Date.now();
+        go(1);
+      }
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [items.length, go]);
 
   // A sideways swipe turns it; the art follows the finger at a third of its speed until it's let go.
+  // Coalesced per animation frame and written directly to `.ph-hero-track` transform (zero inherited CSS var).
   useEffect(() => {
     const el = card.current;
     if (!el || items.length < 2) return;
     let x0 = 0;
     let y0 = 0;
     let dx = 0;
+    let dragRaf = 0;
+    let pendingX = 0;
     let state: "idle" | "maybe" | "drag" = "idle";
-    const set = (v: number) => el.style.setProperty("--drag", `${v.toFixed(1)}px`);
+    const applyTransform = (v: number) => {
+      const tr = track.current;
+      if (tr) tr.style.transform = v === 0 ? "" : `translate3d(${v.toFixed(1)}px, 0, 0)`;
+    };
+    const flushDrag = () => {
+      dragRaf = 0;
+      applyTransform(pendingX);
+    };
     const start = (e: TouchEvent) => {
       touching.current = true;
       if (e.touches.length !== 1) return;
@@ -232,14 +249,19 @@ export function Carousel({
       }
       e.preventDefault();
       dx = mx;
-      set(mx * 0.35);
+      pendingX = mx * 0.35;
+      if (!dragRaf) dragRaf = requestAnimationFrame(flushDrag);
     };
     const end = () => {
       touching.current = false;
-      setTick((n) => n + 1);
+      lastInteraction.current = Date.now();
+      if (dragRaf) {
+        cancelAnimationFrame(dragRaf);
+        dragRaf = 0;
+      }
       if (state === "drag") {
         delete el.dataset.dragging;
-        set(0);
+        applyTransform(0);
         if (Math.abs(dx) > 48) go(dx < 0 ? 1 : -1);
       }
       state = "idle";
@@ -249,6 +271,7 @@ export function Carousel({
     el.addEventListener("touchend", end);
     el.addEventListener("touchcancel", end);
     return () => {
+      if (dragRaf) cancelAnimationFrame(dragRaf);
       el.removeEventListener("touchstart", start);
       el.removeEventListener("touchmove", move);
       el.removeEventListener("touchend", end);
@@ -281,9 +304,11 @@ export function Carousel({
         {...intent}
       >
         <div className="ph-hero-window">
-          {/* The title coming in, over the one it replaces (first in the tree: the card's picture for the sheet). */}
-          <HeroArt key={`${index}:${item.id}`} item={item} entering={prev >= 0} />
-          {prev >= 0 && items[prev] && <HeroArt key={`${prev}:${items[prev].id}`} item={items[prev]} under />}
+          <div className="ph-hero-track" ref={track}>
+            {/* The title coming in, over the one it replaces (first in the tree: the card's picture for the sheet). */}
+            <HeroArt key={`${index}:${item.id}`} item={item} entering={prev >= 0} />
+            {prev >= 0 && items[prev] && <HeroArt key={`${prev}:${items[prev].id}`} item={items[prev]} under />}
+          </div>
         </div>
         <div className="ph-hero-shade" aria-hidden />
         <HeroBody key={item.id} item={item} kicker={kicker?.(index)} wide={wide} />

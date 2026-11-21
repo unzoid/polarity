@@ -77,7 +77,7 @@
 @media (min-aspect-ratio: 2/1) {
   .hero-stage > .hero-card {
     flex: 0 1 auto;
-    width: calc(var(--hero-h, 76vh) * 2.1);
+    width: calc(var(--hero-h, 76dvh) * 2.1);
     max-width: calc(100% - 2 * clamp(4.5rem, 6vw, 8.5rem) - 2rem);
   }
   .hero-peek {
@@ -141,7 +141,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 115vh;
+  height: 115dvh;
   z-index: -1;
   pointer-events: none;
   background: linear-gradient(
@@ -1332,9 +1332,11 @@
   width: 5px;
   height: 5px;
   margin: 0 2.5px;
+  background: rgb(var(--ink) / 0.32);
 }
 :root[data-form="phone"] .hero-dot[aria-selected="true"] {
   width: 16px;
+  background: rgb(var(--ink) / 0.32);
 }
 :root[data-form="phone"] .home-rows {
   margin-top: 0.875rem;
@@ -1386,7 +1388,7 @@
 .trailer-box {
   display: grid;
   gap: 0.875rem;
-  width: min(100%, calc((100vh - var(--nav-h) * 0.6 - var(--gutter) - 4rem) * 16 / 9), 1400px);
+  width: min(100%, calc((100dvh - var(--nav-h) * 0.6 - var(--gutter) - 4rem) * 16 / 9), 1400px);
 }
 .trailer-video {
   width: 100%;
@@ -1594,8 +1596,10 @@ video.trailer-video {
   opacity: 0;
   white-space: nowrap;
 }
-.cw-edit:hover .cw-edit-actions:not([data-editing]) .cw-edit-hint {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .cw-edit:hover .cw-edit-actions:not([data-editing]) .cw-edit-hint {
+    opacity: 1;
+  }
 }
 .cw-edit-hint kbd {
   padding: 0.05rem 0.375rem;

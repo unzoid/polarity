@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { catalogKey, catalogTitle } from "../lib/catalog";
 import type { ContentType } from "../lib/types";
-import { sizedArt } from "../lib/ui";
 import { CATALOGS, useDiscover } from "../screens/Discover";
 import { useCollapse } from "./Header";
 import { IconBack, IconChevronDown } from "./icons";
 import { ListOverlay } from "./ListOverlay";
 import { Carousel } from "./PhoneHome";
 import { Poster } from "./Rows";
-import { useArtTint } from "./tint";
+import { TintBackdrop, useTintBus } from "./tint";
 
 /** How many of a section's first titles take turns in its card. */
 const FEATURED = 5;
@@ -28,9 +27,7 @@ export function PhoneSection({ type, catalog, genre, addon, onBack }: { type: Co
   const featured = useMemo(() => d.items.filter((m) => m.background).slice(0, FEATURED), [d.items]);
   const featuredIds = useMemo(() => new Set(featured.map((m) => m.id)), [featured]);
   const grid = useMemo(() => d.items.filter((m) => !featuredIds.has(m.id)), [d.items, featuredIds]);
-  const [shown, setShown] = useState(0);
-  const current = featured[Math.min(shown, featured.length - 1)];
-  const tint = useArtTint(current ? sizedArt(current.background ?? current.poster, "w300") : undefined);
+  const tintBus = useTintBus(featured);
 
   const listName = d.own ? catalogTitle(d.own) : d.catalogLabel;
   const kind = type === "movie" ? "Movies" : "Shows";
@@ -52,7 +49,7 @@ export function PhoneSection({ type, catalog, genre, addon, onBack }: { type: Co
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
-    <div className="ph-section" style={tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined}>
+    <div className="ph-section">
       <header className="ph-sect-head" ref={(el) => void (head.current = el)}>
         <div className="ph-head-bg" aria-hidden />
         <button type="button" className="ph-round" aria-label="Back" onClick={onBack}>
@@ -62,7 +59,7 @@ export function PhoneSection({ type, catalog, genre, addon, onBack }: { type: Co
         <span className="ph-round-spacer" aria-hidden />
       </header>
       <div className="ph-scroll" ref={scroller}>
-        <div className="ph-tint" aria-hidden />
+        <TintBackdrop bus={tintBus} headRef={head} />
         <div className="ph-sect-pills">
           <button type="button" className="ph-pill" data-set={d.own || d.catalog !== "trending" || undefined} onClick={() => setChoosing("list")}>
             {listName}
@@ -76,7 +73,7 @@ export function PhoneSection({ type, catalog, genre, addon, onBack }: { type: Co
           )}
         </div>
         {featured.length > 0 ? (
-          <Carousel key={`${d.own ? catalogKey(d.own) : d.catalog}:${d.genre ?? ""}`} items={featured} onShown={setShown} wide kicker={(i) => `#${i + 1} in ${d.genre ?? listName}`} />
+          <Carousel key={`${d.own ? catalogKey(d.own) : d.catalog}:${d.genre ?? ""}`} items={featured} onShown={tintBus.onShown} wide kicker={(i) => `#${i + 1} in ${d.genre ?? listName}`} />
         ) : (
           d.query.isPending && (
             <div className="ph-carousel" data-wide>

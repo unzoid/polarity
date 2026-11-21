@@ -3,7 +3,7 @@ import { api } from "../api";
 import { listOf, storedJson } from "../parse";
 import { warnFailed } from "../errors";
 import { readProfile } from "./backend";
-import { backend, type AccountUser, type Profile, type ProfileInput } from ".";
+import { backend, mightHaveAccountBackend, startAccountBackend, type AccountUser, type Profile, type ProfileInput } from ".";
 import { forgetPlaylists, importLocalPlaylists } from "../library/playlists";
 import { clearRecentSearches } from "../catalog/recentSearches";
 import { forgetSettings, keepDeviceSettings, markDeviceSettings, restoreDeviceSettings, restoreSettings, startProfile } from "./settingsSync";
@@ -109,7 +109,8 @@ const profilesKey = (userId: string) => `polar.profiles.${userId}`;
 const cachedProfiles = (userId: string): Profile[] => listOf(storedJson(localStorage, profilesKey(userId)), readProfile);
 
 export function AccountProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AccountStatus>(backend ? "loading" : "guest");
+  const [backendStarted, setBackendStarted] = useState(!!backend || !mightHaveAccountBackend());
+  const [status, setStatus] = useState<AccountStatus>(mightHaveAccountBackend() ? "loading" : "guest");
   const [user, setUser] = useState<AccountUser | null>(null);
   const [profiles, setProfilesState] = useState<Profile[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -186,14 +187,18 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     [enter, setProfiles],
   );
 
-  // Restore the session on launch.
+  // Restore the session on launch (starts the account backend concurrently with first paint).
   useEffect(() => {
-    if (!backend) {
-      void api.activateSpace(null).then(refreshLocalViews);
-      return;
-    }
     let cancelled = false;
     (async () => {
+      await startAccountBackend().catch(() => undefined);
+      if (cancelled) return;
+      setBackendStarted(true);
+      if (!backend) {
+        await api.activateSpace(null).then(refreshLocalViews);
+        if (!cancelled) setStatus("guest");
+        return;
+      }
       const u = await backend.auth.current().catch(() => null);
       if (cancelled) return;
       // A session that stopped between the email code and the authenticator code asks for the second again.
@@ -239,7 +244,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   // Session ended elsewhere (revoked, expired refresh token).
   useEffect(() => {
-    if (!backend) return;
+    if (!backendStarted || !backend) return;
     return backend.auth.onChange((u) => {
       // The same user read again (an email change confirmed): the address shown follows.
       if (u) setUser((cur) => (cur && cur.id === u.id && !sameUser(cur, u) ? u : cur));
@@ -258,9 +263,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         .then(refreshLocalViews);
       setStatus("signed-out");
     });
-  }, []);
+  }, [backendStarted]);
 
-  const security = useMemo(() => backend && accountSecurity(backend, (u) => setUser((cur) => (cur && cur.id === u.id && !sameUser(cur, u) ? u : cur))), []);
+  const security = useMemo(() => backend && accountSecurity(backend, (u) => setUser((cur) => (cur && cur.id === u.id && !sameUser(cur, u) ? u : cur))), [backendStarted]);
 
   // An email change waiting for its codes may be confirmed on another device: read the user again on coming back.
   const waitingEmail = !!user?.newEmail;

@@ -449,19 +449,29 @@ function Categories({ onPick }: { onPick: (genre: string, type?: "movie" | "seri
  * Settings), which takes its backing as the page scrolls under it.
  */
 function AnimeTab({ Screen, route }: { Screen: ComponentType<{ route: Route }>; route: Route }) {
-  const page = useRef<HTMLDivElement>(null);
-  // The Anime page scrolls inside itself, mounted later (a lazy chunk): its scroll is read as it bubbles up.
+  const head = useRef<HTMLElement | null>(null);
+  const frameRef = useRef(0);
+  const lastRef = useRef(-1);
+  // The Anime page scrolls inside itself, mounted later (a lazy chunk): its scroll is read as it bubbles up
+  // and written only to the header element (never the whole `.ph-tab-page`) coalesced per animation frame.
   const none = useRef<HTMLElement>(null);
+  useEffect(() => () => cancelAnimationFrame(frameRef.current), []);
   return (
     <div
       className="ph-tab-page ph-anime"
-      ref={page}
       onScrollCapture={(e) => {
-        const c = Math.min(1, Math.max(0, (e.target as HTMLElement).scrollTop / 56));
-        page.current?.style.setProperty("--c", c.toFixed(3));
+        const target = e.target as HTMLElement;
+        if (frameRef.current) return;
+        frameRef.current = requestAnimationFrame(() => {
+          frameRef.current = 0;
+          const c = Math.min(1, Math.max(0, target.scrollTop / 56));
+          if (c === lastRef.current) return;
+          lastRef.current = c;
+          head.current?.style.setProperty("--c", c.toFixed(3));
+        });
       }}
     >
-      <TabHeader scroller={none}>
+      <TabHeader scroller={none} headRef={head}>
         <h1 className="ph-head-name">Anime</h1>
       </TabHeader>
       <div className="page" data-active="true">

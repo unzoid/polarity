@@ -10,14 +10,22 @@ import { notifications } from "./store";
  * backing and the name eases down to 92% (Netflix's: 24.7 pt → 22.6 pt, measured), all from one value the
  * scroll sets (`--c`, 0–1) without rendering anything again.
  */
-export function TabHeader({ lead, children, scroller, actions = true }: { lead?: ReactNode; children: ReactNode; scroller: RefObject<HTMLElement | null>; actions?: boolean }) {
-  const head = useRef<HTMLElement>(null);
-  // On the tab's page, not just the bar: the chips under it fade with the same value (phone.css).
-  const page = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    page.current = head.current?.parentElement ?? null;
-  });
-  useCollapse(scroller, page, 56);
+export function TabHeader({
+  lead,
+  children,
+  scroller,
+  actions = true,
+  headRef,
+}: {
+  lead?: ReactNode;
+  children: ReactNode;
+  scroller: RefObject<HTMLElement | null>;
+  actions?: boolean;
+  headRef?: RefObject<HTMLElement | null>;
+}) {
+  const localHead = useRef<HTMLElement | null>(null);
+  const head = headRef ?? localHead;
+  useCollapse(scroller, head, 56, true);
   const { navigate } = useNavigation();
   return (
     <header className="ph-head" ref={head}>
@@ -45,14 +53,19 @@ export function TabHeader({ lead, children, scroller, actions = true }: { lead?:
   );
 }
 
-/** `--c` on `target`: how far `scroller` has scrolled through its first `span` px, 0 to 1, a frame at a time. */
-export function useCollapse(scroller: RefObject<HTMLElement | null>, target: RefObject<HTMLElement | null>, span: number) {
+/**
+ * `--c` on `target` (the header bar alone, never the whole `.ph-tab-page`): how far `scroller` has scrolled
+ * through its first `span` px, 0 to 1, coalesced per animation frame. When `fadeChips` is true, also drives
+ * `.ph-chips` opacity directly on that element so scrolling never recalculates styles across the page tree.
+ */
+export function useCollapse(scroller: RefObject<HTMLElement | null>, target: RefObject<HTMLElement | null>, span: number, fadeChips = false) {
   useEffect(() => {
     const el = scroller.current;
     const out = target.current;
     if (!el || !out) return;
     let frame = 0;
     let last = -1;
+    let chips: HTMLElement | null = null;
     const apply = () => {
       frame = 0;
       const c = Math.min(1, Math.max(0, el.scrollTop / span));
@@ -60,6 +73,10 @@ export function useCollapse(scroller: RefObject<HTMLElement | null>, target: Ref
       last = c;
       out.style.setProperty("--c", c.toFixed(3));
       out.toggleAttribute("data-scrolled", c >= 1);
+      if (fadeChips) {
+        if (!chips || !chips.isConnected) chips = el.querySelector<HTMLElement>(".ph-chips");
+        if (chips) chips.style.opacity = String(Math.max(0, Math.min(1, 1 - c * 1.6)).toFixed(3));
+      }
     };
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(apply);
@@ -70,5 +87,5 @@ export function useCollapse(scroller: RefObject<HTMLElement | null>, target: Ref
       el.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(frame);
     };
-  }, [scroller, target, span]);
+  }, [scroller, target, span, fadeChips]);
 }

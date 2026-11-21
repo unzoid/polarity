@@ -69,11 +69,26 @@ export function TitleLogo({ logos, backdrop, spot, onReady, ...props }: TitleLog
   );
 }
 
+// One shared MutationObserver on `<html>` across every mounted TitleLogo instead of one per card.
+const schemeListeners = new Set<() => void>();
+let schemeObserver: MutationObserver | null = null;
+
 function subscribeScheme(onChange: () => void) {
   if (typeof MutationObserver === "undefined" || typeof document === "undefined") return () => {};
-  const mo = new MutationObserver(onChange);
-  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-scheme"] });
-  return () => mo.disconnect();
+  schemeListeners.add(onChange);
+  if (!schemeObserver) {
+    schemeObserver = new MutationObserver(() => {
+      for (const fn of schemeListeners) fn();
+    });
+    schemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-scheme"] });
+  }
+  return () => {
+    schemeListeners.delete(onChange);
+    if (schemeListeners.size === 0 && schemeObserver) {
+      schemeObserver.disconnect();
+      schemeObserver = null;
+    }
+  };
 }
 
 function useLogoScheme(): LogoScheme {
@@ -181,18 +196,18 @@ const LOAD_TIMEOUT = 8000;
 
 /**
  * Loads a picture for measuring, so its pixels can be read: by a CORS request, or when the host refuses that
- * (no CORS headers), through the app (#354). Null when neither gets it. Shared across HeroGlow, TitleLogo,
- * DetailArt and AmbientWash so one backdrop isn't fetched and decoded multiple times concurrently.
+ * (no CORS headers), through the app (#354). Null when neither gets it. Coalesces concurrent callers in flight
+ * and releases the decoded HTMLImageElement once settled so bitmaps are not pinned in RAM.
  */
 export function loadReadable(src: string): Promise<HTMLImageElement | null> {
   const key = toneUrl(src);
-  let pending = lruGet(readables, key);
+  let pending = readables.get(key);
   if (!pending) {
-    pending = (async () => (await load(src)) ?? (await loadThroughApp(src)))().then((img) => {
-      if (!img) readables.delete(key);
-      return img;
+    pending = (async () => (await load(src)) ?? (await loadThroughApp(src)))().finally(() => {
+      // Keep only in-flight deduplication; callers extract tiny stats/histograms immediately so the decoded bitmap can be GC'd.
+      if (readables.get(key) === pending) readables.delete(key);
     });
-    lruSet(readables, key, pending);
+    readables.set(key, pending);
   }
   return pending;
 }
@@ -249,6 +264,8 @@ function load(src: string, plain = false): Promise<HTMLImageElement | null> {
   });
 }
 
+let scratchCanvas: HTMLCanvasElement | null = null;
+
 /** Draws `img` (or the part of it in `spot`) `w` px wide and reads its pixels; null when the canvas is tainted. */
 export function pixelsOf(img: HTMLImageElement, w: number, spot?: LogoSpot) {
   try {
@@ -257,7 +274,8 @@ export function pixelsOf(img: HTMLImageElement, w: number, spot?: LogoSpot) {
     const sw = spot ? (spot.x1 - spot.x0) * img.naturalWidth : img.naturalWidth;
     const sh = spot ? (spot.y1 - spot.y0) * img.naturalHeight : img.naturalHeight;
     const h = Math.max(1, Math.round((sh / sw) * w)) || 32;
-    const canvas = document.createElement("canvas");
+    const canvas = (scratchCanvas ??= document.createElement("canvas"));
+    // Setting `canvas.width` resets and clears the backing store by HTML Canvas spec (no clearRect needed).
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });

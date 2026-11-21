@@ -5,10 +5,17 @@
 export type LogoLook = "as-is" | "silhouette" | "silhouette-dark" | "halo-light" | "halo-dark";
 export type LogoScheme = "dark" | "light";
 
-/** A measured logo: each opaque pixel's relative luminance (0-1) with its weight, and whether it's one ink throughout. */
+/** Number of luminance histogram bins stored per measured logo (256 bytes instead of per-pixel arrays). */
+const LUM_BINS = 64;
+/** Histogram resolution for O(N) weighted median calculation. */
+const MEDIAN_BINS = 256;
+
+/** A measured logo: compact luminance histogram (0-1) with total weight, and whether it's one ink throughout. */
 export interface Ink {
-  lum: number[];
-  weight: number[];
+  /** Weighted luminance histogram across `LUM_BINS` uniform buckets in [0, 1]. */
+  bins: Float32Array;
+  /** Sum of opaque pixel weights in `bins`. */
+  total: number;
   /** Most of the ink is one tone with no strong colour: a silhouette keeps its shape and loses nothing. */
   single: boolean;
   /** The ink's median luminance. */
@@ -42,37 +49,44 @@ export function contrast(a: number, b: number) {
 
 /** The ink of a logo's RGBA pixels (its mostly transparent surround left out); null when there's none. */
 export function measureInk(px: ArrayLike<number>): Ink | null {
-  const lum: number[] = [];
-  const weight: number[] = [];
-  const light: number[] = [];
+  const bins = new Float32Array(LUM_BINS);
+  const lumHist = new Float32Array(MEDIAN_BINS);
+  const lightHist = new Float32Array(MEDIAN_BINS);
   let total = 0;
   let colourful = 0;
   for (let i = 0; i < px.length; i += 4) {
     const a = px[i + 3] / 255;
     if (a < 0.5) continue;
-    const [r, g, b] = [px[i], px[i + 1], px[i + 2]];
-    lum.push(luminance(r, g, b));
-    light.push((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255);
-    weight.push(a);
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    const l = luminance(r, g, b);
+    const li = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    bins[Math.min(LUM_BINS - 1, Math.floor(l * LUM_BINS))] += a;
+    lumHist[Math.min(MEDIAN_BINS - 1, Math.floor(l * MEDIAN_BINS))] += a;
+    lightHist[Math.min(MEDIAN_BINS - 1, Math.floor(li * MEDIAN_BINS))] += a;
     total += a;
     if ((Math.max(r, g, b) - Math.min(r, g, b)) / 255 > 0.25) colourful += a;
   }
   if (total === 0) return null;
-  const median = weightedMedian(lum, weight, total);
-  const mid = weightedMedian(light, weight, total);
+  const median = histogramMedian(lumHist, total);
+  const mid = histogramMedian(lightHist, total);
   let near = 0;
-  for (let i = 0; i < light.length; i++) if (Math.abs(light[i] - mid) <= BAND) near += weight[i];
-  return { lum, weight, median, single: near / total >= SINGLE_SHARE && colourful / total <= COLOURFUL };
+  for (let i = 0; i < MEDIAN_BINS; i++) {
+    const w = lightHist[i];
+    if (w > 0 && Math.abs((i + 0.5) / MEDIAN_BINS - mid) <= BAND) near += w;
+  }
+  return { bins, total, median, single: near / total >= SINGLE_SHARE && colourful / total <= COLOURFUL };
 }
 
-function weightedMedian(values: number[], weight: number[], total: number) {
-  const order = values.map((_, i) => i).sort((a, b) => values[a] - values[b]);
+function histogramMedian(hist: Float32Array, total: number) {
+  const half = total / 2;
   let seen = 0;
-  for (const i of order) {
-    seen += weight[i];
-    if (seen >= total / 2) return values[i];
+  for (let i = 0; i < hist.length; i++) {
+    seen += hist[i];
+    if (seen >= half) return (i + 0.5) / hist.length;
   }
-  return values[order[order.length - 1]];
+  return 1;
 }
 
 /**
@@ -134,13 +148,13 @@ export function backdropLuminance(px: ArrayLike<number>, scrim: number, level = 
 
 /** The share of the ink that reaches `LOGO_CONTRAST` against a backdrop of luminance `behind`. */
 export function legibleShare(ink: Ink, behind: number) {
+  if (!ink.total) return 0;
   let ok = 0;
-  let total = 0;
-  for (let i = 0; i < ink.lum.length; i++) {
-    total += ink.weight[i];
-    if (contrast(ink.lum[i], behind) >= LOGO_CONTRAST) ok += ink.weight[i];
+  for (let i = 0; i < ink.bins.length; i++) {
+    const w = ink.bins[i];
+    if (w > 0 && contrast((i + 0.5) / ink.bins.length, behind) >= LOGO_CONTRAST) ok += w;
   }
-  return total ? ok / total : 0;
+  return ok / ink.total;
 }
 
 export const readsOn = (ink: Ink, behind: number) => legibleShare(ink, behind) >= LEGIBLE_SHARE;

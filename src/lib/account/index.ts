@@ -28,21 +28,36 @@ function initialBackend(): AccountBackend | null {
 }
 
 export let backend = initialBackend();
+let backendReady: Promise<void> | null = null;
 
-/** Before the app renders: loads the configured account provider (and in dev builds, any saved connection code). */
-export async function startAccountBackend() {
+/** Synchronous hint of whether an account backend may become active after `startAccountBackend()`. */
+export function mightHaveAccountBackend(): boolean {
+  if (backend) return true;
   if (import.meta.env.DEV && "__polarFakeAccount" in globalThis) {
-    backend = (globalThis as { __polarFakeAccount?: AccountBackend | null }).__polarFakeAccount ?? null;
-    return;
+    return !!(globalThis as { __polarFakeAccount?: AccountBackend | null }).__polarFakeAccount;
   }
-  if (buildChannel === "dev") await loadDevDatabase();
-  const db = configuredDatabase();
-  if (!db) {
-    backend = null;
-    return;
-  }
-  const { createSupabaseBackend } = await import("./supabase");
-  backend = createSupabaseBackend(db.url, db.key);
+  if (buildChannel === "dev") return true;
+  return !!configuredDatabase();
+}
+
+/** Loads the configured account provider (and in dev builds, any saved connection code); coalesced across callers. */
+export function startAccountBackend(): Promise<void> {
+  if (backendReady) return backendReady;
+  backendReady = (async () => {
+    if (import.meta.env.DEV && "__polarFakeAccount" in globalThis) {
+      backend = (globalThis as { __polarFakeAccount?: AccountBackend | null }).__polarFakeAccount ?? null;
+      return;
+    }
+    if (buildChannel === "dev") await loadDevDatabase();
+    const db = configuredDatabase();
+    if (!db) {
+      backend = null;
+      return;
+    }
+    const { createSupabaseBackend } = await import("./supabase");
+    backend = createSupabaseBackend(db.url, db.key);
+  })();
+  return backendReady;
 }
 
 export * from "./backend";

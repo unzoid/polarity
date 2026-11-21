@@ -73,7 +73,7 @@ export function Person({ id, name }: { id: number; name?: string }) {
             <div className="person-bio">
               <p className="t-body">{whole ? person?.biography : bio.text}</p>
               {bio.more && (
-                <Button variant="plain" size="sm" onClick={() => setWhole((w) => !w)} aria-expanded={whole}>
+                <Button variant="plain" className="person-bio-more" onClick={() => setWhole((w) => !w)} aria-expanded={whole}>
                   {whole ? "Less" : "More"}
                 </Button>
               )}

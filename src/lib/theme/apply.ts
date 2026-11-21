@@ -14,6 +14,7 @@ export function applyTheme(t: Theme, scheme: ColorScheme, root: HTMLElement = do
   root.style.setProperty("--theme-base-dark", t.base);
   root.style.setProperty("--theme-tint", `${t.tint}%`);
   root.dataset.scheme = scheme;
+  document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", scheme);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeBackground(t, scheme));
 }
 

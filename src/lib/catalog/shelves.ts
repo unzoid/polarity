@@ -127,19 +127,33 @@ export function useSeeds(): Seed[] {
 
 /**
  * For each shelf, the ids already shown above it (`top`, then earlier
- * shelves), recomputed as shelves finish loading.
+ * shelves), recomputed as shelves finish loading. Scoped to keys belonging to
+ * `shelves` and coalesced per animation frame so concurrent query arrivals
+ * don't cascade into 19+ full Home re-renders.
  */
 export function useShownAbove(shelves: Shelf[], top: MetaPreview[]) {
   const qc = useQueryClient();
   const [version, bump] = useReducer((n: number) => n + 1, 0);
-  useEffect(
-    () =>
-      qc.getQueryCache().subscribe((e) => {
-        const root = e.query.queryKey[0];
-        if (e.type === "updated" && e.action.type === "success" && (root === "catalog" || root === "recommend")) bump();
-      }),
-    [qc],
-  );
+  const shelfKeySet = useMemo(() => new Set(shelves.map((s) => JSON.stringify(shelfKey(s)))), [shelves]);
+  useEffect(() => {
+    let raf = 0;
+    const unsub = qc.getQueryCache().subscribe((e) => {
+      if (e.type !== "updated" || e.action.type !== "success") return;
+      const root = e.query.queryKey[0];
+      if (root !== "catalog" && root !== "recommend") return;
+      if (!shelfKeySet.has(JSON.stringify(e.query.queryKey))) return;
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          bump();
+        });
+      }
+    });
+    return () => {
+      unsub();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [qc, shelfKeySet]);
   return useMemo(() => {
     void version;
     const shown = new Set(top.map((m) => m.id));

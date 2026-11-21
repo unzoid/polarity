@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { createElement, useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { loadReadable, pixelsOf } from "../components/TitleLogo";
+import type { MetaPreview } from "../lib/types";
+import { sizedArt } from "../lib/ui";
 
 /**
  * A picture's colour as a page takes it: `dark` for the page in dark mode, `light` in light mode. The page fades
@@ -32,6 +34,103 @@ export function useArtTint(src: string | undefined): Tint | undefined {
     };
   }, [src]);
   return tint;
+}
+
+/**
+ * Lightweight imperative bus connecting a carousel's active index to `<TintBackdrop>` (and its scrolled header's
+ * background) without re-rendering the entire page or shelves every 8 seconds.
+ */
+export interface TintBus {
+  readonly subscribe: (fn: (src: string | undefined) => void) => () => void;
+  readonly getSrc: () => string | undefined;
+  readonly onShown: (index: number) => void;
+}
+
+export function useTintBus(featured: readonly MetaPreview[]): TintBus {
+  const itemsRef = useRef(featured);
+  itemsRef.current = featured;
+  const indexRef = useRef(0);
+  const srcRef = useRef<string | undefined>(undefined);
+  const listeners = useRef(new Set<(src: string | undefined) => void>());
+
+  const emit = useCallback((idx: number) => {
+    indexRef.current = idx;
+    const item = itemsRef.current[Math.min(idx, Math.max(0, itemsRef.current.length - 1))];
+    const next = item ? sizedArt(item.background ?? item.poster, "w300") : undefined;
+    if (next === srcRef.current) return;
+    srcRef.current = next;
+    for (const fn of listeners.current) fn(next);
+  }, []);
+
+  // Re-evaluate when the featured list itself changes (e.g. initial load or switching Home view/filter).
+  useEffect(() => {
+    emit(0);
+  }, [featured, emit]);
+
+  const subscribe = useCallback((fn: (src: string | undefined) => void) => {
+    listeners.current.add(fn);
+    return () => {
+      listeners.current.delete(fn);
+    };
+  }, []);
+
+  const getSrc = useCallback(() => srcRef.current, []);
+
+  return useRef<TintBus>({
+    subscribe,
+    getSrc,
+    onShown: emit,
+  }).current;
+}
+
+/**
+ * Composite-only tint backdrop: swaps between two stacked gradient layers using `opacity` only (zero inherited
+ * CSS variable recalcs across descendants), and mirrors `--tint-dark`/`--tint-light` onto the header's leaf
+ * `.ph-head-bg` element if `headRef` is provided.
+ */
+export function TintBackdrop({ bus, headRef }: { bus: TintBus; headRef?: RefObject<HTMLElement | null> }) {
+  const [src, setSrc] = useState<string | undefined>(() => bus.getSrc());
+  useEffect(() => {
+    setSrc(bus.getSrc());
+    return bus.subscribe(setSrc);
+  }, [bus]);
+
+  const tint = useArtTint(src);
+  const [pair, setPair] = useState<{ active: 0 | 1; slots: [Tint | undefined, Tint | undefined] }>(() => ({
+    active: 0,
+    slots: [tint, undefined],
+  }));
+
+  useEffect(() => {
+    const bg = headRef?.current?.querySelector<HTMLElement>(".ph-head-bg") ?? headRef?.current;
+    if (bg) {
+      if (tint) {
+        bg.style.setProperty("--tint-dark", tint.dark);
+        bg.style.setProperty("--tint-light", tint.light);
+      } else {
+        bg.style.removeProperty("--tint-dark");
+        bg.style.removeProperty("--tint-light");
+      }
+    }
+    setPair((prev) => {
+      const cur = prev.slots[prev.active];
+      if (cur?.dark === tint?.dark && cur?.light === tint?.light) return prev;
+      const nextActive: 0 | 1 = prev.active === 0 ? 1 : 0;
+      const slots: [Tint | undefined, Tint | undefined] = [prev.slots[0], prev.slots[1]];
+      slots[nextActive] = tint;
+      return { active: nextActive, slots };
+    });
+  }, [tint, headRef]);
+
+  const styleOf = (t: Tint | undefined): CSSProperties | undefined =>
+    t ? ({ "--tint-dark": t.dark, "--tint-light": t.light } as CSSProperties) : undefined;
+
+  return createElement(
+    "div",
+    { className: "ph-tint", "aria-hidden": true },
+    createElement("div", { className: "ph-tint-layer", "data-active": pair.active === 0 ? "true" : "false", style: styleOf(pair.slots[0]) }),
+    createElement("div", { className: "ph-tint-layer", "data-active": pair.active === 1 ? "true" : "false", style: styleOf(pair.slots[1]) }),
+  );
 }
 
 type Hsl = { h: number; s: number; l: number };

@@ -517,6 +517,11 @@
   --bar-left: calc(0.5rem + var(--safe-left));
   padding-bottom: 3rem;
 }
+/* Keep Back flush inside `--bar-left` so landscape phones never pull it -8px into the Dynamic Island / notch. */
+:root:is([data-form="phone"], [data-compact="true"]) .player-top > .player-back {
+  margin-left: 0;
+  margin-top: 0;
+}
 :root:is([data-form="phone"], [data-compact="true"]) .player-heading {
   align-items: flex-start;
   padding-top: 0.5rem;
@@ -610,11 +615,9 @@
      stay (useBarFit measures the row's own width). */
   padding-inline: 2rem;
 }
-/* The bar sits at the bottom of the screen, as Netflix's does: its last row reaches into the home indicator's
-   strip (the indicator is a thin line in the middle; the words either side of it stay clear), rather than a
-   full inset and a margin above it. Skip Intro follows it down, just above the timeline. */
+/* Keep the bottom controls above the iOS Home Indicator safe area and keep Skip Intro clear of the scrubber. */
 :root[data-form="phone"] .player-bottom {
-  --bar-bottom: max(0.25rem, calc(var(--safe-bottom) - 0.75rem));
+  --bar-bottom: max(0.5rem, var(--safe-bottom));
   padding-top: 3.5rem;
   padding-bottom: var(--bar-bottom);
 }
@@ -624,16 +627,17 @@
 }
 :root[data-form="phone"] .skip-controls {
   right: max(1.25rem, var(--safe-right));
-  bottom: calc(6.25rem + max(0.25rem, calc(var(--safe-bottom) - 0.75rem)));
+  bottom: calc(7.25rem + max(0.5rem, var(--safe-bottom)));
 }
 :root[data-form="phone"] .skip-button {
-  height: 2.5rem;
+  min-height: 44px;
+  height: 44px;
   padding: 0 1rem 0 1.125rem;
   font-size: var(--fs-md);
 }
 :root[data-form="phone"] .skip-cancel {
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 44px;
+  height: 44px;
 }
 
 /* Volume: slider fill painted from a per-element custom property (one element,
@@ -667,10 +671,17 @@
     opacity var(--dur-fast) var(--ease-std),
     visibility 0s linear var(--dur-fast);
 }
-.player-volume[data-folded]:is(:hover, :focus-within, [data-open]) .player-volume-slider {
+.player-volume[data-folded]:is(:focus-within, [data-open]) .player-volume-slider {
   visibility: visible;
   opacity: 1;
   transition: opacity var(--dur-fast) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .player-volume[data-folded]:hover .player-volume-slider {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity var(--dur-fast) var(--ease-std);
+  }
 }
 .player-volume input[type="range"] {
   -webkit-appearance: none;
@@ -841,7 +852,7 @@
   -webkit-backdrop-filter: var(--blur-popover);
 }
 .options-overlay[data-live="true"] .options-column {
-  max-height: min(74vh, 640px);
+  max-height: min(74dvh, 640px);
 }
 /* Layer 1: the frosted video (see VideoBackdrop.tsx, which does the blurring). Scaled past the edges
    so the softened border never shows; a light CSS blur only smooths the upscale's blocks. */
@@ -887,13 +898,13 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: 80vh;
+  max-height: 80dvh;
   width: clamp(240px, 24vw, 340px);
 }
 /* Sources: a fixed height, so filtering the list down doesn't re-centre the
    column and jump the bar (and an open Filters popover) up or down the screen. */
 .options-column:has(.srcf:not(.srcf-tv)) {
-  height: 80vh;
+  height: 80dvh;
 }
 /* No narrower than the source bar's tightest fit (460px). */
 .options-column[data-size="wide"] {
@@ -1498,6 +1509,20 @@ html[data-os="android"] .options-columns {
   width: 2rem;
   height: 2rem;
 }
+:root[data-touch="true"] .stall-prompt-dismiss.btn-icon {
+  width: var(--hit);
+  height: var(--hit);
+}
+:root[data-form="phone"] .stall-prompt {
+  flex-wrap: wrap;
+  justify-content: center;
+  border-radius: var(--r-panel);
+  padding: 0.5rem 0.75rem;
+}
+:root[data-form="phone"] .stall-prompt-text {
+  white-space: normal;
+  text-align: center;
+}
 /* End-of-movie / series finale bridge (Player.tsx): bottom-left so RatingPrompt owns bottom-right cleanly. */
 .player-ended-card {
   position: absolute;
@@ -1513,6 +1538,33 @@ html[data-os="android"] .options-columns {
   background: var(--surface-float);
   box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
   animation: fade-in var(--dur-slow) var(--ease-out);
+}
+:root[data-form="phone"] .player-ended-card,
+:root[data-compact="true"] .player-ended-card {
+  left: max(1rem, var(--safe-left));
+  right: max(1rem, var(--safe-right));
+  width: auto;
+  bottom: calc(8rem + var(--safe-bottom));
+}
+/* When RatingPrompt is also mounted on phone portrait, lift Finished card above it so they never stack. */
+:root:is([data-form="phone"], [data-compact="true"]) .player:has(.rating-prompt) .player-ended-card {
+  bottom: calc(19.5rem + var(--safe-bottom));
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  :root[data-form="phone"] .player-ended-card {
+    right: auto;
+    width: min(19rem, calc(50vw - max(1rem, var(--safe-left)) - 0.5rem));
+    bottom: calc(6.5rem + var(--safe-bottom));
+  }
+  :root[data-form="phone"] .player:has(.rating-prompt) .player-ended-card {
+    bottom: calc(6.5rem + var(--safe-bottom));
+  }
+  :root[data-form="phone"] .rating-prompt {
+    left: auto;
+    right: max(1rem, var(--safe-right));
+    width: min(22rem, calc(50vw - max(1rem, var(--safe-right)) - 0.5rem));
+    bottom: calc(6.5rem + var(--safe-bottom));
+  }
 }
 .player[data-options="true"] .player-ended-card {
   visibility: hidden;
@@ -2442,7 +2494,7 @@ img.load-mark-base[data-logo-look^="halo"] {
   height: 30px;
   padding: 0 0.625rem;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   color: var(--text-2);
   font-size: var(--fs-xs);
   font-weight: 600;
@@ -2467,7 +2519,7 @@ img.load-mark-base[data-logo-look^="halo"] {
   width: 30px;
   height: 30px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   color: var(--text);
   transition:
     background-color var(--dur-fast) var(--ease-std),
@@ -2490,16 +2542,17 @@ img.load-mark-base[data-logo-look^="halo"] {
   gap: 0.5rem;
 }
 .sub-swatch {
+  position: relative;
   width: 24px;
   height: 24px;
   border-radius: var(--r-round);
   background: var(--swatch);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.25);
   transition: box-shadow var(--dur-fast) var(--ease-std);
 }
 .sub-swatch[aria-checked="true"] {
   box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    inset 0 0 0 1px rgb(var(--ink) / 0.25),
     0 0 0 2px var(--tone-2),
     0 0 0 4px var(--text);
 }
@@ -2519,11 +2572,27 @@ img.load-mark-base[data-logo-look^="halo"] {
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-2);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--ink) / 0.08);
   transition:
     background-color var(--dur-fast) var(--ease-std),
     color var(--dur-fast) var(--ease-std),
     transform var(--dur-press) var(--ease-out);
+}
+:root[data-touch="true"] .sub-delay-zero,
+:root[data-touch="true"] .sub-reset,
+:root[data-touch="true"] .sub-settings .source-chip {
+  min-height: var(--hit);
+  height: var(--hit);
+  padding-inline: 0.875rem;
+}
+:root[data-touch="true"] .sub-stepper button {
+  width: var(--hit);
+  height: var(--hit);
+}
+:root[data-touch="true"] .sub-swatch::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
 }
 .sub-reset:active:not(:disabled) {
   transform: scale(0.98);
@@ -2736,15 +2805,28 @@ img.load-mark-base[data-logo-look^="halo"] {
 :root:is([data-form="phone"], [data-compact="true"]) .options-overlay:not([data-place="beside"]) > .sub-preview {
   position: relative;
   bottom: auto;
+  max-height: 28dvh;
+  overflow: hidden;
   padding: 0.625rem max(1.25rem, var(--safe-right)) calc(0.75rem + var(--safe-bottom)) max(1.25rem, var(--safe-left));
   border-top: 1px solid var(--hairline);
   background: rgb(0 0 0 / 0.35);
 }
-/* A phone on its side (#464): centred at up to 80% of a short screen, a panel's heading came up under the
-   close button. The panels get the screen under the button's band (its top, its 44px and a gap) instead. */
+/* A phone on its side (#464): pad horizontally past Dynamic Island / notch and let multi-column pickers fit or scroll cleanly. */
 :root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) {
   --options-band: calc(1rem + var(--safe-top) + 44px + 0.5rem);
-  padding: var(--options-band) 0 calc(0.75rem + var(--safe-bottom));
+  padding: var(--options-band) max(1rem, var(--safe-right)) calc(0.75rem + var(--safe-bottom)) max(1rem, var(--safe-left));
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-columns {
+  max-width: 100%;
+  gap: clamp(1rem, 3vw, 2rem);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+:root[data-form="phone"]:not([data-compact="true"]) .options-overlay:not([data-place="beside"]) .options-column:not([data-size="full"]) {
+  flex: 1 1 0;
+  min-width: min(210px, 100%);
+  width: clamp(200px, 28vw, 280px);
 }
 :root[data-form="phone"]:not([data-compact="true"]) .options-overlay:has(> .sub-preview):not([data-place="beside"]) {
   padding-bottom: 0;
@@ -2784,7 +2866,7 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 .options-column[data-size="full"] {
   width: min(1600px, calc(100vw - 2 * var(--gutter)));
-  max-height: 86vh;
+  max-height: 86dvh;
 }
 .options-column[data-size="full"] .options-head {
   margin: 0 0 1.25rem;
@@ -3009,9 +3091,12 @@ img.load-mark-base[data-logo-look^="halo"] {
   grid-auto-columns: min(78vw, 340px);
 }
 /* A phone's overlays, as Netflix's: nearly black over the picture, so the lists read as their own screen
-   rather than text over a bright frame. */
+   rather than text over a bright frame. Skip the expensive full-screen feTurbulence noise blend on phones. */
 :root[data-form="phone"] .options-shade {
   background: rgb(0 0 0 / 0.86);
+}
+:root[data-form="phone"] .options-shade::after {
+  display: none;
 }
 /* Episodes on a phone held sideways. Close is at the top right there, so the season sits on its line at the
    top left instead of under its band, a size down; the cards are tighter, so each one's synopsis is on the
@@ -3204,8 +3289,16 @@ img.load-mark-base[data-logo-look^="halo"] {
   white-space: nowrap;
 }
 :root[data-form="phone"] .sleep-prompt {
-  left: max(1.25rem, var(--safe-left));
-  bottom: calc(6.25rem + max(0.25rem, calc(var(--safe-bottom) - 0.75rem)));
+  left: max(1rem, var(--safe-left));
+  right: max(1rem, var(--safe-right));
+  bottom: calc(7.25rem + max(0.5rem, var(--safe-bottom)));
+  flex-wrap: wrap;
+  justify-content: center;
+  border-radius: var(--r-panel);
+  padding: 0.625rem 0.75rem;
+}
+:root[data-form="phone"] .sleep-prompt-text {
+  white-space: normal;
 }
 .sleep-ended {
   position: absolute;
@@ -3442,11 +3535,18 @@ img.load-mark-base[data-logo-look^="halo"] {
   flex-wrap: nowrap;
   gap: 0.375rem;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+:root[data-form="phone"] .pause-screen-cast::-webkit-scrollbar,
+:root[data-compact="true"] .pause-screen-cast::-webkit-scrollbar {
+  display: none;
 }
 :root[data-form="phone"] .pause-screen-person,
 :root[data-compact="true"] .pause-screen-person {
-  flex: 0 1 auto;
+  flex: none;
   min-width: 0;
   max-width: 11.5rem;
   padding: 0.25rem 0.6875rem 0.25rem 0.25rem;
@@ -3574,6 +3674,10 @@ img.load-mark-base[data-logo-look^="halo"] {
 }
 :root[data-touch="true"] .rating-prompt-score {
   height: var(--hit);
+}
+:root[data-touch="true"] :is(.rating-prompt-dismiss.btn-icon, .options-head-btn) {
+  min-width: var(--hit);
+  min-height: var(--hit);
 }
 .tv .rating-prompt {
   right: var(--tv-gutter);

@@ -154,7 +154,7 @@ export function useBarFit(
     // The interface font arriving changes every width.
     void document.fonts?.ready.then(measure);
     return () => observer.disconnect();
-  }, [top, actions, enabled, fitActions, signature, fit, moreStays]);
+  }, [top, actions, enabled, fitActions, signature, moreStays]);
 
   return enabled || fitActions ? fit : FULL_FIT;
 }

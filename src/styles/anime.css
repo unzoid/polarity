@@ -67,10 +67,12 @@
   margin-top: 0;
   padding-top: calc(var(--nav-h) + 1.5rem);
 }
-.anime-unreachable {
-  padding-top: calc(var(--nav-h) + 3rem);
+.anime-unreachable,
+.anime-detail-empty {
+  padding-top: calc(var(--nav-h) + 2rem);
 }
-/* Under the carousel: Schedule and Browse, then a way in by genre or kind of show. */
+/* Under the carousel: Schedule and Browse, then a way in by genre or kind of show. Extra right padding lets the
+   final chip scroll past the right-edge fade mask instead of clipping permanently. */
 .anime-nav {
   position: relative;
   z-index: 1;
@@ -78,7 +80,7 @@
   align-items: center;
   gap: 0.5rem;
   margin-top: 2rem;
-  padding: 0.25rem var(--content-start);
+  padding: 0.25rem calc(var(--content-start) + 3.5rem) 0.25rem var(--content-start);
   overflow-x: auto;
   scrollbar-width: none;
   mask-image: linear-gradient(to right, #000 calc(100% - 4rem), transparent);
@@ -728,10 +730,10 @@
   gap: 3rem;
   padding: 0 var(--gutter) 0 var(--content-start);
 }
-/* Never squeezed below two cards (or its one). */
+/* Never squeezed below two cards (or its one), clamped to container width so phones never overflow horizontally. */
 .anime-franchise-col {
   flex: 0 1 auto;
-  min-width: calc(var(--cards) * var(--poster-w) + (var(--cards) - 1) * 0.875rem);
+  min-width: min(100%, calc(var(--cards) * var(--poster-w) + (var(--cards) - 1) * 0.875rem));
 }
 @media (max-width: 900px) {
   .anime-franchise-grid {
@@ -749,11 +751,14 @@
 
 @media (max-width: 760px) {
   .anime-slot {
-    grid-template-columns: 4.25rem 3rem minmax(0, 1fr);
+    grid-template-columns: 5.25rem 3rem minmax(0, 1fr);
   }
   .anime-slot-when {
     display: none;
   }
+}
+:root[data-touch="true"] :is(.anime-cast-toggle, .anime-range, .genre-chip) {
+  min-height: var(--hit);
 }
 
 /* Long shows: the capped list's way to the rest. */

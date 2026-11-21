@@ -89,7 +89,7 @@ export function PhoneSearch({ active }: { active: boolean }) {
               >
                 <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
                   <circle cx="9" cy="9" r="9" fill="currentColor" />
-                  <path d="M6 6l6 6M12 6l-6 6" stroke="#2d2d2d" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M6 6l6 6M12 6l-6 6" stroke="var(--bg)" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </button>
             )}

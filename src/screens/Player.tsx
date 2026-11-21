@@ -480,7 +480,16 @@ export function Player({
 
   // Optional seek-bar thumbnails (Seekr). Keyed to whole seconds of duration:
   // the API aligns cues to the length of the release being played.
-  const durationS = useMediaTime(media, (t) => Math.round(t.duration));
+  // Stabilize live/HLS growing durations so Seekr isn't re-queried every second on minor drifts.
+  const rawDurationS = useMediaTime(media, (t) => (Number.isFinite(t.duration) && t.duration > 0 ? Math.round(t.duration) : 0));
+  const [durationS, setDurationS] = useState(0);
+  useEffect(() => {
+    setDurationS(0);
+  }, [videoId]);
+  useEffect(() => {
+    if (rawDurationS <= 0) return;
+    setDurationS((prev) => (prev === 0 || Math.abs(rawDurationS - prev) >= 15 ? rawDurationS : prev));
+  }, [rawDurationS]);
   const { data: seekTrack } = useQuery({
     queryKey: keys.seekr(videoId, durationS),
     queryFn: () => api.seekPreviews(videoId, durationS * 1000),
@@ -712,7 +721,10 @@ export function Player({
     enabled: touch && !tv && swipeGestures && !touchLock.locked && started && !ytFramed,
     begin: (side) => {
       if (hold.held) return null;
-      if (side === "left") return brightness.level == null ? null : { level: brightness.level, max: 1 };
+      if (side === "left") {
+        const cur = brightness.getLevel();
+        return cur == null ? null : { level: cur, max: 1 };
+      }
       // When the OS handles volume (iOS/Android phones), volume UI is hidden: don't silently attenuate software volume.
       if (systemVolume) return null;
       return { level: muted ? 0 : Math.min(volume, volumeTop), max: volumeTop };
@@ -726,6 +738,10 @@ export function Player({
       setVolumePing((p) => ({ n: p.n + 1, dir: level > before ? "up" : "down" }));
     },
   });
+  const sleepTickVisible = chromeVisible || moreOpen || options === "sleep";
+  useEffect(() => {
+    sleep.setTickActive(sleepTickVisible);
+  }, [sleep.setTickActive, sleepTickVisible]);
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
   }, [playRate, source.state, media, inParty]);
@@ -2574,10 +2590,10 @@ export function Player({
 
       {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
       {/* Phones and tablets: the swipes' levels, each at the edge of its half. */}
-      {touch && !tv && (
+      {touch && !tv && !systemVolume && (
         <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} side="right" held={swipe.active === "right"} />
       )}
-      {brightness.available && <BrightnessHud level={brightness.level ?? 0} held={swipe.active === "left"} media={media} />}
+      {brightness.available && <BrightnessHud brightness={brightness} held={swipe.active === "left"} media={media} />}
 
       <SkipButton
         active={started ? skip.active : null}

@@ -4,8 +4,8 @@ import { preloadImage } from "../../lib/net";
 import type { SeekCue, SeekTrack, SkipSegments, Span } from "../../lib/types";
 import { isMpv, type MediaLike, type MpvChapter } from "./mpvMedia";
 
-/** Rendered thumbnail width; tiles are cropped from the sheet and scaled to this. */
-const PREVIEW_W = 240;
+/** Rendered thumbnail width; tiles are cropped from the sheet and scaled to this (compact on short landscape phones). */
+const previewWidth = () => (typeof window !== "undefined" && window.innerHeight < 450 ? 160 : 240);
 
 const SEGMENT_KINDS = ["recap", "intro", "outro", "postCredits"] as const;
 type SegmentKind = (typeof SEGMENT_KINDS)[number];
@@ -55,11 +55,14 @@ export function Scrubber({
 }) {
   const bar = useRef<HTMLDivElement>(null);
   const barWidth = useRef(0);
+  const barRect = useRef<{ left: number; width: number }>({ left: 0, width: 0 });
   const fill = useRef<HTMLDivElement>(null);
   const buffered = useRef<HTMLDivElement>(null);
   const hover = useRef<HTMLDivElement>(null);
   const knob = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
+  const tipLabel = useRef<HTMLSpanElement>(null);
+  const lastTipText = useRef("0:00");
   const tipWidth = useRef(0);
   const preview = useRef<HTMLDivElement>(null);
   const tile = useRef<HTMLDivElement>(null);
@@ -67,9 +70,16 @@ export function Scrubber({
   const hoverFrac = useRef<number | null>(null);
   const scrubChangeRef = useRef(onScrubChange);
   scrubChangeRef.current = onScrubChange;
-  const [tipText, setTipText] = useState("0:00");
   const [chapters, setChapters] = useState<MpvChapter[]>([]);
   const [dur, setDur] = useState(0);
+
+  const measureBar = () => {
+    const el = bar.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    barRect.current = { left: r.left, width: r.width };
+    barWidth.current = r.width || el.clientWidth;
+  };
 
   const resolvedSegments = useMemo<SkipSegments | undefined>(() => {
     if (segments) return { ...segments, intro: segments.intro ?? span ?? null };
@@ -84,15 +94,15 @@ export function Scrubber({
     tip.current.style.transform = `translateX(${x - tw / 2}px)`;
   };
 
-  // Track bar and tooltip widths via ResizeObserver so rAF and pointermove never force synchronous layout reads.
+  // Track bar and tooltip dimensions via ResizeObserver so rAF and pointermove never force synchronous layout reads.
   useEffect(() => {
     const el = bar.current;
     const tipEl = tip.current;
-    if (el) barWidth.current = el.clientWidth;
+    measureBar();
     if (tipEl) tipWidth.current = tipEl.offsetWidth;
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
-      if (bar.current) barWidth.current = bar.current.clientWidth;
+      measureBar();
       if (tip.current) tipWidth.current = tip.current.offsetWidth;
       if (hoverFrac.current != null) placeTip(hoverFrac.current);
     });
@@ -191,8 +201,12 @@ export function Scrubber({
   }, [video, active]);
 
   const fractionAt = (clientX: number) => {
-    const r = bar.current!.getBoundingClientRect();
-    return r.width > 0 ? Math.min(1, Math.max(0, (clientX - r.left) / r.width)) : 0;
+    let { left, width } = barRect.current;
+    if (width <= 0 && bar.current) {
+      measureBar();
+      ({ left, width } = barRect.current);
+    }
+    return width > 0 ? Math.min(1, Math.max(0, (clientX - left) / width)) : 0;
   };
 
   const showTile = (seconds: number) => {
@@ -204,24 +218,31 @@ export function Scrubber({
     const offset = previews.sourceDurationMs ? previews.sourceDurationMs - durationMs : 0;
     const cue = nearestCue(previews.cues, seconds * 1000 + offset);
     if (!cue || !(cue.w > 0) || !(cue.h > 0)) return;
-    if (preview.current) preview.current.style.height = `${Math.round((PREVIEW_W * cue.h) / cue.w)}px`;
+    const pw = previewWidth();
+    if (preview.current) {
+      preview.current.style.width = `${pw}px`;
+      preview.current.style.height = `${Math.round((pw * cue.h) / cue.w)}px`;
+    }
     el.style.width = `${cue.w}px`;
     el.style.height = `${cue.h}px`;
     el.style.backgroundImage = `url("${cue.sheet}")`;
     el.style.backgroundPosition = `-${cue.x}px -${cue.y}px`;
-    el.style.transform = `scale(${PREVIEW_W / cue.w})`;
+    el.style.transform = `scale(${pw / cue.w})`;
     preloadImage(cue.sheet);
   };
 
-  const showTip = (clientX: number) => {
-    const f = fractionAt(clientX);
+  const showTip = (clientX: number, fOverride?: number) => {
+    const f = fOverride ?? fractionAt(clientX);
     hoverFrac.current = f;
     if (hover.current) hover.current.style.transform = `scaleX(${f})`;
     placeTip(f);
     const t = f * (video?.duration || 0);
     const label = segmentLabelAt(resolvedSegments, t) ?? chapterTitleAt(chapters, t);
     const nextText = label ? `${formatTime(t)} · ${label}` : formatTime(t);
-    setTipText((prev) => (prev === nextText ? prev : nextText));
+    if (nextText !== lastTipText.current) {
+      lastTipText.current = nextText;
+      if (tipLabel.current) tipLabel.current.textContent = nextText;
+    }
     showTile(t);
   };
 
@@ -231,8 +252,9 @@ export function Scrubber({
     if (knob.current) knob.current.style.translate = `${f * w}px 0`;
   };
 
+  const pw = previewWidth();
   const firstCue = previews?.cues[0];
-  const initialPreviewH = firstCue && firstCue.w > 0 && firstCue.h > 0 ? Math.round((PREVIEW_W * firstCue.h) / firstCue.w) : Math.round((PREVIEW_W * 9) / 16);
+  const initialPreviewH = firstCue && firstCue.w > 0 && firstCue.h > 0 ? Math.round((pw * firstCue.h) / firstCue.w) : Math.round((pw * 9) / 16);
 
   return (
     <div
@@ -244,20 +266,22 @@ export function Scrubber({
       aria-valuemax={Math.round(video?.duration || 0)}
       aria-valuenow={Math.round(video?.currentTime || 0)}
       tabIndex={-1}
+      onPointerEnter={measureBar}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         e.currentTarget.setPointerCapture(e.pointerId);
+        measureBar();
         const f = fractionAt(e.clientX);
         scrubbing.current = f; // jump to the press point immediately
         e.currentTarget.dataset.scrubbing = "true";
         scrubChangeRef.current?.(true);
         syncPlayhead(f);
-        showTip(e.clientX);
+        showTip(e.clientX, f);
       }}
       onPointerMove={(e) => {
-        showTip(e.clientX);
+        const f = fractionAt(e.clientX);
+        showTip(e.clientX, f);
         if (scrubbing.current != null) {
-          const f = fractionAt(e.clientX);
           scrubbing.current = f;
           syncPlayhead(f);
         }
@@ -312,11 +336,11 @@ export function Scrubber({
       <div className="scrubber-knob" ref={knob} />
       <div className="scrubber-tip" data-preview={!!previews} ref={tip}>
         {previews && (
-          <div className="scrubber-preview" ref={preview} style={{ width: PREVIEW_W, height: initialPreviewH }}>
+          <div className="scrubber-preview" ref={preview} style={{ width: pw, height: initialPreviewH }}>
             <div className="scrubber-tile" ref={tile} />
           </div>
         )}
-        <span className="scrubber-time t-caption tabular">{tipText}</span>
+        <span className="scrubber-time t-caption tabular" ref={tipLabel}>0:00</span>
       </div>
     </div>
   );

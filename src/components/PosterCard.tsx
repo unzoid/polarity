@@ -1,4 +1,5 @@
 import { detailBackdropUrl, useCardIntent } from "../lib/ui";
+import { formFactor } from "../lib/platform";
 import { prefetchMeta, preloadImage } from "../lib/net";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { useNavigation } from "../lib/router";
@@ -10,10 +11,11 @@ import { ArtTitle, Card, ProgressBar } from "./title/Card";
 
 const INTENT_DELAY = 120;
 
-/** Prefetch detail + backdrop once the pointer rests on a title. */
+/** Prefetch detail + backdrop once the pointer rests on a title (or finger touches on phone). */
 export function useIntent(item: MetaPreview) {
   return useCardIntent(() => {
-    preloadRoute({ name: "detail", type: item.type, id: item.id });
+    // Phone opens TitleSheet/TitleBody rather than desktop LazyDetail; skip loading the unused desktop chunk.
+    if (formFactor().form !== "phone") preloadRoute({ name: "detail", type: item.type, id: item.id });
     prefetchTitlePage(item.type, item.id, item);
     prefetchMeta(item.type, item.id);
     preloadImage(detailBackdropUrl(item.background));

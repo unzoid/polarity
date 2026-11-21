@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type SwipeSide = "left" | "right";
 
@@ -54,9 +54,25 @@ export function useSwipeLevels(options: SwipeLevels) {
   const press = useRef<{ id: number; x: number; y: number; side: SwipeSide; height: number } | null>(null);
   const swipe = useRef<{ side: SwipeSide; y: number; level: number; max: number; height: number } | null>(null);
   const swiped = useRef(false);
+  const pending = useRef<{ side: SwipeSide; level: number } | null>(null);
+  const raf = useRef(0);
   const [active, setActive] = useState<SwipeSide | null>(null);
 
+  const flush = () => {
+    raf.current = 0;
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    live.current.change(p.side, p.level);
+  };
+
+  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+
   const stop = () => {
+    if (raf.current) {
+      cancelAnimationFrame(raf.current);
+      flush();
+    }
     press.current = null;
     if (!swipe.current) return;
     swipe.current = null;
@@ -94,7 +110,8 @@ export function useSwipeLevels(options: SwipeLevels) {
           setActive(p.side);
           return;
         }
-        live.current.change(s.side, swipeLevel(s.level, e.clientY - s.y, s.height, s.max));
+        pending.current = { side: s.side, level: swipeLevel(s.level, e.clientY - s.y, s.height, s.max) };
+        if (!raf.current) raf.current = requestAnimationFrame(flush);
       },
       onPointerUp: up,
       onPointerCancel: up,

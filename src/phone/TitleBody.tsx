@@ -23,8 +23,8 @@ import { trailerFor, useFileTrailer, usePlayTarget, type PlayRequest } from "../
 import type { ContentType, Extra, Meta, MetaPreview, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
 import { LazyAnimeDetail } from "../screens/lazyScreens";
+import { preloadPlayerNow } from "../components/PlayerLayer";
 import { IconBack, IconCheck, IconClose, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
-import { ListOverlay } from "./ListOverlay";
 import { Poster } from "./Rows";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 
@@ -115,6 +115,11 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
   const verdict = useTitleVerdict(meta ?? preview, !!meta || isError);
   const item: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
   const series = type === "series";
+
+  // Warm the Player chunk once a title opens so tapping Play never waits on chunk download/parse on cellular.
+  useEffect(() => {
+    preloadPlayerNow();
+  }, []);
 
   const [sheets, setSheets] = useState(0);
   const onSheet = useCallback((open: boolean) => setSheets((n) => Math.max(0, n + (open ? 1 : -1))), []);
@@ -397,7 +402,6 @@ function Episodes({ meta, episode, onSheet }: { meta: Meta; episode?: string; on
   const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
   const linked = episode ? meta.videos.find((v) => v.id === episode) : undefined;
   const [season, setSeason] = useState<number | undefined>(linked && shelfGroupOf(linked, view));
-  const [choosing, setChoosing] = useState(false);
   const [layout, setLayout] = useEpisodeLayout();
   const picker = useSourcePicker(onSheet);
   useEffect(() => {
@@ -466,17 +470,6 @@ function Episodes({ meta, episode, onSheet }: { meta: Meta; episode?: string; on
           ))}
         </ol>
       )}
-      <ListOverlay
-        open={choosing}
-        label="Seasons"
-        options={groups.map((g) => ({ id: g.id, label: g.label }))}
-        value={current}
-        onPick={(id) => {
-          setSeason(id);
-          setChoosing(false);
-        }}
-        onClose={() => setChoosing(false)}
-      />
       <SourcePicker picker={picker} />
     </section>
   );

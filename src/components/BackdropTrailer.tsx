@@ -38,7 +38,9 @@ export function useBackdropTrailer(
   { active, paused = false, scroller }: { active: boolean; paused?: boolean; scroller?: RefObject<HTMLElement | null> },
 ): BackdropTrailerHandle {
   const { data: settings } = useSettings();
-  const allowed = (settings?.trailerAutoplay ?? true) && !prefersReducedMotion();
+  const conn = typeof navigator !== "undefined" ? (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection : undefined;
+  const meteredSlow = !!(conn && (conn.saveData || conn.effectiveType === "slow-2g" || conn.effectiveType === "2g" || conn.effectiveType === "3g"));
+  const allowed = (settings?.trailerAutoplay ?? true) && !prefersReducedMotion() && !meteredSlow;
   const fileUrl = useFileTrailer(imdbId, allowed).data?.url;
   const enabled = !!fileUrl && allowed;
   const video = useRef<HTMLVideoElement | null>(null);

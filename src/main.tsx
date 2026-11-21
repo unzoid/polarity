@@ -7,7 +7,7 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { api } from "./lib/api";
 import { keys, queryClient } from "./lib/net";
 import { AccountProvider, startAccountBackend } from "./lib/account";
-import { installKeepFieldInView, mirrorFormFactor } from "./lib/ui";
+import { installKeepFieldInView, mirrorFormFactor, whenIdle } from "./lib/ui";
 import { inShell, os } from "./lib/platform";
 
 // Inter with weight + optical-size axes: large titles get the Display cut automatically.
@@ -48,15 +48,10 @@ import "./styles/tv.css";
 import "./styles/updates.css";
 import "./styles/phone.css";
 import { installGamepad } from "./tv/gamepad";
-import { polyfillCountryFlagEmojis } from "country-flag-emoji-polyfill";
-import flagFont from "country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url";
 
 // Windows has no flag emoji: 🇬🇧 shows as the letters "GB". Where flags don't draw (checked on a
 // canvas, so macOS, Linux and Android keep their own), a flags-only font is added, bundled with the
-// app; its @font-face covers only the flag characters, so every other glyph keeps the app's font.
-// Twemoji's flags, CC-BY 4.0; the polyfill MIT (docs/licensing.md).
-// The check draws emoji on a canvas, about 15 ms on the way to the first frame, and its answer only changes
-// with the web view: it's kept per user agent, and later starts add the same @font-face without checking.
+// app; dynamically imported on Windows only so mobile bundles skip evaluating the polyfill at cold start.
 if (os === "windows") {
   const FLAG_FONT = "Twemoji Country Flags";
   const key = "polar.flagFont";
@@ -67,19 +62,24 @@ if (os === "windows") {
   } catch {
     /* storage unavailable: check every time */
   }
-  if (known === `1|${ua}`) {
-    const style = document.createElement("style");
-    // As the polyfill adds it: the flag characters only.
-    style.textContent = `@font-face { font-family: "${FLAG_FONT}"; unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F; src: url('${flagFont}') format('woff2'); font-display: swap; }`;
-    document.head.append(style);
-  } else if (known !== `0|${ua}`) {
-    const added = polyfillCountryFlagEmojis(FLAG_FONT, flagFont);
-    try {
-      localStorage.setItem(key, `${added ? 1 : 0}|${ua}`);
-    } catch {
-      /* checked again next time */
+  void Promise.all([
+    import("country-flag-emoji-polyfill"),
+    import("country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url"),
+  ]).then(([{ polyfillCountryFlagEmojis }, { default: flagFont }]) => {
+    if (known === `1|${ua}`) {
+      const style = document.createElement("style");
+      // As the polyfill adds it: the flag characters only.
+      style.textContent = `@font-face { font-family: "${FLAG_FONT}"; unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F; src: url('${flagFont}') format('woff2'); font-display: swap; }`;
+      document.head.append(style);
+    } else if (known !== `0|${ua}`) {
+      const added = polyfillCountryFlagEmojis(FLAG_FONT, flagFont);
+      try {
+        localStorage.setItem(key, `${added ? 1 : 0}|${ua}`);
+      } catch {
+        /* checked again next time */
+      }
     }
-  }
+  });
 }
 
 // Font rendering differs by OS; base.css tunes text weight for Windows.
@@ -105,12 +105,11 @@ if (!inShell) {
     </div>,
   );
 } else {
-  installGamepad();
-  // Warm stored settings alongside the account backend so App() applies theme, scheme, font and motion on frame 0.
-  await Promise.all([
-    startAccountBackend().catch(() => undefined),
-    queryClient.prefetchQuery({ queryKey: keys.settings, queryFn: api.settings }).catch(() => undefined),
-  ]);
+  // Defer gamepad listener setup past first paint; start account backend in parallel without blocking root.render().
+  whenIdle(installGamepad, 1500);
+  void startAccountBackend().catch(() => undefined);
+  // Warm stored settings (~5 ms local IPC) so App() applies theme, scheme, font and motion on frame 0.
+  await queryClient.prefetchQuery({ queryKey: keys.settings, queryFn: api.settings }).catch(() => undefined);
   root.render(
     <StrictMode>
       <ErrorBoundary where="app">

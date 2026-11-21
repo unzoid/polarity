@@ -23,11 +23,22 @@ body {
   font: 100%/1.5 var(--font);
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
   overflow: hidden;
-  -webkit-user-select: none; /* WebKit (iOS, macOS) still needs the prefix */
-  user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+/* Controls never select text on long-press; content text stays selectable for copying. */
+button,
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="slider"],
+nav,
+.card,
+.ph-poster,
+.ph-bar,
+.sheet-header {
+  -webkit-user-select: none;
+  user-select: none;
 }
 /* A long press on a poster or a button opens the app's own menu, not iOS's image preview. */
 :root[data-touch="true"] :is(button, a, img) {

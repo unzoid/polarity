@@ -13,6 +13,7 @@ import { torrentsPlayHere } from "../lib/platform";
 import { openSettings, type PageId } from "../lib/settings";
 import type { ContentType, RankedStream, Readiness } from "../lib/types";
 import { useLayer } from "../lib/ui";
+import { preloadPlayerNow } from "../components/PlayerLayer";
 import { IconCheck, IconChevronDown, IconClose } from "./icons";
 
 /** Initial source rows rendered when opening the overlay; more load automatically as you scroll. */
@@ -52,6 +53,7 @@ export function SourcesOverlay({
 
   useEffect(() => {
     if (open) {
+      preloadPlayerNow();
       setShown(true);
       setLeaving(false);
       setView("list");

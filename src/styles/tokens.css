@@ -365,9 +365,9 @@
   --tabbar-h: calc(56px + var(--safe-bottom));
   /* In landscape the content stays clear of the camera cutout, on either side. */
   --gutter: max(1rem, var(--safe-left), var(--safe-right));
-  /* A phone's cards start from the small size (Settings → Appearance → Card size still scales them): three and
-     a half posters across a 390px screen, as phone apps show them. */
-  --poster-w: calc(104px * var(--card-scale));
+  /* A phone's cards start from the small size (Settings → Appearance → Card size still scales them):
+     98px yields a consistent 3-column PosterGrid from 360px through 430px without a 2-column cliff. */
+  --poster-w: calc(98px * var(--card-scale));
   --landscape-w: calc(208px * var(--card-scale));
   --episode-w: calc(248px * var(--card-scale));
 }
@@ -397,6 +397,11 @@
 }
 :root[data-touch="true"] :is(.navbar-link, .player-remaining) {
   min-height: var(--hit);
+}
+/* Short inputs bumped to 16px text on touch need 44px vertical room so text never clips. */
+:root[data-touch="true"] :is(.search-field-mini, .search-field-pill, .search-field-box, .slider-field-box, .party-chat-input) {
+  min-height: var(--hit);
+  height: auto;
 }
 /* Feedback the moment a finger lands, where hover (gated to a mouse) gives none. */
 :root[data-touch="true"] :is(.navbar-link, .genre-chip, .srcf-tag, .source-chip, .segmented-item, .select-trigger):active {

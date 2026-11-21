@@ -297,10 +297,10 @@ export function OptionsOverlay({
       }}
       onPointerCancel={() => (press.current = null)}
     >
-      {/* On Android mpv draws on a surface behind the clear page: a frosted snapshot over it jumped every
-          time it was retaken (#181), so the live picture shows through the shade instead. Live mode (delay
-          tuning) also leaves the playing video clear when not docked. */}
-      {!beside && !docked && !live && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
+      {/* On Android & iOS mpv draws on a native surface behind the clear page: a frosted JPEG snapshot over it
+          jumped on Android (#181) and burned disk/CPU every 1.5s on iOS behind an 86% black phone scrim, so let the
+          live picture show through the shade instead. Live mode (delay tuning) also leaves the playing video clear. */}
+      {!beside && !docked && !live && !((os === "android" || os === "ios") && isMpv(media)) && <VideoBackdrop media={media} />}
       {!beside && !docked && !live && <div className="options-shade" aria-hidden />}
       {!docked && (
         <IconButton variant="player" className="options-close" onClick={onClose} label="Close" title="Close (Esc)">
@@ -311,7 +311,7 @@ export function OptionsOverlay({
         {/* Docked: the menu is a pane of frosted glass over the picture: a blurred copy of just the part of the frame
             behind it (VideoBackdrop's crop), so its colour follows the scene. mpv's native picture can't be
             backdrop-filtered; the copy works for both engines. Until it has a frame, the solid surface shows. */}
-        {docked && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} className="options-frost" crop cropSize={FROST_SIZE} fade />}
+        {docked && !((os === "android" || os === "ios") && isMpv(media)) && <VideoBackdrop media={media} className="options-frost" crop cropSize={FROST_SIZE} fade />}
         {tabbed && (
           <div className="options-tabs">
             <Segmented

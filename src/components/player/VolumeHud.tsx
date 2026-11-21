@@ -1,7 +1,8 @@
 import { AnimatePresence, animate, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Volume, VolumeMuted } from "../icons";
-import type { MediaLike } from "./mpvMedia";
+import { os } from "../../lib/platform";
+import { isMpv, type MediaLike } from "./mpvMedia";
 import { VideoBackdrop } from "./VideoBackdrop";
 
 /** How long the HUD stays after the last change. */
@@ -113,8 +114,9 @@ export function VolumeHud({
             className="volume-hud-pill"
           >
             {/* The blur: backdrop-filter has nothing to sample over the video
-                (VideoBackdrop.tsx), so a frosted copy of just the part of the frame behind the pill. */}
-            <VideoBackdrop media={media} className="volume-hud-backdrop" crop />
+                (VideoBackdrop.tsx), so a frosted copy of just the part of the frame behind the pill.
+                Skip on mobile mpv (Android/iOS) to avoid disk JPEG mpv_snapshot + GPU readback during swipes. */}
+            {!((os === "android" || os === "ios") && isMpv(media)) && <VideoBackdrop media={media} className="volume-hud-backdrop" crop />}
             <motion.div className="volume-hud-fill" initial={false} animate={{ scaleY: level / max }} transition={reduce ? { duration: 0 } : LEVEL} />
             <Icon className="volume-hud-icon" data-covered={level / max > 0.2} size="1.5rem" />
           </div>

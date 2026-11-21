@@ -178,8 +178,18 @@ export function AnimeDetail({ id, preview, episode }: { id: number; preview?: Ca
   const top = useRef<HTMLDivElement>(null);
   useShowDarkHero(darkHero && onTop && !!shown && verdict === "show", top);
 
-  if (verdict === "hide") return <EmptyState>{LIMIT_NOTICE}</EmptyState>;
-  if (isError && !shown) return <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>;
+  if (verdict === "hide")
+    return (
+      <div className="anime-detail-empty">
+        <EmptyState>{LIMIT_NOTICE}</EmptyState>
+      </div>
+    );
+  if (isError && !shown)
+    return (
+      <div className="anime-detail-empty">
+        <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>
+      </div>
+    );
   if (!shown || verdict === "wait")
     return phone ? (
       <div className="detail anime-detail" ref={together.ref} data-ready={together.state}>
