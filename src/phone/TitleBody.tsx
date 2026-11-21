@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBatchDownload } from "../components/BatchDownload";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
@@ -27,7 +27,6 @@ import { IconBack, IconCheck, IconClose, IconMuted, IconPlay, IconPlayRing, Icon
 import { ListOverlay } from "./ListOverlay";
 import { Poster } from "./Rows";
 import { SeasonPicker } from "../components/title/SeasonPicker";
-import { useArtTint } from "./tint";
 
 type Props = {
   type: ContentType;
@@ -128,9 +127,6 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
   const { data: progress } = useProgress(id);
   const { data: fileTrailer } = useFileTrailer(id);
   const { data: ratings } = useRatings(type, id);
-  // The art's colour, washed under the picture down into the page (phone.css).
-  const shownArt = (meta ?? preview)?.background ?? (meta ?? preview)?.poster;
-  const tint = useArtTint(shownArt ? sizedArt(shownArt, "w300") : undefined);
 
   const tabs = useMemo((): { id: Tab; label: string }[] => {
     const list: { id: Tab; label: string }[] = [];
@@ -177,7 +173,7 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
   const art = detailBackdropUrl(item.background ?? item.poster);
 
   return (
-    <div className="ps-body" style={tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined}>
+    <div className="ps-body">
       <div className="ps-media scheme-dark">
         {art && <Img className="ps-media-art" src={art} fallbacks={[sizedArt(item.poster, "w780")]} alt="" loading="eager" fetchPriority="high" />}
         {trailer.node}

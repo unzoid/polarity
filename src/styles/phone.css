@@ -45,11 +45,11 @@
   -webkit-font-smoothing: antialiased;
 }
 /* A phone draws no scrollbars: lists show they scroll by moving. */
-:root[data-phone-ui] :is(.ph-main, .sheet) *,
-:root[data-phone-ui] :is(.ph-main, .sheet) *::before {
+:root[data-phone-ui] :is(.ph-main, .sheet, .ph-sources-overlay) *,
+:root[data-phone-ui] :is(.ph-main, .sheet, .ph-sources-overlay) *::before {
   scrollbar-width: none;
 }
-:root[data-phone-ui] :is(.ph-main, .sheet) ::-webkit-scrollbar {
+:root[data-phone-ui] :is(.ph-main, .sheet, .ph-sources-overlay) ::-webkit-scrollbar {
   display: none;
 }
 .ph-main button {
@@ -214,15 +214,14 @@
   opacity: 0.6;
 }
 
-/* --- Home (and a title's sheet): the page takes the featured art's dominant colour (tint.ts) and fades it into the
+/* --- Home and sections: the page takes the featured art's dominant colour (tint.ts) and fades it into the
        page's own background down one screen, as Netflix's does (measured: full at the top, 88% at 30% down, 60% at
        half way, 35% at 70%, gone by 90%). It eases from one title's to the next as the card turns. */
 .ph-home,
-.ph-section,
-.ps-body {
+.ph-section {
   --tint: var(--tint-dark, var(--bg));
 }
-:root[data-scheme="light"] :is(.ph-home, .ph-section, .ps-body) {
+:root[data-scheme="light"] :is(.ph-home, .ph-section) {
   --tint: var(--tint-light, var(--bg));
 }
 .ph-home,
@@ -1490,8 +1489,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-bottom: calc(var(--safe-bottom) + 40px);
-  /* The art's colour under the picture, fading to black (it stays put while the page scrolls over it). */
-  background: linear-gradient(to bottom, var(--tint, var(--bg)) 0, color-mix(in srgb, var(--tint, var(--bg)) 40%, var(--bg)) 160px, var(--bg) 380px);
+  background: var(--bg);
   scrollbar-width: none;
 }
 .ps-info {
@@ -2144,6 +2142,708 @@
   background: var(--text);
   color: var(--bg) !important;
   transform: translateX(-50%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out);
+}
+.ph-list-close:active {
+  transform: translateX(-50%) scale(0.93);
+  opacity: 0.88;
+}
+
+/* --- Sources overlay (SourcesOverlay.tsx): full-screen dark blurred chooser in Categories' overlay style —
+       translucent pill filter chips at the top, full-width cardless source rows cleanly aligned below, fading
+       into the round white close button at the foot. */
+.ph-sources-overlay {
+  position: fixed;
+  z-index: 45;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgb(0 0 0 / 0.78);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+  color: var(--text);
+  animation: ph-fade-in 0.2s var(--ease-out) both;
+}
+.ph-sources-overlay[data-leaving] {
+  animation: ph-fade-out 0.16s var(--ease-out) both;
+  pointer-events: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ph-sources-overlay {
+    background: rgb(0 0 0 / 0.92);
+  }
+}
+.ph-sources-overlay button {
+  font: inherit;
+  color: inherit;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.ph-src-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--safe-top) + 18px) 20px 6px;
+  text-align: center;
+  animation: ph-src-rise 0.22s var(--ease-out) both;
+}
+.ph-src-subhead {
+  position: relative;
+  padding-bottom: 12px;
+}
+.ph-src-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--text);
+}
+.ph-src-sub {
+  margin: 4px 0 0;
+  max-width: min(100%, 320px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--ink) / 0.5);
+}
+.ph-src-reset {
+  position: absolute;
+  top: calc(var(--safe-top) + 16px);
+  right: 16px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.68) !important;
+  font-size: 14px;
+  font-weight: 600;
+  transition: opacity 140ms var(--ease-out);
+}
+.ph-src-reset:active {
+  opacity: 0.5;
+}
+
+/* Filter bar: translucent pill chips aligned to the list's exact width. */
+.ph-src-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  margin-top: 14px;
+}
+.ph-src-qualities {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.ph-src-quality {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.1);
+  color: rgb(var(--ink) / 0.76) !important;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  transition: background-color 180ms var(--ease-out), color 180ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.ph-src-quality[aria-checked="true"] {
+  background: var(--text);
+  color: var(--bg) !important;
+  font-weight: 700;
+}
+.ph-src-quality:active {
+  transform: scale(0.95);
+}
+
+.ph-src-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+.ph-src-bar[data-single] {
+  grid-template-columns: 1fr;
+}
+.ph-src-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.1);
+  color: rgb(var(--ink) / 0.84) !important;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.ph-src-addon-btn {
+  justify-content: space-between;
+}
+.ph-src-pill[data-active] {
+  background: rgb(var(--ink) / 0.2);
+  color: var(--text) !important;
+}
+.ph-src-pill:active {
+  background: rgb(var(--ink) / 0.24);
+  transform: scale(0.97);
+}
+.ph-src-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-src-pill-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Active filter tags: compact chips left-aligned under the bar. */
+.ph-src-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding-top: 2px;
+}
+.ph-src-active-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  background: rgb(var(--ink) / 0.14);
+  color: var(--text) !important;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.ph-src-active-item svg {
+  opacity: 0.65;
+}
+.ph-src-active-clear {
+  margin-left: auto;
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.56) !important;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: opacity 140ms var(--ease-out);
+}
+.ph-src-active-item:active,
+.ph-src-active-clear:active {
+  opacity: 0.55;
+  transform: scale(0.96);
+}
+
+/* Scrollable body: feathered top and bottom fade behind the floating close circle. */
+.ph-src-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 20px calc(var(--safe-bottom) + 124px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 116px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 116px), transparent 100%);
+  animation: ph-src-rise 0.24s var(--ease-out) both;
+}
+.ph-src-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+.ph-src-kicker {
+  margin: 20px 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--ink) / 0.42);
+  text-align: left;
+}
+.ph-src-list > .ph-src-kicker:first-child {
+  margin-top: 2px;
+}
+
+/* Consistent full-width 3-column source row: [lead] [title + detail] [size] — zero cards or backgrounds. */
+.ph-sources-overlay .ph-src-row,
+.ph-sources-overlay .ph-src-row[data-featured="true"],
+.ph-sources-overlay .ph-src-row:active,
+.ph-sources-overlay .ph-src-row:hover,
+.ph-sources-overlay .ph-src-row[data-featured="true"]:hover {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 2px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  text-align: left;
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+/* Whisper-quiet divider between consecutive rows in the same section — never a card box. */
+.ph-sources-overlay .ph-src-row + .ph-src-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 30px;
+  right: 2px;
+  height: 1px;
+  background: rgb(var(--ink) / 0.08);
+  pointer-events: none;
+}
+.ph-sources-overlay .ph-src-row:active {
+  opacity: 0.52;
+  transform: scale(0.985);
+}
+.ph-sources-overlay .ph-src-row[data-featured="true"] {
+  padding: 12px 2px 14px;
+}
+.ph-sources-overlay .ph-src-row[data-ready="no"] :is(.ph-src-text, .ph-src-size) {
+  opacity: 0.44;
+}
+.ph-src-lead {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  color: var(--text);
+}
+.ph-src-row:not([data-featured="true"]):not([data-current="true"]) .ph-src-lead {
+  opacity: 0.78;
+}
+.ph-src-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ph-src-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  row-gap: 3px;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+  color: rgb(var(--ink) / 0.9);
+}
+.ph-src-row[data-featured="true"] .ph-src-main {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ph-src-row[data-current="true"] .ph-src-main {
+  color: var(--text);
+  font-weight: 700;
+}
+.ph-src-name {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Crisp transparent micro-badges: consistent width & rhythm, no heavy background fill. */
+.ph-src-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.24);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: rgb(var(--ink) / 0.76);
+}
+.ph-src-tag[data-kind="range"] {
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.36);
+  color: var(--text);
+}
+.ph-src-tag-bad {
+  box-shadow: inset 0 0 0 1px rgb(255 107 94 / 0.5);
+  color: var(--danger);
+}
+.ph-src-detail {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: rgb(var(--ink) / 0.5);
+}
+.ph-src-row[data-featured="true"] .ph-src-detail {
+  color: rgb(var(--ink) / 0.62);
+}
+.ph-src-size {
+  flex: none;
+  margin-left: 4px;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: rgb(var(--ink) / 0.72);
+  text-align: right;
+}
+.ph-src-row[data-featured="true"] .ph-src-size {
+  color: var(--text);
+}
+/* Best Match explanation line: plain quiet text directly under detail, no pill card. */
+.ph-src-why {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--ink) / 0.44);
+}
+
+/* Add-on sub-view: 1:1 with Categories ListOverlay. */
+.ph-src-picker {
+  padding-top: 28px;
+}
+.ph-src-choices {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ph-src-choices li button {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.58) !important;
+  font-size: 18px;
+  font-weight: 500;
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.ph-src-choices li button[aria-current="true"] {
+  color: var(--text) !important;
+  font-size: 22px;
+  font-weight: 700;
+}
+.ph-src-choices li button:active {
+  opacity: 0.55;
+  transform: scale(0.96);
+}
+.ph-src-choice-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--ink) / 0.34);
+}
+.ph-src-choices li button[aria-current="true"] .ph-src-choice-count {
+  font-size: 14px;
+  color: rgb(var(--ink) / 0.55);
+}
+
+/* Filters sub-view: matching translucent pill chips floating directly over the blurred overlay (no card box). */
+.ph-src-filter-sections {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 22px;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding-top: 8px;
+}
+.ph-src-fsec {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+.ph-src-fsec .ph-src-kicker {
+  margin: 0 0 10px;
+}
+.ph-src-fopts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ph-src-fopt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.1);
+  color: rgb(var(--ink) / 0.8) !important;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.ph-src-fopt[aria-pressed="true"] {
+  background: var(--text);
+  color: var(--bg) !important;
+  font-weight: 700;
+}
+.ph-src-fopt:active {
+  transform: scale(0.96);
+}
+.ph-src-fcount {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.55;
+}
+.ph-src-fmore {
+  margin-top: 8px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.62) !important;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ph-src-fmore:active {
+  opacity: 0.5;
+}
+
+/* Loading, empty, pagination, and footer inside the overlay: consistent full-width rhythm, no cards. */
+.ph-src-loading {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 440px;
+  margin: 12px auto 0;
+}
+.ph-src-sk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px 2px;
+}
+.ph-src-sk-lead {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.08);
+  animation: ph-pulse 1.4s ease-in-out infinite;
+}
+.ph-src-sk-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.ph-src-sk-title,
+.ph-src-sk-sub,
+.ph-src-sk-size {
+  display: block;
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.1);
+  animation: ph-pulse 1.4s ease-in-out infinite;
+}
+.ph-src-sk-title {
+  height: 15px;
+}
+.ph-src-sk[data-featured] .ph-src-sk-title {
+  height: 17px;
+  background: rgb(var(--ink) / 0.16);
+}
+.ph-src-sk-sub {
+  height: 11px;
+  background: rgb(var(--ink) / 0.06);
+}
+.ph-src-sk-size {
+  flex: none;
+  width: 46px;
+  height: 13px;
+  background: rgb(var(--ink) / 0.08);
+}
+
+.ph-src-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 36vh;
+  padding: 24px 16px;
+  text-align: center;
+}
+.ph-src-empty p {
+  margin: 0;
+  max-width: 280px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: rgb(var(--ink) / 0.62);
+}
+.ph-src-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.ph-src-empty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  color: var(--text) !important;
+  font-size: 15px;
+  font-weight: 650;
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.ph-src-empty-btn:active {
+  opacity: 0.55;
+  transform: scale(0.96);
+}
+.ph-src-empty-muted {
+  color: rgb(var(--ink) / 0.58) !important;
+  font-weight: 550;
+}
+
+.ph-src-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+.ph-src-more button {
+  min-height: 40px;
+  padding: 6px 16px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.6) !important;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ph-src-more button:active {
+  opacity: 0.5;
+}
+
+.ph-src-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 14px;
+}
+.ph-src-footer:empty {
+  display: none;
+}
+.ph-src-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  color: rgb(var(--ink) / 0.56);
+}
+.ph-src-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--ink) / 0.4);
+  text-align: center;
+}
+
+@keyframes ph-src-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-height: 500px) {
+  .ph-src-head {
+    padding-top: calc(var(--safe-top) + 10px);
+  }
+  .ph-src-controls {
+    margin-top: 6px;
+  }
+  .ph-sources-overlay .ph-list-close {
+    bottom: calc(var(--safe-bottom) + 14px);
+    width: 48px;
+    height: 48px;
+  }
+  .ph-src-scroll {
+    padding-bottom: calc(var(--safe-bottom) + 84px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 76px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 76px), transparent 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-src-head,
+  .ph-src-scroll {
+    animation: none;
+  }
 }
 
 /* --- The bottom sheets (Profiles with Settings inside, Notifications, Sources, Download): near-black glass lit

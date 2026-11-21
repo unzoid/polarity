@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { serveAniList } from "./anilistMock";
 import { barOverlaps, card, expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
 
 // Phone width (Pixel 7: 412×915, touch): the phone shell (src/phone) over the app's pages (docs/ARCHITECTURE.md §4).
@@ -343,9 +344,10 @@ test.describe("on a tablet", () => {
 test("on a phone, a long press on a source opens its info; no i button shows (#229)", async ({ app }) => {
   const sheet = await openTitle(app, "glass orchard", "The Glass Orchard");
   await sheet.locator(".ps-actions").getByRole("button", { name: "Sources", exact: true }).tap();
-  const row = app.locator(".sheet .stream-row").last();
+  const overlay = app.locator(".ph-sources-overlay");
+  const row = overlay.locator(".stream-row").last();
   await expect(row).toBeVisible();
-  await expect(app.locator(".sheet .stream-info").first()).toHaveCSS("opacity", "0");
+  await expect(overlay.locator(".stream-info")).toHaveCount(0);
   // What a held finger sends (lib/platform/longPress.ts sends it on iOS; Android's web view itself).
   await row.dispatchEvent("contextmenu");
   const panel = app.getByRole("dialog", { name: "Source Info" });
@@ -356,25 +358,47 @@ test("on a phone, a long press on a source opens its info; no i button shows (#2
   expect(await fitsWidth(app)).toBe(true);
   await panel.getByRole("button", { name: "Close" }).tap();
   await expect(panel).toHaveCount(0);
-  await expect(app.locator(".sheet")).toBeVisible();
+  await expect(overlay).toBeVisible();
 });
 
-test("Sources: the qualities across the list, the add-on and Filters as two halves under them", async ({ app }) => {
+test("title pages have no colored top gradient and Sources opens as a borderless full-screen overlay", async ({ app }) => {
   const sheet = await openTitle(app, "glass orchard", "The Glass Orchard");
+  // No coloured art-tint gradient at the top of the title sheet's scroll area.
+  const scrollBg = await sheet.locator(".ps-scroll").evaluate((el) => getComputedStyle(el).backgroundImage);
+  expect(scrollBg).toBe("none");
+
   await sheet.locator(".ps-actions").getByRole("button", { name: "Sources", exact: true }).tap();
-  const sources = app.locator(".sheet");
-  await expect(sources.locator(".stream-row").first()).toBeVisible();
-  const [qualities, addon, filters] = await Promise.all([
-    sources.locator(".srcf .segmented").boundingBox(),
-    sources.locator(".srcf-addon").boundingBox(),
-    sources.locator(".srcf-filters").boundingBox(),
-  ]);
-  expect(Math.abs(addon!.y - filters!.y)).toBeLessThanOrEqual(1);
-  expect(addon!.y).toBeGreaterThan(qualities!.y + qualities!.height - 1);
-  expect(Math.abs(addon!.width - filters!.width)).toBeLessThanOrEqual(1);
-  expect(Math.abs(addon!.x - qualities!.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(filters!.x + filters!.width - (qualities!.x + qualities!.width))).toBeLessThanOrEqual(1);
-  await expect(sources.locator(".srcf-filters")).toContainText("Filters");
+  const overlay = app.locator(".ph-sources-overlay");
+  await expect(overlay).toBeVisible();
+  await expect(app.locator(".sheet")).toHaveCount(0);
+  const featured = overlay.locator('.stream-row[data-featured="true"]');
+  await expect(featured).toBeVisible();
+  // Borderless, cardless rows: transparent background and no inset card outline.
+  const rowStyle = await featured.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { bg: s.backgroundColor, shadow: s.boxShadow };
+  });
+  expect(rowStyle.bg).toBe("rgba(0, 0, 0, 0)");
+  expect(rowStyle.shadow).toBe("none");
+
+  // Quality radios, add-on picker sub-view, and Filters sub-view all live inside the overlay.
+  const qualities = overlay.getByRole("radiogroup", { name: "Picture quality" });
+  await expect(qualities).toBeVisible();
+  await overlay.getByRole("button", { name: "Add-on" }).tap();
+  await expect(overlay).toHaveAttribute("data-view", "addon");
+  await overlay.getByRole("button", { name: /^Open Films/ }).tap();
+  await expect(overlay).toHaveAttribute("data-view", "list");
+  await expect(overlay.getByRole("button", { name: "Add-on" })).toContainText("Open Films");
+
+  await overlay.getByRole("button", { name: /^Filters/ }).tap();
+  await expect(overlay).toHaveAttribute("data-view", "filters");
+  await overlay.getByRole("button", { name: "Highest Quality" }).tap();
+  await overlay.getByRole("button", { name: "Done", exact: true }).tap();
+  await expect(overlay).toHaveAttribute("data-view", "list");
+
+  expect(await fitsWidth(app)).toBe(true);
+  await overlay.getByRole("button", { name: "Close", exact: true }).tap();
+  await expect(overlay).toHaveCount(0);
 });
 
 test("a phone on its side: each player panel starts under its X, nothing under it (#464)", async ({ app }) => {
@@ -554,8 +578,10 @@ test.describe("on an iPhone", () => {
   });
 
   test("a sheet opens at half the screen, expands and closes like iOS's own (#174)", async ({ app }) => {
-    const title = await openTitle(app, "glass orchard", "The Glass Orchard");
-    await title.locator(".ps-actions").getByRole("button", { name: "Sources", exact: true }).tap();
+    await serveAniList(app);
+    await bar(app).getByRole("button", { name: "Anime", exact: true }).tap();
+    await app.getByRole("button", { name: "Browse All", exact: true }).tap();
+    await app.getByRole("button", { name: "Filters", exact: true }).tap();
     const sheet = app.locator(".sheet");
     await expect(sheet).toHaveAttribute("data-detent", "medium");
     const height = app.viewportSize()!.height;
@@ -609,12 +635,13 @@ test.describe("on an iPhone, Back by swiping", () => {
     await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
   });
 
-  test("over a sheet the swipe closes the sheet and leaves the title where it is (#451)", async ({ app }) => {
+  test("over the Sources overlay the swipe closes it and leaves the title where it is (#451)", async ({ app }) => {
     const title = await openTitle(app, "glass orchard", "The Glass Orchard");
     await title.locator(".ps-actions").getByRole("button", { name: "Sources", exact: true }).tap();
-    await expect(app.locator(".sheet")).toBeVisible();
+    const overlay = app.locator(".ph-sources-overlay");
+    await expect(overlay).toBeVisible();
     await swipeBack(app);
-    await expect(app.locator(".sheet")).toHaveCount(0);
+    await expect(overlay).toHaveCount(0);
     await expect(title).toBeVisible();
   });
 });

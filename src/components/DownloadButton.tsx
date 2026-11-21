@@ -20,6 +20,8 @@ import { Spinner } from "./Spinner";
 import { StreamList } from "./StreamList";
 import { buttonClass } from "./ui/Button";
 import { MenuHeader, MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "./ui/Menu";
+import { useFormFactor } from "../lib/ui";
+import { SourcesOverlay } from "../phone/SourcesOverlay";
 import { isTvMode } from "../tv/tvMode";
 
 /**
@@ -52,6 +54,7 @@ export function DownloadButton({
   const videoId = video?.id ?? item.id;
   const { download: d, pending } = useDownload(videoId);
   const [choosing, setChoosing] = useState(false);
+  const phone = useFormFactor().form === "phone";
   const what = video ? (labelled ? shortCode(video) : "Episode") : "Movie";
 
   // The glyph pops in when the state changes, not on first paint.
@@ -66,23 +69,33 @@ export function DownloadButton({
     </span>
   );
 
-  const sheet = createPortal(
-    <Sheet
+  const subtitle = video ? `${episodeCode(video.season, video.episode)} · ${video.title}` : item.name;
+  const sheet = phone ? (
+    <SourcesOverlay
       open={choosing}
       onClose={() => setChoosing(false)}
       title="Download"
-      subtitle={video ? `${episodeCode(video.season, video.episode)} · ${video.title}` : item.name}
-    >
-      <StreamList
-        type={item.type}
-        videoId={videoId}
-        onPick={(s) => {
-          setChoosing(false);
-          void startDownload(item, video, s);
-        }}
-      />
-    </Sheet>,
-    document.body,
+      subtitle={subtitle}
+      request={{ type: item.type, videoId }}
+      onPick={(s) => {
+        setChoosing(false);
+        void startDownload(item, video, s);
+      }}
+    />
+  ) : (
+    createPortal(
+      <Sheet open={choosing} onClose={() => setChoosing(false)} title="Download" subtitle={subtitle}>
+        <StreamList
+          type={item.type}
+          videoId={videoId}
+          onPick={(s) => {
+            setChoosing(false);
+            void startDownload(item, video, s);
+          }}
+        />
+      </Sheet>,
+      document.body,
+    )
   );
 
   let control: ReactNode;

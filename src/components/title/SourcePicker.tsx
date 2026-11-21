@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { type PlayRequest, useTitlePlayback } from "../../lib/playback";
+import { useFormFactor } from "../../lib/ui";
+import { SourcesOverlay } from "../../phone/SourcesOverlay";
 import { Sheet } from "../Sheet";
 import { StreamList } from "../StreamList";
 
@@ -28,9 +30,25 @@ export function useSourcePicker(onOpen?: (open: boolean) => void) {
 
 export type SourcePickerState = ReturnType<typeof useSourcePicker>;
 
-/** The desktop source sheet: the streams for the request, a pick closes it and plays. */
+/** The source chooser: a full-screen overlay on phones, a side sheet on larger screens. */
 export function SourcePicker({ picker }: { picker: SourcePickerState }) {
   const { request, open, close, play } = picker;
+  const phone = useFormFactor().form === "phone";
+  if (phone) {
+    return (
+      <SourcesOverlay
+        open={open}
+        onClose={close}
+        title="Sources"
+        subtitle={request?.subtitle}
+        request={request ? { type: request.type, videoId: request.videoId } : null}
+        onPick={(s) => {
+          close();
+          if (request) play(request, s);
+        }}
+      />
+    );
+  }
   return (
     <Sheet open={open} onClose={close} title="Sources" subtitle={request?.subtitle} forgiveMisses>
       {request && (

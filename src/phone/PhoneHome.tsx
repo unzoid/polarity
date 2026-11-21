@@ -195,7 +195,7 @@ export function Carousel({
     if (items.length < 2 || prefersReducedMotion()) return;
     const t = window.setTimeout(() => {
       const page = card.current?.closest<HTMLElement>(".ph-tab");
-      const free = !touching.current && !document.hidden && page?.dataset.active === "true" && !document.querySelector(".ps-layer, .sheet, .ph-pushed");
+      const free = !touching.current && !document.hidden && page?.dataset.active === "true" && !document.querySelector(".ps-layer, .sheet, .ph-pushed, .ph-list-overlay, .ph-sources-overlay");
       if (free) go(1);
       else setTick((n) => n + 1);
     }, ADVANCE_MS);
