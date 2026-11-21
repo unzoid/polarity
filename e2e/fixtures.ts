@@ -67,8 +67,10 @@ export { expect };
  * URL this fixture refused is let through.
  */
 function refusedLoad(e: Error, refused: Set<string>): boolean {
-  const m = /^Fetch API cannot load (\S+) due to access control checks\.$/.exec((e.stack ?? "").split("\n")[0]);
-  return !!m && refused.has(m[1]);
+  const first = (e.stack ?? e.message ?? String(e)).split("\n")[0];
+  const m = /^Fetch API cannot load (.+?) due to access control checks\.$/.exec(first);
+  if (!m) return false;
+  return refused.has(m[1].replace(/^(https?):\s+\//, "$1://"));
 }
 
 /** A poster or row card, by the title's name (its accessible name is "<name> <year>"). */

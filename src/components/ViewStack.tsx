@@ -14,9 +14,21 @@ export function FitHeight({ children }: { children: ReactNode }) {
     if (!el) return;
     const measure = () => setHeight(el.offsetHeight);
     measure();
-    const ro = new ResizeObserver(measure);
+    // Defer ResizeObserver height updates out of the observation pass so resizing the parent
+    // popover doesn't trigger WebKit's "ResizeObserver loop completed with undelivered notifications."
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        measure();
+      });
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, []);
   return (
     <div className="fit-height" style={{ height }}>
