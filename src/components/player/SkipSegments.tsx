@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { SkipForward } from "../icons";
+import { Close, SkipForward } from "../icons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../../lib/api";
 import { aniSkipSegments } from "../../lib/anime";
@@ -129,6 +129,8 @@ export function useSkipSegments({
     /** Seconds the button counts down before skipping on its own, or 0. */
     countdown,
     finishCountdown,
+    /** Stop an auto-skip countdown for this segment so the user can watch the opening. */
+    cancelCountdown: useCallback(() => setCounting(null), []),
     skipActive: useCallback(() => {
       setCounting(null);
       skipTo(active);
@@ -198,6 +200,7 @@ export const SKIP_ALONE_MS = 6000;
 export function SkipButton({
   active,
   onSkip,
+  onCancel,
   chromeVisible,
   countdown = 0,
   paused = false,
@@ -206,6 +209,8 @@ export function SkipButton({
 }: {
   active: ActiveSkip | null;
   onSkip: () => void;
+  /** Cancels an active auto-skip countdown without leaving the segment. */
+  onCancel?: () => void;
   chromeVisible: boolean;
   /** Seconds until it skips on its own: the button fills left to right meanwhile (0 = no countdown). */
   countdown?: number;
@@ -235,35 +240,52 @@ export function SkipButton({
   // Skipped, ended or hidden with focus on it: focus goes back to the player, its keys keep working.
   const button = useRef<HTMLButtonElement>(null);
   useHandFocus(button, !visible);
+  const canCancel = visible && countdown > 0 && !!onCancel;
 
   return (
-    <button
-      ref={button}
-      className="skip-button"
-      data-visible={visible}
-      data-segment={!!active}
-      tabIndex={visible ? 0 : -1}
-      inert={!visible}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSkip();
-      }}
-      title={withShortcut("Skip", "skip")}
-    >
-      {countdown > 0 && (
-        // CSS times it (linear, holds while paused); its end is the skip. Keyed per
-        // segment so a new countdown starts from empty.
-        <span
-          key={segment}
-          className="skip-countdown"
-          data-paused={paused}
-          style={{ animationDuration: `${countdown}s` }}
-          onAnimationEnd={onCountdownEnd}
-          aria-hidden
-        />
+    <div className="skip-controls" data-visible={visible}>
+      {canCancel && (
+        <button
+          type="button"
+          className="skip-cancel"
+          aria-label="Cancel auto-skip"
+          title="Watch without skipping"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel();
+          }}
+        >
+          <Close size={16} />
+        </button>
       )}
-      {shown?.label ?? "Skip"}
-      {glyph ?? <SkipForward size={18} fill="currentColor" strokeWidth={2.25} />}
-    </button>
+      <button
+        ref={button}
+        className="skip-button"
+        data-visible={visible}
+        data-segment={!!active}
+        tabIndex={visible ? 0 : -1}
+        inert={!visible}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSkip();
+        }}
+        title={withShortcut("Skip", "skip")}
+      >
+        {countdown > 0 && (
+          // CSS times it (linear, holds while paused); its end is the skip. Keyed per
+          // segment so a new countdown starts from empty.
+          <span
+            key={segment}
+            className="skip-countdown"
+            data-paused={paused}
+            style={{ animationDuration: `${countdown}s` }}
+            onAnimationEnd={onCountdownEnd}
+            aria-hidden
+          />
+        )}
+        {shown?.label ?? "Skip"}
+        {glyph ?? <SkipForward size={18} fill="currentColor" strokeWidth={2.25} />}
+      </button>
+    </div>
   );
 }

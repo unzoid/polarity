@@ -15,7 +15,8 @@ import { partyChime } from "./sounds";
 import type { StreamHint } from "./messages";
 import type { Stream } from "../types";
 
-export type { PartyMedia, StreamHint } from "./messages";
+export type { PartyMedia, PartyReactionEmoji, StreamHint } from "./messages";
+export { PARTY_REACTIONS } from "./messages";
 export {
   BEHIND_SHOWN,
   CODE_LENGTH,
@@ -24,8 +25,10 @@ export {
   type Member,
   type MemberPosition,
   type MemberStatus,
+  type PartyChatMessage,
   type PartyExit,
   type PartyNote,
+  type PartyReaction,
   type PartyState,
   type Playback,
 } from "./room";
@@ -66,6 +69,9 @@ export const {
   reportPosition,
   behind,
   syncNow,
+  syncEveryone,
+  sendReaction,
+  sendChat,
   setQuiet,
   setRules,
   makeHost,

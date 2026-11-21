@@ -66,6 +66,8 @@ export const api = {
     call<MetaPreview[]>("catalog", { ty: type, id, skip, genre, ...bound }),
   /** Titles like `id`, for "Because you watched …". */
   recommend: (type: ContentType, id: string) => call<MetaPreview[]>("recommend", { ty: type, id }),
+  /** Films in a TMDB collection / franchise (`/collection/{id}`); empty without a TMDB key. */
+  collection: (id: number) => call<MetaPreview[]>("collection", { id }),
   search: (query: string) => call<SearchResults>("search", { query }),
   /** Films only, released in `year` where the catalog can narrow it (TMDB); Cinemeta answers the plain search. */
   searchMovies: (query: string, year?: number) => call<MetaPreview[]>("search_movies", { query, year: year ?? null }),

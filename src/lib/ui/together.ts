@@ -61,7 +61,9 @@ export function placingSettled(root: Element, cap: number): Promise<void> {
 }
 
 /** How long a page waits for its pictures before it shows anyway, once its data is in. */
-const PAGE_CAP = 1600;
+const PAGE_CAP = 650;
+/** How long a phone title page waits for face/subject art focus before revealing (detail.css eases object-position smoothly if later). */
+const PLACING_CAP = 240;
 
 /**
  * A whole page that comes in at once (a title's page on a phone): `ready` stays false, and the page shows its
@@ -87,7 +89,7 @@ export function usePageTogether<T extends HTMLElement = HTMLDivElement>(dataIn: 
     const cap = window.setTimeout(finish, dataIn ? PAGE_CAP : CAP_EMPTY);
     // A frame for what the data brought (the logo, the episodes' stills) to be in the page before it's judged.
     const frame = dataIn
-      ? requestAnimationFrame(() => void Promise.all([imagesSettled(node, PAGE_CAP), placingSettled(node, PAGE_CAP)]).then(finish))
+      ? requestAnimationFrame(() => void Promise.all([imagesSettled(node, PAGE_CAP), placingSettled(node, PLACING_CAP)]).then(finish))
       : 0;
     return () => {
       live = false;

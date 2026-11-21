@@ -492,3 +492,7 @@ export function useAccount() {
   if (!ctx) throw new Error("useAccount outside AccountProvider");
   return ctx;
 }
+
+export function useOptionalAccount() {
+  return useContext(AccountContext);
+}

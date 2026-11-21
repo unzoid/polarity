@@ -238,6 +238,14 @@ pub struct Person {
     pub tmdb_id: Option<u64>,
 }
 
+/// A movie franchise / collection from TMDB (`belongs_to_collection`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionInfo {
+    pub id: u64,
+    pub name: String,
+}
+
 /// The fine print about a title. Every field is optional: sources differ.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -279,6 +287,9 @@ pub struct MetaDetails {
     /// TMDB id, for links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tmdb_id: Option<u64>,
+    /// Movie collection / franchise (TMDB `belongs_to_collection`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection: Option<CollectionInfo>,
 }
 
 /// One episode. `id` follows the Stremio convention `tt…:season:episode`,

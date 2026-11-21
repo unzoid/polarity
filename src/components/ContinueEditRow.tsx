@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { removeFromContinueWatching } from "../lib/library/titleActions";
 import type { Progress } from "../lib/types";
 import { TrashLid, useConfirmDelete } from "./ConfirmDeleteButton";
-import { Check, CheckAll, Close } from "./icons";
+import { Check, CheckAll, Close, Edit } from "./icons";
+import { useFormFactor } from "../lib/ui";
 import { Row } from "./Row";
 import { Button, buttonClass } from "./ui/Button";
 
@@ -29,6 +30,7 @@ export function ContinueEditRow({
   const [opened, setOpened] = useState(false);
   const shift = useShiftHeld();
   const touch = useCoarsePointer();
+  const phone = useFormFactor().form === "phone";
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   // What's picked and still in the row (a card can leave it while editing: played elsewhere, synced).
   const selected = useMemo(() => items.filter((p) => picked.has(p.videoId)), [items, picked]);
@@ -70,7 +72,12 @@ export function ContinueEditRow({
   // swapping one header for another; its buttons come in one after another (--i).
   const action = (
     <div className="cw-edit-actions" data-editing={editing || undefined}>
-      {touch ? (
+      {touch && phone ? (
+        // A phone: the pencil alone, no button around it.
+        <button ref={editButton} type="button" className="cw-edit-open cw-edit-icon" inert={editing} onClick={() => setOpened(true)} aria-label="Edit Continue Watching">
+          <Edit size={20} />
+        </button>
+      ) : touch ? (
         <Button ref={editButton} size="sm" variant="glass" className="cw-edit-open" inert={editing} onClick={() => setOpened(true)} aria-label="Edit Continue Watching">
           Edit
         </Button>

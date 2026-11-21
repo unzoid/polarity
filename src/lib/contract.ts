@@ -10,6 +10,7 @@ import type { EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo } from "./librar
 import type {
   CacheInfo,
   CatalogExtra,
+  CollectionInfo,
   Extra,
   CustomTheme,
   Imported,
@@ -24,6 +25,7 @@ import type {
   MetaDetails,
   MetaPreview,
   Person,
+  PersonHit,
   PersonPage,
   Playable,
   Progress,
@@ -66,6 +68,7 @@ export const contract = {
   ManifestCatalog: { extra: true, id: true, name: true, type: true } satisfies Keys<ManifestCatalog>,
   Extra: { key: true, kind: true, name: true } satisfies Keys<Extra>,
   CatalogExtra: { isRequired: true, name: true, options: true } satisfies Keys<CatalogExtra>,
+  CollectionInfo: { id: true, name: true } satisfies Keys<CollectionInfo>,
   Meta: {
     background: true,
     cast: true,
@@ -93,6 +96,7 @@ export const contract = {
   MetaDetails: {
     awards: true,
     budget: true,
+    collection: true,
     countries: true,
     episodes: true,
     languages: true,
@@ -210,6 +214,7 @@ export const contract = {
   } satisfies Keys<Download>,
   InstalledAddon: { disabled: true, manifest: true, manifestUrl: true } satisfies Keys<InstalledAddon>,
   LocalChanges: { library: true, links: true, progress: true, pulledAt: true } satisfies Keys<LocalChanges>,
+  PersonHit: { id: true, knownFor: true, name: true, photo: true } satisfies Keys<PersonHit>,
   PersonPage: {
     acting: true,
     biography: true,
@@ -221,6 +226,7 @@ export const contract = {
     knownFor: true,
     name: true,
     photo: true,
+    writing: true,
   } satisfies Keys<PersonPage>,
   "Playable.external": { kind: true, url: true } satisfies Keys<Extract<Playable, { kind: "external" }>>,
   "Playable.torrent": { kind: true } satisfies Keys<Extract<Playable, { kind: "torrent" }>>,
@@ -241,7 +247,7 @@ export const contract = {
     tmdb: true,
     trakt: true,
   } satisfies Keys<ExternalRatings>,
-  SearchResults: { movies: true, series: true } satisfies Keys<SearchResults>,
+  SearchResults: { movies: true, people: true, series: true } satisfies Keys<SearchResults>,
   Segments: { intro: true, outro: true, postCredits: true, recap: true } satisfies Keys<SkipSegments>,
   Settings: {
     accentColor: true,

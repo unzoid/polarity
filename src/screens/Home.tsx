@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { HeroGlow } from "../components/HeroGlow";
-import { ChevronLeft, ChevronRight, Play } from "../components/icons";
+import { ChevronLeft, ChevronRight, Play, Shuffle } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
 import { AgeRatingBadge } from "../components/title/TitleDetails";
@@ -10,6 +10,7 @@ import { LandscapeCard, PosterCard, useIntent } from "../components/PosterCard";
 import { ArtTitle, Card, ProgressBar } from "../components/title/Card";
 import { Shelf } from "../components/title/Shelf";
 import { ContinueEditRow } from "../components/ContinueEditRow";
+import { RatingRing } from "../components/RatingRing";
 import { api } from "../lib/api";
 import { episodeCode, formatRemaining, joinFacts, kindFacts } from "../lib/format";
 import {
@@ -19,12 +20,15 @@ import {
   useContinueWatching,
   useRecommend,
   useSettings,
+  useWatchHistory,
 } from "../lib/net";
-import { heroBackdropUrl, prefersReducedMotion, rubberband, useArtGate, useFormFactor, useNearViewport } from "../lib/ui";
+import { dismissUpNext, removeContinueEntries, useUpNextContinueWatching, type ContinueEntry } from "../lib/library";
+import { heroBackdropUrl, prefersReducedMotion, rubberband, useArtGate, useFormFactor, useNearViewport, type Rgb } from "../lib/ui";
 import { useNavigation } from "../lib/router";
 import {
   catalogKey,
   catalogTitle,
+  pickForMe,
   progressItem,
   shelfKey,
   shelfRoute,
@@ -38,11 +42,12 @@ import {
   useListable,
   useSeeds,
   useShownAbove,
+  useTasteProfile,
   type AddonCatalog,
   type Shelf as HomeShelf,
 } from "../lib/catalog";
 import { cardMenu } from "../components/CardMenu";
-import type { MetaPreview, Progress } from "../lib/types";
+import type { MetaPreview } from "../lib/types";
 import { Button, IconButton } from "../components/ui/Button";
 import { LibraryButton } from "../components/title/LibraryButton";
 import { Skeleton } from "../components/ui/Skeleton";
@@ -61,24 +66,11 @@ const NO_TITLES: MetaPreview[] = [];
 const EAGER_SHELVES = 2;
 
 export function Home() {
-  // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
-  const items = useBrowseFeatured(useFeatured().data);
-  const seeds = useSeeds();
-  const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
-  const shownAbove = useShownAbove(shelves, items ?? NO_TITLES);
-  const { data: watching } = useContinueWatching();
-  const watched = useMemo(() => new Set((watching ?? []).map((p) => p.metaId)), [watching]);
-  // Recommendations also skip what you're already watching; memoized so shelves keep stable Set references.
-  const excludes = useMemo(
-    () => shelves.map((shelf, i) => (shelf.kind === "because" ? new Set([...shownAbove[i], ...watched]) : shownAbove[i])),
-    [shelves, shownAbove, watched],
-  );
-  const { data: settings } = useSettings();
-  const addonRows = useHomeCatalogs();
+  const { items, shelves, excludes, settings, addonRows, surpriseMe } = useHomeFeed();
 
   return (
     <div className="scroll home">
-      {items?.length !== 0 && <HeroCarousel items={items} />}
+      {items?.length !== 0 && <HeroCarousel items={items} onSurprise={surpriseMe} />}
       <div className="rows home-rows">
         {(settings?.showContinueWatching ?? true) && <ContinueRow />}
         {addonRows.map((c) => (
@@ -95,6 +87,46 @@ export function Home() {
       </div>
     </div>
   );
+}
+
+/**
+ * What Home shows, for any layout of it (this page, and the phone shell's): the featured titles, the shelves and
+ * what each leaves out, the add-ons' rows, and Surprise Me.
+ */
+export function useHomeFeed() {
+  // Without the hidden and (when asked) the watched (lib/catalog/browseFilter.ts).
+  const items = useBrowseFeatured(useFeatured().data);
+  const seeds = useSeeds();
+  const taste = useTasteProfile();
+  const shelves = useMemo(() => todaysShelves(seeds, taste), [seeds, taste]);
+  const shownAbove = useShownAbove(shelves, items ?? NO_TITLES);
+  const { data: watching } = useContinueWatching();
+  const { data: history } = useWatchHistory();
+  const watched = useMemo(
+    () => new Set([...(watching ?? []).map((p) => p.metaId), ...(history ?? []).map((p) => p.metaId)]),
+    [watching, history],
+  );
+  // Recommendations also skip what you're watching or have watched; memoized so shelves keep stable Set references.
+  const excludes = useMemo(
+    () => shelves.map((shelf, i) => (shelf.kind === "because" ? new Set([...shownAbove[i], ...watched]) : shownAbove[i])),
+    [shelves, shownAbove, watched],
+  );
+  const { data: settings } = useSettings();
+  const addonRows = useHomeCatalogs();
+  const qc = useQueryClient();
+  const { navigate } = useNavigation();
+
+  const surpriseMe = useCallback(() => {
+    const pool: MetaPreview[] = [...(items ?? [])];
+    for (const s of shelves) {
+      const list = qc.getQueryData<MetaPreview[]>(shelfKey(s));
+      if (list?.length) pool.push(...list);
+    }
+    const chosen = pickForMe(pool, watched, taste);
+    if (chosen) navigate({ name: "detail", type: chosen.type, id: chosen.id, preview: chosen });
+  }, [items, shelves, qc, watched, taste, navigate]);
+
+  return { items, shelves, excludes, settings, addonRows, surpriseMe };
 }
 
 // --- Hero ----------------------------------------------------------------
@@ -135,6 +167,7 @@ export function HeroCarousel({
   setIndex: controlledSetIndex,
   content,
   handlers,
+  onSurprise,
 }: {
   items?: MetaPreview[];
   index?: number;
@@ -143,6 +176,8 @@ export function HeroCarousel({
   content?: (item: MetaPreview) => ReactNode;
   /** What clicking and right-clicking the art does; by default the title's page and its options menu. */
   handlers?: (item: MetaPreview) => { onClick: () => void; onContextMenu: (e: React.MouseEvent<HTMLElement>) => void };
+  /** Optional "Surprise Me" picker shown alongside the default hero actions. */
+  onSurprise?: () => void;
 }) {
   const { navigate } = useNavigation();
   const phone = useFormFactor().form === "phone";
@@ -234,6 +269,7 @@ export function HeroCarousel({
   // A sideways swipe on touch steps through the titles, as the arrows do.
   const swiped = useRef(false);
   const swipeHandlers = useHeroSwipe(count > 1, (dir) => setIndex((index + dir + count) % count), swiped);
+  const [scrim, setScrim] = useState<Rgb | null>(null);
 
   if (!items || !item) {
     return (
@@ -251,10 +287,42 @@ export function HeroCarousel({
   const prevItem = items[(index - 1 + count) % count];
   const nextItem = items[(index + 1) % count];
 
+  const pager = (
+    <div className="hero-pager">
+      <div className="hero-dots" role="tablist" aria-label="Featured">
+        {items.map((it, i) => (
+          <button
+            key={it.id}
+            role="tab"
+            aria-selected={i === index}
+            aria-label={it.name}
+            className="hero-dot"
+            onClick={() => setIndex(i)}
+          >
+            {i === index && canRotate && (
+              <span key={index} className="hero-dot-clip">
+                <span
+                  className="hero-dot-fill"
+                  data-paused={paused || undefined}
+                  style={{ animationDuration: `${ADVANCE_MS}ms` }}
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget && hero.current?.checkVisibility({ visibilityProperty: true }) !== false) {
+                      setIndex((prev) => (prev + 1) % count);
+                    }
+                  }}
+                />
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <section className="hero" aria-roledescription="carousel">
       {/* The page around the card takes on a dark shade of the art's colour, as Netflix's, fading down the window. */}
-      <HeroGlow src={item.background} next={nextBg} area={phone ? "middle" : "whole"} />
+      <HeroGlow src={item.background} next={nextBg} area={phone ? "middle" : "whole"} onColor={setScrim} />
       <div className="hero-stage">
       {ultrawide && count > 1 && prevItem && (
         <HeroPeek item={{ ...prevItem, background: bgOf(prevItem.background) }} side="prev" onClick={() => setIndex((index - 1 + count) % count)} />
@@ -300,48 +368,35 @@ export function HeroCarousel({
             ) : null,
           )}
         </div>
-        <div className="hero-scrim" />
+        <div className="hero-scrim" style={scrim ? ({ "--glow-scrim": `rgb(${scrim.join(" ")})` } as CSSProperties) : undefined} />
 
         {/* Keyed: the text block swaps with a short blur-masked fade. */}
         <Fragment key={item.id}>{content ? content(item) : <HeroContent item={item} />}</Fragment>
 
-        <div className="hero-pager">
-          <div className="hero-dots" role="tablist" aria-label="Featured">
-            {items.map((it, i) => (
-              <button
-                key={it.id}
-                role="tab"
-                aria-selected={i === index}
-                aria-label={it.name}
-                className="hero-dot"
-                onClick={() => setIndex(i)}
-              >
-                {i === index && canRotate && (
-                  <span key={index} className="hero-dot-clip">
-                    <span
-                      className="hero-dot-fill"
-                      data-paused={paused || undefined}
-                      style={{ animationDuration: `${ADVANCE_MS}ms` }}
-                      onAnimationEnd={(e) => {
-                        if (e.target === e.currentTarget && hero.current?.checkVisibility({ visibilityProperty: true }) !== false) {
-                          setIndex((prev) => (prev + 1) % count);
-                        }
-                      }}
-                    />
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-        {count > 1 && (
+        {!phone && pager}
+        {(count > 1 || (!phone && onSurprise)) && (
           <div className="hero-steps">
-            <IconButton variant="glass" className="hero-next pressable" label="Previous featured" onClick={() => setIndex((index - 1 + count) % count)}>
-              <ChevronLeft size={22} />
-            </IconButton>
-            <IconButton variant="glass" className="hero-next pressable" label="Next featured" onClick={() => setIndex((index + 1) % count)}>
-              <ChevronRight size={22} />
-            </IconButton>
+            {!phone && onSurprise && (
+              <IconButton
+                variant="glass"
+                className="hero-next hero-surprise pressable"
+                label="Surprise Me"
+                title="Surprise Me — pick an unwatched title for you"
+                onClick={onSurprise}
+              >
+                <Shuffle size={20} />
+              </IconButton>
+            )}
+            {count > 1 && (
+              <>
+                <IconButton variant="glass" className="hero-next pressable" label="Previous featured" onClick={() => setIndex((index - 1 + count) % count)}>
+                  <ChevronLeft size={22} />
+                </IconButton>
+                <IconButton variant="glass" className="hero-next pressable" label="Next featured" onClick={() => setIndex((index + 1) % count)}>
+                  <ChevronRight size={22} />
+                </IconButton>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -349,6 +404,7 @@ export function HeroCarousel({
         <HeroPeek item={{ ...nextItem, background: bgOf(nextItem.background) }} side="next" onClick={() => setIndex((index + 1) % count)} />
       )}
       </div>
+      {phone && count > 1 && pager}
     </section>
   );
 }
@@ -469,13 +525,30 @@ function HeroContent({ item }: { item: MetaPreview }) {
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
   const phone = useFormFactor().form === "phone";
   const facts = joinFacts([...kindFacts(item), item.releaseInfo]);
+  const kind = item.type === "movie" ? "Movie" : "Series";
+  const phoneTags = item.genres?.length ? item.genres.slice(0, 3) : item.releaseInfo ? [item.releaseInfo] : [];
 
   return (
     <div className="hero-content">
       <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
-      <p className="hero-kind t-callout">
-        <span className="hero-kind-text">{facts}</span>
-        <AgeRatingBadge certification={item.certification} />
+      <p className="hero-kind t-callout tabular">
+        {!phone && item.imdbRating && <RatingRing value={item.imdbRating} imdbId={item.id} />}
+        {phone ? (
+          <span className="hero-kind-text">
+            <span className="hero-kind-lead">{kind}</span>
+            {phoneTags.map((tag) => (
+              <Fragment key={tag}>
+                <span className="hero-kind-dot" aria-hidden>
+                  •
+                </span>
+                <span>{tag}</span>
+              </Fragment>
+            ))}
+          </span>
+        ) : (
+          facts && <span className="hero-kind-text">{facts}</span>
+        )}
+        {!phone && <AgeRatingBadge certification={item.certification} />}
       </p>
       <p className="hero-description t-body">{item.description}</p>
       <div className="hero-actions">
@@ -493,17 +566,16 @@ function HeroContent({ item }: { item: MetaPreview }) {
 /** With fewer fresh titles than this, a shelf shows its full list, repeats and all. */
 const MIN_FRESH = 6;
 
-function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
-  const { title } = shelf;
-  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
-  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
-  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
+/**
+ * A shelf's titles once `enabled` (near the screen): what its catalog or recommendations give, without what's
+ * hidden, watched or already above (`exclude`) unless that leaves too few. `skip`: the shelf stays out (its catalog
+ * failed, or there's too little worth recommending).
+ */
+export function useShelfItems(shelf: HomeShelf, enabled: boolean, exclude: Set<string>) {
   const isCatalog = shelf.kind === "catalog";
   const catalog = useCatalog(shelf.type, isCatalog ? shelf.id : "", isCatalog ? shelf.genre : undefined, enabled && isCatalog);
   const recommended = useRecommend(shelf.type, isCatalog ? "" : shelf.seed, enabled && !isCatalog);
   const { data, isLoading, isError } = isCatalog ? catalog : recommended;
-  const { navigate } = useNavigation();
-  const to = shelfRoute(shelf);
   // Nothing to play and nothing to show (#337) stays out.
   // Hidden and watched titles go too, and a shelf they leave short loads more (lib/catalog/browseFilter.ts).
   const shown = useBrowseShelf(useListable(data), isCatalog ? { type: shelf.type, id: shelf.id, genre: shelf.genre } : undefined);
@@ -511,17 +583,27 @@ function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: bo
     const fresh = (shown ?? []).filter((m) => !exclude.has(m.id));
     return fresh.length >= MIN_FRESH || shelf.kind === "because" ? fresh : (shown ?? []);
   }, [shown, exclude, shelf.kind]);
+  // One failing catalog shouldn't break the page; nothing good to recommend leaves the row out rather than a stub.
+  const skip = isError || (shelf.kind === "because" && !!data && items.length < 4);
+  return { items: isLoading || !enabled ? undefined : items, skip };
+}
 
-  if (isError) return null; // one failing catalog shouldn't break the page
-  // Nothing good to recommend: leave the row out rather than show a stub.
-  if (shelf.kind === "because" && data && items.length < 4) return null;
+function CatalogRow({ shelf, enabled, exclude }: { shelf: HomeShelf; enabled: boolean; exclude: Set<string> }) {
+  const { title } = shelf;
+  // An upright screen is a poster's shape: a phone's shelves are all posters, three and a bit across, and
+  // only Continue Watching keeps its wide stills. Wide cards there showed one and a half to a row.
+  const shape = useFormFactor().form === "phone" ? "poster" : shelf.shape;
+  const { items, skip } = useShelfItems(shelf, enabled, exclude);
+  const { navigate } = useNavigation();
+  const to = shelfRoute(shelf);
+  if (skip) return null;
   const TitleCard = shape === "landscape" ? LandscapeCard : PosterCard;
   return (
     <Shelf
       title={title}
       onOpen={to && (() => navigate(to))}
       shape={shape}
-      items={isLoading || !enabled ? undefined : items}
+      items={items}
       card={(item) => <TitleCard key={item.id} item={item} />}
     />
   );
@@ -560,21 +642,30 @@ function AddonShelf({ catalog }: { catalog: AddonCatalog }) {
   );
 }
 
-function ContinueRow() {
-  const { data } = useContinueWatching();
-  const items = useMemo(() => data ?? [], [data]);
+export function ContinueRow() {
+  const entries = useUpNextContinueWatching();
+  const items = useMemo(() => entries.map((e) => e.progress), [entries]);
+  const byVideo = useMemo(() => new Map(entries.map((e) => [e.progress.videoId, e])), [entries]);
   const order = useMemo(() => items.map((p) => p.videoId).join(" "), [items]);
-  if (!items.length) return null;
+  if (!entries.length) return null;
   // Edit picks several cards to remove at once (components/ContinueEditRow.tsx).
-  return <ContinueEditRow items={items} order={order} card={(p) => <ContinueCard progress={p} />} />;
+  return (
+    <ContinueEditRow
+      items={items}
+      order={order}
+      remove={(selected) => removeContinueEntries(selected.map((p) => byVideo.get(p.videoId) ?? { progress: p }))}
+      card={(p) => <ContinueCard entry={byVideo.get(p.videoId) ?? { progress: p }} />}
+    />
+  );
 }
 
 /**
- * Continue Watching card: clicking the play button resumes straight away; clicking
- * anywhere else on the card opens the title's page.
+ * Continue Watching card: clicking the play button resumes (or starts the next episode) straight away;
+ * clicking anywhere else on the card opens the title's page.
  * With seasons as separate shows, an anime shows the entry the episode is part of (#22).
  */
-function ContinueCard({ progress: p }: { progress: Progress }) {
+function ContinueCard({ entry: cw }: { entry: ContinueEntry }) {
+  const { progress: p, upNext } = cw;
   const { navigate } = useNavigation();
   const stored = useMemo(() => progressItem(p), [p]);
   const { item, entry, opens } = useEntryShown(stored, p.videoId);
@@ -612,7 +703,7 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
         <button
           type="button"
           className="card-play"
-          aria-label={`Resume ${item.name}`}
+          aria-label={upNext ? `Play next episode of ${item.name}` : `Resume ${item.name}`}
           onClick={(e) => {
             e.stopPropagation();
             resume();
@@ -621,14 +712,20 @@ function ContinueCard({ progress: p }: { progress: Progress }) {
           <Play size={20} fill="currentColor" />
         </button>
       }
-      {...cardMenu(stored, p)}
+      {...cardMenu(stored, p, upNext ? { onRemoveContinue: () => dismissUpNext([cw]) } : undefined)}
     >
       {/* The logo names the show; an entry of it goes by its own name. */}
       <ArtTitle name={item.name} logo={entry ? undefined : logo} pending={!entry && meta.isLoading} />
-      {/* Where you are, on the picture like Apple TV's: a bar and the time left, over a gradient (#38). */}
+      {/* Where you are, on the picture like Apple TV's: a bar and the time left, or Up Next (#38). */}
       <div className="card-resume">
-        <ProgressBar fraction={fraction} />
-        {remaining && <span className="card-resume-left tabular">{remaining}</span>}
+        {upNext ? (
+          <span className="card-resume-upnext">Up Next</span>
+        ) : (
+          <>
+            <ProgressBar fraction={fraction} />
+            {remaining && <span className="card-resume-left tabular">{remaining}</span>}
+          </>
+        )}
       </div>
     </Card>
   );

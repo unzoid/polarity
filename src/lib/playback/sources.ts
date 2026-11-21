@@ -8,6 +8,7 @@ import { languageName, langMatches } from "./languages";
 import { formatBytes } from "../format";
 import { NEUTRAL, scoreSources, type Match, type MatchContext } from "./bestMatch";
 import { useDeviceCaps } from "./device";
+import { knownReadiness } from "./readiness";
 import { connectionMbps, sourceRecord } from "./sourceHistory";
 import type { RankedStream, Settings, SourceSort } from "../types";
 
@@ -377,7 +378,8 @@ export function defaultFilter(streams: RankedStream[], settings?: Settings): Sou
  * The order the player tries sources in on its own (auto-pick): CAM rips and other episodes' files out,
  * the filters you set in the player for this show if they leave something
  * (so the next episode is the same kind of file), else the list's default
- * filters if they do, best match (or your sort) first.
+ * filters if they do, best match (or your sort) first — demoting links already
+ * known not ready, and preferring the binge group already playing for this show.
  */
 export function autoPickOrder(streams: RankedStream[], settings?: Settings, show?: string, ctx: MatchContext = NEUTRAL) {
   const playable = streams.filter((s) => !s.quality.lowQualitySource && !s.otherEpisode);
@@ -387,7 +389,13 @@ export function autoPickOrder(streams: RankedStream[], settings?: Settings, show
   const preferred = yours.length ? yours : playable.filter((r) => matches(r, f));
   const pool = preferred.length ? preferred : playable;
   const cmp = compareBy(kept?.sort ?? "best", scoreSources(playable, ctx));
-  return pool.map((r, i) => ({ r, i })).sort((a, b) => cmp(a.r, b.r) || a.i - b.i).map(({ r }) => r);
+  const group = show ? bingeGroups.get(show) : undefined;
+  const isDead = (r: RankedStream) => (r.stream.url ? knownReadiness(r.stream.url)?.state === "notReady" : false);
+  const sameBinge = (r: RankedStream) => !!group && r.stream.behaviorHints?.bingeGroup === group;
+  return pool
+    .map((r, i) => ({ r, i, dead: isDead(r), binge: sameBinge(r) }))
+    .sort((a, b) => Number(a.dead) - Number(b.dead) || Number(b.binge) - Number(a.binge) || cmp(a.r, b.r) || a.i - b.i)
+    .map(({ r }) => r);
 }
 
 /**
@@ -398,9 +406,20 @@ export function autoPickOrder(streams: RankedStream[], settings?: Settings, show
  * page's source lists aren't affected.
  */
 const playerChoices = new Map<string, { filter: SourceFilter; sort: SourceSort }>();
+/** The release bingeGroup last played for a show while the player stays open, for consistent next episodes. */
+const bingeGroups = new Map<string, string>();
+
+export function rememberBingeGroup(show: string, group?: unknown) {
+  if (typeof group === "string" && group.trim()) bingeGroups.set(show, group);
+}
+
+export const bingeGroupOf = (show: string) => bingeGroups.get(show);
 
 /** The player closed: its next visit starts from the defaults again. */
-export const forgetPlayerSourceChoices = () => playerChoices.clear();
+export const forgetPlayerSourceChoices = () => {
+  playerChoices.clear();
+  bingeGroups.clear();
+};
 
 export interface Facet<K extends string = string> {
   key: K;

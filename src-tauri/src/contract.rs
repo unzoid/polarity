@@ -108,7 +108,11 @@ fn field_names_match_contract() {
             addon: "A".into(),
         }),
     );
-    add("SearchResults", keys(&SearchResults { movies: vec![], series: vec![] }));
+    add("SearchResults", keys(&SearchResults { movies: vec![], series: vec![], people: vec![] }));
+    add(
+        "PersonHit",
+        keys(&polar_index::PersonHit { id: 1, name: "P".into(), photo: s("p"), known_for: s("Directing") }),
+    );
     add("CacheInfo", keys(&CacheInfo { path: "p".into(), bytes: 1 }));
     add("Imported", keys(&Imported { library: 1, progress: 1 }));
     let cue = crate::seekr::Cue { start_ms: 0, end_ms: 1, sheet: "s".into(), x: 0, y: 0, w: 1, h: 1 };
@@ -170,7 +174,8 @@ fn field_names_match_contract() {
             birthplace: s("Example Town"),
             known_for: s("Acting"),
             acting: vec![preview.clone()],
-            directing: vec![preview],
+            directing: vec![preview.clone()],
+            writing: vec![preview],
         }),
     );
 

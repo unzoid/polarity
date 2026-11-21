@@ -1,10 +1,10 @@
+import { Fragment, useState, type ReactNode } from "react";
 import { api } from "../../lib/api";
 import { formatDate, formatRuntime } from "../../lib/format";
-import { usePersonPhoto } from "../../lib/catalog";
+import { BROWSE_GENRES, personIds, usePersonPhoto } from "../../lib/catalog";
 import { useQuery } from "@tanstack/react-query";
 import { keys, useRatings, useStreams } from "../../lib/net";
 import { isFresh, metacriticTone } from "../../lib/ui";
-import { useState, type ReactNode } from "react";
 import type { ContentType, ExternalRatings, Meta } from "../../lib/types";
 import { letterboxdUrl } from "../CardMenu";
 import { BrandIcon } from "../BrandIcon";
@@ -12,6 +12,7 @@ import { ArrowUpRight } from "../icons";
 import { Img } from "../Img";
 import { imdbUrl } from "../RatingRing";
 import { Chip } from "../ui/Chip";
+import { NameList } from "./NameList";
 import { useNavigation } from "../../lib/router";
 
 /**
@@ -21,20 +22,42 @@ import { useNavigation } from "../../lib/router";
  */
 export function TitleDetails({ meta, links: showLinks = true }: { meta: Meta; links?: boolean }) {
   const { data: ratings } = useRatings(meta.type, meta.id);
+  const { navigate } = useNavigation();
   const d = meta.details ?? {};
   const isSeries = meta.type === "series";
   const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
+  const ids = personIds(meta);
+  const browseGenres = BROWSE_GENRES[meta.type];
 
-  const info: [string, string | undefined][] = [
-    ["Genres", meta.genres?.join(", ")],
+  const genresNode = meta.genres?.length ? (
+    showLinks ? (
+      meta.genres.map((g, i) => (
+        <Fragment key={g}>
+          {i > 0 && ", "}
+          {browseGenres.includes(g) ? (
+            <button type="button" className="name-link" onClick={() => navigate({ name: "discover", type: meta.type, genre: g })}>
+              {g}
+            </button>
+          ) : (
+            g
+          )}
+        </Fragment>
+      ))
+    ) : (
+      meta.genres.join(", ")
+    )
+  ) : undefined;
+
+  const info: [string, ReactNode][] = [
+    ["Genres", genresNode],
     [isSeries ? "First aired" : "Released", d.released ? formatDate(d.released) : meta.releaseInfo],
     ["Runtime", formatRuntime(meta.runtime)],
     ["Status", isSeries ? d.status : undefined],
     ["Seasons", d.seasons ? `${d.seasons} ${d.seasons === 1 ? "season" : "seasons"}${d.episodes ? ` · ${d.episodes} episodes` : ""}` : undefined],
     // TMDB's rating for the metadata language's region first, then MDBList's or OMDb's.
     ["Rated", meta.certification ?? ratings?.rated ?? undefined],
-    [isSeries ? "Created by" : "Director", meta.director?.join(", ")],
-    ["Writers", d.writers?.join(", ")],
+    [isSeries ? "Created by" : "Director", meta.director?.length ? <NameList names={meta.director} ids={ids} /> : undefined],
+    ["Writers", d.writers?.length ? <NameList names={d.writers} ids={ids} /> : undefined],
     [isSeries ? "Network" : "Studio", d.studios?.join(", ")],
     ["Country", d.countries?.join(", ")],
     ["Language", d.languages?.join(", ")],
@@ -120,7 +143,7 @@ export function DetailsSection({
 }
 
 /** Whatever goes down the left (the story, mostly), with the facts beside it. */
-export function DetailsColumns({ facts, children }: { facts: [string, string | undefined][]; children?: ReactNode }) {
+export function DetailsColumns({ facts, children }: { facts: [string, ReactNode][]; children?: ReactNode }) {
   return (
     <section className="details-section details-columns">
       {children}
@@ -130,11 +153,11 @@ export function DetailsColumns({ facts, children }: { facts: [string, string | u
 }
 
 /** Label over value, the ones without a value left out. */
-export function FactList({ facts }: { facts: [string, string | undefined][] }) {
+export function FactList({ facts }: { facts: [string, ReactNode][] }) {
   return (
     <dl className="details-facts">
       {facts
-        .filter(([, v]) => v)
+        .filter(([, v]) => v != null && v !== "" && v !== false)
         .map(([k, v]) => (
           <div key={k}>
             <dt className="details-label">{k}</dt>

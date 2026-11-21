@@ -5,7 +5,7 @@ import type { Settings as SettingsT } from "./lib/types";
 import { NavBar } from "./components/NavBar";
 import { useNativeSwipe } from "./components/NativeBack";
 import { PlayerLayer, preloadPlayer, usePlayerLayer } from "./components/PlayerLayer";
-import { useSettings } from "./lib/net";
+import { preloadImage, useSettings } from "./lib/net";
 import { rootTab, RouterProvider, useRouter, type Entry, type Route } from "./lib/router";
 import { focusSearch } from "./lib/catalog";
 import { Home } from "./screens/Home";
@@ -30,6 +30,7 @@ import { ControllerToast } from "./tv/TvChrome";
 import { isTvMode, setTvMode, useTvMode } from "./tv/tvMode";
 import {
   dismissDepth,
+  detailBackdropUrl,
   lazyNamed,
   onDismissDepth,
   pageDrag,
@@ -40,7 +41,6 @@ import {
   usePageMotion,
   usePresence,
   cardGhostParts,
-  cardMotionVars,
   playCardMotion,
   liveCard,
   cardOrigin,
@@ -70,6 +70,7 @@ import { LockedKeysToast } from "./components/LockedKeysToast";
 import { SeriesPickToast } from "./components/anime/SeriesPickToast";
 import { HiddenTitleToast } from "./components/HiddenTitleToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
+import { PhoneApp } from "./phone/PhoneApp";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
@@ -171,11 +172,13 @@ const Screen = memo(function Screen({ route }: { route: Route }) {
  */
 function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: page } = useQuery(titlePageQuery(type, id, preview));
-  // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it for its first 300ms:
-  // the tap renders only the skeleton, so the motion starts in the next frame, and the page itself renders after,
-  // in a transition that gives way to every frame.
+  // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it briefly:
+  // start preloading the detail backdrop on frame 0 and mount the full Detail tree in a non-blocking transition.
   const phone = useFormFactor().form === "phone";
   const [ready, setReady] = useState(!phone);
+  useEffect(() => {
+    if (phone && preview?.background) preloadImage(detailBackdropUrl(preview.background, true));
+  }, [phone, preview?.background]);
   useEffect(() => {
     if (ready) return;
     const frame = requestAnimationFrame(() => startTransition(() => setReady(true)));
@@ -186,7 +189,7 @@ function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: str
   if (page.kind === "anime")
     return (
       <Suspense fallback={loading}>
-        <LazyAnimeDetail id={page.anilist} />
+        <LazyAnimeDetail id={page.anilist} episode={episode} />
       </Suspense>
     );
   return (
@@ -310,6 +313,8 @@ function GateScreen() {
 /** The desktop app or, in TV mode, the 10-foot one — over the same navigation stack. */
 function MainApp() {
   const tv = useTvMode();
+  // A phone has its own app (src/phone): Netflix's layout and motion over the same pages and navigation.
+  const phone = useFormFactor().form === "phone";
 
   // Interface size is this screen's, so it's a device pref.
   const { uiScale, animeEnabled } = usePrefs();
@@ -389,6 +394,8 @@ function MainApp() {
         <Suspense fallback={null}>
           <TvApp />
         </Suspense>
+      ) : phone ? (
+        <PhoneApp Screen={Screen} />
       ) : (
         <DesktopApp />
       )}
@@ -438,11 +445,13 @@ function DesktopApp() {
   const all = new Map<number, Entry>();
   for (const e of [...(phone ? kept : []), ...pages, ...(motion?.leaving ? [motion.leaving] : [])]) all.set(e.key, e);
   const shown = [...all.values()].sort((a, b) => a.key - b.key);
-  // A title's page out of its card plays from the commit itself (lib/ui/cardMotion.ts): the tap is answered in the
-  // next frame, whatever the new page still has to render or load. Back waits for the pair's first frame (`go`): the
-  // page coming back is drawn then, under the title's, so painting it doesn't eat the motion's first frames.
+  // Both open AND close card transitions play immediately on commit (lib/ui/cardMotion.ts): the page directly
+  // under a pushed title stays warm via data-under-top (content-visibility: visible), so Back and swipe-back
+  // never stall re-laying out Home's shelves before moving.
   const main = useRef<HTMLElement>(null);
-  const card = motion?.card && (motion.dir === 1 || motion.go) ? motion.card : undefined;
+  const dragScrim = useRef<HTMLDivElement>(null);
+  const underTop = pages.length > 1 ? pages[pages.length - 2] : undefined;
+  const card = motion?.card;
   const cardKey = card && motion ? (motion.dir === 1 ? motion.enter : motion.leave) : undefined;
   useLayoutEffect(() => {
     if (cardKey === undefined || !card) return;
@@ -518,7 +527,7 @@ function DesktopApp() {
           const top = at(pages[pages.length - 1]);
           const under = pages.length > 1 && at(pages[pages.length - 2]);
           // A title page that grew out of a card goes back into it with the finger (pageDrag.ts).
-          return top && under ? { top, under, card: cardOrigin(pages[pages.length - 1].key) } : null;
+          return top && under ? { top, under, card: cardOrigin(pages[pages.length - 1].key), scrim: dragScrim.current } : null;
         },
         () => now.current.back(),
       ),
@@ -577,12 +586,9 @@ function DesktopApp() {
             // Another section: the pair slides across as a pager's pages do. A page replaced: a crossfade in place.
             data-tab={motion?.tab || undefined}
             data-fade={(motion && !motion.card && !motion.tab && motion.dir === 0) || undefined}
-            style={
-              motion
-                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
-                : undefined
-            }
+            style={motion ? ({ "--page-dir": motion.dir } as CSSProperties) : undefined}
             data-under-player={(entry === topPage && !!player) || undefined}
+            data-under-top={(phone && entry === underTop) || undefined}
             data-page-key={entry.key}
             inert={entry !== topPage || !!playing}
           >
@@ -592,11 +598,13 @@ function DesktopApp() {
             {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
                 the same box, so they move as one piece (shell.css). */}
             {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
-              <CardGhost src={motion.card.src} />
+              <CardGhost src={motion.card.src} img={motion.card.img} />
             )}
           </section>
         ))}
-        {/* Between the title's page and the one behind it: dims and softens what's behind as the card opens. */}
+        {/* Dedicated zero-children scrim for interactive swipe-back (pageDrag.ts), avoiding inherited CSS var recalcs on under. */}
+        <div ref={dragScrim} className="drag-scrim" aria-hidden />
+        {/* Between the title's page and the one behind it: dims what's behind as the card opens/closes. */}
         {motion?.card && <div className="card-scrim" aria-hidden data-card={motion.dir === 1 ? "open" : "close"} data-go={motion.go || undefined} />}
         <ErrorBoundary where="toasts" quiet>
           <div className="toast-stack">
@@ -638,14 +646,14 @@ function DesktopApp() {
 }
 
 /** The card's picture on a title's page while it grows out of the card or goes back into it (lib/ui/cardGhost.ts). */
-function CardGhost({ src }: { src: string }) {
+function CardGhost({ src, img }: { src: string; img?: HTMLImageElement }) {
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const { panel, soft, medium, sharp } = cardGhostParts(src);
-    el.replaceChildren(panel, soft, medium, sharp);
-  }, [src]);
+    const { panel, media } = cardGhostParts(src, img);
+    el.replaceChildren(panel, media);
+  }, [src, img]);
   return <div ref={box} className="card-ghost" aria-hidden />;
 }
 

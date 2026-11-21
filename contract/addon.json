@@ -1,11 +1,12 @@
 {
   "BehaviorHints": ["configurable","configurationRequired"],
   "CatalogExtra": ["isRequired","name","options"],
+  "CollectionInfo": ["id","name"],
   "Manifest": ["behaviorHints","catalogs","description","id","idPrefixes","logo","name","resources","types","version"],
   "Extra": ["key","kind","name"],
   "ManifestCatalog": ["extra","id","name","type"],
   "Meta": ["background","cast","certification","crew","description","details","director","extras","genres","id","imdbRating","logo","logos","name","people","poster","releaseInfo","runtime","trailerSource","trailerYtId","type","videos"],
-  "MetaDetails": ["awards","budget","countries","episodes","languages","originalLanguage","released","revenue","seasons","status","studios","tagline","tmdbId","votes","writers"],
+  "MetaDetails": ["awards","budget","collection","countries","episodes","languages","originalLanguage","released","revenue","seasons","status","studios","tagline","tmdbId","votes","writers"],
   "MetaPreview": ["background","certification","description","genres","id","imdbRating","logo","logos","name","poster","releaseInfo","type"],
   "Person": ["character","name","photo","tmdbId"],
   "RankedStream": ["addon","fileEpisode","label","otherEpisode","quality","requestId","stream"],

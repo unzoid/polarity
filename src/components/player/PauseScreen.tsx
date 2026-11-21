@@ -9,7 +9,7 @@ import {
   type PauseScreenState,
 } from "../../lib/playback/pauseScreen";
 import { usePrefs } from "../../lib/settings/prefs";
-import type { Meta } from "../../lib/types";
+import type { Meta, Person } from "../../lib/types";
 import { usePresence } from "../../lib/ui";
 import { Img } from "../Img";
 import { LogoOrName } from "../title/Card";
@@ -23,6 +23,7 @@ export function PlayerPauseScreen({
   videoId,
   media = null,
   unwatched = false,
+  onSelectPerson,
 }: {
   state: Omit<PauseScreenState, "enabled" | "details">;
   meta: Meta | undefined;
@@ -30,6 +31,8 @@ export function PlayerPauseScreen({
   media?: MediaLike | null;
   /** True when the playing episode has not been watched yet, so spoiler settings apply to its synopsis. */
   unwatched?: boolean;
+  /** Open a cast member's Person page directly from the pause screen (Apple TV+ InSight style). */
+  onSelectPerson?: (person: Person) => void;
 }) {
   const { pauseDetails: enabled } = usePrefs();
   const details = useMemo(() => pauseDetails(meta, videoId), [meta, videoId]);
@@ -37,14 +40,14 @@ export function PlayerPauseScreen({
   const remaining = useMediaTime(allowed ? media : null, (t) =>
     t.duration > 0 && Number.isFinite(t.duration) && t.current < t.duration ? formatRemaining(t.current, t.duration) : "",
   );
-  return <PauseScreen allowed={allowed} details={details} remaining={remaining || undefined} unwatched={unwatched} />;
+  return <PauseScreen allowed={allowed} details={details} remaining={remaining || undefined} unwatched={unwatched} onSelectPerson={onSelectPerson} />;
 }
 
 /**
  * Paused and left alone (lib/playback/pauseScreen.ts decides when that is): the frame dims and shows the title's
- * logo or name, the episode, a facts/remaining kicker, the overview and Apple TV+ "InSight"-style cast pills. It
- * takes no input of its own: a click, tap or key goes to the player under it and does what it always does, and
- * taking `allowed` back fades the layer out cleanly in 160ms.
+ * logo or name, the episode, a facts/remaining kicker, the overview and Apple TV+ "InSight"-style cast pills.
+ * Clicking anywhere on the backdrop still goes to the player under it, while cast pills with a TMDB id can be
+ * clicked directly to jump to their Person page. Taking `allowed` back fades the layer out cleanly in 160ms.
  */
 export function PauseScreen({
   allowed,
@@ -52,12 +55,14 @@ export function PauseScreen({
   remaining,
   unwatched = false,
   after = PAUSE_SCREEN_AFTER_MS,
+  onSelectPerson,
 }: {
   allowed: boolean;
   details: PauseDetails | undefined;
   remaining?: string;
   unwatched?: boolean;
   after?: number;
+  onSelectPerson?: (person: Person) => void;
 }) {
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -98,17 +103,39 @@ export function PauseScreen({
         {d.overview && <p className="pause-screen-overview t-body">{d.overview}</p>}
         {d.cast.length > 0 && (
           <ul className="pause-screen-cast" aria-label="Cast">
-            {d.cast.map((p, i) => (
-              <li key={`${p.name}-${i}`} className="pause-screen-person" style={{ "--i": i } as CSSProperties}>
-                <span className="pause-screen-photo">
-                  {p.photo ? <Img src={p.photo} alt="" /> : <span aria-hidden>{initials(p.name)}</span>}
-                </span>
-                <span className="pause-screen-person-text">
-                  <span className="pause-screen-person-name">{p.name}</span>
-                  {p.character && <span className="pause-screen-character">{p.character}</span>}
-                </span>
-              </li>
-            ))}
+            {d.cast.map((p, i) => {
+              const content = (
+                <>
+                  <span className="pause-screen-photo">
+                    {p.photo ? <Img src={p.photo} alt="" /> : <span aria-hidden>{initials(p.name)}</span>}
+                  </span>
+                  <span className="pause-screen-person-text">
+                    <span className="pause-screen-person-name">{p.name}</span>
+                    {p.character && <span className="pause-screen-character">{p.character}</span>}
+                  </span>
+                </>
+              );
+              const clickable = !!onSelectPerson && p.tmdbId != null && !leaving;
+              return (
+                <li key={`${p.name}-${i}`} className="pause-screen-person" data-clickable={clickable || undefined} style={{ "--i": i } as CSSProperties}>
+                  {clickable ? (
+                    <button
+                      type="button"
+                      className="pause-screen-person-btn"
+                      aria-label={`View ${p.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectPerson(p);
+                      }}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    content
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

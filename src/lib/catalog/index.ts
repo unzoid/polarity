@@ -16,3 +16,4 @@ export * from "./recentSearches";
 export * from "./searchQuery";
 export * from "./searchRows";
 export * from "./shelves";
+export * from "./taste";

@@ -18,6 +18,7 @@ import {
   useHomeCatalogs,
   useSeeds,
   useShownAbove,
+  useTasteProfile,
   useTrending,
   type AddonCatalog,
   type Shape,
@@ -37,14 +38,17 @@ import { TvKeyboard } from "./TvKeyboard";
 import { TvAnimeRail } from "./TvAnime";
 import { useAnimeAliases, useAnimeResults, withoutAnime } from "../lib/anime";
 import { usePrefs } from "../lib/settings";
+import { Img } from "../components/Img";
 import { EmptyState } from "../components/ui/EmptyState";
+import { initialsOf } from "../screens/Person";
 
 const NO_TITLES: MetaPreview[] = [];
 
 /** Home: what you're watching, friends, what's trending, the add-on catalogs switched on (#206), then the day's shelves. */
 export function TvHome() {
   const seeds = useSeeds();
-  const shelves = useMemo(() => todaysShelves(seeds), [seeds]);
+  const taste = useTasteProfile();
+  const shelves = useMemo(() => todaysShelves(seeds, taste), [seeds, taste]);
   const trending = useTrending();
   const allPicks = useMemo(
     () => (trending.series && trending.movies ? trendingPicks(trending.series, trending.movies, [], 20) : undefined),
@@ -54,7 +58,11 @@ export function TvHome() {
   const picks = useBrowseVisible(allPicks);
   const shownAbove = useShownAbove(shelves, picks ?? NO_TITLES);
   const { data: watching } = useContinueWatching();
-  const watched = useMemo(() => new Set((watching ?? []).map((p) => p.metaId)), [watching]);
+  const { data: history } = useWatchHistory();
+  const watched = useMemo(
+    () => new Set([...(watching ?? []).map((p) => p.metaId), ...(history ?? []).map((p) => p.metaId)]),
+    [watching, history],
+  );
   const addonRows = useHomeCatalogs();
 
   const continueRow = useMemo<RailRow>(() => ({ key: "continue", render: () => <TvContinueRail /> }), []);
@@ -102,7 +110,7 @@ const CATALOGS = [
 ];
 
 /** Series or Movies: every catalog, then every genre, then the add-on catalogs that are on Home (#206), as rails. */
-export function TvDiscover({ type }: { type: ContentType }) {
+export function TvDiscover({ type, catalog: initialCatalog, genre: initialGenre }: { type: ContentType; catalog?: string; genre?: string }) {
   const shelves = useMemo<Shelf[]>(() => {
     const noun = type === "movie" ? "Movies" : "Series";
     const shapeAt = (i: number): Shape => (i % 3 === 0 ? "landscape" : "poster");
@@ -110,8 +118,17 @@ export function TvDiscover({ type }: { type: ContentType }) {
     const genres = GENRES.filter((g) => g.type === type).map(
       (g, i): Shelf => ({ kind: "catalog", type, id: "popular", genre: g.genre, title: g.title, shape: shapeAt(i + 1) }),
     );
-    return [...catalogs, ...genres];
-  }, [type]);
+    const all = [...catalogs, ...genres];
+    if (!initialCatalog && !initialGenre) return all;
+    const match = all.findIndex(
+      (s) => s.kind === "catalog" && (initialGenre ? s.genre === initialGenre : s.id === initialCatalog && !s.genre),
+    );
+    if (match > 0) return [all[match]!, ...all.slice(0, match), ...all.slice(match + 1)];
+    if (match < 0 && initialGenre) {
+      return [{ kind: "catalog", type, id: initialCatalog || "popular", genre: initialGenre, title: `${initialGenre} ${noun}`, shape: "landscape" }, ...all];
+    }
+    return all;
+  }, [type, initialCatalog, initialGenre]);
   const shownAbove = useShownAbove(shelves, NO_TITLES);
   const allAddonRows = useHomeCatalogs();
   const addonRows = useMemo(() => allAddonRows.filter((c) => c.type === type), [allAddonRows, type]);
@@ -228,9 +245,10 @@ const MAX_QUERY = 60;
  */
 export function TvSearch() {
   const active = usePageActive();
+  const { navigate } = useNavigation();
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
-  const { data, isPlaceholderData } = useSearch(query);
+  const { data, isPlaceholderData, isError, refetch } = useSearch(query);
   const recent = useRecentSearches();
   const trending = useTrending();
   const suggestions = useMemo(
@@ -267,6 +285,7 @@ export function TvSearch() {
   const aliases = useAnimeAliases();
   const movies = withoutAnime(data?.movies, anime.items, aliases);
   const series = withoutAnime(data?.series, anime.items, aliases);
+  const people = data?.people ?? [];
   const fromAddons = useAddonSearches(searching ? query : "");
   const addonsQuiet = fromAddons.every((r) => r.failed || (r.items && !r.items.length));
   const typedGenre = searching ? genreOf(query) : undefined;
@@ -278,7 +297,7 @@ export function TvSearch() {
     anime: animeEnabled && (anime.loading || !!anime.items?.length) && <TvAnimeRail key="anime" title={anime.title} items={anime.items} shape="poster" />,
   };
   const empty =
-    searching && data && !isPlaceholderData && !movies!.length && !series!.length && !anime.loading && !anime.items?.length && addonsQuiet;
+    searching && !isError && data && !isPlaceholderData && !movies!.length && !series!.length && !people.length && !anime.loading && !anime.items?.length && addonsQuiet;
 
   // Enter (or a recent search): search now, and go to the first result once it's in.
   const pendingFocus = useRef<string | null>(null);
@@ -296,7 +315,7 @@ export function TvSearch() {
   useEffect(() => {
     if (pendingFocus.current !== query || !data || isPlaceholderData) return;
     pendingFocus.current = null;
-    if (data.movies.length || data.series.length) return focusWhenReady(resultsRef.current);
+    if (data.movies.length || data.series.length || data.people?.length) return focusWhenReady(resultsRef.current);
   }, [query, data, isPlaceholderData, submits]);
 
   return (
@@ -350,11 +369,33 @@ export function TvSearch() {
             <TvItemsRail title="Popular Searches" items={suggestions} shape="poster" />
           </>
         )}
-        {searching && !data && <TvItemsRail title="Results" items={undefined} shape="poster" />}
+        {searching && !data && !isError && <TvItemsRail title="Results" items={undefined} shape="poster" />}
+        {searching && isError && (
+          <EmptyState variant="tv" action={{ label: "Try Again", onClick: () => void refetch() }}>
+            Couldn't load search results.
+          </EmptyState>
+        )}
         {searching && data && (
           <>
             {/* Search's own rows in desktop's order: a genre's popular titles first, an anime genre's anime by its kind (#338, #431). */}
             {searchRows(typedGenre, !!anime.genre).map((row) => ownRows[row])}
+            {people.length > 0 && (
+              <TvRail title="People">
+                {people.map((p) => (
+                  <button
+                    key={p.id}
+                    className="tv-card"
+                    data-shape="poster"
+                    onClick={() => navigate({ name: "person", id: p.id, title: p.name })}
+                  >
+                    <span className="tv-card-frame">
+                      {p.photo ? <Img src={p.photo} alt="" /> : <span className="tv-card-fallback">{initialsOf(p.name)}</span>}
+                    </span>
+                    <span className="tv-card-title">{p.name}</span>
+                  </button>
+                ))}
+              </TvRail>
+            )}
             {fromAddons.map((r) => !r.failed && <TvItemsRail key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} shape="poster" />)}
           </>
         )}

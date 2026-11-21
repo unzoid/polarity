@@ -15,6 +15,7 @@ import {
   useFriendsOpen,
 } from "../../lib/friends";
 import { getParty, joinParty, leaveParty, useParty } from "../../lib/party";
+import { useNavigation } from "../../lib/router";
 import { openSettings } from "../../lib/settings";
 import { errorMessage } from "../../lib/errors";
 import { Avatar } from "../Avatar";
@@ -303,11 +304,13 @@ type ErrorSink = (msg: string | null) => void;
 function Row({
   entry,
   line,
+  onLineClick,
   online,
   actions,
 }: {
   entry: FriendEntry;
   line: string;
+  onLineClick?: () => void;
   online?: boolean;
   actions: (onError: ErrorSink) => React.ReactNode;
 }) {
@@ -319,7 +322,13 @@ function Row({
       </span>
       <span className="friends-who">
         <strong>{entry.name}</strong>
-        <span>{line}</span>
+        {onLineClick ? (
+          <button type="button" className="friends-watching-link" onClick={onLineClick}>
+            {line}
+          </button>
+        ) : (
+          <span>{line}</span>
+        )}
       </span>
       <span className="friends-actions">{actions(setError)}</span>
       {error && (
@@ -392,12 +401,22 @@ function MoreMenu({ entry, remove, onError }: { entry: FriendEntry; remove: bool
 
 function FriendRow({ entry, presence }: { entry: FriendEntry; presence: FriendPresence | undefined }) {
   const party = useParty();
+  const { navigate } = useNavigation();
   const mine = party && !party.knocking ? party.code : null;
   const theirs = presence?.party;
+  const watching = presence?.watching;
+  const openWatching =
+    watching && watching.metaId
+      ? () => {
+          setFriendsOpen(false);
+          navigate({ name: "detail", type: watching.type, id: watching.metaId });
+        }
+      : undefined;
   return (
     <Row
       entry={entry}
       line={friendStatus(presence)}
+      onLineClick={openWatching}
       online={!!presence}
       actions={(onError) => (
         <>

@@ -1,10 +1,12 @@
 import { Fragment, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { useOptionalAccount } from "../../lib/account";
 import { useDownload } from "../../lib/library";
+import { partyAvailable, useParty } from "../../lib/party";
 import type { PlayRequest } from "../../lib/playback";
 import type { MetaPreview } from "../../lib/types";
 import { useFormFactor } from "../../lib/ui";
 import { DownloadButton } from "../DownloadButton";
-import { Close, More, Play, Reset, Sources, Trailer } from "../icons";
+import { Close, More, Play, Reset, Sources, Trailer, WatchParty } from "../icons";
 import { PlaylistButton } from "../Playlists";
 import { Button, IconButton } from "../ui/Button";
 import { LibraryButton } from "./LibraryButton";
@@ -62,17 +64,31 @@ export function TitleActions({
   // A phone: Play across the width, then one row of round buttons under it, each glyph alone
   // (Trailer and Download had words, and wrapped onto rows of their own).
   const phone = useFormFactor().form === "phone";
+  const profile = useOptionalAccount()?.profile ?? null;
+  const party = useParty();
+  const canStartParty = !!request && partyAvailable() && !!profile && !party;
   const { download: d, pending } = useDownload(item && download ? item.id : undefined);
   // Coming down, paused or failed: its ring and menu stay in view. Finished, it goes behind More with the rest.
   const downloadBusy = !!pending || (!!d && d.state !== "done");
   const downloadButton = item && download && <DownloadButton item={item} />;
 
   const lesser = [
+    canStartParty && (
+      <IconButton
+        key="watch-party"
+        variant="glass"
+        onClick={() => picker.play({ ...request, startParty: true })}
+        label="Watch Together"
+        title="Watch Together"
+      >
+        <WatchParty size={19} />
+      </IconButton>
+    ),
     item && playlist && <PlaylistButton key="playlist" item={item} />,
     <IconButton key="sources" variant="glass" disabled={!request} onClick={() => request && picker.choose(request)} label="Choose source" title="Choose source">
       <Sources size={19} />
     </IconButton>,
-    !downloadBusy && downloadButton && <span key="download">{downloadButton}</span>,
+    !downloadBusy && downloadButton && <Fragment key="download">{downloadButton}</Fragment>,
     item && <TraktRating key="trakt" item={item} />,
     more && <Fragment key="more">{more}</Fragment>,
   ];
@@ -91,21 +107,23 @@ export function TitleActions({
         {resume ? <Reset size={18} strokeWidth={2.5} /> : <Play size={18} fill="currentColor" />}
         {label}
       </Button>
-      {onTrailer &&
-        (phone ? (
-          <IconButton variant="glass" onClick={onTrailer} label="Trailer" title="Trailer">
-            <Trailer size={20} />
-          </IconButton>
-        ) : (
-          <Button variant="glass" className="detail-trailer-btn" onClick={onTrailer}>
-            <Trailer size={18} />
-            Trailer
-          </Button>
-        ))}
-      {item && <LibraryButton item={item} />}
-      {downloadBusy && downloadButton}
-      {phone ? lesser : <MoreActions>{lesser}</MoreActions>}
-      {children}
+      <div className="detail-actions-row">
+        {onTrailer &&
+          (phone ? (
+            <IconButton variant="glass" onClick={onTrailer} label="Trailer" title="Trailer">
+              <Trailer size={20} />
+            </IconButton>
+          ) : (
+            <Button variant="glass" className="detail-trailer-btn" onClick={onTrailer}>
+              <Trailer size={18} />
+              Trailer
+            </Button>
+          ))}
+        {item && <LibraryButton item={item} />}
+        {downloadBusy && downloadButton}
+        {phone ? lesser : <MoreActions>{lesser}</MoreActions>}
+        {children}
+      </div>
     </div>
   );
 }

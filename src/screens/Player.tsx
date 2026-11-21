@@ -14,6 +14,7 @@ import {
   Fullscreen,
   Pause,
   Play,
+  Reset,
   Settings as Cog,
   Shuffle,
   SkipForward,
@@ -136,7 +137,7 @@ import { useNavigation } from "../lib/router";
 import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
-import { setTvMode, useTvMode } from "../tv/tvMode";
+import { useTvMode } from "../tv/tvMode";
 import { usePadGlyph } from "../tv/TvChrome";
 import { fileId, filePlace, fileStream, isFileId, recentPosition, useRecentFiles } from "../lib/localFiles";
 import {
@@ -190,6 +191,13 @@ import { PlayerRatingPrompt } from "../components/player/RatingPrompt";
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
+/** Solo playback: how long a direct link (or torrent) gets to render frame 1 before auto-failing over. */
+const SOLO_START_MS = 15_000;
+const TORRENT_START_MS = 45_000;
+/** Continuous mid-playback buffering before offering a one-click switch to the next source. */
+const STALL_PROMPT_MS = 12_000;
+/** Short delay on desktop mouse click so double-click to fullscreen never pauses and unpauses the video. */
+const CLICK_PAUSE_DELAY_MS = 200;
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 /** What Subtitles & Audio and Speed say for a YouTube video outside TV mode: they're YouTube's own controls there (#384). TV mode has menus for them (#434). */
 const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
@@ -210,6 +218,7 @@ export function Player({
   videoId,
   stream,
   shuffle = false,
+  startParty: autoParty = false,
   leaving = false,
 }: {
   type: ContentType;
@@ -218,10 +227,12 @@ export function Player({
   stream?: Stream;
   /** The show's episodes in random order; nothing is saved or scrobbled (lib/playback/shuffle.ts). */
   shuffle?: boolean;
+  /** Automatically open a Watch Party room once playback starts (one-click "Watch Together" from Detail). */
+  startParty?: boolean;
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
-  const { back, replace, tab } = useNavigation();
+  const { back, navigate, replace, tab } = useNavigation();
   // TV mode keeps the window fullscreen: no fullscreen toggle, and Esc simply goes back.
   const tv = useTvMode();
   // With a controller in TV mode, controls show the button that triggers them.
@@ -575,6 +586,15 @@ export function Player({
     const v = videoRef.current;
     if (!party && profile && v) startParty({ ...partyMedia, hint }, v.currentTime, v.paused, profile);
   };
+  const autoPartyStarted = useRef(false);
+  useEffect(() => {
+    if (!autoParty || autoPartyStarted.current || !ready || !started || !profile || party || !videoRef.current) return;
+    autoPartyStarted.current = true;
+    const v = videoRef.current;
+    startParty({ ...partyMedia, hint }, v.currentTime, v.paused, profile);
+    setOptions("party");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoParty, ready, started, profile, party]);
 
   // --- mpv lifecycle ----------------------------------------------------------
   useEffect(() => {
@@ -711,18 +731,56 @@ export function Player({
     if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
   }, [playRate, source.state, media, inParty]);
 
-  // In a party, a source that won't start keeps the whole room waiting: move
-  // on to the next one, as picking another source by hand would.
+  // A source that hangs before showing frame 1 shouldn't trap the viewer (party OR solo): move on to the next candidate.
   const sourceNext = source.next;
   useEffect(() => {
-    if (!inParty || started || source.state.status !== "ready") return;
+    if (started || source.state.status !== "ready" || local || link) return;
+    const isTorrent = !!source.state.stream.infoHash;
+    const limit = inParty ? PARTY_START_MS : isTorrent ? TORRENT_START_MS : SOLO_START_MS;
     const t = window.setTimeout(() => {
-      logStep(`Not playing after ${PARTY_START_MS / 1000} s; the watch party is waiting`, "warn", "player");
+      logStep(
+        inParty ? `Not playing after ${limit / 1000} s; the watch party is waiting` : `No picture after ${limit / 1000} s; trying another source`,
+        "warn",
+        "player",
+      );
       if (sourceNext()) flashNotice("That source was slow to start. Trying the next best one.", 3500);
-    }, PARTY_START_MS);
+    }, limit);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a new attempt is a new source.state
-  }, [inParty, started, source.state]);
+  }, [inParty, started, source.state, local, link]);
+
+  // Mid-playback stall recovery: if buffering runs continuously for 12s, offer a non-blocking source switch.
+  const [stallPrompt, setStallPrompt] = useState(false);
+  const [stallDismissed, setStallDismissed] = useState(false);
+  useEffect(() => {
+    setStallDismissed(false);
+    setStallPrompt(false);
+  }, [source.state]);
+  useEffect(() => {
+    if (!started || paused || ended || !buffering || castingAway || local || link || !!options || stallDismissed) {
+      setStallPrompt(false);
+      return;
+    }
+    const t = window.setTimeout(() => setStallPrompt(true), STALL_PROMPT_MS);
+    return () => window.clearTimeout(t);
+  }, [started, paused, ended, buffering, castingAway, local, link, options, stallDismissed]);
+
+  const switchStalledSource = useCallback(() => {
+    setStallPrompt(false);
+    const at = videoRef.current?.currentTime;
+    if (at != null && Number.isFinite(at) && at > 0) reached.current = at;
+    recordFail(source.kind);
+    if (sourceNext()) {
+      logStep("Switched source after stall", "warn", "player");
+      flashNotice("Switching to the next best source…", 3000);
+    } else {
+      setOptions("sources");
+    }
+  }, [source.kind, sourceNext, logStep, flashNotice]);
+
+  // Debounce single-click play/pause on desktop mouse so double-click fullscreen never stutters.
+  const clickTimer = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
 
   // Fullscreen carries over from the previous episode; Settings → Playback
   // can also start every video in it.
@@ -1032,14 +1090,13 @@ export function Player({
   }, [back, tv, miniPlayer]);
 
   /**
-   * The Settings page a playback problem names. In TV mode (#435): Sources is TV's own Sources settings; Add-ons, which
-   * TV mode has no page for, is desktop mode's.
+   * The Settings page a playback problem names. In TV mode (#435): both Sources and Add-ons stay in TV's own
+   * Settings so remote/controller users are never booted into pointer-only desktop UI.
    */
   const openSettingsPage = useCallback(
     (page: "sources" | "addons") => {
-      if (tv && page === "sources") return tab({ name: "settings", page: "sources" });
+      if (tv) return tab({ name: "settings", page });
       void exit();
-      if (tv) setTvMode(false);
       openSettings(page);
     },
     [tv, tab, exit],
@@ -1381,20 +1438,36 @@ export function Player({
     }
   }, [next, pastThreeQuarters, type]);
 
-  // Autoplay countdown once the episode ends, unless it's time to ask
-  // whether anyone's still watching (Settings → Playback). Pauses while playback is
-  // paused before EOF or while a picker/menu is open so browsing sources/subtitles never hijacks playback.
+  // With IntroDB / chapter credit timings, "Up next" arrives as soon as credits
+  // roll (Netflix-style) and counts down immediately unless there's a post-credits
+  // scene or the user prefers waiting until the very end.
+  const creditsStart = skip.segments?.outro?.start;
+  const postCredits = !!skip.segments?.postCredits;
+  const atEnd = settings?.nextUpTiming === "end";
+  const nearEnd = useMediaTime(media, (t) => {
+    if (!(t.duration > 0)) return "unknown";
+    const remaining = t.duration - t.current;
+    const inCredits = creditsStart != null && t.current >= creditsStart && !postCredits;
+    return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
+  });
+  const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
+  const creditsRoll = creditsStart != null && !postCredits && !atEnd && nearEnd === "yes";
+
+  // Autoplay countdown once credits start (when known) or once the episode ends,
+  // unless it's time to ask whether anyone's still watching (Settings → Playback).
+  // Pauses while playback is paused before EOF or while a picker/menu is open.
   const askAfter = settings?.stillWatchingAfter ?? 0;
   const stillWatching = askAfter > 0 && autoplayStreak() >= askAfter;
   // A sleep timer set to the end of this episode (or run out) stops here: no next one (#270).
   const willAutoplay = !!settings?.autoplayNext && !stillWatching && sleep.choice !== "episode" && !sleep.asleep;
+  const autoAdvancing = showNextUp && willAutoplay && (ended || creditsRoll);
   const countdownPaused = (paused && !ended) || !!options || moreOpen || !!sourceMenu;
   const autoplayLeft = useRef(countdown * 1000);
   useEffect(() => {
     autoplayLeft.current = countdown * 1000;
-  }, [ended, videoId, countdown]);
+  }, [autoAdvancing, videoId, countdown]);
   useEffect(() => {
-    if (!ended || !next || nextDismissed || !willAutoplay || countdownPaused) return;
+    if (!autoAdvancing || !next || countdownPaused) return;
     const startedAt = performance.now();
     const wait = autoplayLeft.current;
     const t = window.setTimeout(() => {
@@ -1406,21 +1479,8 @@ export function Player({
       window.clearTimeout(t);
       autoplayLeft.current = Math.max(0, wait - (performance.now() - startedAt));
     };
-  }, [ended, next, nextDismissed, willAutoplay, countdownPaused, playVideo]);
+  }, [autoAdvancing, next, countdownPaused, playVideo]);
 
-  // With IntroDB credit timings, "Up next" arrives exactly when the credits
-  // roll (Netflix-style); without them, fall back to the last ~40s. Settings
-  // can hold it back until the very end instead.
-  const creditsStart = skip.segments?.outro?.start;
-  const postCredits = !!skip.segments?.postCredits;
-  const atEnd = settings?.nextUpTiming === "end";
-  const nearEnd = useMediaTime(media, (t) => {
-    if (!(t.duration > 0)) return "unknown";
-    const remaining = t.duration - t.current;
-    const inCredits = creditsStart != null && t.current >= creditsStart && !postCredits;
-    return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
-  });
-  const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
   const sleepEndedRef = useRef<HTMLDivElement>(null);
   useDismiss(showNextUp && !!next && !options, () => setNextDismissed(true));
   useDismiss(sleep.warning && !sleep.asleep && !options, () => sleep.cancel());
@@ -1432,7 +1492,7 @@ export function Player({
     if (!nextId || local || link || nearEnd !== "yes") return;
     const streams = cachedStreams(type, nextId);
     if (!streams?.length) return;
-    return warmLinks(autoPickOrder(streams, settings, metaId).slice(0, 2));
+    return warmLinks(autoPickOrder(streams, settings, metaId, source.match.current).slice(0, 2));
     // The settings at that moment: a change later doesn't need another look.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextId, nearEnd, local, link, type, metaId]);
@@ -1482,8 +1542,10 @@ export function Player({
       );
   };
 
-  /** "More" has items of its own (screenshots, Picture in Picture, other players), so it shows whatever fits. */
-  const moreItems = canShoot || canMini || canHandOff;
+  /** On a phone, secondary actions (Sleep Timer, Watch Party) live in the top-right "…" menu so the bottom bar never clips. */
+  const phoneMore = !tv && form === "phone";
+  /** "More" has items of its own (screenshots, Picture in Picture, other players, phone overflow), so it shows whatever fits. */
+  const moreItems = canShoot || canMini || canHandOff || phoneMore;
 
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
@@ -1504,16 +1566,17 @@ export function Player({
         // The same smoked glass as the dock's panels: a frosted copy of the picture behind the menu.
         backdrop: <VideoBackdrop media={media} className="options-frost" crop cropSize={[192, 168]} fade />,
       }
-    : {};
+    : { className: "scheme-dark" };
   const barFit = useBarFit(
     topBar,
     actionRow,
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact && !dock,
-    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join(
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems, phoneMore].join(
       "|",
     ),
     !!watchLog || moreItems,
+    !tv && !dock,
   );
   const more = barFit.more;
   // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
@@ -1791,9 +1854,14 @@ export function Player({
             {`Crop: ${cropModeLabel(crop)}`}
           </MenuCheckItem>
         )}
-        {dock && (
+        {(dock || phoneMore) && (
           <MenuItem onClick={() => setOptions("sleep")} meta={sleep.left != null ? sleepLabel(sleep.left) : undefined}>
             Sleep Timer
+          </MenuItem>
+        )}
+        {phoneMore && canParty && !castingAway && (
+          <MenuItem onClick={() => setOptions("party")} meta={party ? `${party.members.length}` : undefined}>
+            Watch Party
           </MenuItem>
         )}
         {canMini && (
@@ -1922,13 +1990,22 @@ export function Player({
             touchChain.current = null;
             if (e.detail <= 1) chromeBeforeTap.current = chromeAtPress.current;
           }
-          if (!touch && settings?.clickAction !== "controls") return togglePlay();
+          if (!touch && settings?.clickAction !== "controls") {
+            window.clearTimeout(clickTimer.current);
+            clickTimer.current = window.setTimeout(() => {
+              clickTimer.current = undefined;
+              togglePlay();
+            }, CLICK_PAUSE_DELAY_MS);
+            return;
+          }
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
         }}
         // A finger double-taps the left or right third to skip back or ahead, as phone players do;
-        // the middle (and a mouse anywhere) toggles fullscreen.
+        // the middle (and a mouse anywhere) toggles fullscreen without first pausing on click 1.
         onDoubleClick={(e) => {
+          window.clearTimeout(clickTimer.current);
+          clickTimer.current = undefined;
           const third = e.currentTarget.clientWidth / 3;
           const x = e.nativeEvent.offsetX;
           if (touch && (x < third || x > third * 2)) {
@@ -2036,6 +2113,28 @@ export function Player({
         {party && ready && started && <PartyHold party={party} videoId={videoId} />}
         {notice && <div className="player-notice t-callout">{notice}</div>}
       </div>
+      {stallPrompt && !notice && (
+        <div className="stall-prompt" role="status">
+          <span className="stall-prompt-text t-callout">Stream is buffering</span>
+          <Button size="sm" variant="primary" onClick={switchStalledSource}>
+            Try Next Source
+          </Button>
+          <Button size="sm" variant="glass" onClick={() => setOptions("sources")}>
+            Sources
+          </Button>
+          <IconButton
+            variant="plain"
+            className="stall-prompt-dismiss"
+            onClick={() => {
+              setStallDismissed(true);
+              setStallPrompt(false);
+            }}
+            label="Dismiss"
+          >
+            <Close size={15} />
+          </IconButton>
+        </div>
+      )}
       {party && <PartyNotes party={party} />}
 
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
@@ -2265,14 +2364,14 @@ export function Player({
             {!party && (
               <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
             )}
-            <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
+            {!phoneMore && <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />}
             {type === "series" && (
               <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
             )}
             {/* YouTube's player keeps its own captions and audio. */}
             {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
             {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
-            {canParty && !castingAway && (
+            {!phoneMore && canParty && !castingAway && (
               <ActionButton
                 icon={<WatchParty size={22} />}
                 label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
@@ -2331,7 +2430,10 @@ export function Player({
             title: "Playback Speed",
             value: String(rate),
             options: SPEEDS.map((r) => ({ id: String(r), label: speedLabel(r) })),
-            onSelect: (id: string) => setRate(Number(id)),
+            onSelect: (id: string) => {
+              setRate(Number(id));
+              if (!dock) setOptions(null);
+            },
             // The dock: Netflix's line of speeds, the chosen one named beside the title.
             ...(dock
               ? {
@@ -2379,6 +2481,7 @@ export function Player({
       <OptionsOverlay
         open={options === "tracks"}
         dockedTo={dock ? "tracks" : undefined}
+        live={form !== "phone" && (audioSettingsOpen || subSettingsOpen)}
         onClose={() => {
           setOptions(null);
           setSubSettingsOpen(false);
@@ -2480,6 +2583,7 @@ export function Player({
       <SkipButton
         active={started ? skip.active : null}
         onSkip={skip.skipActive}
+        onCancel={skip.cancelCountdown}
         chromeVisible={chromeVisible}
         countdown={skip.countdown}
         paused={paused}
@@ -2502,9 +2606,13 @@ export function Player({
             </div>
             <div className="next-up-text">
               <span className="next-up-kicker">
-                {ended && stillWatching ? "Are you still watching?" : local ? "Up Next" : `Up Next · ${episodeCode(next.season, next.episode)}`}
+                {(ended || creditsRoll) && stillWatching
+                  ? "Are you still watching?"
+                  : local
+                    ? "Up Next"
+                    : `Up Next · ${episodeCode(next.season, next.episode)}`}
               </span>
-              {skipped.length > 0 && !(ended && stillWatching) && (
+              {skipped.length > 0 && !((ended || creditsRoll) && stillWatching) && (
                 <span className="next-up-skipping">
                   Skipping filler: {skipped.length === 1 ? `episode ${skipped[0].episode}` : `episodes ${skipped[0].episode}–${skipped[skipped.length - 1].episode}`}
                 </span>
@@ -2514,15 +2622,17 @@ export function Player({
                 <Button
                   variant="primary"
                   className="next-up-play"
+                  title={withShortcut("Play next episode", "nextEpisode")}
                   onClick={() => {
                     resetAutoplay();
                     playVideo(next.id);
                   }}
                 >
-                  {ended && willAutoplay && (
+                  {autoAdvancing && (
                     <span className="next-up-countdown" data-paused={countdownPaused} style={{ animationDuration: `${countdown}s` }} />
                   )}
-                  {pad("skipOrNext", "nextEpisode") ?? <Play size={16} fill="currentColor" />} {ended && stillWatching ? "Keep Watching" : "Play Now"}
+                  {pad("skipOrNext", "nextEpisode") ?? <Play size={16} fill="currentColor" />}{" "}
+                  {(ended || creditsRoll) && stillWatching ? "Keep Watching" : "Play Now"}
                 </Button>
                 <IconButton variant="glass" className="next-up-dismiss" onClick={() => setNextDismissed(true)} label="Dismiss">
                   <Close size={16} />
@@ -2533,11 +2643,39 @@ export function Player({
         )}
       </AnimatePresence>
 
+      {/* Finished a movie or series finale: offer Replay and Back to Title instead of freezing on a black frame. */}
+      {ended && !showNextUp && !castingAway && !sleep.asleep && !ytFramed && (
+        <div className="player-ended-card" role="region" aria-label="Playback finished">
+          <span className="player-ended-kicker">Finished</span>
+          <span className="player-ended-title">{heading || title}</span>
+          <div className="player-ended-actions">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setEnded(false);
+                seekTo(0);
+                void videoRef.current?.play().catch(() => {});
+              }}
+            >
+              <Reset size={15} /> Replay
+            </Button>
+            <Button variant="glass" size="sm" onClick={() => void exit()}>
+              Back to Title
+            </Button>
+          </div>
+        </div>
+      )}
+
       <PlayerPauseScreen
         meta={meta}
         videoId={videoId}
         media={media}
         unwatched={currentUnwatched}
+        onSelectPerson={(person) => {
+          if (person.tmdbId == null) return;
+          void exit().then(() => navigate({ name: "person", id: person.tmdbId!, title: person.name }));
+        }}
         state={{
           engine,
           playing: ready && started,
@@ -2559,6 +2697,19 @@ export function Player({
         videoId={videoId}
         state={{ ended, nextUp: showNextUp, follower: !!party && party.hostId !== party.me, local, link: isLinkId(metaId), shuffle: shuffled || shuffling }}
       />
+
+      {party && (party.reactions?.length ?? 0) > 0 && (
+        <div className="party-reactions-stage" aria-live="polite" aria-label="Party reactions">
+          {(party.reactions ?? []).map((r) => (
+            <span key={r.id} className="party-reaction-float">
+              <span className="party-reaction-emoji" aria-hidden>
+                {r.emoji}
+              </span>
+              {r.who?.name && <span className="party-reaction-who">{r.who.name}</span>}
+            </span>
+          ))}
+        </div>
+      )}
 
       {canParty && (
         <OptionsOverlay

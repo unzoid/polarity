@@ -1160,3 +1160,197 @@ body:has(.player[data-started="true"]) :is(.party-link-card, .party-popover) {
   height: 2.5rem;
   border-radius: 999px;
 }
+
+
+/* --- Watch Party social: in-player friend invites, reactions & ephemeral chat --- */
+.party-invite-friends {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.party-invite-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.party-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.25rem 0;
+}
+.party-invite-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex: none;
+}
+.party-invite-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.party-social {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.party-react-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.party-react-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  background: var(--fill-1);
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 130ms var(--ease-out), background-color 130ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .party-react-btn:hover {
+    background: var(--fill-2);
+    transform: translateY(-1px) scale(1.06);
+  }
+}
+.party-chat-log {
+  list-style: none;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-radius: var(--r-sm);
+  background: var(--fill-1);
+  border: 1px solid var(--hairline);
+  font-size: var(--fs-sm);
+}
+.party-chat-line {
+  display: flex;
+  gap: 0.4rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.party-chat-who {
+  font-weight: 600;
+  color: var(--text);
+  flex: none;
+}
+.party-chat-text {
+  color: var(--text-2);
+}
+.party-chat-form {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.party-chat-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 0.65rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--fill-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.party-chat-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.friends-watching-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .friends-watching-link:hover {
+    text-decoration: underline;
+  }
+}
+
+.party-reactions-stage {
+  position: absolute;
+  right: max(1.5rem, env(safe-area-inset-right));
+  bottom: 6.5rem;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+.party-reaction-float {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--r-pill);
+  background: rgb(18 18 22 / 0.72);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  animation: party-reaction-rise 2.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.party-reaction-emoji {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+@keyframes party-reaction-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.82);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-48px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-76px) scale(0.95);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .party-reaction-float {
+    animation: none;
+  }
+}
+:root[data-reduce-motion="on"] .party-reaction-float {
+  animation: none;
+}

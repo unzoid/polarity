@@ -3,6 +3,7 @@
 
 export * from "./autoDownloads";
 export * from "./batchDownloads";
+export * from "./continueWatching";
 export * from "./downloadFolder";
 export * from "./downloads";
 export * from "./keepDownloaded";

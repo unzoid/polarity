@@ -1,6 +1,6 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
 import { LIMIT_STEPS } from "../catalog/ageRating";
-import { isMac } from "../platform/device";
+import { osName } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
 import { MAX_VOLUMES } from "../playback/volume";
 import type { Prefs } from "./prefs";
@@ -762,7 +762,7 @@ export const SETTINGS: SettingDef[] = [
     keywords: "animations accessibility",
     bind: s("reduceMotion", "system"),
     control: choice([
-      { value: "system", label: isMac ? "Match macOS" : "Match Windows" },
+      { value: "system", label: `Match ${osName}` },
       { value: "on", label: "On" },
       { value: "off", label: "Off" },
     ]),

@@ -4,6 +4,16 @@ import { dismissTop } from "../../lib/ui";
 import { focusEl, KEY_DIRS, move, navigables } from "../../tv/spatial";
 import { isTvMode } from "../../tv/tvMode";
 
+/** Continuous actions where holding a key should keep firing; discrete toggles ignore key repeat. */
+const REPEATABLE_ACTIONS: ReadonlySet<Action | "escape"> = new Set([
+  "seekBack",
+  "seekForward",
+  "volumeUp",
+  "volumeDown",
+  "frameBack",
+  "frameForward",
+]);
+
 /** Keys that back out of the player: Esc always; in TV mode also Backspace and a remote's Back, as on the other TV screens. */
 function isBack(e: KeyboardEvent): boolean {
   if (e.key === "Escape") return true;
@@ -54,7 +64,7 @@ export function usePlayerKeyboard(
 
       const dir = KEY_DIRS[e.key];
       const tv = isTvMode();
-      const bareFocus = !target || target === document.body || target === document.documentElement || target.classList.contains("player");
+      const bareFocus = !target || !(target instanceof Element) || target === document.body || target === document.documentElement || target.classList.contains("player");
 
       if (dir) {
         const inPrompt = !!target?.closest?.(PROMPT_ZONES);
@@ -93,6 +103,10 @@ export function usePlayerKeyboard(
       }
 
       const action = isBack(e) ? "escape" : actionFor(e, "player");
+      if (action && e.repeat && !REPEATABLE_ACTIONS.has(action)) {
+        e.preventDefault();
+        return;
+      }
       if (action && latest.current.onAction(action)) {
         e.preventDefault();
         latest.current.onHandled(action);

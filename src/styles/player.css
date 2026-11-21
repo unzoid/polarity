@@ -622,12 +622,18 @@
   min-height: 44px;
   min-width: 44px;
 }
-:root[data-form="phone"] .skip-button {
+:root[data-form="phone"] .skip-controls {
   right: max(1.25rem, var(--safe-right));
   bottom: calc(6.25rem + max(0.25rem, calc(var(--safe-bottom) - 0.75rem)));
+}
+:root[data-form="phone"] .skip-button {
   height: 2.5rem;
   padding: 0 1rem 0 1.125rem;
   font-size: var(--fs-md);
+}
+:root[data-form="phone"] .skip-cancel {
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 /* Volume: slider fill painted from a per-element custom property (one element,
@@ -813,6 +819,29 @@
   /* No fill: until the frosted copy has a frame, the live video shows through
      the shade — a solid fill here dips the screen to black on open. */
   cursor: default;
+}
+/* Live mode (audio/subtitle delay & style tuning): dock the controls on the right as a
+   translucent glass panel so the playing video stays unobstructed on the left for lip-sync. */
+.options-overlay[data-live="true"] {
+  justify-items: end;
+  align-items: center;
+  padding: max(4rem, var(--safe-top)) max(1.5rem, var(--safe-right)) max(2rem, var(--safe-bottom)) max(1.5rem, var(--safe-left));
+  background: linear-gradient(to left, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0.32) 48%, transparent 72%);
+}
+.options-overlay[data-live="true"] .options-columns {
+  gap: 1.5rem;
+  max-width: min(46rem, calc(100vw - 3rem));
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--r-panel);
+  background: rgb(16 16 18 / 0.82);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 1.5rem 3rem -1rem rgb(0 0 0 / 0.7);
+  backdrop-filter: var(--blur-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
+}
+.options-overlay[data-live="true"] .options-column {
+  max-height: min(74vh, 640px);
 }
 /* Layer 1: the frosted video (see VideoBackdrop.tsx, which does the blurring). Scaled past the edges
    so the softened border never shows; a light CSS blur only smooths the upscale's blocks. */
@@ -1444,6 +1473,70 @@ html[data-os="android"] .options-columns {
     0 12px 28px -6px rgb(0 0 0 / 0.55);
   animation: fade-in var(--dur-base) var(--ease-out);
 }
+/* Mid-playback stall recovery prompt (Player.tsx): top-center pill with one-click source switch. */
+.stall-prompt {
+  position: absolute;
+  top: calc(4.5rem + var(--safe-top));
+  left: 50%;
+  translate: -50% 0;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 2rem);
+  padding: 0.375rem 0.5rem 0.375rem 1rem;
+  border-radius: var(--r-pill);
+  background: var(--surface-float);
+  box-shadow: 0 1.25rem 2.5rem -0.75rem rgb(0 0 0 / 0.65);
+  animation: fade-in var(--dur-base) var(--ease-out);
+}
+.stall-prompt-text {
+  white-space: nowrap;
+  color: var(--text);
+}
+.stall-prompt-dismiss.btn-icon {
+  width: 2rem;
+  height: 2rem;
+}
+/* End-of-movie / series finale bridge (Player.tsx): bottom-left so RatingPrompt owns bottom-right cleanly. */
+.player-ended-card {
+  position: absolute;
+  left: max(3rem, var(--safe-left));
+  bottom: calc(10rem + var(--safe-bottom));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: min(22rem, calc(100vw - max(3rem, var(--safe-left)) - max(1.5rem, var(--safe-right))));
+  padding: 1rem 1.125rem;
+  border-radius: var(--r-panel);
+  background: var(--surface-float);
+  box-shadow: 0 1.5rem 3rem -1rem rgb(0 0 0 / 0.6);
+  animation: fade-in var(--dur-slow) var(--ease-out);
+}
+.player[data-options="true"] .player-ended-card {
+  visibility: hidden;
+}
+.player-ended-kicker {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+.player-ended-title {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-ended-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
 
 /* Press and hold on the picture (useHoldSpeed): how fast it plays while held, where notices sit. */
 .player-hold-speed {
@@ -1707,6 +1800,7 @@ html[data-os="android"] .options-columns {
     .player-transport:active,
     .player-icon:active,
     .player-action:active,
+    .skip-cancel:active,
     .sub-stepper button:active:not(:disabled),
     .sub-reset:active:not(:disabled)
   ) {
@@ -2113,11 +2207,47 @@ img.load-mark-base[data-logo-look^="halo"] {
        action row whether the controls are up or not, so it never moves out from
        under the pointer as they appear (#331). Shown when the segment starts,
        then only with the chrome (#17). */
-.skip-button {
+.skip-controls {
   position: absolute;
   right: max(2.5rem, var(--safe-right));
   bottom: calc(10.5rem + var(--safe-bottom));
   z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+.skip-controls[data-visible="true"] {
+  pointer-events: auto;
+}
+.player[data-options="true"] .skip-controls {
+  visibility: hidden;
+}
+.skip-cancel {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--r-pill);
+  background: var(--surface-float);
+  color: var(--text-2);
+  box-shadow: 0 1rem 2rem -0.75rem rgb(0 0 0 / 0.6);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-press) var(--ease-out);
+}
+.skip-cancel:active {
+  transform: scale(0.95);
+}
+@media (hover: hover) and (pointer: fine) {
+  .skip-cancel:hover {
+    background: var(--fill-4);
+    color: var(--text);
+  }
+}
+.skip-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
@@ -2302,6 +2432,29 @@ img.load-mark-base[data-logo-look^="halo"] {
 .sub-setting-caption {
   font-size: var(--fs-xs);
   color: var(--text-3);
+}
+.sub-delay-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sub-delay-zero {
+  height: 30px;
+  padding: 0 0.625rem;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.08);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sub-delay-zero:hover {
+    background: var(--fill-4);
+    color: var(--text);
+  }
 }
 .sub-stepper {
   display: flex;
@@ -3208,6 +3361,37 @@ img.load-mark-base[data-logo-look^="halo"] {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.pause-screen-person[data-clickable="true"] {
+  padding: 0;
+}
+.pause-screen-person-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  max-width: 100%;
+  padding: 0.3125rem 0.875rem 0.3125rem 0.3125rem;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pause-screen-person-btn:hover {
+    background: rgb(255 255 255 / 0.14);
+  }
+}
+.pause-screen-person-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pause-screen-person-btn:active {
+  transform: scale(0.97);
 }
 .pause-screen-person-text {
   display: flex;

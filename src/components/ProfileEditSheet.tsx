@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type AvatarId, useAccount } from "../lib/account";
 import { errorMessage } from "../lib/errors";
 import { openSettings } from "../lib/settings";
@@ -13,7 +13,16 @@ import { ProfileLockRows } from "./profileLock/ProfileLockRows";
  * Delete. Each change is kept as it's made, as a phone's settings are: a new picture when it's picked, the name when
  * the field is left. `onDone`: back to the profiles (after Delete too).
  */
-export function ProfileEditSheet({ id, onDone }: { id: string; onDone: () => void }) {
+export function ProfileEditSheet({
+  id,
+  onDone,
+  onHead,
+}: {
+  id: string;
+  onDone: () => void;
+  /** Tells the phone sheet's header when a nested sub-view (Icon Picker) owns the Back button. */
+  onHead?: (head: { label: string; back: () => void } | undefined) => void;
+}) {
   const account = useAccount();
   const profile = account.profiles.find((p) => p.id === id);
   const [name, setName] = useState(profile?.name ?? "");
@@ -21,6 +30,10 @@ export function ProfileEditSheet({ id, onDone }: { id: string; onDone: () => voi
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    onHead?.(picking ? { label: "Choose Icon", back: () => setPicking(false) } : undefined);
+    return () => onHead?.(undefined);
+  }, [picking, onHead]);
   if (!profile) return null;
 
   const inUse = account.profile?.id === profile.id;

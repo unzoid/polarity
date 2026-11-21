@@ -40,23 +40,23 @@ const sameRange = (a: [number, number] | null, b: [number, number] | null) => a?
 const sizeLabel = (r: [number, number] | null) =>
   SIZE_PRESETS.find((p) => sameRange(p.range, r))?.label ?? (r ? `${r[0]}–${r[1]} GB` : "Any size");
 
-interface Chip {
+export interface SourceFilterChip {
   key: string;
   label: string;
   count?: number;
   on: boolean;
   pick: () => void;
 }
-interface Section {
+export interface SourceFilterSection {
   label: string;
-  chips: Chip[];
+  chips: SourceFilterChip[];
 }
 
 /** Every choice as a labelled row of chips. Quality is left out where the segmented control has it. */
 /** `withQuality`: TV, where everything is chip rows; desktop has its own quality and add-on controls. */
-function sections(f: SourceFilters, withQuality: boolean): Section[] {
+export function sourceFilterSections(f: SourceFilters, withQuality: boolean): SourceFilterSection[] {
   const { filter, facets } = f;
-  const out: Section[] = [
+  const out: SourceFilterSection[] = [
     {
       label: "Sort",
       chips: (Object.keys(SORTS) as SourceSort[]).map((k) => ({ key: k, label: SORTS[k], on: f.sort === k, pick: () => f.setSort(k) })),
@@ -125,7 +125,7 @@ function sections(f: SourceFilters, withQuality: boolean): Section[] {
 }
 
 /** What narrows the list besides the picture, each with its own undo. */
-function activeFilters(f: SourceFilters) {
+export function activeSourceFilters(f: SourceFilters) {
   const { filter, facets } = f;
   const out: { key: string; label: string; clear: () => void }[] = [];
   if (filter.lang)
@@ -139,7 +139,7 @@ function activeFilters(f: SourceFilters) {
 
 function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
   const { filter, facets } = f;
-  const active = activeFilters(f);
+  const active = activeSourceFilters(f);
   // On a phone Filters is its glyph alone, right after the picture choice (sheet.css).
   const filters = (
     <PopoverRoot>
@@ -149,7 +149,7 @@ function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
         {active.length > 0 && <span className="srcf-filters-count tabular">{active.length}</span>}
       </PopoverTrigger>
       <PopoverPopup className="srcf-popover" sideOffset={8} align="end">
-        {sections(f, false).map((s) => (
+        {sourceFilterSections(f, false).map((s) => (
           <ChipRow key={s.label} {...s} collapsible />
         ))}
         {note && <p className="srcf-popover-note">{note}</p>}
@@ -206,7 +206,7 @@ function DesktopBar({ f, note }: { f: SourceFilters; note?: string }) {
 
 function TvBar({ f, note }: { f: SourceFilters; note?: string }) {
   // Sort goes last on TV, under the filters it orders.
-  const [sort, ...rest] = sections(f, true);
+  const [sort, ...rest] = sourceFilterSections(f, true);
   return (
     <div className="srcf srcf-tv" data-nav-memory data-nav-group>
       {[...rest, sort].map((s) => (
@@ -222,7 +222,7 @@ function TvBar({ f, note }: { f: SourceFilters; note?: string }) {
  * so the panel shows every choice at a glance instead of a wall of audio languages and release names; More
  * opens the rest in place (and Show Less folds it again). A chip that's on is never folded away.
  */
-function TvChipRow({ label, chips }: Section) {
+function TvChipRow({ label, chips }: SourceFilterSection) {
   const [open, setOpen] = useState(false);
   // How many chips fit on the line with the More chip after them; null while measuring (everything drawn).
   const [fit, setFit] = useState<number | null>(null);
@@ -314,7 +314,7 @@ const SEARCH_FROM = 10;
  * past three rows the rest fold behind "Show all", and long rows get a search
  * beside their label. TV keeps every chip in reach of the remote.
  */
-function ChipRow({ label, chips, collapsible = false }: Section & { collapsible?: boolean }) {
+function ChipRow({ label, chips, collapsible = false }: SourceFilterSection & { collapsible?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);

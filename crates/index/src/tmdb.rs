@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::stream::{self, StreamExt, TryStreamExt};
-use polar_addon::{Meta, MetaDetails, MetaPreview, Person, Video};
+use polar_addon::{CollectionInfo, Meta, MetaDetails, MetaPreview, Person, Video};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{Mutex, Semaphore};
@@ -196,6 +196,22 @@ impl Tmdb {
             list.results.extend(similar.results);
         }
         Ok(curate::dedupe(self.previews(ty, list.results).await?))
+    }
+
+    /// Films in a TMDB collection / franchise (`/collection/{id}`), in release order.
+    pub async fn collection(&self, id: u64) -> Result<Vec<MetaPreview>> {
+        #[derive(Deserialize)]
+        struct Collection {
+            #[serde(default)]
+            parts: Vec<Item>,
+        }
+        let mut col: Collection = self.get(&format!("/collection/{id}"), &[]).await?;
+        col.parts.sort_by(|a, b| {
+            let da = a.release_date.as_deref().filter(|s| !s.is_empty()).unwrap_or("9999-99-99");
+            let db = b.release_date.as_deref().filter(|s| !s.is_empty()).unwrap_or("9999-99-99");
+            da.cmp(db)
+        });
+        Ok(curate::dedupe(self.previews("movie", col.parts).await?))
     }
 
     async fn find(&self, ty: &str, imdb_id: &str) -> Result<u64> {
@@ -671,6 +687,14 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
         episodes: positive(&d["number_of_episodes"]).map(|n| n as u32),
         votes: positive(&d["vote_count"]),
         tmdb_id: d["id"].as_u64(),
+        collection: if is_series {
+            None
+        } else {
+            d["belongs_to_collection"]["id"]
+                .as_u64()
+                .zip(str_of(&d["belongs_to_collection"]["name"]))
+                .map(|(id, name)| CollectionInfo { id, name })
+        },
     };
 
     Meta {
@@ -713,7 +737,7 @@ fn one() -> u32 {
     1
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Item {
     id: u64,
     title: Option<String>,

@@ -14,10 +14,10 @@ export const systemBack: "button" | "swipe" | null = !inShell ? null : os === "a
 
 /**
  * A Back that follows the finger (iOS's swipe, Android's back gesture): `begin` says whether it takes this swipe (the page moves with it),
- * `move` how far it has come of `width`, `end` whether it goes back. A swipe it doesn't take calls the handler
- * when it ends far enough in, as a button press would.
+ * `move` how far it has come of `width`, `end` whether it goes back (with optional release velocity in CSS px/s). A swipe it doesn't take
+ * calls the handler when it ends far enough in, as a button press would.
  */
-export type BackDrag = { begin(): boolean; move(x: number, width: number): void; end(back: boolean): void };
+export type BackDrag = { begin(): boolean; move(x: number, width: number): void; end(back: boolean, velocity?: number): void };
 
 /** Hear the system's Back until the returned function is called; a no-op where there is none. */
 export async function onSystemBack(handler: () => void, drag?: () => BackDrag | undefined): Promise<Unlisten> {
@@ -110,7 +110,7 @@ export function followSwipe(handler: () => void, drag?: () => BackDrag | undefin
       taken?.move(swipe.x, swipe.width);
     } else {
       const back = swipe.phase === "end" && swipeGoesBack(swipe);
-      if (taken) taken.end(back);
+      if (taken) taken.end(back, swipe.velocity);
       else if (back) handler();
       taken = undefined;
     }

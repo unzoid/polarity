@@ -49,7 +49,7 @@ const TvScreen = memo(function TvScreen({ route }: { route: Route }) {
     case "home":
       return <TvHome />;
     case "discover":
-      return <TvDiscover type={route.type} />;
+      return <TvDiscover type={route.type} catalog={route.catalog} genre={route.genre} />;
     case "library-collection":
       return route.view === "downloads" ? <TvDownloads /> : <TvLibrary />;
     case "library":
