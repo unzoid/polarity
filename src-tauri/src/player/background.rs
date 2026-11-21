@@ -77,41 +77,65 @@ pub fn set_app(app: &AppHandle) {
 }
 
 /// Show what plays on the system's controls (`info`), or take them away (`None`: the player
-/// closed). Only iOS and Android show them.
+/// closed). Only iOS and Android show them. Runs asynchronously so Bitmap/UIImage decode & JNI
+/// never block the UI thread or mpv's `read_loop`.
 #[tauri::command]
-pub fn now_playing(info: Option<Info>) {
-    let mut shown = SHOWN.locked();
-    match info.map(Info::clipped) {
-        Some(info) => {
-            shown.tracker.forget();
-            let playback = shown.tracker.current();
-            system::show(&info, playback);
-            shown.info = Some(info);
-        }
-        None => {
-            if shown.info.take().is_some() {
-                system::hide();
+pub async fn now_playing(info: Option<Info>) {
+    enum Action {
+        Show(Info, Playback),
+        Hide,
+        None,
+    }
+    let action = {
+        let mut shown = SHOWN.locked();
+        match info.map(Info::clipped) {
+            Some(info) => {
+                shown.tracker.forget();
+                let playback = shown.tracker.current();
+                shown.info = Some(info.clone());
+                Action::Show(info, playback)
+            }
+            None => {
+                if shown.info.take().is_some() {
+                    Action::Hide
+                } else {
+                    Action::None
+                }
             }
         }
+    };
+    match action {
+        Action::Show(info, playback) => {
+            let _ = tokio::task::spawn_blocking(move || system::show(&info, playback)).await;
+        }
+        Action::Hide => {
+            let _ = tokio::task::spawn_blocking(system::hide).await;
+        }
+        Action::None => {}
     }
 }
 
 /// An observed mpv property changed (the reader, every change, held pauses left out).
 pub(super) fn observe(name: &str, data: &Value) {
-    let mut shown = SHOWN.locked();
-    if let Some(playback) = shown.tracker.observe(name, data, now()) {
-        if shown.info.is_some() {
-            system::update(playback);
-        }
+    let update = {
+        let mut shown = SHOWN.locked();
+        shown.tracker.observe(name, data, now()).filter(|_| shown.info.is_some())
+    };
+    if let Some(playback) = update {
+        // Dispatch off `read_loop` so JNI/system calls never stall mpv IPC responses.
+        tokio::task::spawn_blocking(move || system::update(playback));
     }
 }
 
 /// mpv went away: nothing plays any more.
 pub(super) fn stopped() {
-    let mut shown = SHOWN.locked();
-    shown.tracker.reset();
-    if shown.info.take().is_some() {
-        system::hide();
+    let hide = {
+        let mut shown = SHOWN.locked();
+        shown.tracker.reset();
+        shown.info.take().is_some()
+    };
+    if hide {
+        tokio::task::spawn_blocking(system::hide);
     }
 }
 
@@ -241,12 +265,15 @@ mod system {
 #[cfg(target_os = "android")]
 mod system {
     use super::{Info, Playback};
-    use jni::objects::{JClass, JObject, JValue};
+    use jni::objects::{GlobalRef, JClass, JObject, JValue};
     use jni::sys::{jdouble, jint};
     use jni::JNIEnv;
+    use std::sync::OnceLock;
 
-    /// Calls a static method of `NowPlaying` (PlaybackService.kt) with the app's context first. The
-    /// class comes from the app's class loader: a thread Rust started can't find it by name.
+    static NOW_PLAYING_CLASS: OnceLock<GlobalRef> = OnceLock::new();
+
+    /// Calls a static method of `NowPlaying` (PlaybackService.kt) with the app's context first.
+    /// Caches the `GlobalRef` class once so updates never invoke `getClassLoader().loadClass(...)` again.
     fn call(f: impl for<'l> FnOnce(&mut JNIEnv<'l>, &JClass<'l>, &JObject<'l>) -> jni::errors::Result<()>) {
         let ctx = ndk_context::android_context();
         // SAFETY: the VM and the activity Tauri recorded in ndk_context live as long as the app.
@@ -254,15 +281,25 @@ mod system {
         let Ok(mut env) = vm.attach_current_thread() else { return };
         let done = env.with_local_frame(16, |env| {
             let context = unsafe { JObject::from_raw(ctx.context().cast()) };
-            let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
-            let name = env.new_string("app.getpolar.desktop.NowPlaying")?;
-            let class = env.call_method(
-                &loader,
-                "loadClass",
-                "(Ljava/lang/String;)Ljava/lang/Class;",
-                &[JValue::Object(&name)],
-            )?;
-            f(env, &JClass::from(class.l()?), &context)
+            let class_ref = if let Some(cached) = NOW_PLAYING_CLASS.get() {
+                cached
+            } else {
+                let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
+                let name = env.new_string("app.getpolar.desktop.NowPlaying")?;
+                let cls = env
+                    .call_method(
+                        &loader,
+                        "loadClass",
+                        "(Ljava/lang/String;)Ljava/lang/Class;",
+                        &[JValue::Object(&name)],
+                    )?
+                    .l()?;
+                let global = env.new_global_ref(cls)?;
+                let _ = NOW_PLAYING_CLASS.set(global);
+                NOW_PLAYING_CLASS.get().expect("cached NowPlaying class")
+            };
+            let class = JClass::from(env.new_local_ref(class_ref)?);
+            f(env, &class, &context)
         });
         if env.exception_check().unwrap_or(false) {
             let _ = env.exception_clear();

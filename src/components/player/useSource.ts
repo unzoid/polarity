@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { keys, useMeta, useProgress, useStreams } from "../../lib/net";
+import { keys, useMeta, usePartialStreams, useProgress, useStreams } from "../../lib/net";
 import {
   airedAt,
   askedLine,
@@ -49,6 +49,12 @@ interface Candidate {
 }
 
 let torrentSteps = 0;
+
+/**
+ * After the first responsive add-on returns partial streams, wait at most this long for slower/dead add-ons
+ * before auto-picking so one hanging add-on never stalls playback for the full 8 s ADDON_TIMEOUT.
+ */
+const PARTIAL_AUTO_PICK_GRACE_MS = 1500;
 
 /**
  * Decides what to play, with no user decision required:
@@ -100,6 +106,7 @@ export function useSource(
   // candidate selection below still waits for them so a local download or saved source wins.
   const needsRanking = !picked && !resumeLocal;
   const streams = useStreams(type, needsRanking ? videoId : undefined);
+  const partial = usePartialStreams(type, needsRanking ? videoId : undefined);
   const { settings } = useTitleSettings(type, videoId);
   // Best Match for this device; the runtime gives the files' bitrates.
   const { data: meta } = useMeta(type, metaId, needsRanking);
@@ -116,6 +123,24 @@ export function useSource(
   // An answer kept from before that's being asked again (an add-on installed or removed since, or one with no
   // sources, which is never kept fresh) doesn't count: the new answer does (#375).
   const answer = streams.isStale && streams.isFetching ? undefined : streams.data;
+  const partialRef = useRef(partial);
+  partialRef.current = partial;
+  // Fast-path auto-pick: once responsive add-ons have returned streams, start after a short grace window
+  // instead of waiting up to 8s for a dead or slow add-on to time out.
+  const hasPartial = !!partial?.streams.length;
+  useEffect(() => {
+    if (candidates || answer || !needsRanking || !hasPartial || prefer || saved === undefined || saved?.stream || downloads.isPending) return;
+    const t = window.setTimeout(() => {
+      const latest = partialRef.current;
+      if (!latest?.streams.length) return;
+      const ranked = autoPickOrder(latest.streams, settings, metaId, matchRef.current).filter((r) => !r.otherEpisode);
+      if (!ranked.length) return;
+      const waiting = latest.waiting?.length ? ` (not waiting on ${latest.waiting.join(", ")})` : "";
+      log(`Starting with ${ranked.length} ready source${ranked.length === 1 ? "" : "s"}${waiting}`, "ok", "sources");
+      setCandidates(ranked.slice(0, 5).map((s) => ({ stream: s.stream, label: s.label, addon: s.addon, group: s.quality.source })));
+    }, PARTIAL_AUTO_PICK_GRACE_MS);
+    return () => window.clearTimeout(t);
+  }, [candidates, answer, needsRanking, hasPartial, prefer, saved, downloads.isPending, settings, metaId, log]);
   useEffect(() => {
     if (candidates) return;
     if (picked) {

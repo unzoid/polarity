@@ -307,13 +307,13 @@
   /* Stacking order of app layers (local stacking inside a component stays 1-5). Watch party dialogs and
      panels never stack on each other, whatever their layer: one is up at a time (lib/party/surface.ts). */
   --z-nav: 20;
-  --z-player: 30;
-  --z-toast: 35;
-  --z-sheet: 40;
-  --z-overlay: 50;
-  --z-popover: 60;
+  --z-overlay: 40;
+  --z-sheet: 50;
+  --z-player: 60;
+  --z-popover: 70;
   --z-modal: 900;
-  --z-notice: 950; /* saved-data problems: above Settings, under dropdowns */
+  --z-toast: 920; /* above browse sheets, overlays, player and Settings */
+  --z-notice: 950; /* saved-data problems: above Settings and toasts, under dropdowns */
   --z-dropdown: 1000;
   --z-system: 2147483647;
 

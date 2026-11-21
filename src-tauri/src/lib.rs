@@ -44,6 +44,10 @@ use tauri::Manager;
 use crate::locks::{Locked, ReadWrite};
 
 pub struct AppState {
+    /// Shared HTTP pool reused across metadata, add-ons, ratings, Seekr and IntroDB.
+    pub http: reqwest::Client,
+    /// App cache directory (reused when rebuilding Indexer on language/key change).
+    pub cache_dir: std::path::PathBuf,
     /// Swapped wholesale when the TMDB key changes.
     pub indexer: RwLock<Arc<Indexer>>,
     pub addons: AddonClient,
@@ -79,6 +83,26 @@ impl AppState {
     /// (read-only session, or the last write failed).
     pub fn persist(&self, f: impl FnOnce(&mut store::Data)) -> commands::Result<()> {
         self.change(f, false)
+    }
+
+    /// Like [`Self::persist`], but skips scheduling a disk write when `f` reports nothing changed.
+    pub fn persist_if(&self, f: impl FnOnce(&mut store::Data) -> bool) -> commands::Result<bool> {
+        let (dirty, problem) = {
+            let mut store = self.store.locked();
+            let dirty = f(&mut store.data);
+            (dirty, store.problem().map(str::to_owned))
+        };
+        if !dirty {
+            return Ok(false);
+        }
+        if let Some(problem) = problem {
+            return Err(commands::CmdError::Save(format!("could not save: not saved: {problem}")));
+        }
+        self.saver.mark();
+        match self.saver.error() {
+            Some(e) => Err(commands::CmdError::Save(format!("could not save: {e}"))),
+            None => Ok(true),
+        }
     }
 
     /// [`Self::persist`] for a change someone made (a setting, the library, an
@@ -132,10 +156,16 @@ fn store_saver(store: Arc<Mutex<store::Store>>, vault: Arc<Mutex<keychain::Vault
     })
 }
 
-pub fn index_config(settings: &store::Settings) -> IndexConfig {
+pub fn index_config(
+    settings: &store::Settings,
+    cache_dir: std::path::PathBuf,
+    http: reqwest::Client,
+) -> IndexConfig {
     IndexConfig {
         tmdb_key: settings.tmdb_key.clone().or_else(|| std::env::var("TMDB_API_KEY").ok()),
         language: Some(settings.language.clone()),
+        cache_dir: Some(cache_dir),
+        http: Some(http),
     }
 }
 
@@ -250,22 +280,33 @@ pub fn run() {
                 player::set_scratch_dir(cache.join("mpv"));
                 player::preload();
             }
-            let indexer = Indexer::new(index_config(&store.locked().data.settings));
+            #[cfg(target_os = "ios")]
+            player::preload();
+            let http = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(20))
+                .pool_idle_timeout(std::time::Duration::from_secs(60))
+                .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .expect("shared http client");
+            let indexer = Indexer::new(index_config(&store.locked().data.settings, cache.clone(), http.clone()));
             app.manage(AppState {
                 indexer: RwLock::new(Arc::new(indexer)),
-                addons: AddonClient::new(),
+                addons: AddonClient::with_client(http.clone()),
                 subtitle_urls: Default::default(),
                 saver: store_saver(store.clone(), vault.clone()),
                 vault,
                 store,
-                seekr: seekr::Seekr::default(),
+                seekr: seekr::Seekr::with_client(http.clone()),
                 mpv: player::Mpv::default(),
-                introdb: introdb::IntroDb::default(),
+                introdb: introdb::IntroDb::with_client(http.clone()),
                 mal: mal::Mal::default(),
-                ratings: ratings::RatingsClient::default(),
+                ratings: ratings::RatingsClient::with_client(http.clone()),
                 fillers: polar_anime::Fillers::new(cache.clone()),
                 anime_lists: polar_anime::AnimeLists::new(cache.clone()),
                 pictures: polar_addon::pictures::Pictures::default(),
+                cache_dir: cache.clone(),
+                http,
             });
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
@@ -289,6 +330,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::store_problem,
             commands::catalog,
+            commands::genre_backdrops,
             commands::recommend,
             commands::collection,
             commands::search,
@@ -369,6 +411,7 @@ pub fn run() {
             sync::space_untitled,
             sync::space_fill_display,
             player::mpv_available,
+            player::mpv_warm,
             player::mpv_load,
             player::mpv_lookahead,
             local_files::local_pick,
@@ -385,6 +428,7 @@ pub fn run() {
             stremio_links::stremio_links_set,
             player::mpv_command,
             player::mpv_set,
+            player::mpv_set_many,
             player::mpv_tune,
             player::mpv_stop,
             player::mpv_snapshot,

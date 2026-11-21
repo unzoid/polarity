@@ -2086,7 +2086,7 @@
 /* --- Netflix's full-screen chooser (Categories, seasons). */
 .ph-list-overlay {
   position: fixed;
-  z-index: 45;
+  z-index: var(--z-overlay);
   inset: 0;
   display: flex;
   flex-direction: column;
@@ -2156,7 +2156,7 @@
        into the round white close button at the foot. */
 .ph-sources-overlay {
   position: fixed;
-  z-index: 45;
+  z-index: var(--z-overlay);
   inset: 0;
   display: flex;
   flex-direction: column;

@@ -51,6 +51,8 @@ fn span(r: Option<RawSpan>) -> Option<Span> {
     r.filter(|s| s.end_sec > s.start_sec).map(|s| Span { start: s.start_sec, end: s.end_sec })
 }
 
+const CACHE_MAX: usize = 512;
+
 pub struct IntroDb {
     http: reqwest::Client,
     cache: Mutex<HashMap<String, (Instant, Segments)>>,
@@ -58,19 +60,22 @@ pub struct IntroDb {
 
 impl Default for IntroDb {
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
+        Self::with_client(
+            reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(5))
                 .timeout(Duration::from_secs(10))
                 .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .expect("http client"),
-            cache: Mutex::new(HashMap::new()),
-        }
+        )
     }
 }
 
 impl IntroDb {
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http, cache: Mutex::new(HashMap::new()) }
+    }
+
     /// `video_id` is a movie `tt…` or an episode `tt…:season:episode`.
     pub async fn segments(&self, video_id: &str) -> Result<Segments, String> {
         if let Some((at, hit)) = self.cache.locked().get(video_id) {
@@ -91,7 +96,14 @@ impl IntroDb {
             _ => query.push(("is_movie", "true".to_owned())),
         }
 
-        let res = self.http.get(API).query(&query).send().await.map_err(|e| e.without_url().to_string())?;
+        let res = self
+            .http
+            .get(API)
+            .timeout(Duration::from_secs(10))
+            .query(&query)
+            .send()
+            .await
+            .map_err(|e| e.without_url().to_string())?;
         let segments = if res.status().is_success() {
             let raw: Raw = res.json().await.map_err(|e| e.without_url().to_string())?;
             Segments {
@@ -106,7 +118,16 @@ impl IntroDb {
             // Rate limited or down: report, but don't cache, so it's retried next time.
             return Err(format!("IntroDB returned {}", res.status()));
         };
-        self.cache.locked().insert(video_id.to_owned(), (Instant::now(), segments.clone()));
+        let mut cache = self.cache.locked();
+        if cache.len() >= CACHE_MAX {
+            cache.retain(|_, (at, _)| at.elapsed() < TTL);
+            if cache.len() >= CACHE_MAX {
+                if let Some(oldest) = cache.iter().min_by_key(|(_, (at, _))| *at).map(|(k, _)| k.clone()) {
+                    cache.remove(&oldest);
+                }
+            }
+        }
+        cache.insert(video_id.to_owned(), (Instant::now(), segments.clone()));
         Ok(segments)
     }
 }

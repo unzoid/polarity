@@ -64,6 +64,9 @@ export const api = {
   /** `bound`: an age limit's highest film rating, which TMDB's discover lists apply (lib/catalog/viewingLimit.ts catalogBound). */
   catalog: (type: ContentType, id: string, skip = 0, genre?: string, bound?: { certCountry: string; certMax: string }) =>
     call<MetaPreview[]>("catalog", { ty: type, id, skip, genre, ...bound }),
+  /** Lightweight backdrop URL per genre (no N+1 lookups), for Search start genre tiles. */
+  genreBackdrops: (type: ContentType, genres: readonly string[]) =>
+    call<Record<string, string>>("genre_backdrops", { ty: type, genres: [...genres] }),
   /** Titles like `id`, for "Because you watched …". */
   recommend: (type: ContentType, id: string) => call<MetaPreview[]>("recommend", { ty: type, id }),
   /** Films in a TMDB collection / franchise (`/collection/{id}`); empty without a TMDB key. */

@@ -7,7 +7,7 @@
 //! and MPRemoteCommandCenter (apple/now_playing.m, [`apple`]). Elsewhere nothing: the built-in player's
 //! `<video>` has the web view's own media session there.
 
-#[cfg(mpv_apple)]
+#[cfg(target_os = "macos")]
 mod apple;
 #[cfg(windows)]
 mod smtc;
@@ -63,7 +63,7 @@ impl NowPlaying {
 
 /// A media key, headset button or the system's controls, to the page: "play", "pause", "toggle",
 /// "next", "previous", or "seek" with a position in seconds.
-#[cfg_attr(not(any(windows, mpv_apple)), allow(dead_code))]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 fn pressed(app: &AppHandle, action: &str, position: Option<f64>) {
     let _ = app.emit("media://key", json!({ "action": action, "position": position }));
 }
@@ -75,7 +75,7 @@ pub fn media_session(app: AppHandle, window: WebviewWindow, now: Option<NowPlayi
     let now = now.map(NowPlaying::checked);
     #[cfg(windows)]
     return smtc::update(&app, &window, now);
-    #[cfg(mpv_apple)]
+    #[cfg(target_os = "macos")]
     {
         let _ = window;
         apple::update(&app, now);

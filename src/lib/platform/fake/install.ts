@@ -71,6 +71,16 @@ const commands: Record<string, (a: Args) => unknown> = {
   settings_set: (a) => (settings = a.settings as Settings),
   settings_reset: () => (settings = { ...fx.settings }),
   catalog: (a) => fx.catalogPage(String(a.ty), String(a.id), Number(a.skip ?? 0)),
+  genre_backdrops: (a) => {
+    const genres = (a.genres as string[]) ?? [];
+    const pool = a.ty === "series" ? fx.series : fx.movies;
+    const out: Record<string, string> = {};
+    for (let i = 0; i < genres.length; i++) {
+      const bg = pool.find((m) => m.genres?.includes(genres[i]) && m.background)?.background ?? pool[i % pool.length]?.background;
+      if (bg) out[genres[i]] = bg;
+    }
+    return out;
+  },
   recommend: (a) => (a.ty === "series" ? fx.series : fx.movies).slice(3, 15),
   search: (a) => {
     const q = String(a.query).toLowerCase();
@@ -213,6 +223,8 @@ const commands: Record<string, (a: Args) => unknown> = {
   downloads_set_folder: () => ({ dir: "~/Videos/Polarity", free: null, custom: false }),
   controllers_list: () => [],
   mpv_available: () => false,
+  mpv_warm: () => undefined,
+  mpv_set_many: () => undefined,
   // The screen's brightness (the player's swipe, iOS): what the screen was told is kept for browser tests to read.
   player_brightness: () => (window as { __brightness?: number }).__brightness ?? 0.5,
   player_set_brightness: (a) => void ((window as { __brightness?: number | null }).__brightness = a.level as number | null),

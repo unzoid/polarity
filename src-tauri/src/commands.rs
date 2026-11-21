@@ -124,6 +124,16 @@ pub async fn addon_catalog(
     }
 }
 
+/// Lightweight backdrop URL per genre (no N+1 IMDb lookups) for Search start tiles.
+#[tauri::command]
+pub async fn genre_backdrops(
+    state: State<'_, AppState>,
+    ty: String,
+    genres: Vec<String>,
+) -> Result<std::collections::HashMap<String, String>> {
+    Ok(state.indexer().genre_backdrops(&ty, &genres).await?)
+}
+
 /// Titles like `id` ("Because you watched …").
 #[tauri::command]
 pub async fn recommend(state: State<'_, AppState>, ty: String, id: String) -> Result<Vec<MetaPreview>> {
@@ -139,9 +149,16 @@ pub struct SearchResults {
 
 #[tauri::command]
 pub async fn search(state: State<'_, AppState>, query: String) -> Result<SearchResults> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEARCH_GEN: AtomicU64 = AtomicU64::new(0);
+    let gen = SEARCH_GEN.fetch_add(1, Ordering::Relaxed) + 1;
     let ix: Arc<Indexer> = state.indexer();
     let (movies, series, people) =
         tokio::join!(ix.search("movie", &query), ix.search("series", &query), ix.search_people(&query));
+    // If the user already typed a newer query, return empty without logging stale failures.
+    if SEARCH_GEN.load(Ordering::Relaxed) != gen {
+        return Ok(SearchResults { movies: Vec::new(), series: Vec::new(), people: Vec::new() });
+    }
     // Partial results beat a dead search: only fail when neither movies nor series answered.
     let (movies, series) = match (movies, series) {
         (Ok(m), Ok(s)) => (m, s),
@@ -278,30 +295,98 @@ pub async fn streams(
         })
         .collect();
     // Each job's answer in the add-ons' order, whatever order they come in: ties in the ranking keep that order.
-    // Quality and episode regexes run once when a slot arrives instead of re-parsing earlier add-ons on each update.
+    // Quality and episode regexes run once when a slot arrives (off Tokio workers for large batches).
     let mut slots: Vec<Option<PreparedAnswer>> = vec![None; jobs.len()];
+    let mut last_partial = std::time::Instant::now() - std::time::Duration::from_secs(1);
+    let mut sent_any = false;
     while let Some((at, answer)) = pending.next().await {
         let (addon, req_id) = &jobs[at];
-        slots[at] = Some(answer.map(|streams| {
-            prepare_asked(
+        let prepared = match answer {
+            Some(streams) if streams.len() > 40 => {
+                let addon_name = addon.manifest.name.clone();
+                let req_id = req_id.clone();
+                let wanted = wanted.clone();
+                tokio::task::spawn_blocking(move || {
+                    prepare_asked(
+                        streams.into_iter().map(|stream| Asked {
+                            addon: addon_name.clone(),
+                            request: Some(req_id.clone()),
+                            stream,
+                        }),
+                        wanted.as_ref(),
+                    )
+                })
+                .await
+                .ok()
+            }
+            Some(streams) => Some(prepare_asked(
                 streams.into_iter().map(|stream| Asked {
                     addon: addon.manifest.name.clone(),
                     request: Some(req_id.clone()),
                     stream,
                 }),
                 wanted.as_ref(),
-            )
-        }));
-        if !pending.is_empty() {
-            // The page may have moved on: nothing to do about a list nobody listens to.
+            )),
+            None => None,
+        };
+        let has_streams = prepared.as_ref().is_some_and(|s| !s.is_empty());
+        slots[at] = Some(prepared);
+        // Send immediately on the first non-empty arrival, then debounce partial IPC broadcasts to 150ms
+        // so bursts of fast add-ons don't trigger O(K^2) cloning & JSON serialization floods.
+        if !pending.is_empty()
+            && ((!sent_any && has_streams) || last_partial.elapsed() >= std::time::Duration::from_millis(150))
+        {
+            sent_any |= has_streams;
+            last_partial = std::time::Instant::now();
             let _ = partial.send(summarize(&jobs, &slots, &filter, &ids));
         }
     }
-    Ok(summarize(&jobs, &slots, &filter, &ids))
+    Ok(summarize_owned(&jobs, slots, &filter, &ids))
 }
 
 /// One request's pre-parsed answer: the add-on's parsed sources, or none when it failed or ran out of time.
 type PreparedAnswer = Option<Vec<RankedStream>>;
+
+/// Move `slots` out on the final answer so we don't clone every `RankedStream` one more time.
+fn summarize_owned(
+    jobs: &[(InstalledAddon, String)],
+    slots: Vec<Option<PreparedAnswer>>,
+    filter: &polar_addon::StreamFilter,
+    ids: &[String],
+) -> StreamsResult {
+    use std::collections::HashSet;
+    let total: usize = slots.iter().filter_map(|s| s.as_ref()?.as_ref().map(Vec::len)).sum();
+    let mut all = Vec::with_capacity(total);
+    let mut answered = HashSet::new();
+    let mut out = HashSet::new();
+    let mut failed_urls = HashSet::new();
+    for ((a, _), slot) in jobs.iter().zip(slots) {
+        match slot {
+            Some(Some(streams)) => {
+                answered.insert(a.manifest_url.as_str());
+                all.extend(streams);
+            }
+            None => {
+                out.insert(a.manifest_url.as_str());
+            }
+            Some(None) => {
+                failed_urls.insert(a.manifest_url.as_str());
+            }
+        }
+    }
+    let named = |keep: &dyn Fn(&str) -> bool| {
+        let mut seen = HashSet::new();
+        jobs.iter()
+            .filter(|(a, _)| keep(&a.manifest_url) && seen.insert(a.manifest_url.as_str()))
+            .map(|(a, _)| a.manifest.name.clone())
+            .collect::<Vec<_>>()
+    };
+    let failed = named(&|url| failed_urls.contains(url) && !answered.contains(url) && !out.contains(url));
+    let waiting = named(&|url| out.contains(url) && !answered.contains(url));
+    let asked = named(&|_| true);
+    let (streams, hidden) = rank_prepared(all, filter);
+    StreamsResult { streams, failed, hidden, asked, ids: ids.to_vec(), waiting }
+}
 
 /// The sources the add-ons answered with so far, ranked, and who failed, answered or is still out. `slots` are
 /// `jobs`' answers, `None` while one is out.
@@ -639,7 +724,11 @@ pub fn settings_set(state: State<'_, AppState>, mut settings: Settings) -> Resul
         store.data.settings.tmdb_key != settings.tmdb_key || store.data.settings.language != settings.language
     };
     if rebuild {
-        *state.indexer.writing() = Arc::new(Indexer::new(crate::index_config(&settings)));
+        *state.indexer.writing() = Arc::new(Indexer::new(crate::index_config(
+            &settings,
+            state.cache_dir.clone(),
+            state.http.clone(),
+        )));
     }
     let next = settings.clone();
     state.persist_now(|d| d.settings = next)?;

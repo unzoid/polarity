@@ -25,7 +25,7 @@ use crate::AppState;
 /// into our window, which only Windows (`--wid`), macOS, iOS and Android (libmpv
 /// in the app) can do so far (see [`window_id`]). Elsewhere the player uses the
 /// webview's `<video>`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mpv_available() -> bool {
     #[cfg(mpv_apple)]
     return mpv_library().is_some();
@@ -35,6 +35,19 @@ pub fn mpv_available() -> bool {
     return super::android::available();
     #[cfg(not(any(windows, mpv_in_app)))]
     false
+}
+
+/// Pre-warm mpv in the background as soon as the Player screen mounts (overlaps mpv startup with
+/// add-on stream resolution and `torrent_open`).
+#[tauri::command]
+pub async fn mpv_warm(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    user_config: Option<bool>,
+) -> Result<(), CmdError> {
+    state.mpv.touch();
+    state.mpv.ensure(&app, &window, user_config.unwrap_or(false)).await.map_err(CmdError::Player)
 }
 
 /// Whether autocrop's lookahead reads ahead in the video playing now, or
@@ -143,15 +156,23 @@ pub async fn mpv_load(
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));
     }
     // Ours as they are: a download, a file the user opened, or the torrent engine's loopback link.
-    let local = downloaded || opened || crate::torrent::owns(&app, &url);
+    let is_torrent = crate::torrent::owns(&app, &url);
+    let local = downloaded || opened || is_torrent;
     // A link that's not ready yet, or a placeholder clip in place of the video.
     let headers =
         if local { Vec::new() } else { polar_player::headers::playback_headers(&headers.unwrap_or_default()) };
-    let url = if local {
-        url
+    state.mpv.touch();
+    // Overlap HTTP stream probing with cold mpv startup so mpv init is completely hidden behind network probe time.
+    let user_cfg = user_config.unwrap_or(false);
+    let (url, ensured) = if local {
+        (Ok(url), state.mpv.ensure(&app, &window, user_cfg).await)
     } else {
-        crate::streamcheck::prepare(&app, &url, headers.clone(), probe_id, link.unwrap_or(false)).await?
+        tokio::join!(
+            crate::streamcheck::prepare(&app, &url, headers.clone(), probe_id, link.unwrap_or(false)),
+            state.mpv.ensure(&app, &window, user_cfg),
+        )
     };
+    let url = url?;
     // Where the check ended up must still be a web link (it refuses redirects off the web itself).
     if !local && !is_web_url(&url) {
         return Err(CmdError::Unsupported("only http(s) streams, downloads and files you opened can be played".into()));
@@ -159,8 +180,7 @@ pub async fn mpv_load(
     if !state.mpv.turns.wanted(owner) {
         return Ok(());
     }
-    state.mpv.touch();
-    state.mpv.ensure(&app, &window, user_config.unwrap_or(false)).await.map_err(CmdError::Player)?;
+    ensured.map_err(CmdError::Player)?;
     let mut options = String::new();
     if let Some(s) = start.filter(|s| *s > 1.0) {
         options = format!("start={s:.2}");
@@ -181,9 +201,9 @@ pub async fn mpv_load(
     // The add-on's headers for this source, or none left over from the last one.
     let fields = polar_player::headers::mpv_fields(&headers);
     *state.mpv.source.locked() = Some((load, url.clone(), fields.clone()));
-    // Autocrop: probe the opening while this load buffers, and start paused
-    // until the probe is done or out of time (docs/autocrop.md §3).
-    let probe = state.mpv.tuned.locked().autocrop.then(|| {
+    // Autocrop: probe the opening while this load buffers, and start paused until done.
+    // Skip multi-process pre-roll on loopback torrents so a 2nd mpv doesn't seek across the file and thrash swarm pieces.
+    let probe = (!is_torrent && state.mpv.tuned.locked().autocrop).then(|| {
         *state.mpv.opening.locked() = Some(Opening::Probing(load));
         tauri::async_runtime::spawn(opening(url.clone(), fields.clone(), start.unwrap_or(0.0)))
     });
@@ -261,6 +281,20 @@ pub async fn mpv_command(state: State<'_, AppState>, args: Vec<Value>) -> Result
 pub async fn mpv_set(state: State<'_, AppState>, name: String, value: Value) -> Result<(), String> {
     check_property(&name)?;
     state.mpv.request(json!(["set_property", name, value])).await.map(|_| ())
+}
+
+/// Set several allow-listed mpv properties in one pipelined IPC batch (cuts startup & subtitle-style IPC chatter).
+#[tauri::command]
+pub async fn mpv_set_many(state: State<'_, AppState>, entries: Vec<(String, Value)>) -> Result<(), String> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let mut cmds = Vec::with_capacity(entries.len());
+    for (name, value) in entries {
+        check_property(&name)?;
+        cmds.push(json!(["set_property", name, value]));
+    }
+    state.mpv.request_batch(&cmds).await.map(|_| ())
 }
 
 /// Apply [`Tune`] to the running mpv. Takes effect immediately (audio
@@ -406,7 +440,7 @@ pub async fn mpv_subtitle_pick(app: AppHandle, state: State<'_, AppState>) -> Re
 }
 
 /// Open the user's own mpv folder (made, with a starter mpv.conf, if it isn't there yet).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mpv_config_folder(app: AppHandle) -> Result<(), CmdError> {
     let dir =
         super::ensure_user_config_dir(&app).ok_or_else(|| CmdError::Save("couldn't make the mpv folder".into()))?;
@@ -414,7 +448,7 @@ pub fn mpv_config_folder(app: AppHandle) -> Result<(), CmdError> {
 }
 
 /// Show the last screenshot in the system's file manager.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mpv_screenshot_reveal(state: State<'_, AppState>) -> Result<(), CmdError> {
     let path = state.mpv.last_shot.locked().clone().ok_or_else(|| CmdError::NotFound("no screenshot yet".into()))?;
     tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| CmdError::Other(e.to_string()))

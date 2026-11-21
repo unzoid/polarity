@@ -8,7 +8,7 @@ import { usePrefs } from "../settings/prefs";
 import { type TabRoute, useNavigation } from "../router";
 import { runCheck, type CheckDeps } from "./check";
 import { downloadNotes } from "./messages";
-import { payloadRoute, routePayload } from "./store";
+import { loadMemory, payloadRoute, routePayload } from "./store";
 
 /**
  * Notifications while the app runs (#209), mounted once inside the router: checks for new episodes
@@ -58,7 +58,7 @@ export function useNotifications() {
       plan: systemPlansNotes ? planNotes : null,
     };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let last = 0;
+    let last = loadMemory(profileId).checkedAt ?? 0;
     let stopped = false;
     const check = async () => {
       clearTimeout(timer);
@@ -71,7 +71,13 @@ export function useNotifications() {
     };
     // Back from the background (phones, a sleeping laptop): timers may not have run.
     const back = () => document.visibilityState === "visible" && Date.now() - last > CHECK_EVERY && void check();
-    timer = setTimeout(check, FIRST_CHECK);
+    // Only run 15s after launch when no recent check was persisted (avoids a 200-show storm on every mobile restart).
+    const initialDelay = !options.episodes && !options.seasons
+      ? FIRST_CHECK
+      : last > 0 && Date.now() - last < CHECK_EVERY
+        ? Math.max(FIRST_CHECK, CHECK_EVERY - (Date.now() - last))
+        : FIRST_CHECK;
+    timer = setTimeout(check, initialDelay);
     document.addEventListener("visibilitychange", back);
     return () => {
       stopped = true;

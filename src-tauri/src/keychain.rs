@@ -159,14 +159,16 @@ mod ios {
 
 #[cfg(target_os = "android")]
 mod android {
-    use jni::objects::{JByteArray, JClass, JObject, JValue};
+    use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JValue};
     use jni::JNIEnv;
     use polar_library::keychain::{SecretStore, StoreError};
+    use std::sync::OnceLock;
+
+    static POLAR_KEYS_CLASS: OnceLock<GlobalRef> = OnceLock::new();
 
     /// Calls `PolarKeys.<method>(context, name, …)` (PolarKeys.kt) on this thread, attached to
-    /// the app's VM for the call. The class comes from the app's class loader: a thread Rust
-    /// started can't find it by name. An exception reads as a failure, with no detail: it may
-    /// name the value's file.
+    /// the app's VM for the call. Caches the `GlobalRef` class once so subsequent calls avoid
+    /// `getClassLoader().loadClass(...)`.
     fn call<T>(
         f: impl for<'l> FnOnce(&mut JNIEnv<'l>, &JClass<'l>, &JObject<'l>) -> jni::errors::Result<T>,
     ) -> Result<T, StoreError> {
@@ -177,18 +179,26 @@ mod android {
         let mut env = vm.attach_current_thread().map_err(|e| StoreError::Unavailable(e.to_string()))?;
         let found = env.with_local_frame(16, |env| -> jni::errors::Result<std::result::Result<T, bool>> {
             let context = unsafe { JObject::from_raw(ctx.context().cast()) };
-            let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
-            let class_name = env.new_string("app.getpolar.desktop.PolarKeys")?;
-            let class = match env.call_method(
-                &loader,
-                "loadClass",
-                "(Ljava/lang/String;)Ljava/lang/Class;",
-                &[JValue::Object(&class_name)],
-            ) {
-                Ok(c) => JClass::from(c.l()?),
-                Err(jni::errors::Error::JavaException) => return Ok(Err(false)),
-                Err(e) => return Err(e),
+            let class_ref = if let Some(cached) = POLAR_KEYS_CLASS.get() {
+                cached
+            } else {
+                let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
+                let class_name = env.new_string("app.getpolar.desktop.PolarKeys")?;
+                let cls = match env.call_method(
+                    &loader,
+                    "loadClass",
+                    "(Ljava/lang/String;)Ljava/lang/Class;",
+                    &[JValue::Object(&class_name)],
+                ) {
+                    Ok(c) => c.l()?,
+                    Err(jni::errors::Error::JavaException) => return Ok(Err(false)),
+                    Err(e) => return Err(e),
+                };
+                let global = env.new_global_ref(cls)?;
+                let _ = POLAR_KEYS_CLASS.set(global);
+                POLAR_KEYS_CLASS.get().expect("cached PolarKeys class")
             };
+            let class = JClass::from(env.new_local_ref(class_ref)?);
             match f(env, &class, &context) {
                 Ok(v) => Ok(Ok(v)),
                 Err(jni::errors::Error::JavaException) => Ok(Err(true)),
@@ -270,7 +280,7 @@ pub fn take_secrets(vault: &Mutex<Vault>, file: &mut serde_json::Value) {
 }
 
 /// Where this device keeps its keys and add-on links: `keychain`, `file` or `unreadable`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn secrets_place(state: State<'_, AppState>) -> Place {
     state.vault.locked().place()
 }

@@ -186,7 +186,9 @@ pub struct Downloads {
     default_dir: PathBuf,
     /// Where `downloads.json` is.
     state: PathBuf,
-    inner: Mutex<Inner>,
+    inner: Arc<Mutex<Inner>>,
+    /// Writes `downloads.json` off the Tokio workers and outside the `inner` lock.
+    saver: polar_library::saver::Saver,
     http: reqwest::Client,
     /// Why `downloads.json` couldn't be read at start-up: while set, the list
     /// isn't saved over it (critique C1).
@@ -235,11 +237,29 @@ impl Downloads {
         // folder is missing is kept: an SD card or a drive that isn't there right now.
         items.retain(|d| d.state != DownloadState::Done || Path::new(&d.file).exists() || !folder_present(&d.file));
         let chosen = folder::read(state);
+        let inner = Arc::new(Mutex::new(Inner { items, ..Inner::default() }));
+        let saver = {
+            let inner = inner.clone();
+            let path = state.join("downloads.json");
+            let read_only = problem.is_some();
+            polar_library::saver::Saver::spawn(Duration::from_secs(2), move || {
+                if read_only {
+                    return Ok(());
+                }
+                let snapshot = inner.locked().items.clone();
+                let json = serde_json::to_vec(&snapshot).map_err(|e| e.to_string())?;
+                polar_library::saver::write_atomic(&path, &json).map_err(|e| {
+                    tracing::warn!("the downloads list wasn't saved: {e}");
+                    e.to_string()
+                })
+            })
+        };
         Self {
             dir: Mutex::new(chosen.unwrap_or_else(|| dir.clone())),
             default_dir: dir,
             state: state.to_owned(),
-            inner: Mutex::new(Inner { items, ..Inner::default() }),
+            inner,
+            saver,
             http: reqwest::Client::builder()
                 .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
                 .connect_timeout(Duration::from_secs(15))
@@ -280,35 +300,40 @@ impl Downloads {
         is_local(path) && self.inner.locked().items.iter().any(|d| d.state == DownloadState::Done && d.file == path)
     }
 
-    fn save(&self, items: &[Download]) {
-        if self.problem.is_some() {
-            return;
+    fn save(&self) {
+        if self.problem.is_none() {
+            self.saver.mark();
         }
-        if let Ok(json) = serde_json::to_vec(items) {
-            if let Err(e) = polar_library::saver::write_atomic(&self.state.join("downloads.json"), &json) {
-                tracing::warn!("the downloads list wasn't saved: {e}");
-            }
+    }
+
+    fn save_now(&self) {
+        if self.problem.is_none() {
+            self.saver.mark_now();
         }
     }
 
     fn update(&self, id: &str, f: impl FnOnce(&mut Download), persist: bool) {
-        let mut inner = self.inner.locked();
-        if let Some(d) = inner.items.iter_mut().find(|d| d.id == id) {
-            f(d);
+        {
+            let mut inner = self.inner.locked();
+            if let Some(d) = inner.items.iter_mut().find(|d| d.id == id) {
+                f(d);
+            }
         }
         if persist {
-            self.save(&inner.items);
+            self.save_now();
         }
     }
 
     /// A running transfer updates its own record by file, never a newer one for the same video.
     fn update_file(&self, file: &str, f: impl FnOnce(&mut Download), persist: bool) {
-        let mut inner = self.inner.locked();
-        if let Some(d) = inner.items.iter_mut().find(|d| d.file == file) {
-            f(d);
+        {
+            let mut inner = self.inner.locked();
+            if let Some(d) = inner.items.iter_mut().find(|d| d.file == file) {
+                f(d);
+            }
         }
         if persist {
-            self.save(&inner.items);
+            self.save();
         }
     }
 
@@ -335,9 +360,9 @@ impl Downloads {
             d.error = None;
             let file = d.file.clone();
             inner.running.insert(id.clone(), flag.clone());
-            self.save(&inner.items);
             file
         };
+        self.save_now();
         let writer = self.inner.locked().writers.entry(file.clone()).or_default().clone();
         let me = self.clone();
         tauri::async_runtime::spawn(async move {
@@ -372,7 +397,8 @@ impl Downloads {
                     }
                 }
             }
-            me.save(&inner.items);
+            drop(inner);
+            me.save_now();
         });
     }
 
@@ -582,13 +608,13 @@ pub async fn download_start(downloads: Shared<'_>, req: DownloadRequest) -> Resu
         }
         inner.items.retain(|x| x.id != d.id);
         inner.items.push(d.clone());
-        downloads.save(&inner.items);
     }
+    downloads.save_now();
     downloads.inner().spawn(d.id.clone());
     Ok(d)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn download_pause(downloads: Shared<'_>, id: String) {
     downloads.stop(&id);
     downloads.update(
@@ -602,7 +628,7 @@ pub fn download_pause(downloads: Shared<'_>, id: String) {
     );
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn download_resume(downloads: Shared<'_>, id: String) {
     if downloads.get(&id).is_some_and(|d| d.state != DownloadState::Done) {
         downloads.inner().spawn(id);
@@ -610,7 +636,7 @@ pub fn download_resume(downloads: Shared<'_>, id: String) {
 }
 
 /// Show a download's file in Explorer / Finder. By id, so the webview can't point it anywhere else.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn download_reveal(downloads: Shared<'_>, id: String) -> Result<()> {
     let file = downloads.get(&id).map(|d| d.file).ok_or_else(|| CmdError::NotFound("No such download.".into()))?;
     // Unfinished, it is still the `.part` file.
@@ -628,7 +654,7 @@ pub struct Storage {
     custom: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn downloads_storage(downloads: Shared<'_>) -> Storage {
     storage(&downloads)
 }
@@ -652,7 +678,7 @@ pub struct Volume {
 
 /// Android: the app's own folder on each removable volume (`/storage/<volume>/Android/data/<app>/files`,
 /// made by `getExternalFilesDirs` in MainActivity.kt). Elsewhere none.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn downloads_volumes(app: AppHandle) -> Vec<Volume> {
     volumes(&app)
 }
@@ -685,7 +711,7 @@ fn volumes(_: &AppHandle) -> Vec<Volume> {
 /// Back to the default folder (`dir` none), or, on Android, one of `downloads_volumes`. A folder
 /// anywhere else is chosen in the system's folder dialog (`downloads_pick_folder`), never named by
 /// the page.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn downloads_set_folder(app: AppHandle, downloads: Shared<'_>, dir: Option<String>) -> Result<Storage> {
     if cfg!(target_os = "ios") {
         return Err(CmdError::Unsupported("Downloads stay in the app's own folder on this device.".into()));
@@ -722,16 +748,22 @@ pub async fn downloads_pick_folder(app: AppHandle, downloads: Shared<'_>) -> Res
 }
 
 /// Cancel and delete: the record and the file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn download_remove(downloads: Shared<'_>, id: String) {
     downloads.stop(&id);
-    let mut inner = downloads.inner.locked();
-    if let Some(file) = inner.items.iter().find(|d| d.id == id).map(|d| d.file.clone()) {
+    let removed_file = {
+        let mut inner = downloads.inner.locked();
+        let file = inner.items.iter().find(|d| d.id == id).map(|d| d.file.clone());
+        if let Some(f) = &file {
+            inner.writers.remove(f);
+        }
+        inner.items.retain(|d| d.id != id);
+        file
+    };
+    if let Some(file) = removed_file {
         remove_files(&file);
-        inner.writers.remove(&file);
     }
-    inner.items.retain(|d| d.id != id);
-    downloads.save(&inner.items);
+    downloads.save_now();
 }
 
 /// Called once at startup so the managed state exists before any command runs. `app_data` is
@@ -948,8 +980,9 @@ mod tests {
         {
             let mut inner = downloads.inner.locked();
             inner.items.push(old.clone());
-            downloads.save(&inner.items);
         }
+        downloads.save_now();
+        downloads.saver.flush();
 
         assert_eq!(downloads.set_folder(Some(chosen.clone())), Ok(chosen.clone()));
         assert_eq!(downloads.dir(), chosen);
@@ -1005,8 +1038,9 @@ mod tests {
         {
             let mut inner = downloads.inner.locked();
             inner.items.extend([deleted.clone(), away.clone()]);
-            downloads.save(&inner.items);
         }
+        downloads.save_now();
+        downloads.saver.flush();
         let again = Downloads::load(&state, here, None);
         assert!(again.get(&deleted.id).is_none());
         assert!(again.get(&away.id).is_some());

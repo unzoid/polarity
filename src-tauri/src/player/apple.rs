@@ -7,6 +7,8 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::path::Path;
 
 extern "C" {
+    #[cfg(target_os = "ios")]
+    fn polar_mpv_preload(libpath: *const c_char);
     fn polar_mpv_create(
         libpath: *const c_char,
         host: *mut c_void,
@@ -29,6 +31,14 @@ extern "C" {
         len: *mut usize,
     ) -> *mut c_void;
     fn polar_mpv_frame_free(frame: *mut c_void);
+}
+
+/// Preload libmpv's dynamic framework off the main thread at iOS launch so first playback doesn't stall on dlopen.
+#[cfg(target_os = "ios")]
+pub fn preload(lib: &Path) {
+    if let Ok(c) = CString::new(lib.to_string_lossy().as_bytes()) {
+        std::thread::spawn(move || unsafe { polar_mpv_preload(c.as_ptr()) });
+    }
 }
 
 pub struct Player(*mut c_void);

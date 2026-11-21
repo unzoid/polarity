@@ -1,5 +1,5 @@
 import "../../styles/player.css";
-import { isMac } from "../../lib/platform";
+import { isMac, os } from "../../lib/platform";
 import { OPEN_DYSLEXIC } from "../../lib/settings";
 import { ChevronLeft, ChevronRight, Minus, Plus, Reset } from "../icons";
 import { Switch } from "../ui/Switch";
@@ -12,9 +12,9 @@ import { Chip } from "../ui/Chip";
 import { dialogueOverrides, dialogueStyles, parseAssHeader, type DialogueLook } from "./assStyles";
 
 // The platform's own UI face: plain-text subtitles use it unless you pick another.
-const DEFAULT_FONT = isMac ? "Helvetica Neue" : "Segoe UI Semibold";
-/** What the default used to be called on either platform (styles sync between devices). */
-const EARLIER_DEFAULT_FONTS = ["Segoe UI Semibold", "Helvetica Neue"];
+const DEFAULT_FONT = os === "android" ? "Roboto" : isMac || os === "ios" ? "Helvetica Neue" : "Segoe UI Semibold";
+/** What the default used to be called on any platform (styles sync between devices). */
+const EARLIER_DEFAULT_FONTS = ["Segoe UI Semibold", "Helvetica Neue", "Roboto"];
 /** The Font menu's "From the subtitles": only in the menu, saved as `fontFromSubtitles`. */
 const FROM_SUBTITLES = "from-subtitles";
 
@@ -124,10 +124,15 @@ const shadowOffset = (style: Required<SubtitleStyle>) => (style.outline === "non
 
 /** The `sub-ass-override` and `sub-ass-style-overrides` last given to each player. */
 const assGiven = new WeakMap<MpvMedia, { override: string; overrides: string }>();
+/** Plain-text subtitle properties last sent to each player, so repeated track events don't re-send 10+ IPCs. */
+const subGiven = new WeakMap<MpvMedia, Record<string, unknown>>();
 /** Each restyle of a player, so a header read for an earlier one is dropped. */
 const assRuns = new WeakMap<MpvMedia, number>();
 /** A (re)started mpv has its own idea of the overrides again. */
-export const forgetAssOverride = (mpv: MpvMedia) => assGiven.delete(mpv);
+export const forgetAssOverride = (mpv: MpvMedia) => {
+  assGiven.delete(mpv);
+  subGiven.delete(mpv);
+};
 
 /** Changing either makes mpv rebuild the subtitle renderer and re-read the stream (a stall of a second or more): only when they change. */
 function giveAss(mpv: MpvMedia, override: string, overrides: string) {
@@ -185,20 +190,34 @@ export function applySubtitleStyleToMpv(mpv: MpvMedia, saved: SubtitleStyle, del
     assRuns.set(mpv, (assRuns.get(mpv) ?? 0) + 1);
     giveAss(mpv, "scale", "");
   }
-  void mpv.set("sub-font", style.font);
-  void mpv.set("sub-scale", style.size / 100);
-  void mpv.set("sub-pos", 100 - style.raise);
-  void mpv.set("sub-color", mpvColor(style.color, style.opacity));
-  void mpv.set("sub-border-size", OUTLINE_PX[style.outline]);
-  void mpv.set("sub-border-color", mpvColor(style.outlineColor, style.opacity));
-  void mpv.set("sub-shadow-offset", shadowOffset(style));
-  void mpv.set("sub-back-color", mpvColor("#000000", style.background));
+  const prev = subGiven.get(mpv) ?? {};
+  const next: Record<string, unknown> = {
+    "sub-font": style.font,
+    "sub-scale": style.size / 100,
+    "sub-pos": 100 - style.raise,
+    "sub-color": mpvColor(style.color, style.opacity),
+    "sub-border-size": OUTLINE_PX[style.outline],
+    "sub-border-color": mpvColor(style.outlineColor, style.opacity),
+    "sub-shadow-offset": shadowOffset(style),
+    "sub-back-color": mpvColor("#000000", style.background),
+    "sub-delay": delay,
+  };
+  const changed: [string, unknown][] = [];
+  for (const [k, v] of Object.entries(next)) {
+    if (prev[k] !== v) {
+      prev[k] = v;
+      changed.push([k, v]);
+    }
+  }
+  if (changed.length) void mpv.setMany(changed);
   // Newer mpv draws the box from sub-back-color; older builds only know "opaque-box".
   const box = style.background > 0;
-  void mpv
-    .command("set", "sub-border-style", box ? "background-box" : "outline-and-shadow")
-    .catch(() => box && mpv.set("sub-border-style", "opaque-box"));
-  void mpv.set("sub-delay", delay);
+  const borderStyle = box ? "background-box" : "outline-and-shadow";
+  if (prev["sub-border-style"] !== borderStyle) {
+    prev["sub-border-style"] = borderStyle;
+    void mpv.set("sub-border-style", borderStyle).catch(() => box && mpv.set("sub-border-style", "opaque-box"));
+  }
+  subGiven.set(mpv, prev);
 }
 
 /** The built-in <video> player: the same choices, as CSS variables read by `::cue`. */

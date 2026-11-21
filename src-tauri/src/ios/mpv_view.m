@@ -48,7 +48,7 @@ static void *gl_proc_address(void *ctx, const char *name) {
 @end
 
 @interface PolarMpvView : UIView
-- (instancetype)initWithFrame:(CGRect)frame context:(EAGLContext *)ctx render:(mpv_render_context *)rctx;
+- (instancetype)initWithFrame:(CGRect)frame webView:(WKWebView *)web context:(EAGLContext *)ctx render:(mpv_render_context *)rctx;
 - (void)frameReady;
 - (void)tick;
 - (void)setShown:(BOOL)shown;
@@ -60,6 +60,7 @@ static void *gl_proc_address(void *ctx, const char *name) {
 @end
 
 @implementation PolarMpvView {
+    __weak WKWebView *_web;
     EAGLContext *_ctx;
     CAEAGLLayer *_layer;       // read on _queue: kept here rather than asking the view there
     mpv_render_context *_rctx; // used on _queue only
@@ -76,8 +77,9 @@ static void *gl_proc_address(void *ctx, const char *name) {
 
 + (Class)layerClass { return [CAEAGLLayer class]; }
 
-- (instancetype)initWithFrame:(CGRect)frame context:(EAGLContext *)ctx render:(mpv_render_context *)rctx {
+- (instancetype)initWithFrame:(CGRect)frame webView:(WKWebView *)web context:(EAGLContext *)ctx render:(mpv_render_context *)rctx {
     if ((self = [super initWithFrame:frame])) {
+        _web = web;
         _ctx = ctx;
         _rctx = rctx;
         _queue = dispatch_queue_create("polarity.mpv-draw", DISPATCH_QUEUE_SERIAL);
@@ -87,7 +89,8 @@ static void *gl_proc_address(void *ctx, const char *name) {
         self.userInteractionEnabled = NO;
         self.opaque = YES;
         self.backgroundColor = UIColor.blackColor;
-        self.contentScaleFactor = UIScreen.mainScreen.nativeScale;
+        // Cap FBO scale at 2x to avoid 3x ProMotion OpenGL ES fillrate pressure during 4K playback.
+        self.contentScaleFactor = MIN(UIScreen.mainScreen.nativeScale, 2.0);
         CAEAGLLayer *layer = (CAEAGLLayer *)self.layer;
         _layer = layer;
         layer.opaque = YES;
@@ -98,6 +101,9 @@ static void *gl_proc_address(void *ctx, const char *name) {
         PolarMpvTick *tick = [PolarMpvTick new];
         tick.view = self;
         _link = [CADisplayLink displayLinkWithTarget:tick selector:@selector(tick:)];
+        if (@available(iOS 15.0, *)) {
+            _link.preferredFrameRateRange = CAFrameRateRangeMake(24, 60, 60);
+        }
         _link.paused = YES;
         [_link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
         NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
@@ -135,6 +141,13 @@ static void *gl_proc_address(void *ctx, const char *name) {
 - (void)setShown:(BOOL)shown {
     self.hidden = !shown;
     _link.paused = !shown;
+    WKWebView *web = _web;
+    if (web) {
+        // Restore opaque WKWebView compositing whenever video is hidden so browsing stays at full FPS.
+        web.opaque = !shown;
+        web.backgroundColor = shown ? UIColor.clearColor : nil;
+        web.scrollView.backgroundColor = shown ? UIColor.clearColor : nil;
+    }
     if (shown) atomic_store(&_redraw, true);
 }
 
@@ -166,12 +179,14 @@ static void *gl_proc_address(void *ctx, const char *name) {
 
 - (void)draw {
     if (!atomic_load(&_active) || !_rctx) return;
-    [EAGLContext setCurrentContext:_ctx];
-    if (atomic_exchange(&_resize, false)) [self makeBuffers];
+    if ([EAGLContext currentContext] != _ctx) [EAGLContext setCurrentContext:_ctx];
+    BOOL resized = atomic_exchange(&_resize, false);
+    if (resized) [self makeBuffers];
     atomic_store(&_frame, false);
-    atomic_store(&_redraw, false);
+    BOOL mustRedraw = atomic_exchange(&_redraw, false) || resized;
     if (_w > 0 && _h > 0) {
-        mpv.render_update(_rctx);
+        uint64_t flags = mpv.render_update(_rctx);
+        if (!mustRedraw && !(flags & MPV_RENDER_UPDATE_FRAME)) return;
         glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
         mpv_opengl_fbo target = { .fbo = (int)_fbo, .w = _w, .h = _h, .internal_format = 0 };
         int flip = 1;
@@ -189,7 +204,6 @@ static void *gl_proc_address(void *ctx, const char *name) {
         [_ctx presentRenderbuffer:GL_RENDERBUFFER];
         mpv.render_report_swap(_rctx);
     }
-    [EAGLContext setCurrentContext:nil];
 }
 
 /// Stop drawing and free the render context (with its GL context current, as
@@ -198,6 +212,12 @@ static void *gl_proc_address(void *ctx, const char *name) {
     [_link invalidate];
     _link = nil;
     [NSNotificationCenter.defaultCenter removeObserver:self];
+    WKWebView *web = _web;
+    if (web) {
+        web.opaque = YES;
+        web.backgroundColor = nil;
+        web.scrollView.backgroundColor = nil;
+    }
     dispatch_sync(_queue, ^{
         [EAGLContext setCurrentContext:self->_ctx];
         if (self->_rctx) {
@@ -226,71 +246,85 @@ typedef struct {
     PolarMpvView *view; // strong ref held through CFBridgingRetain
 } Player;
 
+/// Preload libmpv's dynamic library off the main thread at startup.
+void polar_mpv_preload(const char *libpath) {
+    char err[256] = {0};
+    load_libmpv(libpath, err, sizeof(err));
+}
+
 /// Create mpv in-process with `keys[i]=vals[i]` options and put its video
 /// behind `webview` (a WKWebView), hidden until polar_mpv_set_visible.
+/// Heavy initialization (dlopen, AVAudioSession, mpv_initialize, GL render context)
+/// runs on the caller's background thread; only UIView attachment touches the main thread.
 /// Returns NULL with `err` filled on failure. Safe to call from any thread.
 void *polar_mpv_create(const char *libpath, void *webview, const char *const *keys, const char *const *vals, int n, char *err, size_t errlen) {
+    if (!load_libmpv(libpath, err, errlen)) return NULL;
+
+    // Sound plays with the ring/silent switch on silent, as video apps do.
+    AVAudioSession *session = AVAudioSession.sharedInstance;
+    NSError *audioErr = nil;
+    if (![session setCategory:AVAudioSessionCategoryPlayback mode:AVAudioSessionModeMoviePlayback options:0 error:&audioErr]
+        || ![session setActive:YES error:&audioErr])
+        NSLog(@"polar: audio session: %@", audioErr);
+
+    mpv_handle *h = mpv.create();
+    if (!h) { snprintf(err, errlen, "mpv_create failed"); return NULL; }
+    for (int i = 0; i < n; i++) {
+        int r = mpv.set_option_string(h, keys[i], vals[i]);
+        if (r < 0) NSLog(@"polar: mpv option %s: %s", keys[i], mpv.error_string(r));
+    }
+    int r = mpv.initialize(h);
+    if (r < 0) { snprintf(err, errlen, "mpv_initialize: %s", mpv.error_string(r)); mpv.terminate_destroy(h); return NULL; }
+
+    EAGLContext *ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+    if (!ctx) {
+        snprintf(err, errlen, "couldn't create an OpenGL ES context for mpv");
+        mpv.terminate_destroy(h);
+        return NULL;
+    }
+    EAGLContext *previous = EAGLContext.currentContext;
+    [EAGLContext setCurrentContext:ctx];
+    mpv_opengl_init_params gl = { gl_proc_address, NULL };
+    mpv_render_param params[] = {
+        { MPV_RENDER_PARAM_API_TYPE, (void *)"opengl" },
+        { MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl },
+        { MPV_RENDER_PARAM_INVALID, NULL },
+    };
+    mpv_render_context *rctx = NULL;
+    r = mpv.render_create(&rctx, h, params);
+    [EAGLContext setCurrentContext:previous];
+    if (r < 0) {
+        snprintf(err, errlen, "mpv_render_context_create: %s", mpv.error_string(r));
+        mpv.terminate_destroy(h);
+        return NULL;
+    }
+
     __block Player *result = NULL;
     on_main(^{
-        if (!load_libmpv(libpath, err, errlen)) return;
         WKWebView *web = (__bridge WKWebView *)webview;
         UIView *parent = web.superview;
-        if (!parent) { snprintf(err, errlen, "the web view has no superview to put the video in"); return; }
-
-        // Sound plays with the ring/silent switch on silent, as video apps do.
-        AVAudioSession *session = AVAudioSession.sharedInstance;
-        NSError *audioErr = nil;
-        if (![session setCategory:AVAudioSessionCategoryPlayback mode:AVAudioSessionModeMoviePlayback options:0 error:&audioErr]
-            || ![session setActive:YES error:&audioErr])
-            NSLog(@"polar: audio session: %@", audioErr);
-
-        mpv_handle *h = mpv.create();
-        if (!h) { snprintf(err, errlen, "mpv_create failed"); return; }
-        for (int i = 0; i < n; i++) {
-            int r = mpv.set_option_string(h, keys[i], vals[i]);
-            if (r < 0) NSLog(@"polar: mpv option %s: %s", keys[i], mpv.error_string(r));
-        }
-        int r = mpv.initialize(h);
-        if (r < 0) { snprintf(err, errlen, "mpv_initialize: %s", mpv.error_string(r)); mpv.terminate_destroy(h); return; }
-
-        EAGLContext *ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
-        if (!ctx) {
-            snprintf(err, errlen, "couldn't create an OpenGL ES context for mpv");
-            mpv.terminate_destroy(h);
+        if (!parent) {
+            snprintf(err, errlen, "the web view has no superview to put the video in");
             return;
         }
-        EAGLContext *previous = EAGLContext.currentContext;
-        [EAGLContext setCurrentContext:ctx];
-        mpv_opengl_init_params gl = { gl_proc_address, NULL };
-        mpv_render_param params[] = {
-            { MPV_RENDER_PARAM_API_TYPE, (void *)"opengl" },
-            { MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl },
-            { MPV_RENDER_PARAM_INVALID, NULL },
-        };
-        mpv_render_context *rctx = NULL;
-        r = mpv.render_create(&rctx, h, params);
-        [EAGLContext setCurrentContext:previous];
-        if (r < 0) {
-            snprintf(err, errlen, "mpv_render_context_create: %s", mpv.error_string(r));
-            mpv.terminate_destroy(h);
-            return;
-        }
-
-        PolarMpvView *view = [[PolarMpvView alloc] initWithFrame:web.frame context:ctx render:rctx];
+        PolarMpvView *view = [[PolarMpvView alloc] initWithFrame:web.frame webView:web context:ctx render:rctx];
         mpv.render_set_update_callback(rctx, on_mpv_update, (__bridge void *)view);
         view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         view.hidden = YES;
         [parent insertSubview:view belowSubview:web];
-        // The page draws its own background where it isn't transparent.
-        web.opaque = NO;
-        web.backgroundColor = UIColor.clearColor;
-        web.scrollView.backgroundColor = UIColor.clearColor;
 
         Player *p = calloc(1, sizeof(Player));
         p->mpv = h;
         p->view = (__bridge PolarMpvView *)CFBridgingRetain(view);
         result = p;
     });
+    if (!result) {
+        EAGLContext *prev = EAGLContext.currentContext;
+        [EAGLContext setCurrentContext:ctx];
+        mpv.render_free(rctx);
+        [EAGLContext setCurrentContext:prev];
+        mpv.terminate_destroy(h);
+    }
     return result;
 }
 

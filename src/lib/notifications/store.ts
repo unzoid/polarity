@@ -18,6 +18,8 @@ export interface Memory {
   shows: Record<string, ShowMemory>;
   /** Phones: per show, the memory as it will be after each planned note (whatsNew.ts `upcoming`). */
   planned: Record<string, PlannedMemory[]>;
+  /** Epoch ms when the last full check completed, so mobile restarts don't re-fetch every show immediately. */
+  checkedAt?: number;
 }
 
 const key = (profile: string) => `polar.notifications.${profile}`;
@@ -57,6 +59,8 @@ export function readMemory(v: unknown): Memory {
       if (plans.length) out.planned[id] = plans;
     }
   }
+  const checkedAt = num(v.checkedAt);
+  if (checkedAt != null) out.checkedAt = checkedAt;
   return out;
 }
 

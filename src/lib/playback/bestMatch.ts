@@ -222,13 +222,30 @@ export function scoreSources(streams: RankedStream[], ctx: MatchContext = NEUTRA
   const rates = new Map<number, number[]>();
   for (const r of streams) {
     const b = bitrateMbps(r, ctx.runtimeSec);
-    if (b != null && !r.quality.lowQualitySource) rates.set(bucket(r), [...(rates.get(bucket(r)) ?? []), b]);
+    if (b != null && !r.quality.lowQualitySource) {
+      const key = bucket(r);
+      let list = rates.get(key);
+      if (!list) {
+        list = [];
+        rates.set(key, list);
+      }
+      list.push(b);
+    }
   }
   // Fewer than three files of a height with a known size aren't much to compare with.
-  const middle = new Map([...rates].filter(([, xs]) => xs.length >= 3).map(([k, xs]) => [k, median(xs)]));
+  const middle = new Map<number, number>();
+  for (const [k, xs] of rates) if (xs.length >= 3) middle.set(k, median(xs));
   const scored = streams.map((r) => [r, scoreOne(r, ctx, middle.get(bucket(r)) ?? null)] as const);
   const of = scored.length;
-  return new Map(scored.map(([r, m]) => [r, { ...m, rank: { position: 1 + scored.filter(([, o]) => o.score > m.score).length, of } }]));
+  // Dense competition rank in O(N log N) instead of O(N^2) filter per stream.
+  const sortedScores = scored.map(([, m]) => m.score).sort((a, b) => b - a);
+  const rankOf = new Map<number, number>();
+  for (let i = 0; i < sortedScores.length; i++) {
+    if (!rankOf.has(sortedScores[i])) rankOf.set(sortedScores[i], i + 1);
+  }
+  const out = new Map<RankedStream, Match>();
+  for (const [r, m] of scored) out.set(r, { ...m, rank: { position: rankOf.get(m.score) ?? 1, of } });
+  return out;
 }
 
 /** One source's score; `middle` is the middle bitrate of the other files of its height, when there are enough. */
@@ -242,7 +259,12 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
     if (!points) return;
     const x = { reason, points: Math.round(points * 10) / 10 };
     reasons.push(x);
-    by.set(factor, [...(by.get(factor) ?? []), x]);
+    let list = by.get(factor);
+    if (!list) {
+      list = [];
+      by.set(factor, list);
+    }
+    list.push(x);
   };
 
   // The picture.

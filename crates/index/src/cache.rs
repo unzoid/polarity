@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::hash::Hash;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
+
+use tokio::sync::OnceCell;
 
 /// Small TTL cache. Metadata changes slowly; the point is that revisiting a
 /// title or scrolling back up a catalog never waits on the network.
@@ -43,6 +46,21 @@ impl<K: Eq + Hash + Clone, V: Clone> TtlCache<K, V> {
         entries.insert(key, (Instant::now(), value));
     }
 
+    /// Snapshot up to `limit` newest live entries for lightweight disk persistence.
+    pub fn snapshot(&self, limit: usize) -> Vec<(K, V)> {
+        let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut live: Vec<(Instant, K, V)> = entries
+            .iter()
+            .filter(|(_, (at, _))| at.elapsed() < self.ttl)
+            .map(|(k, (at, v))| (*at, k.clone(), v.clone()))
+            .collect();
+        if live.len() > limit {
+            live.sort_unstable_by_key(|a| std::cmp::Reverse(a.0));
+            live.truncate(limit);
+        }
+        live.into_iter().map(|(_, k, v)| (k, v)).collect()
+    }
+
     fn make_room(&self, entries: &mut HashMap<K, (Instant, V)>) {
         if entries.len() >= self.capacity {
             // Drop expired entries first, then the oldest if still full.
@@ -54,5 +72,32 @@ impl<K: Eq + Hash + Clone, V: Clone> TtlCache<K, V> {
                 }
             }
         }
+    }
+}
+
+/// Coalesces concurrent identical in-flight async fetches so overlapping Home shelves and Continue Watching
+/// cards never fire duplicate upstream HTTP requests for the same key.
+pub struct Singleflight<K, V> {
+    inflight: Mutex<HashMap<K, Arc<OnceCell<V>>>>,
+}
+
+impl<K: Eq + Hash + Clone, V: Clone> Default for Singleflight<K, V> {
+    fn default() -> Self {
+        Self { inflight: Mutex::new(HashMap::new()) }
+    }
+}
+
+impl<K: Eq + Hash + Clone, V: Clone> Singleflight<K, V> {
+    pub async fn run<E>(&self, key: K, f: impl Future<Output = std::result::Result<V, E>>) -> std::result::Result<V, E> {
+        let cell = {
+            let mut map = self.inflight.lock().unwrap_or_else(PoisonError::into_inner);
+            map.entry(key.clone()).or_insert_with(|| Arc::new(OnceCell::new())).clone()
+        };
+        let res = cell.get_or_try_init(|| f).await.cloned();
+        let mut map = self.inflight.lock().unwrap_or_else(PoisonError::into_inner);
+        if map.get(&key).is_some_and(|cur| Arc::ptr_eq(cur, &cell)) {
+            map.remove(&key);
+        }
+        res
     }
 }

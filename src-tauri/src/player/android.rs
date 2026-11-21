@@ -267,20 +267,36 @@ const CA_FILE: &str = "cacert.pem";
 const SYSTEM_CERTS: &str = "/system/etc/security/cacerts";
 
 /// Write `fonts.conf` (fontconfig finds Android's fonts through it) and the certificate bundle
-/// into mpv's config folder. Failures only cost subtitles their font or HTTPS its checks, so
-/// they're logged and playback goes on.
+/// into mpv's config folder. Skips rewriting when the files are already up to date (avoids
+/// reading ~150-200 system cert files on every mpv start).
 fn prepare_config(dir: &Path) {
     if let Err(e) = std::fs::create_dir_all(dir) {
         tracing::warn!("mpv config folder: {e}");
         return;
     }
     let cache = dir.join("fontconfig-cache");
-    if let Err(e) = std::fs::write(dir.join("fonts.conf"), fonts_conf(&cache)) {
-        tracing::warn!("mpv fonts.conf: {e}");
+    let fonts_path = dir.join("fonts.conf");
+    let desired_fonts = fonts_conf(&cache);
+    if std::fs::read_to_string(&fonts_path).ok().as_deref() != Some(desired_fonts.as_str()) {
+        if let Err(e) = std::fs::write(&fonts_path, desired_fonts) {
+            tracing::warn!("mpv fonts.conf: {e}");
+        }
+    }
+    let ca_path = dir.join(CA_FILE);
+    let ca_fresh = std::fs::metadata(&ca_path).ok().and_then(|m| {
+        if m.len() == 0 {
+            return None;
+        }
+        let ca_mtime = m.modified().ok()?;
+        let sys_mtime = std::fs::metadata(SYSTEM_CERTS).ok()?.modified().ok()?;
+        Some(ca_mtime >= sys_mtime)
+    });
+    if ca_fresh == Some(true) {
+        return;
     }
     match polar_player::certs::pem_bundle(Path::new(SYSTEM_CERTS)) {
         Ok(pem) if !pem.is_empty() => {
-            if let Err(e) = std::fs::write(dir.join(CA_FILE), pem) {
+            if let Err(e) = std::fs::write(&ca_path, pem) {
                 tracing::warn!("mpv certificates: {e}");
             }
         }

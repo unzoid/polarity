@@ -166,9 +166,16 @@ impl Space {
 
     /// Saves entries in order, the last one counting as the title's latest.
     pub fn progress_save(&mut self, entries: Vec<Progress>, at: u64) {
-        let aliases = self.aliases();
+        // Fast path: skip rebuilding/sorting the anime alias map when no links map these IMDb ids.
+        let needs_aliases = !self.links.is_empty()
+            && entries.iter().any(|p| {
+                !is_imdb(&p.meta_id) || self.links.values().any(|l| !l.removed && l.canonical == p.meta_id)
+            });
+        let aliases = needs_aliases.then(|| self.aliases());
         for (i, mut p) in entries.into_iter().enumerate() {
-            p.meta_id = aliases.canonical(&p.meta_id).to_owned();
+            if let Some(a) = &aliases {
+                p.meta_id = a.canonical(&p.meta_id).to_owned();
+            }
             p.updated_at = at + i as u64;
             self.dirty_mut().progress.insert(p.video_id.clone());
             self.progress.insert(p.video_id.clone(), p);

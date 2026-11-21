@@ -291,7 +291,10 @@ pub struct AnimeLists {
     path: PathBuf,
     url: String,
     http: reqwest::Client,
-    state: Mutex<State>,
+    /// Readers never block behind a 60 s 6 MB download once an index is loaded.
+    state: tokio::sync::RwLock<State>,
+    /// Serializes disk load & network refresh so two misses never download the 6 MB file twice.
+    refresh: Mutex<()>,
 }
 
 impl AnimeLists {
@@ -311,7 +314,8 @@ impl AnimeLists {
             path: cache_dir.join(FILE),
             url: url.into(),
             http,
-            state: Mutex::new(State { index: None, fetched: None, tried: None }),
+            state: tokio::sync::RwLock::new(State { index: None, fetched: None, tried: None }),
+            refresh: Mutex::new(()),
         }
     }
 
@@ -327,25 +331,55 @@ impl AnimeLists {
     }
 
     async fn find_at(&self, key: &AnimeKey, now: SystemTime) -> Option<AnimeMapping> {
-        // Held throughout, so two lookups never download the file twice.
-        let mut state = self.state.lock().await;
-        if state.index.is_none() {
-            self.load(&mut state).await;
+        // Fast path: index already loaded and fresh (or retry cooldown active) — zero mutex contention.
+        {
+            let state = self.state.read().await;
+            if state.index.is_some() {
+                let stale = state.fetched.is_none_or(|t| age(now, t) >= TTL);
+                let may_try = state.tried.is_none_or(|t| age(now, t) >= RETRY);
+                if !stale || !may_try {
+                    return state.index.as_ref()?.find(key).cloned();
+                }
+            }
         }
-        let stale = state.fetched.is_none_or(|t| age(now, t) >= TTL);
-        let may_try = state.tried.is_none_or(|t| age(now, t) >= RETRY);
-        if stale && may_try {
-            state.tried = Some(now);
+        let _refresh = self.refresh.lock().await;
+        // Re-check after acquiring refresh lock; load from disk outside the network call.
+        let need_load = self.state.read().await.index.is_none();
+        if need_load {
+            let mut loaded = State { index: None, fetched: None, tried: None };
+            self.load(&mut loaded).await;
+            if loaded.index.is_some() {
+                let mut state = self.state.write().await;
+                if state.index.is_none() {
+                    *state = loaded;
+                }
+            }
+        }
+        let should_download = {
+            let mut state = self.state.write().await;
+            let stale = state.fetched.is_none_or(|t| age(now, t) >= TTL);
+            let may_try = state.tried.is_none_or(|t| age(now, t) >= RETRY);
+            if stale && may_try {
+                state.tried = Some(now);
+                true
+            } else {
+                false
+            }
+        };
+        if should_download {
+            // Download & parse completely outside `self.state` lock so existing cached lookups stay non-blocking.
             if let Some(index) = self.download().await {
+                let mut state = self.state.write().await;
                 *state = State { index: Some(index), fetched: Some(now), tried: Some(now) };
             }
         }
-        state.index.as_ref()?.find(key).cloned()
+        self.state.read().await.index.as_ref()?.find(key).cloned()
     }
 
     /// Forgets the list and deletes the file; it is downloaded again when next needed.
     pub async fn clear(&self) {
-        let mut state = self.state.lock().await;
+        let _refresh = self.refresh.lock().await;
+        let mut state = self.state.write().await;
         *state = State { index: None, fetched: None, tried: None };
         let _ = tokio::fs::remove_file(&self.path).await;
     }

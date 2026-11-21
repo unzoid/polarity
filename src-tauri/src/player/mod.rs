@@ -34,6 +34,12 @@ mod android;
 mod apple;
 #[cfg(target_os = "android")]
 pub use android::preload;
+#[cfg(target_os = "ios")]
+pub fn preload() {
+    if let Some(lib) = mpv_library() {
+        apple::preload(&lib);
+    }
+}
 mod autocrop;
 pub mod background;
 mod commands;
@@ -437,7 +443,11 @@ impl Mpv {
             // Once full, read again in bursts (when 60 s remain) instead of
             // waking up for every packet.
             "--demuxer-hysteresis-secs=60".into(),
+            "--cache-pause-initial=yes".into(),
+            "--cache-pause-wait=1.5".into(),
             "--network-timeout=30".into(),
+            // Keep-Alive for loopback torrent & CDN Range probes + automatic reconnect on mobile network handoffs.
+            "--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5,multiple_requests=1".into(),
             // Check https certificates: older mpv builds (one found on PATH, say) don't by default.
             "--tls-verify=yes".into(),
             "--ytdl=no".into(),
@@ -477,6 +487,9 @@ impl Mpv {
         // iPhones and iPads: their cache, audio output, certificates and VideoToolbox frames.
         #[cfg(target_os = "ios")]
         base.extend(polar_player::tune::IOS_ARGS.iter().map(|a| a.to_string()));
+        // Mobile: faster demuxer probe limits so torrent and CDN streams reach frame 1 sooner.
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        base.extend(["--demuxer-lavf-probesize=2097152".into(), "--demuxer-lavf-analyzeduration=1.5".into()]);
         let (engine, client) = start_engine(window, base, &pipe).await?;
         *self.process.locked() = match &engine {
             Engine::Process(child) => Some(child.clone()),
@@ -494,36 +507,69 @@ impl Mpv {
         drop(guard);
 
         let watched = if WATCH_LOG { WATCHED } else { &[] };
-        for (i, name) in OBSERVED.iter().chain(watched).enumerate() {
-            self.request(json!(["observe_property", i + 1, name])).await?;
-        }
+        let observe_cmds: Vec<Value> = OBSERVED
+            .iter()
+            .chain(watched)
+            .enumerate()
+            .map(|(i, name)| json!(["observe_property", i + 1, name]))
+            .collect();
+        self.request_batch(&observe_cmds).await?;
         Ok(())
     }
 
     async fn request(&self, command: Value) -> Result<Value, String> {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        let (tx, rx) = oneshot::channel();
+        let mut results = self.request_batch(&[command]).await?;
+        Ok(results.pop().unwrap_or(Value::Null))
+    }
+
+    /// Pipelined batch of JSON-RPC commands written in a single `write_all` call, avoiding N serial IPC round-trips.
+    async fn request_batch(&self, commands: &[Value]) -> Result<Vec<Value>, String> {
+        if commands.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut ids = Vec::with_capacity(commands.len());
+        let mut rxs = Vec::with_capacity(commands.len());
+        let mut payload = Vec::with_capacity(commands.len() * 64);
         let pending = {
             let mut guard = self.conn.lock().await;
             let conn = guard.as_mut().ok_or("mpv isn't running")?;
-            conn.pending.locked().insert(id, tx);
-            let mut line = serde_json::to_vec(&json!({ "command": command, "request_id": id })).unwrap();
-            line.push(b'\n');
-            if let Err(e) = conn.writer.write_all(&line).await {
-                conn.pending.locked().remove(&id);
+            {
+                let mut map = conn.pending.locked();
+                for command in commands {
+                    let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+                    let (tx, rx) = oneshot::channel();
+                    map.insert(id, tx);
+                    ids.push(id);
+                    rxs.push(rx);
+                    serde_json::to_writer(&mut payload, &json!({ "command": command, "request_id": id })).unwrap();
+                    payload.push(b'\n');
+                }
+            }
+            if let Err(e) = conn.writer.write_all(&payload).await {
+                let mut map = conn.pending.locked();
+                for id in &ids {
+                    map.remove(id);
+                }
                 return Err(e.to_string());
             }
             conn.pending.clone()
         };
-        // The reader answers, or drops every waiting request when mpv goes away (no 5 s wait then).
-        match tokio::time::timeout(REQUEST_TIMEOUT, rx).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err("mpv stopped".into()),
-            Err(_) => {
-                pending.locked().remove(&id);
-                Err("mpv didn't respond".into())
+        let mut out = Vec::with_capacity(commands.len());
+        for (idx, rx) in rxs.into_iter().enumerate() {
+            match tokio::time::timeout(REQUEST_TIMEOUT, rx).await {
+                Ok(Ok(Ok(val))) => out.push(val),
+                Ok(Ok(Err(e))) => return Err(e),
+                Ok(Err(_)) => return Err("mpv stopped".into()),
+                Err(_) => {
+                    let mut map = pending.locked();
+                    for id in &ids[idx..] {
+                        map.remove(id);
+                    }
+                    return Err("mpv didn't respond".into());
+                }
             }
         }
+        Ok(out)
     }
 
     /// Stop mpv for good (the app is closing). The connection may be busy with a request, so
@@ -602,25 +648,31 @@ async fn start_engine(
     Ok((Engine::Process(Arc::new(StdMutex::new(child))), client))
 }
 
-/// macOS: libmpv in-process, drawing through its render API (`vo=libmpv`).
+/// macOS: libmpv in-process, drawing through its render API (`vo=libmpv`), connected immediately via UnixStream::pair.
 #[cfg(target_os = "macos")]
-async fn start_engine(window: &WebviewWindow, base: Vec<String>, pipe: &str) -> Result<(Engine, IpcStream), String> {
+async fn start_engine(window: &WebviewWindow, base: Vec<String>, _pipe: &str) -> Result<(Engine, IpcStream), String> {
+    use std::os::fd::AsRawFd;
+
     let lib = mpv_library().ok_or("mpv isn't installed")?;
     let nswindow = window.ns_window().map_err(|e| e.to_string())? as usize;
-    // "--name=value" → (name, value). An option this libmpv doesn't know is
-    // only logged, so the newer ones can always go in.
+    let (ours, theirs) = std::os::unix::net::UnixStream::pair().map_err(|e| e.to_string())?;
+    ours.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let client = IpcStream::from_std(ours).map_err(|e| e.to_string())?;
+    let fd = format!("--input-ipc-client=fd://{}", theirs.as_raw_fd());
     let options: Vec<(String, String)> = base
         .iter()
         .map(String::as_str)
+        .filter(|a| !a.starts_with("--input-ipc-server="))
         .chain(MODERN_ARGS.iter().copied())
-        .chain(["--vo=libmpv"])
+        .chain(["--vo=libmpv", fd.as_str()])
         .filter_map(|a| a.strip_prefix("--")?.split_once('='))
         .map(|(k, v)| (k.to_owned(), v.to_owned()))
         .collect();
     let player = tokio::task::spawn_blocking(move || apple::Player::start(&lib, nswindow, &options))
         .await
         .map_err(|e| e.to_string())??;
-    Ok((Engine::InApp(player), connect_in_app(pipe).await?))
+    std::mem::forget(theirs);
+    Ok((Engine::InApp(player), client))
 }
 
 /// iOS: libmpv in-process as on macOS, drawing behind the web view (`ios/mpv_view.m`). Its
@@ -715,35 +767,31 @@ pub fn hardware_decoding_back(app: &AppHandle) {
     });
 }
 
-/// Android: libmpv in-process, drawing into the surface behind the webview ([`android`]).
+/// Android: libmpv in-process, drawing into the surface behind the webview ([`android`]),
+/// connected immediately via UnixStream::pair (no 15ms socket polling loop).
 #[cfg(target_os = "android")]
-async fn start_engine(window: &WebviewWindow, base: Vec<String>, pipe: &str) -> Result<(Engine, IpcStream), String> {
+async fn start_engine(window: &WebviewWindow, base: Vec<String>, _pipe: &str) -> Result<(Engine, IpcStream), String> {
+    use std::os::fd::AsRawFd;
+
     let config = window.app_handle().path().app_data_dir().map_err(|e| e.to_string())?.join("mpv");
+    let (ours, theirs) = std::os::unix::net::UnixStream::pair().map_err(|e| e.to_string())?;
+    ours.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let client = IpcStream::from_std(ours).map_err(|e| e.to_string())?;
+    let fd = format!("--input-ipc-client=fd://{}", theirs.as_raw_fd());
     let options: Vec<(String, String)> = base
         .iter()
         .map(String::as_str)
+        .filter(|a| !a.starts_with("--input-ipc-server="))
         .chain(MODERN_ARGS.iter().copied())
+        .chain([fd.as_str()])
         .filter_map(|a| a.strip_prefix("--")?.split_once('='))
         .map(|(k, v)| (k.to_owned(), v.to_owned()))
         .collect();
     let player = tokio::task::spawn_blocking(move || android::Player::start(&config, &options))
         .await
         .map_err(|e| e.to_string())??;
-    Ok((Engine::InApp(player), connect_in_app(pipe).await?))
-}
-
-/// Connect to the IPC socket of a libmpv running in the app. It's up once mpv_initialize has
-/// returned, but give it a moment.
-#[cfg(any(target_os = "macos", target_os = "android"))]
-async fn connect_in_app(pipe: &str) -> Result<IpcStream, String> {
-    let started = Instant::now();
-    loop {
-        match ipc::connect(pipe).await {
-            Ok(client) => return Ok(client),
-            Err(_) if started.elapsed() < Duration::from_secs(5) => tokio::time::sleep(Duration::from_millis(15)).await,
-            Err(e) => return Err(format!("mpv didn't open its control socket: {e}")),
-        }
-    }
+    std::mem::forget(theirs);
+    Ok((Engine::InApp(player), client))
 }
 
 /// Spawn mpv and connect to its IPC pipe. `Ok(None)` means mpv exited before
@@ -849,14 +897,21 @@ async fn read_loop(
                     continue;
                 }
                 let name = msg.get("name").and_then(Value::as_str).unwrap_or_default().to_owned();
+                let data = msg.get("data");
                 if let Some((_, every)) = THROTTLED.iter().find(|(n, _)| *n == name) {
+                    // Never drop boundary buffering values (0% / 100%) so the UI never gets stuck at 95%.
+                    let boundary = name == "cache-buffering-state"
+                        && matches!(data.and_then(Value::as_i64), Some(0 | 100));
                     let now = Instant::now();
-                    if last_emit.get(&name).is_some_and(|t| now.duration_since(*t) < Duration::from_millis(*every)) {
+                    if !boundary
+                        && last_emit
+                            .get(&name)
+                            .is_some_and(|t| now.duration_since(*t) < Duration::from_millis(*every))
+                    {
                         continue;
                     }
                     last_emit.insert(name.clone(), now);
                 }
-                let data = msg.get("data");
                 if name == "pause" && app.state::<AppState>().mpv.held.load(Ordering::SeqCst) {
                     // Playing on ends the hold; the user's pause would come as a change to true, after it.
                     if data.and_then(Value::as_bool) != Some(true) {

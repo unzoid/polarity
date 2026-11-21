@@ -114,7 +114,7 @@ impl Core {
 
     /// The account's TMDB key and language (`en-US`), from its settings. `None` or empty: Cinemeta.
     pub fn set_tmdb(&self, key: Option<String>, language: Option<String>) {
-        let indexer = Indexer::new(IndexConfig { tmdb_key: key, language });
+        let indexer = Indexer::new(IndexConfig { tmdb_key: key, language, ..Default::default() });
         *self.index.write().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(indexer));
     }
 

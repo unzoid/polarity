@@ -77,7 +77,7 @@ export async function runCheck(profile: string, options: CheckOptions, deps: Che
   const typeOf = (id: string) => (library.find((l) => l.id === id)?.type ?? started.find((p) => p.metaId === id)?.type ?? "series") as ContentType;
 
   const shows = await Promise.all(ids.map((id) => lookup(() => deps.meta(typeOf(id), id)).catch(() => undefined)));
-  const next: Memory = { shows: {}, planned: {} };
+  const next: Memory = { shows: {}, planned: {}, checkedAt: now };
   const news: News[] = [];
   const plans: { id: string; plan: Planned }[] = [];
   ids.forEach((id, i) => {

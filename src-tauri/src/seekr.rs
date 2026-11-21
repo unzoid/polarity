@@ -56,30 +56,38 @@ struct Validation {
     tier: Option<String>,
 }
 
+const CACHE_TTL: Duration = Duration::from_secs(60 * 60);
+const CACHE_MAX: usize = 256;
+
 pub struct Seekr {
     http: reqwest::Client,
-    cache: Mutex<HashMap<String, Option<PreviewTrack>>>,
+    cache: Mutex<HashMap<String, (std::time::Instant, Option<PreviewTrack>)>>,
 }
 
 impl Default for Seekr {
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
+        Self::with_client(
+            reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(5))
                 .timeout(Duration::from_secs(12))
                 .build()
                 .expect("http client"),
-            cache: Mutex::new(HashMap::new()),
-        }
+        )
     }
 }
 
 impl Seekr {
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http, cache: Mutex::new(HashMap::new()) }
+    }
+
     /// `video_id` is a movie `tt…` or an episode `tt…:season:episode`.
     pub async fn track(&self, key: &str, video_id: &str, duration_ms: u64) -> Result<Option<PreviewTrack>, String> {
         let cache_key = format!("{video_id}@{}", duration_ms / 1000);
-        if let Some(hit) = self.cache.locked().get(&cache_key) {
-            return Ok(hit.clone());
+        if let Some((at, hit)) = self.cache.locked().get(&cache_key) {
+            if at.elapsed() < CACHE_TTL {
+                return Ok(hit.clone());
+            }
         }
 
         let mut parts = video_id.split(':');
@@ -97,14 +105,15 @@ impl Seekr {
         let res = self
             .http
             .get(format!("{API}/sprites"))
+            .timeout(Duration::from_secs(12))
             .header("X-API-Key", key)
             .query(&query)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.without_url().to_string())?;
         let track = match res.status() {
             s if s.is_success() => {
-                let lookup: Lookup = res.json().await.map_err(|e| e.to_string())?;
+                let lookup: Lookup = res.json().await.map_err(|e| e.without_url().to_string())?;
                 // Signed URL: deliberately no API key on this request.
                 // `st=1` added as a query parameter, whatever the signed URL already carries (L17).
                 let mut vtt = reqwest::Url::parse(&lookup.vtt_url).map_err(|e| e.to_string())?;
@@ -112,6 +121,7 @@ impl Seekr {
                 let res = self
                     .http
                     .get(vtt)
+                    .timeout(Duration::from_secs(12))
                     .send()
                     .await
                     .and_then(|r| r.error_for_status())
@@ -126,7 +136,16 @@ impl Seekr {
             }
             _ => None, // 404 etc.: this title simply has no previews
         };
-        self.cache.locked().insert(cache_key, track.clone());
+        let mut cache = self.cache.locked();
+        if cache.len() >= CACHE_MAX {
+            cache.retain(|_, (at, _)| at.elapsed() < CACHE_TTL);
+            if cache.len() >= CACHE_MAX {
+                if let Some(oldest) = cache.iter().min_by_key(|(_, (at, _))| *at).map(|(k, _)| k.clone()) {
+                    cache.remove(&oldest);
+                }
+            }
+        }
+        cache.insert(cache_key, (std::time::Instant::now(), track.clone()));
         Ok(track)
     }
 

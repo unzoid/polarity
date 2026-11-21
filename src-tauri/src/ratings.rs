@@ -66,32 +66,38 @@ impl Ratings {
     }
 }
 
+const CACHE_MAX: usize = 512;
+const NEGATIVE_TTL: Duration = Duration::from_secs(60);
+
 pub struct RatingsClient {
     http: reqwest::Client,
-    cache: Mutex<HashMap<String, (Instant, Ratings)>>,
+    cache: Mutex<HashMap<String, (Instant, Duration, Ratings)>>,
 }
 
 impl Default for RatingsClient {
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
+        Self::with_client(
+            reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(5))
                 .timeout(Duration::from_secs(10))
                 .build()
                 .expect("http client"),
-            cache: Mutex::new(HashMap::new()),
-        }
+        )
     }
 }
 
 impl RatingsClient {
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http, cache: Mutex::new(HashMap::new()) }
+    }
+
     pub async fn get(&self, imdb_id: &str, ty: &str, mdblist: Option<&str>, omdb: Option<&str>) -> Ratings {
         if !imdb_id.starts_with("tt") || (mdblist.is_none() && omdb.is_none()) {
             return Ratings::default();
         }
         let key = format!("{imdb_id}/{}/{}", mdblist.is_some(), omdb.is_some());
-        if let Some((at, hit)) = self.cache.locked().get(&key) {
-            if at.elapsed() < TTL {
+        if let Some((at, ttl, hit)) = self.cache.locked().get(&key) {
+            if at.elapsed() < *ttl {
                 return hit.clone();
             }
         }
@@ -109,6 +115,7 @@ impl RatingsClient {
                 }
             }
         );
+        let any_ok = a.is_some() || b.is_some();
         let mut out = a.unwrap_or_default();
         if let Some(b) = b {
             out.fill_from(b);
@@ -116,13 +123,26 @@ impl RatingsClient {
         if out.imdb.is_some() {
             out.links.insert("imdb", format!("https://www.imdb.com/title/{imdb_id}/"));
         }
-        self.cache.locked().insert(key, (Instant::now(), out.clone()));
+        // Don't cache total network failures for 6h: retry after 60s instead.
+        let ttl = if any_ok { TTL } else { NEGATIVE_TTL };
+        let mut cache = self.cache.locked();
+        if cache.len() >= CACHE_MAX {
+            cache.retain(|_, (at, t, _)| at.elapsed() < *t);
+            if cache.len() >= CACHE_MAX {
+                if let Some(oldest) = cache.iter().min_by_key(|(_, (at, _, _))| *at).map(|(k, _)| k.clone()) {
+                    cache.remove(&oldest);
+                }
+            }
+        }
+        cache.insert(key, (Instant::now(), ttl, out.clone()));
         out
     }
 
     /// The answer as JSON, or `None` (logged by host: the query holds the key).
     async fn json(&self, url: &str, query: &[(&str, &str)]) -> Option<Value> {
-        let answer = async { self.http.get(url).query(query).send().await?.error_for_status()?.json().await };
+        let answer = async {
+            self.http.get(url).timeout(Duration::from_secs(10)).query(query).send().await?.error_for_status()?.json().await
+        };
         answer
             .await
             .map_err(|e| {

@@ -174,7 +174,7 @@ function Suggestion({ item }: { item: MetaPreview }) {
 function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   useEffect(() => {
-    const t = window.setTimeout(() => setQuery(text), 220);
+    const t = window.setTimeout(() => setQuery(text), 300);
     return () => window.clearTimeout(t);
   }, [text]);
   const deferred = useDeferredValue(query);

@@ -62,6 +62,8 @@ static NSString *text(const char *s) {
 void polar_now_playing_show(const char *title, const char *subtitle, const char *art) {
     NSString *t = text(title), *s = text(subtitle);
     NSData *picture = art ? [[NSData alloc] initWithBase64EncodedString:text(art) options:0] : nil;
+    // Decode JPEG off the main thread so Lock Screen artwork never causes a UI hitch.
+    UIImage *image = picture ? [UIImage imageWithData:picture] : nil;
     later_on_main(^{
         for (MPRemoteCommand *c in commands()) c.enabled = YES;
         NSMutableDictionary *next = [NSMutableDictionary dictionary];
@@ -69,7 +71,6 @@ void polar_now_playing_show(const char *title, const char *subtitle, const char 
         if (s.length) next[MPMediaItemPropertyArtist] = s;
         next[MPNowPlayingInfoPropertyMediaType] = @(MPNowPlayingInfoMediaTypeVideo);
         next[MPNowPlayingInfoPropertyDefaultPlaybackRate] = @1;
-        UIImage *image = picture ? [UIImage imageWithData:picture] : nil;
         if (image)
             next[MPMediaItemPropertyArtwork] = [[MPMediaItemArtwork alloc] initWithBoundsSize:image.size
                                                                                requestHandler:^UIImage *(CGSize size) { return image; }];

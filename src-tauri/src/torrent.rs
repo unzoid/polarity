@@ -43,7 +43,10 @@ pub struct TorrentLink {
 mod engine {
     use std::num::NonZeroU32;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    #[cfg(target_os = "android")]
+    use std::time::Duration;
 
     use polar_torrent::{Engine, Limits};
     use tauri::{AppHandle, Manager};
@@ -51,6 +54,11 @@ mod engine {
     use crate::locks::Locked;
 
     use super::TorrentLimits;
+
+    /// On Android without `keep_sharing`, keep the empty session (and warm DHT table) alive briefly across
+    /// episode transitions and source failovers before stopping it completely.
+    #[cfg(target_os = "android")]
+    const ANDROID_IDLE_STOP: Duration = Duration::from_secs(45);
 
     #[derive(serde::Serialize, Clone)]
     pub struct StepEvent {
@@ -64,6 +72,7 @@ mod engine {
         dir: PathBuf,
         engine: std::sync::Mutex<Option<Arc<Engine>>>,
         turn: tokio::sync::Mutex<()>,
+        idle_gen: AtomicU64,
     }
 
     pub fn manage(app: &AppHandle, cache: PathBuf) {
@@ -71,14 +80,33 @@ mod engine {
             dir: cache.join("torrent-cache"),
             engine: std::sync::Mutex::new(None),
             turn: tokio::sync::Mutex::new(()),
+            idle_gen: AtomicU64::new(0),
         });
         #[cfg(target_os = "android")]
         let _ = super::android::APP.set(app.clone());
     }
 
+    /// On Android, stop the empty session after a short idle period so it never runs unseen while still
+    /// avoiding a 3–10 s cold DHT rebuild during rapid failovers and episode switches.
+    #[cfg(target_os = "android")]
+    pub fn schedule_idle_stop(app: &AppHandle) {
+        let Some(torrents) = app.try_state::<Torrents>() else { return };
+        let gen = torrents.idle_gen.fetch_add(1, Ordering::Relaxed) + 1;
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(ANDROID_IDLE_STOP).await;
+            let Some(torrents) = app.try_state::<Torrents>() else { return };
+            if torrents.idle_gen.load(Ordering::Relaxed) != gen {
+                return;
+            }
+            stop(&app).await;
+        });
+    }
+
     /// The running engine, started if it isn't.
     pub async fn engine(app: &AppHandle) -> Result<Arc<Engine>, String> {
         let torrents = app.state::<Torrents>();
+        torrents.idle_gen.fetch_add(1, Ordering::Relaxed);
         let _turn = torrents.turn.lock().await;
         if let Some(engine) = started(app) {
             return Ok(engine);
@@ -195,15 +223,15 @@ pub async fn torrent_open(
 /// user keeps sharing after playback.
 #[tauri::command]
 pub async fn torrent_close(app: AppHandle, limits: TorrentLimits) {
-    #[cfg(target_os = "android")]
-    if !limits.keep_sharing {
-        // Nothing is kept: the whole engine goes, so it never runs unseen.
-        engine::stop(&app).await;
-        return;
-    }
     #[cfg(not(target_os = "ios"))]
     if let Some(engine) = engine::started(&app) {
         engine.close(engine::limits(limits)).await;
+    }
+    #[cfg(target_os = "android")]
+    if !limits.keep_sharing {
+        // The torrent and its files are already gone; shut down the empty session after a short idle grace
+        // so episode switches and source failovers reuse the warm DHT routing table.
+        engine::schedule_idle_stop(&app);
     }
     #[cfg(target_os = "ios")]
     let _ = (app, limits);

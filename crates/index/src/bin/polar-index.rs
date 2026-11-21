@@ -21,6 +21,7 @@ async fn main() {
     let indexer = Arc::new(Indexer::new(IndexConfig {
         tmdb_key: std::env::var("TMDB_API_KEY").ok(),
         language: std::env::var("TMDB_LANGUAGE").ok(),
+        ..Default::default()
     }));
     tracing::info!(source = indexer.source(), "polar-index starting");
 

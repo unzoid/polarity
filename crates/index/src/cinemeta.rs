@@ -20,8 +20,8 @@ pub struct Cinemeta {
 }
 
 impl Cinemeta {
-    pub fn new() -> Self {
-        Self { client: AddonClient::new() }
+    pub fn with_client(client: AddonClient) -> Self {
+        Self { client }
     }
 
     /// The raw popularity list ("trending"), paged.
@@ -70,7 +70,8 @@ fn gather(pages: Vec<Result<Vec<MetaPreview>>>) -> Result<Vec<MetaPreview>> {
     let mut all = Vec::new();
     for page in pages {
         match page {
-            Ok(items) => all.extend(items.into_iter().map(upgrade_images)),
+            // `list()` already ran `upgrade_images`; avoid upgrading every item twice.
+            Ok(items) => all.extend(items),
             Err(e) => {
                 first_err.get_or_insert(e);
             }

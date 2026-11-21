@@ -7,7 +7,7 @@
 //! chose to keep sharing it; kept ones are removed oldest first whenever a new
 //! stream needs the room under the cache limit.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
@@ -17,12 +17,13 @@ use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use librqbit::api::TorrentIdOrHash;
-use librqbit::dht::Id20;
+use librqbit::dht::{DhtPersistenceConfig, Id20};
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, DhtSessionConfig, ListOnlyResponse, ListenerOptions,
-    ManagedTorrent, Session, SessionOptions,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, DhtSessionConfig, ListOnlyResponse,
+    ListenerOptions, ManagedTorrent, PeerConnectionOptions, Session, SessionOptions,
 };
 use serde::Serialize;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::magnet;
 use crate::serve::{Files, OpenFuture, Opened as Served, Server};
@@ -82,11 +83,13 @@ pub struct Opened {
     pub size: u64,
 }
 
-/// Knobs tests turn; the app uses [`Options::default`].
+/// Knobs tests turn; the app uses [`Engine::start`].
 #[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct Options {
     pub dht: bool,
+    /// Where to persist the DHT routing table across engine restarts (avoids 2–8 s cold DHT bootstraps).
+    pub dht_file: Option<PathBuf>,
     /// Accept incoming connections here. The app doesn't listen (no firewall
     /// prompt); it connects out to the peers it finds.
     pub listen: Option<SocketAddr>,
@@ -96,7 +99,13 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { dht: true, listen: None, initial_peers: Vec::new(), metadata_timeout: METADATA_TIMEOUT }
+        Options {
+            dht: true,
+            dht_file: None,
+            listen: None,
+            initial_peers: Vec::new(),
+            metadata_timeout: METADATA_TIMEOUT,
+        }
     }
 }
 
@@ -146,22 +155,47 @@ pub struct Engine {
 
 impl Engine {
     /// Start the engine with its cache in `dir` (emptied first: nothing is
-    /// kept from an earlier run).
+    /// kept from an earlier run). Persists the DHT routing table beside `dir`
+    /// so restarts skip cold DHT bootstrap.
     pub async fn start(dir: PathBuf) -> Result<Engine, String> {
-        Self::start_with(dir, Options::default()).await
+        let dht_file = dir.parent().map(|p| p.join("torrent-dht.json"));
+        Self::start_with(dir, Options { dht_file, ..Options::default() }).await
     }
 
     #[doc(hidden)]
     pub async fn start_with(dir: PathBuf, options: Options) -> Result<Engine, String> {
-        empty_dir(&dir).map_err(|e| format!("couldn't prepare the cache folder: {e}"))?;
+        let dir_clean = dir.clone();
+        tokio::task::spawn_blocking(move || empty_dir(&dir_clean))
+            .await
+            .map_err(|e| format!("couldn't prepare the cache folder: {e}"))?
+            .map_err(|e| format!("couldn't prepare the cache folder: {e}"))?;
+        let dht = options.dht.then(|| DhtSessionConfig {
+            bootstrap_addrs: None,
+            port: None,
+            persistence: options.dht_file.clone().map(|path| DhtPersistenceConfig {
+                config_filename: Some(path),
+                dump_interval: Some(Duration::from_secs(30)),
+            }),
+        });
         let session = Session::new_with_opts(
             dir.clone(),
             SessionOptions {
-                dht: options.dht.then_some(DhtSessionConfig { bootstrap_addrs: None, port: None, persistence: None }),
+                dht,
                 disable_trackers: false,
                 fastresume: false,
                 persistence: None,
                 listen: options.listen.map(|addr| ListenerOptions { listen_addr: addr, ..Default::default() }),
+                connect: Some(ConnectionOptions {
+                    enable_tcp: true,
+                    proxy_url: None,
+                    peer_opts: Some(PeerConnectionOptions {
+                        connect_timeout: Some(Duration::from_secs(4)),
+                        read_write_timeout: Some(Duration::from_secs(10)),
+                        keep_alive_interval: None,
+                        // Smaller outstanding request window lets librqbit pivot to newly seeked pieces 4x faster.
+                        max_request_window: Some(32),
+                    }),
+                }),
                 disable_local_service_discovery: true,
                 client_name_and_version: Some(format!("Polarity/{}", env!("CARGO_PKG_VERSION"))),
                 ..Default::default()
@@ -197,12 +231,48 @@ impl Engine {
         let trackers = magnet::trackers(&request.sources);
         let started = Instant::now();
         on_step(Step::Searching { trackers: trackers.len(), dht: self.options.dht });
-        let (torrent, file, size, ext) = match self.take_kept(&hash, request.file_idx) {
+        let (torrent, file, size, ext) = match self.take_kept(&hash) {
             Some(kept) => {
-                let ext = kept.ext.clone();
-                let files = kept.torrent.metadata.load().as_ref().map_or(1, |m| m.file_infos.len());
-                on_step(Step::Metadata { files, chosen: kept.file + 1, ext: ext.clone(), size: kept.size, ms: 0 });
-                (kept.torrent, kept.file, kept.size, ext)
+                // Season-pack reuse: keep existing peers and switch `only_files` if another file in the same torrent is requested.
+                let target_file = request.file_idx.unwrap_or(kept.file);
+                if target_file == kept.file {
+                    let ext = kept.ext.clone();
+                    let files = kept.torrent.metadata.load().as_ref().map_or(1, |m| m.file_infos.len());
+                    on_step(Step::Metadata { files, chosen: kept.file + 1, ext: ext.clone(), size: kept.size, ms: 0 });
+                    (kept.torrent, kept.file, kept.size, ext)
+                } else if let Some((files_len, size, ext)) = {
+                    let meta = kept.torrent.metadata.load();
+                    meta.as_ref().and_then(|m| {
+                        let fi = m.file_infos.get(target_file)?;
+                        Some((m.file_infos.len(), fi.len, extension(&fi.relative_filename)))
+                    })
+                } {
+                    if limits.cache_bytes > 0 && size > limits.cache_bytes {
+                        self.remove(&kept.torrent).await;
+                        return Err(format!(
+                            "This file ({}) is larger than the torrent cache limit ({}) in Settings → Sources.",
+                            gb(size),
+                            gb(limits.cache_bytes)
+                        ));
+                    }
+                    self.make_room(size, limits.cache_bytes).await;
+                    let selected = HashSet::from([target_file]);
+                    self.session
+                        .update_only_files(&kept.torrent, &selected)
+                        .await
+                        .map_err(|e| format!("The torrent couldn't switch files: {e:#}"))?;
+                    on_step(Step::Metadata {
+                        files: files_len,
+                        chosen: target_file + 1,
+                        ext: ext.clone(),
+                        size,
+                        ms: 0,
+                    });
+                    (kept.torrent, target_file, size, ext)
+                } else {
+                    self.remove(&kept.torrent).await;
+                    return Err(format!("The add-on asked for file {} which isn't in this torrent.", target_file + 1));
+                }
             }
             None => {
                 // The file list first, so only the chosen file is ever fetched.
@@ -243,7 +313,7 @@ impl Engine {
                     ));
                 }
                 self.make_room(size, limits.cache_bytes).await;
-                let torrent = self.add(&hash, listed.torrent_bytes, file, listed.seen_peers).await?;
+                let torrent = self.add(&hash, listed.torrent_bytes, file, listed.seen_peers, &trackers).await?;
                 (torrent, file, size, ext)
             }
         };
@@ -262,6 +332,8 @@ impl Engine {
             id
         };
         self.files.0.lock().unwrap_or_else(PoisonError::into_inner).insert(id, (torrent.clone(), file));
+        // Proactively warm header & container trailer (MP4 moov / MKV Cues) pieces while mpv connects.
+        tokio::spawn(prefetch_edges(torrent.clone(), file, size, done.clone()));
         tokio::spawn(report(torrent, file, size, done, on_step));
         Ok(Opened { url: self.server.url(id, ext.as_deref()), size })
     }
@@ -293,7 +365,8 @@ impl Engine {
             self.remove(&active.torrent).await;
         }
         self.session.stop().await;
-        let _ = empty_dir(&self.dir);
+        let dir = self.dir.clone();
+        let _ = tokio::task::spawn_blocking(move || empty_dir(&dir)).await;
     }
 
     /// Ask peers for the torrent's file list (and who has it).
@@ -317,13 +390,14 @@ impl Engine {
         }
     }
 
-    /// Start fetching `file` of the listed torrent, from the peers that sent the list (and any others found).
+    /// Start fetching `file` of the listed torrent, from the peers that sent the list (and any trackers / DHT peers).
     async fn add(
         &self,
         hash: &str,
         torrent: Bytes,
         file: usize,
         peers: Vec<SocketAddr>,
+        trackers: &[String],
     ) -> Result<Arc<ManagedTorrent>, String> {
         let peers: Vec<SocketAddr> = self.options.initial_peers.iter().copied().chain(peers).collect();
         let options = AddTorrentOptions {
@@ -331,6 +405,7 @@ impl Engine {
             overwrite: true,
             sub_folder: Some(hash.to_owned()),
             initial_peers: (!peers.is_empty()).then_some(peers),
+            trackers: (!trackers.is_empty()).then(|| trackers.to_vec()),
             ..Default::default()
         };
         let added = self
@@ -344,11 +419,10 @@ impl Engine {
         }
     }
 
-    /// A torrent kept for sharing, taken back to play the same file again.
-    fn take_kept(&self, hash: &str, file: Option<usize>) -> Option<Active> {
+    /// A torrent kept for sharing, taken back to play the same file or another episode in the same torrent.
+    fn take_kept(&self, hash: &str) -> Option<Active> {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        let at =
-            state.kept.iter().position(|a| hex(&a.torrent.info_hash()) == hash && file.is_none_or(|f| f == a.file))?;
+        let at = state.kept.iter().position(|a| hex(&a.torrent.info_hash()) == hash)?;
         state.kept.remove(at)
     }
 
@@ -378,7 +452,45 @@ impl Engine {
         if let Err(e) = self.session.delete(TorrentIdOrHash::Id(torrent.id()), true).await {
             tracing::warn!("couldn't remove a torrent: {e:#}");
         }
-        let _ = std::fs::remove_dir_all(self.dir.join(hash));
+        let target = self.dir.join(&hash);
+        // Move aside with an O(1) rename and delete off the Tokio worker so the next open starts immediately.
+        let trash = self.dir.join(format!(".trash-{hash}-{}", self.generation.load(Ordering::Relaxed)));
+        tokio::task::spawn_blocking(move || {
+            let path = if std::fs::rename(&target, &trash).is_ok() { trash } else { target };
+            let _ = std::fs::remove_dir_all(path);
+        });
+    }
+}
+
+/// Hint librqbit to fetch the start (container header) and end (MP4 `moov` / MKV `Cues`) right away so
+/// FFmpeg probing finishes in fewer round-trips when mpv connects.
+async fn prefetch_edges(torrent: Arc<ManagedTorrent>, file: usize, size: u64, done: Arc<AtomicBool>) {
+    if size == 0 || done.load(Ordering::Relaxed) {
+        return;
+    }
+    let Ok(mut stream) = torrent.stream(file).await else { return };
+    let mut buf = vec![0u8; 64 * 1024];
+    // Touch first piece(s) and last piece(s) quickly; exit as soon as playback closes.
+    let mut read_head = 0usize;
+    while read_head < 256 * 1024 && !done.load(Ordering::Relaxed) {
+        match tokio::time::timeout(Duration::from_secs(6), stream.read(&mut buf)).await {
+            Ok(Ok(0)) | Err(_) => break,
+            Ok(Ok(n)) => read_head += n,
+            Ok(Err(_)) => return,
+        }
+    }
+    if size > 512 * 1024 && !done.load(Ordering::Relaxed) {
+        let tail_start = size.saturating_sub(256 * 1024);
+        if stream.seek(std::io::SeekFrom::Start(tail_start)).await.is_ok() {
+            let mut read_tail = 0usize;
+            while read_tail < 256 * 1024 && !done.load(Ordering::Relaxed) {
+                match tokio::time::timeout(Duration::from_secs(6), stream.read(&mut buf)).await {
+                    Ok(Ok(0)) | Err(_) => break,
+                    Ok(Ok(n)) => read_tail += n,
+                    Ok(Err(_)) => break,
+                }
+            }
+        }
     }
 }
 

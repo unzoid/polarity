@@ -35,6 +35,10 @@ pub trait Files: Send + Sync + 'static {
 /// The longest request head read; players send a few hundred bytes.
 const MAX_HEAD: usize = 8 * 1024;
 const HEAD_TIMEOUT: Duration = Duration::from_secs(10);
+/// Idle wait between Keep-Alive requests on a reused loopback connection.
+const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
+/// Copy chunk size (256 KiB vs tokio::io::copy's 8 KiB) for low-syscall high-bitrate streaming.
+const COPY_BUF: usize = 256 * 1024;
 /// Connections answered at once; a player uses one or two. Past it a new one is closed unanswered.
 const MAX_CONNECTIONS: usize = 32;
 
@@ -62,6 +66,7 @@ impl Server {
                     }
                 };
                 let Ok(permit) = open.clone().try_acquire_owned() else { continue };
+                let _ = socket.set_nodelay(true);
                 let (files, prefix) = (files.clone(), prefix.clone());
                 tokio::spawn(async move {
                     if let Err(e) = answer(socket, &*files, &prefix).await {
@@ -94,41 +99,118 @@ fn token() -> io::Result<String> {
 }
 
 async fn answer(mut socket: TcpStream, files: &dyn Files, prefix: &str) -> io::Result<()> {
-    let head = tokio::time::timeout(HEAD_TIMEOUT, read_head(&mut socket))
-        .await
-        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "no request"))??;
-    let request = match parse(&head, prefix) {
-        Ok(r) => r,
-        Err(status) => return reply(&mut socket, status, &[]).await,
-    };
-    let Some(mut file) = files.open(request.id).await else {
-        return reply(&mut socket, 404, &[]).await;
-    };
-    let Some((start, end)) = span(request.range, file.len) else {
-        return reply(&mut socket, 416, &[("Content-Range", format!("bytes */{}", file.len))]).await;
-    };
-    let len = end - start;
-    let mut headers = vec![
-        ("Content-Type", mime(&request.ext).to_owned()),
-        ("Content-Length", len.to_string()),
-        ("Accept-Ranges", "bytes".to_owned()),
-    ];
-    let status = if request.range.is_some() {
-        headers.push(("Content-Range", format!("bytes {start}-{}/{}", end.saturating_sub(1), file.len)));
-        206
-    } else {
-        200
-    };
-    reply(&mut socket, status, &headers).await?;
-    if request.head || len == 0 {
-        return Ok(());
+    let mut cached: Option<(u64, Opened)> = None;
+    let mut buf = vec![0u8; COPY_BUF];
+    let mut first = true;
+    loop {
+        let timeout = if first { HEAD_TIMEOUT } else { KEEPALIVE_TIMEOUT };
+        let head = match tokio::time::timeout(timeout, read_head(&mut socket)).await {
+            Ok(Ok(h)) => h,
+            Ok(Err(e)) if !first && e.kind() == io::ErrorKind::UnexpectedEof => return Ok(()),
+            Ok(Err(e)) => return Err(e),
+            Err(_) if !first => return Ok(()),
+            Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "no request")),
+        };
+        first = false;
+        let request = match parse(&head, prefix) {
+            Ok(r) => r,
+            Err(status) => return reply(&mut socket, status, &[], false).await,
+        };
+        let keep_alive = request.keep_alive;
+        let file = match cached.take() {
+            Some((id, f)) if id == request.id => f,
+            _ => match files.open(request.id).await {
+                Some(f) => f,
+                None => {
+                    reply(&mut socket, 404, &[], keep_alive).await?;
+                    if !keep_alive {
+                        return Ok(());
+                    }
+                    continue;
+                }
+            },
+        };
+        let mut file = file;
+        let Some((start, end)) = span(request.range, file.len) else {
+            reply(&mut socket, 416, &[("Content-Range", format!("bytes */{}", file.len))], keep_alive).await?;
+            if !keep_alive {
+                return Ok(());
+            }
+            cached = Some((request.id, file));
+            continue;
+        };
+        let len = end - start;
+        let mut headers = vec![
+            ("Content-Type", mime(&request.ext).to_owned()),
+            ("Content-Length", len.to_string()),
+            ("Accept-Ranges", "bytes".to_owned()),
+        ];
+        let status = if request.range.is_some() {
+            headers.push(("Content-Range", format!("bytes {start}-{}/{}", end.saturating_sub(1), file.len)));
+            206
+        } else {
+            200
+        };
+        reply(&mut socket, status, &headers, keep_alive).await?;
+        if !request.head && len > 0 {
+            file.body.seek(io::SeekFrom::Start(start)).await?;
+            if !copy_until_closed(&mut file.body, &mut socket, len, &mut buf).await? {
+                // Client disconnected mid-range (e.g. mpv seek): drop `file` immediately so librqbit stops old pieces.
+                return Ok(());
+            }
+            socket.flush().await?;
+        }
+        if !keep_alive {
+            return Ok(());
+        }
+        cached = Some((request.id, file));
     }
-    file.body.seek(io::SeekFrom::Start(start)).await?;
-    let copied = tokio::io::copy(&mut (&mut file.body).take(len), &mut socket).await?;
-    if copied < len {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "file ended early"));
+}
+
+/// Copies `len` bytes from `body` to `socket` using a large buffer, aborting immediately if the peer closes
+/// the socket while `body.read()` is awaiting an un-downloaded torrent piece (prevents seek starvation).
+/// Returns `Ok(true)` if all `len` bytes were sent, `Ok(false)` if the client disconnected.
+async fn copy_until_closed(
+    body: &mut dyn Body,
+    socket: &mut TcpStream,
+    mut remaining: u64,
+    buf: &mut [u8],
+) -> io::Result<bool> {
+    while remaining > 0 {
+        let want = (remaining as usize).min(buf.len());
+        let n = tokio::select! {
+            biased;
+            closed = peer_closed(socket) => {
+                if closed {
+                    return Ok(false);
+                }
+                body.read(&mut buf[..want]).await?
+            }
+            res = body.read(&mut buf[..want]) => res?,
+        };
+        if n == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "file ended early"));
+        }
+        socket.write_all(&buf[..n]).await?;
+        remaining -= n as u64;
     }
-    socket.flush().await
+    Ok(true)
+}
+
+/// Resolves with `true` once the TCP peer has closed the connection (EOF / reset).
+async fn peer_closed(socket: &TcpStream) -> bool {
+    let mut peek = [0u8; 1];
+    loop {
+        if socket.readable().await.is_err() {
+            return true;
+        }
+        match socket.try_read(&mut peek) {
+            Ok(0) => return true,
+            Ok(_) => return false, // unexpected pipelined data: let the outer loop handle it
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+            Err(_) => return true,
+        }
+    }
 }
 
 async fn read_head(socket: &mut TcpStream) -> io::Result<String> {
@@ -156,6 +238,7 @@ struct Request {
     ext: String,
     head: bool,
     range: Option<Range>,
+    keep_alive: bool,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -181,13 +264,18 @@ fn parse(head: &str, prefix: &str) -> Result<Request, u16> {
     let id = id.parse().map_err(|_| 404u16)?;
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     let mut range = None;
+    let mut keep_alive = false;
     for line in lines {
         let Some((name, value)) = line.split_once(':') else { continue };
-        if name.trim().eq_ignore_ascii_case("range") {
-            range = Some(parse_range(value.trim()).ok_or(416u16)?);
+        let name = name.trim();
+        let value = value.trim();
+        if name.eq_ignore_ascii_case("range") {
+            range = Some(parse_range(value).ok_or(416u16)?);
+        } else if name.eq_ignore_ascii_case("connection") && value.eq_ignore_ascii_case("keep-alive") {
+            keep_alive = true;
         }
     }
-    Ok(Request { id, ext, head, range })
+    Ok(Request { id, ext, head, range, keep_alive })
 }
 
 /// `target` after `prefix` (the token), compared in full so the time taken doesn't tell how much of
@@ -239,7 +327,7 @@ fn mime(ext: &str) -> &'static str {
     }
 }
 
-async fn reply(socket: &mut TcpStream, status: u16, headers: &[(&str, String)]) -> io::Result<()> {
+async fn reply(socket: &mut TcpStream, status: u16, headers: &[(&str, String)], keep_alive: bool) -> io::Result<()> {
     let reason = match status {
         200 => "OK",
         206 => "Partial Content",
@@ -248,7 +336,8 @@ async fn reply(socket: &mut TcpStream, status: u16, headers: &[(&str, String)]) 
         416 => "Range Not Satisfiable",
         _ => "Error",
     };
-    let mut text = format!("HTTP/1.1 {status} {reason}\r\nConnection: close\r\n");
+    let conn = if keep_alive { "keep-alive" } else { "close" };
+    let mut text = format!("HTTP/1.1 {status} {reason}\r\nConnection: {conn}\r\n");
     for (name, value) in headers {
         text.push_str(&format!("{name}: {value}\r\n"));
     }
@@ -280,7 +369,7 @@ mod tests {
         let p = "/tok/";
         assert_eq!(
             parse("GET /tok/7/video.MKV HTTP/1.1\r\nHost: x\r\nrange: bytes=10-", p),
-            Ok(Request { id: 7, ext: "mkv".into(), head: false, range: Some(Range::From(10, None)) })
+            Ok(Request { id: 7, ext: "mkv".into(), head: false, range: Some(Range::From(10, None)), keep_alive: false })
         );
         assert_eq!(parse("HEAD /tok/7/video HTTP/1.1", p).map(|r| (r.head, r.ext)), Ok((true, String::new())));
         assert_eq!(parse("GET /other/7/video.mkv HTTP/1.1", p), Err(404));

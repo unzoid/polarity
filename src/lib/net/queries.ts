@@ -83,7 +83,7 @@ export const cachedLookup = (qc: QueryClient) => ({
 });
 
 export function useStreams(type: ContentType, videoId: string | undefined) {
-  const select = useStreamsSelect(videoId);
+  const select = useStreamsSelect(type, videoId);
   return useQuery({
     ...streamsQuery(type, videoId ?? ""),
     enabled: !!videoId,
@@ -93,11 +93,10 @@ export function useStreams(type: ContentType, videoId: string | undefined) {
 
 /**
  * The sources found so far while a video's add-ons are still answering (`waiting` names the rest), for a list
- * that shows them as they come; undefined before the first answers and once all have. Nothing else should act
- * on it: a pick waits for every add-on.
+ * that shows them as they come; undefined before the first answers and once all have.
  */
 export function usePartialStreams(type: ContentType, videoId: string | undefined) {
-  const select = useStreamsSelect(videoId);
+  const select = useStreamsSelect(type, videoId);
   return useQuery({
     queryKey: keys.streamsPartial(type, videoId ?? ""),
     // Filled by streamsQuery, never fetched.
@@ -108,8 +107,8 @@ export function usePartialStreams(type: ContentType, videoId: string | undefined
 }
 
 /** What an anime's sources go through before they're shown (Settings → Anime); undefined for other titles. */
-function useStreamsSelect(videoId: string | undefined) {
-  const anime = useIsAnime(videoId);
+function useStreamsSelect(type: ContentType, videoId: string | undefined) {
+  const anime = useIsAnime(videoId, type);
   const { animeNo4k } = usePrefs();
   const no4k = anime && animeNo4k;
   const select = useCallback(
@@ -150,16 +149,41 @@ export const streamsQuery = (type: ContentType, videoId: string) => ({
   staleTime: ({ state }: { state: { data?: StreamsResult } }) => (state.data && state.data.streams.length + (state.data.hidden ?? 0) > 0 ? 10 * 60_000 : 0),
 });
 
-/** Whether a video is anime: a Kitsu id, or an IMDb show ani.zip knows. */
-export function useIsAnime(videoId: string | undefined) {
+/** Whether a title's metadata suggests it could be anime (avoids hitting api.ani.zip on live-action titles). */
+function mightBeAnime(meta: { genres?: string[]; details?: { originalLanguage?: string } }): boolean {
+  const genres = meta.genres ?? [];
+  if (genres.some((g) => /^(animation|anime)$/i.test(g))) return true;
+  if (!genres.length) {
+    const lang = meta.details?.originalLanguage?.toLowerCase();
+    if (!lang || lang === "ja" || lang === "zh" || lang === "ko") return true;
+  }
+  return false;
+}
+
+/** Whether a video is anime: a Kitsu id, a stored anime link, or an animated IMDb title ani.zip knows. */
+export function useIsAnime(videoId: string | undefined, type?: ContentType) {
   const imdb = videoId?.startsWith("tt") ? videoId.split(":")[0] : undefined;
+  const links = queryClient.getQueryData<{ canonical?: string }[]>(keys.animeLinks);
+  const linked = !!imdb && !!links?.some((l) => l.canonical === imdb);
+  // Reuse the title's meta query when `type` is known so live-action titles never hit api.ani.zip.
+  const { data: typedMeta } = useQuery({
+    ...metaQuery(type ?? "series", imdb ?? ""),
+    enabled: !!imdb && !!type && !linked,
+  });
+  const meta =
+    typedMeta ??
+    (imdb
+      ? (queryClient.getQueryData<{ genres?: string[]; details?: { originalLanguage?: string } }>(keys.meta("series", imdb)) ??
+        queryClient.getQueryData<{ genres?: string[]; details?: { originalLanguage?: string } }>(keys.meta("movie", imdb)))
+      : undefined);
+  const shouldAskAniZip = !!imdb && !linked && (type ? !!meta && mightBeAnime(meta) : !meta || mightBeAnime(meta));
   const { data: anime } = useQuery({
     ...aniZipLookup({ imdb_id: imdb ?? "" }),
     select: (zip) => !!zip,
-    enabled: !!imdb,
+    enabled: shouldAskAniZip,
     staleTime: 24 * 60 * 60_000,
   });
-  return !!videoId && (isKitsuId(videoId) || !!anime);
+  return !!videoId && (isKitsuId(videoId) || linked || !!anime);
 }
 
 /** Scores from the ratings services, once a key is set (re-asks when one is). */

@@ -4,6 +4,7 @@
 // loading it, and reading the frames autocrop's detector looks at.
 
 #include <dlfcn.h>
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,12 +55,21 @@ static struct {
 } mpv;
 
 static void *libmpv;
+static pthread_mutex_t libmpv_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int load_libmpv(const char *path, char *err, size_t errlen) {
-    if (libmpv) return 1;
+    pthread_mutex_lock(&libmpv_lock);
+    if (libmpv) {
+        pthread_mutex_unlock(&libmpv_lock);
+        return 1;
+    }
     void *h = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-    if (!h) { snprintf(err, errlen, "couldn't load libmpv: %s", dlerror()); return 0; }
-#define SYM(field, name) if (!(*(void **)&mpv.field = dlsym(h, name))) { snprintf(err, errlen, "libmpv lacks %s", name); dlclose(h); return 0; }
+    if (!h) {
+        snprintf(err, errlen, "couldn't load libmpv: %s", dlerror());
+        pthread_mutex_unlock(&libmpv_lock);
+        return 0;
+    }
+#define SYM(field, name) if (!(*(void **)&mpv.field = dlsym(h, name))) { snprintf(err, errlen, "libmpv lacks %s", name); dlclose(h); pthread_mutex_unlock(&libmpv_lock); return 0; }
     SYM(create, "mpv_create")
     SYM(set_option_string, "mpv_set_option_string")
     SYM(initialize, "mpv_initialize")
@@ -77,6 +87,7 @@ static int load_libmpv(const char *path, char *err, size_t errlen) {
     *(void **)&mpv.command_ret = dlsym(h, "mpv_command_ret");
     *(void **)&mpv.free_node_contents = dlsym(h, "mpv_free_node_contents");
     libmpv = h;
+    pthread_mutex_unlock(&libmpv_lock);
     return 1;
 }
 

@@ -28,7 +28,9 @@ const REFRESH_MS = 5000;
 export function useMediaSession(media: MediaLike | null, info: NowPlayingInfo | null, onKey: (key: MediaKey, position?: number) => void) {
   const latest = useRef({ info, onKey });
   latest.current = { info, onKey };
-  const native = !!media && isMpv(media) && inShell && (os === "windows" || os === "macos" || os === "ios");
+  // iOS uses `useNowPlaying` (`ios/now_playing.m`) for Lock Screen / Control Center / background audio;
+  // running `media_session` (`apple/now_playing.m`) alongside it registers duplicate MPRemoteCommandCenter handlers.
+  const native = !!media && isMpv(media) && inShell && (os === "windows" || os === "macos");
   const infoKey = info ? JSON.stringify(info) : "";
 
   // The native session: what plays, sent on every change of state and every few seconds while playing.

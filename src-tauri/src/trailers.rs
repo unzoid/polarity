@@ -74,8 +74,36 @@ fn quality_rank(label: &str) -> u32 {
 }
 
 pub async fn imdb_trailer(imdb_id: &str) -> Option<Trailer> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+
+    use crate::locks::Locked;
+
+    const TTL: Duration = Duration::from_secs(6 * 60 * 60);
+    const MAX: usize = 512;
+
+    type TrailerCache = HashMap<String, (Instant, Option<Trailer>)>;
+    static CACHE: OnceLock<Mutex<TrailerCache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some((at, hit)) = cache.locked().get(imdb_id) {
+        if at.elapsed() < TTL {
+            return hit.clone();
+        }
+    }
     let title: Title = crate::imdb::title(QUERY, imdb_id).await?;
-    pick(title.primary_videos.edges.into_iter().map(|e| e.node).collect())
+    let found = pick(title.primary_videos.edges.into_iter().map(|e| e.node).collect());
+    let mut map = cache.locked();
+    if map.len() >= MAX {
+        map.retain(|_, (at, _)| at.elapsed() < TTL);
+        if map.len() >= MAX {
+            if let Some(oldest) = map.iter().min_by_key(|(_, (at, _))| *at).map(|(k, _)| k.clone()) {
+                map.remove(&oldest);
+            }
+        }
+    }
+    map.insert(imdb_id.to_owned(), (Instant::now(), found.clone()));
+    found
 }
 
 /// A real trailer over a clip or a teaser: trailers first, then the best

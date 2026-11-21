@@ -93,7 +93,6 @@ import {
   SubtitlePreview,
   SubtitleSettings,
   applySubtitleStyleToMpv,
-  forgetAssOverride,
   subtitleCueVars,
 } from "../components/player/SubtitleSettings";
 import { AudioSettings } from "../components/player/AudioSettings";
@@ -467,18 +466,14 @@ export function Player({
   useEffect(() => {
     if (engine !== "mpv") return;
     applySubtitleStyleToMpv(mpv, subStyle, subDelay);
-    // mpv may (re)start with the file; apply again once it's loaded.
-    const onTracks = () => applySubtitleStyleToMpv(mpv, subStyle, subDelay);
-    const onLoaded = () => {
-      forgetAssOverride(mpv);
-      onTracks();
-    };
-    mpv.addEventListener("loadedmetadata", onLoaded);
     // The track list (and which subtitle is on) arrives after the file opens:
     // an ASS track is only known to need its styling overridden once it's in.
+    // Don't forget overrides on loadedmetadata — re-sending sub-ass-override stalls mpv ~1s+.
+    const onTracks = () => applySubtitleStyleToMpv(mpv, subStyle, subDelay);
+    mpv.addEventListener("loadedmetadata", onTracks);
     mpv.addEventListener("tracks", onTracks);
     return () => {
-      mpv.removeEventListener("loadedmetadata", onLoaded);
+      mpv.removeEventListener("loadedmetadata", onTracks);
       mpv.removeEventListener("tracks", onTracks);
     };
   }, [engine, mpv, subStyle, subDelay, tracks.subId]); // ASS tracks are restyled differently from plain text
@@ -601,6 +596,8 @@ export function Player({
     if (engine !== "mpv") return;
     let alive = true;
     let dispose: (() => void) | undefined;
+    // Start libmpv immediately in parallel with stream discovery & torrent_open.
+    mpv.warm();
     void mpv.attach().then((d) => {
       if (alive) dispose = d;
       else d(); // this mount is already gone; drop only its own listeners
@@ -716,6 +713,8 @@ export function Player({
     begin: (side) => {
       if (hold.held) return null;
       if (side === "left") return brightness.level == null ? null : { level: brightness.level, max: 1 };
+      // When the OS handles volume (iOS/Android phones), volume UI is hidden: don't silently attenuate software volume.
+      if (systemVolume) return null;
       return { level: muted ? 0 : Math.min(volume, volumeTop), max: volumeTop };
     },
     change: (side, level) => {

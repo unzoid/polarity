@@ -7,17 +7,19 @@
 //! read on page by page as `skip` grows ([`Run`]), so titles left out for
 //! lacking an IMDb id or repeated by a drifting list never shift later pages.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use futures::stream::{self, StreamExt, TryStreamExt};
+use futures::stream::{self, StreamExt};
 use polar_addon::{CollectionInfo, Meta, MetaDetails, MetaPreview, Person, Video};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Mutex, Semaphore};
 
-use crate::cache::TtlCache;
+use crate::cache::{Singleflight, TtlCache};
 use crate::{curate, IndexError, Result, PAGE_SIZE};
 
 pub(crate) mod orders;
@@ -35,6 +37,19 @@ const MAX_WAIT: Duration = Duration::from_secs(8);
 /// TMDB serves at most this many pages of a list.
 const LAST_PAGE: u32 = 500;
 
+/// Disk cache max entries and TTL (7 days for immutable IMDb ids + logos/certifications).
+const DISK_CACHE_MAX: usize = 4_000;
+const DISK_CACHE_TTL_SECS: u64 = 7 * 24 * 60 * 60;
+
+#[derive(Serialize, Deserialize)]
+struct DiskLookupFile {
+    version: u32,
+    saved_at: u64,
+    entries: Vec<(char, u64, Lookup)>,
+}
+
+const DISK_CACHE_VERSION: u32 = 1;
+
 pub struct Tmdb {
     http: reqwest::Client,
     /// [`API`], or a local stand-in in tests.
@@ -43,13 +58,20 @@ pub struct Tmdb {
     language: String,
     limit: Semaphore,
     /// Per TMDB id: its IMDb id (none: left out of lists) and title logo.
-    lookups: TtlCache<(char, u64), Lookup>,
+    lookups: Arc<TtlCache<(char, u64), Lookup>>,
+    /// Coalesces duplicate in-flight `lookup` calls across concurrent Home shelves.
+    lookup_flight: Singleflight<(char, u64), Lookup>,
     /// Reverse index (`(kind, imdb_id)` → `tmdb_id`), filled by `lookup` and `find` so opening a
     /// catalog card or fetching recommendations skips an extra `/find/{imdb_id}` round-trip.
     imdb_ids: TtlCache<(char, String), u64>,
+    /// Coalesces duplicate in-flight `/find/{imdb_id}` calls.
+    find_flight: Singleflight<(char, String), u64>,
     /// One growing list per catalog (type, id, genre), so a page asked for by
     /// `skip` is a slice of the same sequence whatever the earlier pages held.
     runs: TtlCache<String, Arc<Mutex<Run>>>,
+    /// Optional disk cache file for `lookups` + `imdb_ids` so mobile cold starts skip N+1 TMDB fetches.
+    disk_path: Option<PathBuf>,
+    save_queued: Arc<AtomicBool>,
 }
 
 type Query = Vec<(String, String)>;
@@ -65,52 +87,136 @@ struct Run {
     seen: HashSet<String>,
 }
 
+fn unix_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
 impl Tmdb {
+    #[cfg(test)]
     pub fn new(key: String, language: Option<String>) -> Self {
-        Self {
-            http: reqwest::Client::builder()
+        Self::new_with(key, language, None, None)
+    }
+
+    pub fn new_with(
+        key: String,
+        language: Option<String>,
+        http: Option<reqwest::Client>,
+        cache_dir: Option<PathBuf>,
+    ) -> Self {
+        let language = language.unwrap_or_else(|| "en-US".into());
+        let http = http.unwrap_or_else(|| {
+            reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(5))
                 .timeout(Duration::from_secs(15))
                 .build()
-                .expect("http client"),
+                .expect("http client")
+        });
+        let lookups = Arc::new(TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000));
+        let imdb_ids = TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000);
+        let disk_path = cache_dir.map(|d| {
+            let safe_lang: String = language.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+            d.join(format!("tmdb-lookups-{safe_lang}.json"))
+        });
+        if let Some(path) = &disk_path {
+            if let Ok(bytes) = std::fs::read(path) {
+                if let Ok(file) = serde_json::from_slice::<DiskLookupFile>(&bytes) {
+                    if file.version == DISK_CACHE_VERSION
+                        && unix_secs().saturating_sub(file.saved_at) < DISK_CACHE_TTL_SECS
+                    {
+                        for (kind, id, entry) in file.entries {
+                            if let Some(imdb) = &entry.imdb_id {
+                                imdb_ids.insert((kind, imdb.clone()), id);
+                            }
+                            lookups.insert((kind, id), entry);
+                        }
+                    }
+                }
+            }
+        }
+        Self {
+            http,
             api: API.to_owned(),
             key: key.trim().to_owned(),
-            language: language.unwrap_or_else(|| "en-US".into()),
+            language,
             limit: Semaphore::new(IN_FLIGHT),
-            lookups: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
-            imdb_ids: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
+            lookups,
+            lookup_flight: Singleflight::default(),
+            imdb_ids,
+            find_flight: Singleflight::default(),
             runs: TtlCache::new(Duration::from_secs(60 * 60), 256),
+            disk_path,
+            save_queued: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// One TMDB request: at most [`IN_FLIGHT`] at a time, 429 and 5xx tried
-    /// again after `Retry-After` (or 1, 2, 4 s). Errors never carry the URL,
+    fn schedule_disk_save(&self) {
+        let Some(path) = self.disk_path.clone() else { return };
+        if self.save_queued.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let lookups = self.lookups.clone();
+        let queued = self.save_queued.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            queued.store(false, Ordering::Release);
+            let _ = tokio::task::spawn_blocking(move || {
+                let entries: Vec<(char, u64, Lookup)> = lookups
+                    .snapshot(DISK_CACHE_MAX)
+                    .into_iter()
+                    .map(|((k, id), v)| (k, id, v))
+                    .collect();
+                let payload = DiskLookupFile { version: DISK_CACHE_VERSION, saved_at: unix_secs(), entries };
+                if let Ok(bytes) = serde_json::to_vec(&payload) {
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let tmp = path.with_extension(format!("json.{}.tmp", std::process::id()));
+                    if std::fs::write(&tmp, &bytes).is_ok() && std::fs::rename(&tmp, &path).is_err() {
+                        let _ = std::fs::remove_file(&tmp);
+                    }
+                }
+            })
+            .await;
+        });
+    }
+
+    /// One TMDB request: at most [`IN_FLIGHT`] at a time (held across body read), 429, 5xx and transient
+    /// transport/timeout errors tried again after `Retry-After` (or 1, 2, 4 s). Errors never carry the URL,
     /// which holds a v3 key.
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
         let mut attempt = 0;
         loop {
             attempt += 1;
-            let res = {
-                let _permit = self.limit.acquire().await.map_err(|_| IndexError::Upstream("closed".into()))?;
-                let mut req = self
-                    .http
-                    .get(format!("{}{path}", self.api))
-                    .query(&[("language", self.language.as_str())])
-                    .query(query);
-                // v4 read tokens are JWTs; v3 keys are 32 hex chars.
-                req = if self.key.starts_with("eyJ") {
-                    req.bearer_auth(&self.key)
-                } else {
-                    req.query(&[("api_key", self.key.as_str())])
-                };
-                req.send().await?
+            let _permit = self.limit.acquire().await.map_err(|_| IndexError::Upstream("closed".into()))?;
+            let mut req = self
+                .http
+                .get(format!("{}{path}", self.api))
+                .timeout(Duration::from_secs(15))
+                .query(&[("language", self.language.as_str())])
+                .query(query);
+            // v4 read tokens are JWTs; v3 keys are 32 hex chars.
+            req = if self.key.starts_with("eyJ") {
+                req.bearer_auth(&self.key)
+            } else {
+                req.query(&[("api_key", self.key.as_str())])
+            };
+            let res = match req.send().await {
+                Ok(res) => res,
+                Err(e) if attempt < TRIES && (e.is_timeout() || e.is_connect() || e.is_request()) => {
+                    drop(_permit);
+                    tokio::time::sleep(retry_wait(None, attempt)).await;
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
             };
             let status = res.status();
             if status == reqwest::StatusCode::NOT_FOUND {
                 return Err(IndexError::NotFound);
             }
             if (status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()) && attempt < TRIES {
-                tokio::time::sleep(retry_wait(res.headers().get(reqwest::header::RETRY_AFTER), attempt)).await;
+                let wait = retry_wait(res.headers().get(reqwest::header::RETRY_AFTER), attempt);
+                drop(_permit);
+                tokio::time::sleep(wait).await;
                 continue;
             }
             return Ok(res.error_for_status()?.json().await?);
@@ -214,16 +320,50 @@ impl Tmdb {
         Ok(curate::dedupe(self.previews("movie", col.parts).await?))
     }
 
+    /// One backdrop URL per genre from `/discover` with zero N+1 `lookup` calls (for Search genre tiles).
+    pub async fn genre_backdrops(&self, ty: &str, genres: &[String]) -> HashMap<String, String> {
+        let kind = tmdb_kind(ty);
+        let jobs: Vec<(String, String)> = genres
+            .iter()
+            .filter_map(|name| {
+                let gid = genre_id(ty, name)?;
+                Some((name.clone(), gid.to_string()))
+            })
+            .collect();
+        let fetched: Vec<(String, Option<String>)> = stream::iter(jobs)
+            .map(|(name, gid)| async move {
+                let path = format!("/discover/{kind}");
+                let list: Result<Paged> =
+                    self.get(&path, &[("with_genres", gid.as_str()), ("sort_by", "popularity.desc")]).await;
+                let bg = list
+                    .ok()
+                    .and_then(|l| l.results.into_iter().find_map(|item| item.backdrop_path))
+                    .map(|p| format!("{IMG}/w780{p}"));
+                (name, bg)
+            })
+            .buffer_unordered(IN_FLIGHT)
+            .collect()
+            .await;
+        fetched.into_iter().filter_map(|(k, v)| v.map(|url| (k, url))).collect()
+    }
+
     async fn find(&self, ty: &str, imdb_id: &str) -> Result<u64> {
         let key = (ty.chars().next().unwrap_or('m'), imdb_id.to_owned());
         if let Some(hit) = self.imdb_ids.get(&key) {
             return Ok(hit);
         }
-        let found: Value = self.get(&format!("/find/{imdb_id}"), &[("external_source", "imdb_id")]).await?;
-        let bucket = if ty == "series" { "tv_results" } else { "movie_results" };
-        let id = found[bucket][0]["id"].as_u64().ok_or(IndexError::NotFound)?;
-        self.imdb_ids.insert(key, id);
-        Ok(id)
+        self.find_flight
+            .run(key.clone(), async {
+                if let Some(hit) = self.imdb_ids.get(&key) {
+                    return Ok(hit);
+                }
+                let found: Value = self.get(&format!("/find/{imdb_id}"), &[("external_source", "imdb_id")]).await?;
+                let bucket = if ty == "series" { "tv_results" } else { "movie_results" };
+                let id = found[bucket][0]["id"].as_u64().ok_or(IndexError::NotFound)?;
+                self.imdb_ids.insert(key.clone(), id);
+                Ok(id)
+            })
+            .await
     }
 
     /// A search, narrowed to titles released in `year` (any region's release
@@ -240,23 +380,27 @@ impl Tmdb {
     }
 
     /// List results with their IMDb ids and logos; titles TMDB has no IMDb id
-    /// for are left out. Any lookup that fails fails the whole list, so a
-    /// thinned list is never cached.
+    /// for are left out. Individual transient lookup failures skip that title
+    /// instead of aborting the entire shelf or search page.
     async fn previews(&self, ty: &str, items: Vec<Item>) -> Result<Vec<MetaPreview>> {
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
         // By value, not `&Item`: a closure over a borrow makes the future not
         // `Send` enough for axum (rust-lang/rust#64552).
         let tmdb_ids: Vec<u64> = items.iter().map(|item| item.id).collect();
-        let found: Vec<Lookup> =
-            stream::iter(tmdb_ids).map(|id| self.lookup(ty, id)).buffered(IN_FLIGHT).try_collect().await?;
-        Ok(items
-            .into_iter()
-            .zip(found)
-            .filter_map(|(item, found)| {
-                let mut preview = item.into_preview(ty, found.imdb_id?, found.logos);
+        let results: Vec<Result<Lookup>> =
+            stream::iter(tmdb_ids).map(|id| self.lookup(ty, id)).buffered(IN_FLIGHT).collect().await;
+        let mut out = Vec::with_capacity(items.len());
+        for (item, res) in items.into_iter().zip(results) {
+            let found = res?;
+            if let Some(imdb_id) = found.imdb_id {
+                let mut preview = item.into_preview(ty, imdb_id, found.logos);
                 preview.certification = found.certification;
-                Some(preview)
-            })
-            .collect())
+                out.push(preview);
+            }
+        }
+        Ok(out)
     }
 
     /// A list result's IMDb id and logos, from one details request with only
@@ -266,22 +410,30 @@ impl Tmdb {
         if let Some(hit) = self.lookups.get(&key) {
             return Ok(hit);
         }
-        let d: Value = self
-            .get(
-                &format!("/{}/{tmdb_id}", tmdb_kind(ty)),
-                &[("append_to_response", lookup_append(ty)), ("include_image_language", "en,null")],
-            )
-            .await?;
-        let found = Lookup {
-            imdb_id: str_of(&d["external_ids"]["imdb_id"]).filter(|i| i.starts_with("tt")),
-            logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
-            certification: pick_certification(ty, &d, &self.region()),
-        };
-        if let Some(imdb) = &found.imdb_id {
-            self.imdb_ids.insert((key.0, imdb.clone()), tmdb_id);
-        }
-        self.lookups.insert(key, found.clone());
-        Ok(found)
+        self.lookup_flight
+            .run(key, async {
+                if let Some(hit) = self.lookups.get(&key) {
+                    return Ok(hit);
+                }
+                let d: Value = self
+                    .get(
+                        &format!("/{}/{tmdb_id}", tmdb_kind(ty)),
+                        &[("append_to_response", lookup_append(ty)), ("include_image_language", "en,null")],
+                    )
+                    .await?;
+                let found = Lookup {
+                    imdb_id: str_of(&d["external_ids"]["imdb_id"]).filter(|i| i.starts_with("tt")),
+                    logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
+                    certification: pick_certification(ty, &d, &self.region()),
+                };
+                if let Some(imdb) = &found.imdb_id {
+                    self.imdb_ids.insert((key.0, imdb.clone()), tmdb_id);
+                }
+                self.lookups.insert(key, found.clone());
+                self.schedule_disk_save();
+                Ok(found)
+            })
+            .await
     }
 
     /// The IMDb id of TMDB's title `tmdb_id`, if TMDB lists one ("Open in Polarity" from a TMDB
@@ -772,7 +924,7 @@ impl Item {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Lookup {
     imdb_id: Option<String>,
     logos: Vec<String>,

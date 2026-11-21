@@ -22,14 +22,19 @@ mod person;
 
 pub use person::{PersonHit, PersonPage};
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::OnceCell;
 
-use polar_addon::{CatalogExtra, Manifest, ManifestCatalog, ManifestResource, Meta, MetaPreview};
+use polar_addon::{AddonClient, CatalogExtra, Manifest, ManifestCatalog, ManifestResource, Meta, MetaPreview};
 
-use cache::TtlCache;
+use cache::{Singleflight, TtlCache};
+
+/// Cap on Cinemeta series renumbering join so slow/degraded Cinemeta never stalls series pages for 20s.
+const NUMBERING_TIMEOUT: Duration = Duration::from_millis(2500);
 
 /// Titles per page of a TMDB catalog (`skip` counts titles, not pages).
 pub const PAGE_SIZE: u32 = 20;
@@ -80,6 +85,10 @@ pub struct IndexConfig {
     pub tmdb_key: Option<String>,
     /// TMDB language, e.g. `en-US`.
     pub language: Option<String>,
+    /// Optional cache folder for persisting TMDB lookups across mobile restarts.
+    pub cache_dir: Option<PathBuf>,
+    /// Optional shared `reqwest::Client` to reuse TLS sessions & connection pools across the app.
+    pub http: Option<reqwest::Client>,
 }
 
 enum Backend {
@@ -91,6 +100,8 @@ pub struct Indexer {
     backend: Backend,
     catalogs: TtlCache<String, Vec<MetaPreview>>,
     metas: TtlCache<String, Meta>,
+    meta_flight: Singleflight<String, Meta>,
+    recommend_flight: Singleflight<String, Vec<MetaPreview>>,
     /// Candidate pools (several upstream pages each), shared by curated shelves.
     /// One fetch per pool however many shelves ask for it at once.
     pools: TtlCache<String, Arc<OnceCell<Vec<MetaPreview>>>>,
@@ -100,25 +111,35 @@ pub struct Indexer {
     orders: episode_order::Cache,
     /// People's pages by TMDB id.
     people: TtlCache<u64, PersonPage>,
+    person_flight: Singleflight<u64, PersonPage>,
     /// People search hits by normalized query.
     people_search: TtlCache<String, Vec<PersonHit>>,
+    /// Lightweight genre backdrop thumbnails for Search tiles.
+    genre_backdrops: TtlCache<String, HashMap<String, String>>,
 }
 
 impl Indexer {
     pub fn new(config: IndexConfig) -> Self {
+        let addon_client = config.http.clone().map(AddonClient::with_client).unwrap_or_default();
         let backend = match config.tmdb_key.filter(|k| !k.trim().is_empty()) {
-            Some(key) => Backend::Tmdb(Box::new(tmdb::Tmdb::new(key, config.language))),
-            None => Backend::Cinemeta(cinemeta::Cinemeta::new()),
+            Some(key) => {
+                Backend::Tmdb(Box::new(tmdb::Tmdb::new_with(key, config.language, config.http, config.cache_dir)))
+            }
+            None => Backend::Cinemeta(cinemeta::Cinemeta::with_client(addon_client.clone())),
         };
         Self {
             backend,
             catalogs: TtlCache::new(Duration::from_secs(60 * 60), 256),
             metas: TtlCache::new(Duration::from_secs(6 * 60 * 60), 2048),
+            meta_flight: Singleflight::default(),
+            recommend_flight: Singleflight::default(),
             pools: TtlCache::new(Duration::from_secs(3 * 60 * 60), 64),
-            numbering: cinemeta::Cinemeta::new(),
+            numbering: cinemeta::Cinemeta::with_client(addon_client),
             orders: episode_order::Cache::new(),
             people: TtlCache::new(Duration::from_secs(6 * 60 * 60), 256),
+            person_flight: Singleflight::default(),
             people_search: TtlCache::new(Duration::from_secs(60 * 60), 128),
+            genre_backdrops: TtlCache::new(Duration::from_secs(6 * 60 * 60), 16),
         }
     }
 
@@ -188,24 +209,61 @@ impl Indexer {
         if let Some(hit) = self.catalogs.get(&key) {
             return Ok(hit);
         }
-        let metas = match &self.backend {
-            Backend::Tmdb(t) => t.recommendations(ty, id).await?,
+        self.recommend_flight
+            .run(key.clone(), async {
+                if let Some(hit) = self.catalogs.get(&key) {
+                    return Ok(hit);
+                }
+                let metas = match &self.backend {
+                    Backend::Tmdb(t) => t.recommendations(ty, id).await?,
+                    Backend::Cinemeta(c) => {
+                        let seed = self.meta(ty, id).await?.preview;
+                        let genres: Vec<Option<String>> =
+                            seed.genres.iter().take(2).cloned().map(Some).chain([None]).collect();
+                        let lists = futures::future::join_all(genres.iter().map(|g| {
+                            let g = g.as_deref();
+                            self.pooled(format!("{ty}/{}", g.unwrap_or("")), c.pool(ty, g))
+                        }))
+                        .await;
+                        let lists: Vec<Vec<MetaPreview>> = lists.into_iter().filter_map(|l| l.ok()).collect();
+                        curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect()
+                    }
+                };
+                self.catalogs.insert(key.clone(), metas.clone());
+                Ok(metas)
+            })
+            .await
+    }
+
+    /// Lightweight backdrop URL per genre (no N+1 IMDb lookups) for Search genre tiles.
+    pub async fn genre_backdrops(&self, ty: &str, genres: &[String]) -> Result<HashMap<String, String>> {
+        check_type(ty)?;
+        let key = format!("{ty}/{}", genres.join(","));
+        if let Some(hit) = self.genre_backdrops.get(&key) {
+            return Ok(hit);
+        }
+        let map = match &self.backend {
+            Backend::Tmdb(t) => t.genre_backdrops(ty, genres).await,
             Backend::Cinemeta(c) => {
-                // Pools for the seed's two main genres, plus the general one
-                // so close matches outside those genres still surface.
-                let seed = self.meta(ty, id).await?.preview;
-                let genres: Vec<Option<String>> = seed.genres.iter().take(2).cloned().map(Some).chain([None]).collect();
-                let lists = futures::future::join_all(genres.iter().map(|g| {
-                    let g = g.as_deref();
-                    self.pooled(format!("{ty}/{}", g.unwrap_or("")), c.pool(ty, g))
-                }))
-                .await;
-                let lists: Vec<Vec<MetaPreview>> = lists.into_iter().filter_map(|l| l.ok()).collect();
-                curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect()
+                let futs = genres.iter().map(|g| async move {
+                    let bg = c
+                        .top(ty, 0, Some(g))
+                        .await
+                        .ok()
+                        .and_then(|list| list.into_iter().find_map(|m| m.background));
+                    (g.clone(), bg)
+                });
+                futures::future::join_all(futs)
+                    .await
+                    .into_iter()
+                    .filter_map(|(k, v)| v.map(|url| (k, url)))
+                    .collect()
             }
         };
-        self.catalogs.insert(key, metas.clone());
-        Ok(metas)
+        if !map.is_empty() {
+            self.genre_backdrops.insert(key, map.clone());
+        }
+        Ok(map)
     }
 
     async fn pooled(
@@ -283,22 +341,32 @@ impl Indexer {
         if let Some(hit) = self.metas.get(&key) {
             return Ok(hit);
         }
-        let meta = match &self.backend {
-            Backend::Tmdb(t) if ty == "series" => {
-                let (meta, imdb) = futures::join!(t.meta(ty, id), self.numbering.meta(ty, id));
-                let mut meta = meta?;
-                match imdb {
-                    Ok(imdb) => meta.videos = polar_addon::numbering::renumber(meta.videos, &imdb.videos),
-                    // TMDB's own numbers rather than nothing; addons may miss some episodes.
-                    Err(e) => tracing::warn!("no IMDb numbering for a show, keeping TMDB's: {e}"),
+        self.meta_flight
+            .run(key.clone(), async {
+                if let Some(hit) = self.metas.get(&key) {
+                    return Ok(hit);
                 }
-                meta
-            }
-            Backend::Tmdb(t) => t.meta(ty, id).await?,
-            Backend::Cinemeta(c) => c.meta(ty, id).await?,
-        };
-        self.metas.insert(key, meta.clone());
-        Ok(meta)
+                let meta = match &self.backend {
+                    Backend::Tmdb(t) if ty == "series" => {
+                        let (meta, imdb) = futures::join!(
+                            t.meta(ty, id),
+                            tokio::time::timeout(NUMBERING_TIMEOUT, self.numbering.meta(ty, id))
+                        );
+                        let mut meta = meta?;
+                        match imdb {
+                            Ok(Ok(imdb)) => meta.videos = polar_addon::numbering::renumber(meta.videos, &imdb.videos),
+                            Ok(Err(e)) => tracing::warn!("no IMDb numbering for a show, keeping TMDB's: {e}"),
+                            Err(_) => tracing::warn!("IMDb numbering timed out after {:?}, keeping TMDB's", NUMBERING_TIMEOUT),
+                        }
+                        meta
+                    }
+                    Backend::Tmdb(t) => t.meta(ty, id).await?,
+                    Backend::Cinemeta(c) => c.meta(ty, id).await?,
+                };
+                self.metas.insert(key.clone(), meta.clone());
+                Ok(meta)
+            })
+            .await
     }
 
     /// A person's page by their TMDB id: who they are and the titles they act in or directed. Only
@@ -308,9 +376,16 @@ impl Indexer {
         if let Some(hit) = self.people.get(&tmdb_id) {
             return Ok(hit);
         }
-        let page = t.person(tmdb_id).await?;
-        self.people.insert(tmdb_id, page.clone());
-        Ok(page)
+        self.person_flight
+            .run(tmdb_id, async {
+                if let Some(hit) = self.people.get(&tmdb_id) {
+                    return Ok(hit);
+                }
+                let page = t.person(tmdb_id).await?;
+                self.people.insert(tmdb_id, page.clone());
+                Ok(page)
+            })
+            .await
     }
 
     /// The IMDb id of a TMDB title, for links that carry TMDB's id (#208). Only TMDB knows its own

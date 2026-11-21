@@ -149,6 +149,11 @@ export class MpvMedia extends EventTarget implements MediaLike {
     return p.then((fns) => () => fns.forEach((u) => u()));
   }
 
+  /** Pre-warm mpv in the background while add-ons and torrents resolve. */
+  warm() {
+    void call("mpv_warm", { userConfig: getPrefs().mpvUserConfig }).catch(() => {});
+  }
+
   /** Stop playback (mpv stays alive, idle, for the next title). Sent immediately so an in-flight pre-roll `mpv_load` aborts before unpausing. */
   stop() {
     this.turn++;
@@ -196,9 +201,10 @@ export class MpvMedia extends EventTarget implements MediaLike {
       this.running = true;
       // Paused before mpv was up (a watch party that's paused): mpv_load un-pauses, the pause below re-pauses.
       const pausedEarly = this.early.get("pause") === true;
-      // What the player set before mpv was up (subtitle style, volume, speed), now that it can take it.
-      for (const [name, value] of this.early) void this.set(name, value);
+      // Flush options queued before mpv was up in one batched IPC call instead of N separate round-trips.
+      const early = [...this.early];
       this.early.clear();
+      if (early.length) void this.setMany(early);
       this.step("Handed to mpv, opening the file", "info", "player");
       // mpv_load un-pauses explicitly; mpv only reports *changes*, so if it was
       // already unpaused no event comes — state it here instead of waiting.
@@ -224,6 +230,18 @@ export class MpvMedia extends EventTarget implements MediaLike {
       return Promise.resolve();
     }
     return call("mpv_set", { name, value }).catch(warnFailed(`mpv_set ${name}`));
+  }
+  /** Set multiple properties in one pipelined IPC call (falls back to `set` when stubbed in tests). */
+  setMany(entries: [string, unknown][]) {
+    if (!entries.length) return Promise.resolve();
+    if (this.set !== MpvMedia.prototype.set) {
+      return Promise.all(entries.map(([name, value]) => this.set(name, value))).then(() => undefined);
+    }
+    if (!this.running) {
+      for (const [name, value] of entries) this.early.set(name, value);
+      return Promise.resolve();
+    }
+    return call("mpv_set_many", { entries }).catch(warnFailed("mpv_set_many"));
   }
 
   /**

@@ -92,14 +92,16 @@ pub fn sync_apply(
     pulled_at: Option<String>,
 ) -> Result<bool> {
     let mut changed = false;
-    state.persist(|d| {
+    state.persist_if(|d| {
         // A pull that finishes after sign-out (or after the profile was
         // deleted) must not bring that profile's data back onto this device.
-        let Some(s) = d.spaces.get_mut(&space) else { return };
+        let Some(s) = d.spaces.get_mut(&space) else { return false };
         changed = s.merge(Changes { library, progress, links: links.unwrap_or_default() });
-        if pulled_at.is_some() {
+        let cursor_changed = pulled_at.is_some() && s.pulled_at != pulled_at;
+        if cursor_changed {
             s.pulled_at = pulled_at;
         }
+        changed || cursor_changed
     })?;
     Ok(changed)
 }
@@ -115,10 +117,11 @@ pub fn space_untitled(state: State<'_, AppState>, space: String) -> Vec<Untitled
 #[tauri::command(async)]
 pub fn space_fill_display(state: State<'_, AppState>, space: String, found: Vec<Display>) -> Result<bool> {
     let mut changed = false;
-    state.persist(|d| {
+    state.persist_if(|d| {
         if let Some(s) = d.spaces.get_mut(&space) {
             changed = s.fill_display(found);
         }
+        changed
     })?;
     Ok(changed)
 }

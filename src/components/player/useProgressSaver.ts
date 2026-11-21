@@ -9,8 +9,8 @@ import type { ContentType, Meta, Progress, Video } from "../../lib/types";
 import type { MediaLike } from "./mpvMedia";
 import type { useSource } from "./useSource";
 
-/** While playing, progress is saved at most this often (and on pause, end and leaving). */
-const SAVE_EVERY = 5000;
+/** While playing, progress is saved at most this often (and immediately on pause, end and leaving). */
+const SAVE_EVERY = 25_000;
 
 /**
  * Saves where the viewer is in this video: `save` now, `saveIfDue` from time
@@ -41,7 +41,7 @@ export function useProgressSaver({
   /** The video already told to a linked AniList list (#83): once per video per opening. */
   const told = useRef<string | undefined>(undefined);
   const local = isFileId(metaId);
-  const save = useCallback(() => {
+  const save = useCallback((periodic = false) => {
     const v = media.current;
     if (!keep || !v || !v.duration || !Number.isFinite(v.duration) || !meta || state.status !== "ready") return;
     lastSave.current = Date.now();
@@ -64,7 +64,7 @@ export function useProgressSaver({
       duration: v.duration,
       updatedAt: 0,
     };
-    api.saveProgress(p).then(sync.schedule, () => {});
+    api.saveProgress(p).then(periodic ? sync.scheduleProgress : sync.schedule, () => {});
     if (told.current !== videoId && isWatched(v.currentTime, v.duration)) {
       told.current = videoId;
       void noteWatched([videoId]);
@@ -80,7 +80,7 @@ export function useProgressSaver({
   }, [openedPath]);
 
   const saveIfDue = useCallback(() => {
-    if (Date.now() - lastSave.current > SAVE_EVERY && media.current && !media.current.paused) save();
+    if (Date.now() - lastSave.current > SAVE_EVERY && media.current && !media.current.paused) save(true);
   }, [media, save]);
 
   const saveRef = useRef(save);

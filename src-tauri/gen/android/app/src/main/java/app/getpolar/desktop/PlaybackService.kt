@@ -92,10 +92,13 @@ object NowPlaying {
   fun update(playing: Boolean, position: Long, duration: Long, rate: Float) {
     main.post {
       if (session == null) return@post
+      val stateChanged = playing != this.playing
       val lengthChanged = duration != this.duration
       setState(playing, position, duration, rate)
       if (lengthChanged) setMetadata()
-      app?.let { refresh(it) }
+      // Only rebuild the notification + 512px Bitmap when play/pause or duration actually changed;
+      // MediaSession.setPlaybackState already updates progress in the shade & lock screen.
+      if (stateChanged || lengthChanged) app?.let { refresh(it) }
     }
   }
 

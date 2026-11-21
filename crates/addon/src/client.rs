@@ -123,7 +123,7 @@ pub async fn read_capped(mut res: reqwest::Response, max: usize) -> Result<Vec<u
     if res.content_length().is_some_and(|n| n > max as u64) {
         return Err(too_big());
     }
-    let mut body = Vec::new();
+    let mut body = Vec::with_capacity(res.content_length().map(|n| (n as usize).min(max)).unwrap_or(0));
     while let Some(chunk) = res.chunk().await? {
         if body.len() + chunk.len() > max {
             return Err(too_big());

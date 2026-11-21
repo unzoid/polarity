@@ -123,6 +123,7 @@ function SearchHeader() {
 export function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
+  const { data: movieArt, isPending: movieArtPending } = useMovieGenreArt(SEARCH_GENRES);
   const { data: animeArt, isPending: animeArtPending } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
   // The tiles come in as one, pictures and colours together (lib/ui/together.ts), not colour first and a
   // picture here and there after.
@@ -151,7 +152,7 @@ export function SearchStart() {
         <h2 className="t-title2">Genres</h2>
         <div className="genre-tiles">
           {SEARCH_GENRES.map((g) => (
-            <MovieGenreTile key={g} genre={g} />
+            <GenreTile key={g} genre={g} image={cardArtUrl(movieArt?.[g], "landscape")} pending={movieArtPending} />
           ))}
         </div>
       </section>
@@ -190,13 +191,13 @@ const TILE_HUES: Record<string, [number, number]> = {
   Psychological: [265, 320],
 };
 
-/**
- * A movie genre's tile: the backdrop of its most popular movie, from the same request the genre's results lead
- * with, so a tap finds them already loaded.
- */
-function MovieGenreTile({ genre }: { genre: string }) {
-  const { data, isPending } = useGenreRow("movie", genre);
-  return <GenreTile genre={genre} image={cardArtUrl(data?.find((m) => m.background)?.background, "landscape")} pending={isPending} />;
+/** Lightweight single-call backdrop lookup for all movie genre tiles (8 discover reqs instead of 168 N+1 reqs). */
+function useMovieGenreArt(genres: readonly string[]) {
+  return useQuery({
+    queryKey: ["genre-backdrops", "movie", genres.join(",")],
+    queryFn: () => api.genreBackdrops("movie", genres).catch(() => ({} as Record<string, string>)),
+    staleTime: 6 * 60 * 60_000,
+  });
 }
 
 /**

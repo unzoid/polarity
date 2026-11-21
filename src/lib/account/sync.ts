@@ -33,12 +33,15 @@ import { fillUntitled, type DisplayDeps } from "./titleDisplay";
 
 const PERIOD_MS = 3 * 60_000;
 const AFTER_CHANGE_MS = 5_000;
+/** Periodic playback progress ticks push on a gentler cadence (push-only, no full pull/playlists/settings). */
+const PROGRESS_PUSH_MS = 90_000;
 const RETRY_MS = [15_000, 60_000, 5 * 60_000];
 
 let active: string | null = null;
 let running: Promise<void> | null = null;
 let again = false;
 let pending: number | undefined;
+let progressPending: number | undefined;
 let interval: number | undefined;
 let failures = 0;
 /** The signed-in account's other profiles: their leftover changes go up in the background. */
@@ -47,7 +50,9 @@ let others: string[] = [];
 const onWake = () => void run();
 /** Going to the background with changes waiting: send them now, as a phone may end the app before the timer fires. */
 const onHide = () => {
-  if (document.visibilityState === "hidden" && pending !== undefined) void sync.flush().catch(() => {});
+  if (document.visibilityState === "hidden" && (pending !== undefined || progressPending !== undefined)) {
+    void sync.flush().catch(() => {});
+  }
 };
 
 async function run(): Promise<void> {
@@ -156,12 +161,35 @@ async function pushPlaylists(space: string) {
   markPlaylistsPushed(space, lists.receipt);
 }
 
-/** Run once after `ms`. Repeated calls (e.g. progress saves while playing) coalesce. */
+/** Push only the active space's local changes (used for periodic playback progress ticks). */
+async function pushProgressOnly(): Promise<void> {
+  if (!active || !backend || running) return;
+  const space = active;
+  try {
+    const local = await pushOne(space);
+    if (local.full) noteAccountFull(local.full);
+  } catch (e) {
+    console.warn("sync: progress push failed", e);
+  }
+}
+
+/** Run once after `ms`. Repeated calls coalesce. */
 function later(ms: number) {
   if (!active || pending !== undefined) return;
+  window.clearTimeout(progressPending);
+  progressPending = undefined;
   pending = window.setTimeout(() => {
     pending = undefined;
     void run();
+  }, ms);
+}
+
+/** Coalesced push-only sync for periodic playback progress ticks (avoids full pull/playlists/settings churn). */
+function laterProgress(ms: number) {
+  if (!active || pending !== undefined || progressPending !== undefined) return;
+  progressPending = window.setTimeout(() => {
+    progressPending = undefined;
+    void pushProgressOnly();
   }, ms);
 }
 
@@ -197,16 +225,22 @@ export const sync = {
     window.clearInterval(interval);
     window.clearTimeout(pending);
     pending = undefined;
+    window.clearTimeout(progressPending);
+    progressPending = undefined;
     window.removeEventListener("focus", onWake);
     window.removeEventListener("online", onWake);
     document.removeEventListener("visibilitychange", onHide);
   },
   /** Push soon after a local change. */
   schedule: () => later(AFTER_CHANGE_MS),
+  /** Push periodic playback progress on a slower, push-only cadence (pause/exit still calls `schedule`). */
+  scheduleProgress: () => laterProgress(PROGRESS_PUSH_MS),
   /** Wait for in-flight work, then push whatever is left (before sign-out). */
   async flush() {
     window.clearTimeout(pending);
     pending = undefined;
+    window.clearTimeout(progressPending);
+    progressPending = undefined;
     await run();
     // A round was already in flight: the one queued behind it carries the newest changes.
     while (running) await running;

@@ -119,7 +119,16 @@ pub async fn get(imdb_id: &str) -> Vec<EpisodeRating> {
             _ => break,
         }
     }
-    cache.locked().insert(imdb_id.to_owned(), (Instant::now(), out.clone()));
+    let mut map = cache.locked();
+    if map.len() >= 512 {
+        map.retain(|_, (at, _)| at.elapsed() < TTL);
+        if map.len() >= 512 {
+            if let Some(oldest) = map.iter().min_by_key(|(_, (at, _))| *at).map(|(k, _)| k.clone()) {
+                map.remove(&oldest);
+            }
+        }
+    }
+    map.insert(imdb_id.to_owned(), (Instant::now(), out.clone()));
     out
 }
 

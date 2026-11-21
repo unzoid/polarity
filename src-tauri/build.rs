@@ -28,7 +28,6 @@ fn main() {
             "src/ios/keys.m",
             "src/ios/now_playing.m",
             "src/apple/notes.m",
-            "src/apple/now_playing.m",
         ],
         _ => &[],
     };

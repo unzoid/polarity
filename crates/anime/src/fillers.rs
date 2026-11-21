@@ -131,14 +131,16 @@ impl Fillers {
         match self.fetch(mal_id, slugs).await {
             Some(flags) => {
                 let entry = Entry { fetched_at: now, flags: flags.clone() };
-                let file = self
+                let snapshot = self
                     .with_cache(|c| {
                         c.insert(mal_id, entry);
                         prune(c, now);
-                        serde_json::to_vec(&CacheFile { version: VERSION, entries: c.clone() })
+                        c.clone()
                     })
                     .await;
-                if let Ok(bytes) = file {
+                if let Ok(Ok(bytes)) =
+                    tokio::task::spawn_blocking(move || serde_json::to_vec(&CacheFile { version: VERSION, entries: snapshot })).await
+                {
                     self.write(&bytes).await;
                 }
                 flags
@@ -176,14 +178,17 @@ impl Fillers {
         }
     }
 
-    /// Replaces the file in one step, so a crash never leaves half of it.
+    /// Replaces the file in one step, using a unique temp file so concurrent saves never race on `.tmp`.
     async fn write(&self, bytes: &[u8]) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
         if let Some(dir) = self.path.parent() {
             let _ = tokio::fs::create_dir_all(dir).await;
         }
-        let tmp = self.path.with_extension("json.tmp");
-        if tokio::fs::write(&tmp, bytes).await.is_ok() {
-            let _ = tokio::fs::rename(&tmp, &self.path).await;
+        let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let tmp = self.path.with_extension(format!("json.{}.{seq}.tmp", std::process::id()));
+        if tokio::fs::write(&tmp, bytes).await.is_ok() && tokio::fs::rename(&tmp, &self.path).await.is_err() {
+            let _ = tokio::fs::remove_file(&tmp).await;
         }
     }
 
@@ -257,7 +262,25 @@ impl Fillers {
             if !res.status().is_success() {
                 continue;
             }
-            let Ok(html) = res.text().await else { continue };
+            // Cap HTML page size (2 MiB) so an unexpected response never exhausts mobile RAM.
+            const HTML_MAX: usize = 2 << 20;
+            if res.content_length().is_some_and(|n| n > HTML_MAX as u64) {
+                continue;
+            }
+            let mut body = Vec::new();
+            let mut res = res;
+            let mut ok = true;
+            while let Ok(Some(chunk)) = res.chunk().await {
+                if body.len() + chunk.len() > HTML_MAX {
+                    ok = false;
+                    break;
+                }
+                body.extend_from_slice(&chunk);
+            }
+            if !ok {
+                continue;
+            }
+            let html = String::from_utf8_lossy(&body);
             if let Some(eps) = parse_animefillerlist(&html) {
                 return Some(eps);
             }

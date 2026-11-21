@@ -506,9 +506,30 @@ export function useSourceFilters(
     const addons = count("addon", (r) => [r.addon]);
     const sourceCounts = count("source", (r) => (r.quality.source ? [r.quality.source] : []));
     const resCounts = count("res", (r) => [resKey(r)]);
-    // Multi-audio sources count toward every language (as they match it).
-    const langCodes = [...new Set(all.flatMap(langsOf))];
-    const langs = new Map(langCodes.map((c) => [c, all.filter((r) => matches(r, filter, "lang") && hasLanguage(r, c)).length]));
+    // Multi-audio sources count toward every language (as they match it). Single pass instead of O(L * N).
+    const langSet = new Set<string>();
+    for (const r of all) for (const c of langsOf(r)) langSet.add(c);
+    const langCodes = [...langSet];
+    const langs = new Map<string, number>();
+    let multiMatches = 0;
+    for (const r of all) {
+      if (!matches(r, filter, "lang")) continue;
+      const list = r.quality.languages ?? [];
+      if (list.includes("multi")) {
+        multiMatches++;
+        continue;
+      }
+      const seen = new Set<string>();
+      for (const l of list) {
+        for (const c of langCodes) {
+          if (!seen.has(c) && langMatches(l, c)) {
+            seen.add(c);
+            langs.set(c, (langs.get(c) ?? 0) + 1);
+          }
+        }
+      }
+    }
+    if (multiMatches > 0) for (const c of langCodes) langs.set(c, (langs.get(c) ?? 0) + multiMatches);
     // Tags narrow together (all of them must match): count within what's shown.
     const tagCounts = new Map<string, number>();
     for (const { r, match } of view) if (match) for (const t of new Set(tagsOf(r))) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);

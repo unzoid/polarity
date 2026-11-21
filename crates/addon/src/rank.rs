@@ -391,23 +391,29 @@ impl StreamFilter {
             return false;
         }
         if !self.exclude_words.is_empty() {
-            let text = [&stream.name, &stream.title, &stream.description]
-                .into_iter()
-                .flatten()
-                .map(|s| s.to_lowercase())
-                .collect::<Vec<_>>()
-                .join(" ");
-            let words: Vec<&str> = text.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+            // Avoid intermediate Vec<String> / Vec<&str> allocations inside the per-stream hot loop.
+            let mut text = String::new();
+            for part in [&stream.name, &stream.title, &stream.description].into_iter().flatten() {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                for ch in part.chars() {
+                    for lc in ch.to_lowercase() {
+                        text.push(lc);
+                    }
+                }
+            }
             let hit = self.exclude_words.iter().any(|ex| {
-                let ex = ex.trim().to_lowercase();
+                let ex = ex.trim();
                 if ex.is_empty() {
                     return false;
                 }
+                let ex = ex.to_lowercase();
                 // Several words ("hard coded") match as a phrase; one word must match a whole word.
                 if ex.contains(char::is_whitespace) {
                     text.contains(&ex)
                 } else {
-                    words.contains(&ex.as_str())
+                    text.split(|c: char| !c.is_alphanumeric()).any(|w| w == ex)
                 }
             });
             if hit {
