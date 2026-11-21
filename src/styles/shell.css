@@ -553,6 +553,11 @@
   backdrop-filter: var(--edge-filter);
   transition: opacity var(--dur-base) var(--ease-std);
 }
+:root:not([data-engine="chromium"]) .navbar[data-scrolled="true"] .edge-blur.navbar-fade i {
+  background: rgb(0 0 0 / 0.001);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
 /* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
    the stacked blurs. Six masked blurs taken again on every frame of a scroll are more than a phone's web view
    keeps up with over moving art; one unmasked layer is cheap. */

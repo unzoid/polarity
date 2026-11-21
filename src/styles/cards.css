@@ -796,13 +796,42 @@
   transition: opacity var(--dur-fast) var(--ease-std);
 }
 .edge-blur i {
-  background: rgb(0 0 0 / 0.001);
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
   -webkit-backdrop-filter: var(--edge-filter);
   backdrop-filter: var(--edge-filter);
   -webkit-mask-image: var(--band);
   mask-image: var(--band);
+}
+/* WebKit skips painting backdrop-filter on empty masked elements without a paintable surface/layer;
+   scope promotion to non-Chromium engines and only while the blur is active so hidden paddles never
+   create idle compositor layers (#134). */
+:root:not([data-engine="chromium"]) .edge-blur:not(.navbar-fade) i {
+  background: rgb(0 0 0 / 0.001);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+:root:not([data-engine="chromium"]) .row-paddle .edge-blur i {
+  background: none;
+  -webkit-transform: none;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-engine="chromium"]) .row-viewport:hover .row-paddle .edge-blur i {
+    background: rgb(0 0 0 / 0.001);
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+}
+:root:not([data-engine="chromium"]) .row-viewport:has(:focus-visible) .row-paddle .edge-blur i {
+  background: rgb(0 0 0 / 0.001);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+:root:not([data-engine="chromium"]) .row-viewport[data-start="true"] .row-paddle[data-dir="prev"] .edge-blur i,
+:root:not([data-engine="chromium"]) .row-viewport[data-end="true"] .row-paddle[data-dir="next"] .edge-blur i,
+:root:not([data-engine="chromium"]) .row-paddle[data-visible="false"] .edge-blur i {
+  background: none;
+  -webkit-transform: none;
+  transform: none;
 }
 .edge-blur::before {
   content: "";
