@@ -770,12 +770,13 @@
 
 /* Then in: the screen stays over the app a moment (App's Gate) and fades off it, while a copy of the
    chosen avatar flies into the navbar (screens/account/profileHandoff.ts). */
-:root[data-profile-handoff] :is(.navbar-profile .avatar, .tv-nav-me .avatar) {
+:root[data-profile-handoff] :is(.dk-profile-btn .avatar, .navbar-profile .avatar, .tv-nav-me .avatar) {
   visibility: hidden;
 }
 .account-shell[data-leaving] {
   z-index: var(--z-overlay);
   pointer-events: none;
+  transition: background-color var(--dur-slow) var(--ease-out);
 }
 .account-shell[data-leaving][data-handoff-go] {
   background: transparent;

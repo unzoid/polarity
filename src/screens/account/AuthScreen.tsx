@@ -7,7 +7,7 @@ import { TextField, type TextFieldProps } from "../../components/ui/TextField";
 import { AccountError, formatTvCode, useAccount, type TvSignInRequest } from "../../lib/account";
 import { useTvMode } from "../../tv/tvMode";
 import { api } from "../../lib/api";
-import { PRIVACY_URL, TERMS_URL } from "../../lib/settings";
+import { PRIVACY_URL, TERMS_URL } from "../../lib/settings/catalog";
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
 import { Captcha } from "./Captcha";

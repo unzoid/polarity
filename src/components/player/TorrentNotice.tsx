@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Button } from "../ui/Button";
 import { SliderField } from "../SliderField";
-import { shownNumber, storedNumber, useSetting } from "../../lib/settings";
+import { shownNumber, storedNumber, useSetting } from "../../lib/settings/catalog";
 import { useLayer } from "../../lib/ui";
 
 /**

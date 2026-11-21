@@ -1,5 +1,5 @@
 import { useViewingLimit } from "../../lib/catalog/viewingLimit";
-import { choicesOf, settingDef } from "../../lib/settings";
+import { choicesOf, settingDef } from "../../lib/settings/catalog";
 import { RowText } from "../settings/rows";
 
 export const SET_IN_PROFILE = "Set in the profile";

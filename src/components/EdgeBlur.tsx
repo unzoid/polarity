@@ -21,28 +21,31 @@ export function EdgeBlur({
   layers = 6,
   step = 3,
   curve = 1,
+  strength = 1,
 }: {
   className?: string;
   edge?: Edge;
   layers?: number;
   step?: number;
   curve?: number;
+  strength?: number;
 }) {
   const n = Math.max(2, layers);
   return (
     <span className={className ? `edge-blur ${className}` : "edge-blur"} data-edge={edge} aria-hidden>
       {Array.from({ length: n }, (_, i) => (
-        <i key={i} style={layerStyle(edge, i, n, step, curve)} />
+        <i key={i} style={layerStyle(edge, i, n, step, curve, strength)} />
       ))}
     </span>
   );
 }
 
 /** Layer `i` of `n`: opaque over its two segments of the run toward the edge, fading over the ones either side. */
-export function layerStyle(edge: Edge, i: number, n: number, step: number, curve = 1): CSSProperties {
+export function layerStyle(edge: Edge, i: number, n: number, step: number, curve = 1, strength = 1): CSSProperties {
   const seg = 100 / (n + 1);
   const stop = (k: number, on: boolean) => `${on ? "#000" : "transparent"} ${+(Math.min(k, n + 1) * seg).toFixed(2)}%`;
   const band = `linear-gradient(${ANGLE[edge]}deg, ${stop(i, false)}, ${stop(i + 1, true)}, ${stop(i + 2, true)}, ${stop(i + 3, false)})`;
-  const radius = +(step * (i + 1) ** curve).toFixed(2);
-  return { "--band": band, "--edge-filter": `blur(calc(${radius}px * var(--edge-strength, 1)))` } as CSSProperties;
+  // Emit a flat `blur(Npx)` without nested calc()/var(): WebKit parses calc() inside `-webkit-backdrop-filter: var(...)` but paints zero blur.
+  const radius = +(step * (i + 1) ** curve * strength).toFixed(2);
+  return { "--band": band, "--edge-filter": `blur(${radius}px)` } as CSSProperties;
 }

@@ -25,9 +25,12 @@ import {
   VolumeMuted,
 } from "../components/icons";
 import { AnimatePresence, motion } from "motion/react";
-import { ease, useDismiss, useFormFactor, useLayer } from "../lib/ui";
+import { ease, lazyNamed, useDismiss, useFormFactor, useLayer } from "../lib/ui";
+import { useDeskUi } from "../desk/mode";
+import { DeskPlayerChrome } from "../desk/DeskPlayerChrome";
+import { DeskPlayerSheets } from "../desk/DeskPlayerSheets";
 import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, keepScreenOn, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
@@ -173,7 +176,6 @@ import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
 import { PlayerStatus } from "../components/player/PlayerStatus";
 import { useLoadingArt } from "../components/player/useLoadingArt";
-import { TorrentNotice } from "../components/player/TorrentNotice";
 import { FrameLabel, PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
 import { useMediaTime } from "../components/player/useMediaTime";
 import { usePlayerChrome } from "../components/player/usePlayerChrome";
@@ -187,6 +189,8 @@ import { useTraktScrobble } from "../components/player/useTraktScrobble";
 import { useAirPlay } from "../components/player/useAirPlay";
 import { PlayerPauseScreen } from "../components/player/PauseScreen";
 import { PlayerRatingPrompt } from "../components/player/RatingPrompt";
+
+const TorrentNotice = lazyNamed(() => import("../components/player/TorrentNotice"), "TorrentNotice");
 
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
@@ -1554,7 +1558,26 @@ export function Player({
   const showFill = !tv && isDesktop;
   // A desktop window (not a phone, a compact window, TV or Picture in Picture): one row of controls under the
   // timeline, and each panel a small menu above its button instead of a layer over the whole picture.
-  const dock = !tv && form === "desktop" && !mini;
+  // The desk layout (src/desk) plays with its own 1:1 Netflix player chrome and edge sheets.
+  const desk = useDeskUi();
+  const deskPlayer = desk && !mini && !tv;
+  const dock = !tv && form === "desktop" && !mini && !desk;
+  // In the desk player, keep mpv subtitles lifted clear of the bottom scrubber/actions bar or Speed sheet while
+  // visible — including while tuning subtitle style/lift, so the live subtitle never collides with the timeline.
+  const deskSubLift = deskPlayer
+    ? options === "speed"
+      ? 16
+      : chromeVisible && (!options || options === "tracks" || options === "episodes")
+        ? 13
+        : 0
+    : 0;
+  useEffect(() => {
+    if (engine !== "mpv" || !deskPlayer) return;
+    const applyPos = () => void mpv.set("sub-pos", 100 - Math.min(60, subStyle.raise + deskSubLift));
+    applyPos();
+    mpv.addEventListener("loadedmetadata", applyPos);
+    return () => mpv.removeEventListener("loadedmetadata", applyPos);
+  }, [engine, mpv, deskPlayer, subStyle.raise, deskSubLift]);
   const dockZoom = useDockZoom(dock);
   // The dock's popup menus (Cast, More) share its panels' look and scale (player.css `.menu-dock`).
   // Zoomed only past 1× (player.css data-zoomed): at 1× nothing carries a zoom, which WebKit doesn't treat as a no-op.
@@ -1923,6 +1946,8 @@ export function Player({
       data-options={!!options}
       data-options-instant={optionsByKey}
       data-dock={dock || undefined}
+      data-desk-player={deskPlayer || undefined}
+      data-desk-sheet={deskPlayer && options ? options : undefined}
       data-zoomed={zoomed || undefined}
       style={zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined}
       data-started={started}
@@ -2061,21 +2086,23 @@ export function Player({
       </AnimatePresence>
 
       {torrentNotice && !leaving && (
-        <TorrentNotice
-          onPlay={() => source.answerNotice(true)}
-          onCancel={() => {
-            source.answerNotice(false);
-            void exit();
-          }}
-          onSettings={
-            tv
-              ? undefined
-              : () => {
-                  source.answerNotice(false);
-                  openSettingsPage("sources");
-                }
-          }
-        />
+        <Suspense fallback={null}>
+          <TorrentNotice
+            onPlay={() => source.answerNotice(true)}
+            onCancel={() => {
+              source.answerNotice(false);
+              void exit();
+            }}
+            onSettings={
+              tv
+                ? undefined
+                : () => {
+                    source.answerNotice(false);
+                    openSettingsPage("sources");
+                  }
+            }
+          />
+        </Suspense>
       )}
 
       {airplay.casting && (
@@ -2137,6 +2164,98 @@ export function Player({
       )}
       {party && <PartyNotes party={party} />}
 
+      {deskPlayer ? (
+        <DeskPlayerChrome
+          type={type}
+          metaId={metaId}
+          title={title}
+          current={current}
+          local={local}
+          link={link}
+          ytId={ytId}
+          pinned={pinned}
+          fullscreen={fullscreen}
+          isDesktop={isDesktop}
+          ready={ready}
+          started={started}
+          paused={paused}
+          spinner={frameSteps.spinner}
+          chromeVisible={chromeVisible}
+          options={options}
+          onExit={() => void exit()}
+          onTogglePlay={togglePlay}
+          seekStep={seekStep}
+          kicks={kicks}
+          onSeekBack={() => (seekBy(-seekStep), kick("back"))}
+          onSeekForward={() => (seekBy(seekStep), kick("forward"))}
+          media={media}
+          seekTrack={seekTrack}
+          segments={skip.segments}
+          onSeekTo={seekTo}
+          onScrubChange={onScrubChange}
+          timeDisplay={timeDisplay}
+          playRate={playRate}
+          onCycleClock={cycleClock}
+          steppingFps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null}
+          sleepLeft={sleep.left}
+          systemVolume={systemVolume}
+          volume={volume}
+          volumeTop={volumeTop}
+          muted={muted}
+          onVolume={(v) => {
+            setVolume(v);
+            setMuted(false);
+          }}
+          onToggleMute={() => setMuted((m) => !m)}
+          brightnessAvailable={brightness.available}
+          brightnessLevel={brightness.level}
+          onBrightness={brightness.set}
+          airplay={airplay}
+          chromecast={chromecast}
+          canMini={canMini}
+          mini={mini}
+          onToggleMini={toggleMini}
+          canPin={canPin}
+          onTogglePin={togglePin}
+          showFill={showFill}
+          crop={crop}
+          onCycleCrop={cycleCrop}
+          touchLockAvailable={touchLock.available}
+          onTouchLock={touchLock.lock}
+          onToggleFullscreen={() => void toggleFullscreen()}
+          canShoot={canShoot}
+          shotSaved={shotSaved}
+          onScreenshot={takeScreenshot}
+          onRevealScreenshot={() => void api.revealScreenshot().catch(warnFailed("reveal screenshot"))}
+          canHandOff={canHandOff}
+          otherPlayers={otherPlayers}
+          onHandOff={handOff}
+          watchLog={!!watchLog}
+          onCopyWatchLog={() =>
+            void watchLogText(engine ?? "not chosen yet")
+              .then((text) => navigator.clipboard.writeText(text))
+              .then(
+                () => flashNotice("Watch log copied", 2000),
+                () => flashNotice("Couldn't copy the watch log", 2500),
+              )
+          }
+          onMoreOpenChange={(open) => {
+            setMoreOpen(open);
+            if (open) setOptions(null);
+          }}
+          rate={rate}
+          inParty={inParty}
+          canParty={canParty}
+          castingAway={castingAway}
+          partyMembers={party?.members.length ?? 0}
+          partyBadge={party ? <PartyBadge party={party} onOpen={() => setOptions("party")} /> : undefined}
+          next={next}
+          onPlayNext={() => next && playVideo(next.id)}
+          onOpenSheet={(s) => setOptions((curr) => (curr === s ? null : s))}
+          controlHover={controlHover}
+        />
+      ) : (
+        <>
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
       {/* Pinned (#266), nothing moves the window. */}
       <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true} {...controlHover}>
@@ -2389,6 +2508,11 @@ export function Player({
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* Paused on a stepped frame: once the controls hide, its number stays where the clock was (#346). */}
+      {deskPlayer && frameSteps.stepping && <FrameLabel media={media} fps={fps ?? DEFAULT_FPS} />}
 
       {/* The sleep timer's last minute: more time, or no timer (#270). */}
       {sleep.warning && !sleep.asleep && (
@@ -2420,6 +2544,91 @@ export function Player({
           </Button>
         </div>
       )}
+      {deskPlayer ? (
+        <DeskPlayerSheets
+          media={media}
+          options={options}
+          instant={optionsByKey}
+          onClose={() => {
+            setOptions(null);
+            setSubSettingsOpen(false);
+            setAudioSettingsOpen(false);
+          }}
+          speeds={SPEEDS}
+          rate={rate}
+          onRate={setRate}
+          speedLabel={speedLabel}
+          type={type}
+          sleepChoice={sleep.choice}
+          onSleepChoice={sleep.set}
+          audioOptions={tracks.audio.length ? tracks.audio : [{ id: "default", label: "Default" }]}
+          audioValue={tracks.audio.length ? tracks.audioId : "default"}
+          onSelectAudio={tracks.selectAudio}
+          canAudioSettings={engine === "mpv" && !castingAway}
+          audioSettingsOpen={audioSettingsOpen}
+          onToggleAudioSettings={() => setAudioSettingsOpen((v) => !v)}
+          audioDelay={audioDelay}
+          onAudioDelay={changeAudioDelay}
+          subOptions={canPickSubtitle ? [...tracks.subtitles, { id: PICK_SUBTITLE, label: "Add from a File…", heading: "On This Computer" }] : tracks.subtitles}
+          subValue={tracks.subId}
+          onSelectSub={(id) =>
+            id === PICK_SUBTITLE
+              ? void api.pickSubtitleFile().catch((e: unknown) => flashNotice(`Couldn't add the subtitle: ${errorMessage(e)}`, 4000))
+              : void tracks.selectSubtitle(id)
+          }
+          subsLoading={tracks.subtitlesLoading}
+          subSettingsOpen={subSettingsOpen}
+          onToggleSubSettings={() => setSubSettingsOpen((v) => !v)}
+          subStyle={subStyle}
+          onSubStyleChange={(patch) => updateSettings.mutate({ subtitleStyle: { ...subStyle, ...patch } })}
+          subDelay={subDelay}
+          onSubDelay={changeSubDelay}
+          onStepLine={engine === "mpv" && !castingAway ? (by) => void stepLine(by) : undefined}
+          secondSubtitles={engine === "mpv" && !castingAway && secondSubtitles}
+          onSecondSubtitlesChange={engine === "mpv" && !castingAway ? (on) => setPrefs({ secondSubtitles: on }) : undefined}
+          secondSubValue={tracks.secondId}
+          onSelectSecondSub={engine === "mpv" && !castingAway ? (id) => void tracks.selectSecond(id) : undefined}
+          canPosition={engine === "mpv"}
+          local={local}
+          meta={meta}
+          seasonGroups={seasonGroups.map((g) => ({ id: g.id, label: g.label, count: g.videos.length }))}
+          shownSeason={shownSeason}
+          onSeason={setPickSeason}
+          episodes={shownEpisodes}
+          numbers={order?.number}
+          playing={videoId}
+          progress={progressById}
+          still={(v) => stillFor(v.id) ?? v.thumbnail}
+          onPlayEpisode={(id) => (local ? playVideo(id) : pickEpisode(id))}
+          folderItems={folderItems}
+          shuffling={shuffling}
+          onToggleShuffle={toggleShuffle}
+          sourceFilters={sourceFilters}
+          hiddenSources={hiddenSources}
+          sourceOptions={sourceOptions}
+          currentSource={currentSource}
+          sourcesEmpty={
+            streams.isLoading
+              ? "Finding sources…"
+              : streams.isError
+                ? "Couldn't load sources."
+                : sourceFilters.total > 0
+                  ? "No sources match these filters."
+                  : hiddenSources > 0
+                    ? `All ${hiddenSources} sources are hidden by your filters in Settings → Sources.`
+                    : "No sources found."
+          }
+          onSelectSource={(id) => {
+            if (id === currentSource) return;
+            if (id === DOWNLOADED) return downloaded && playVideo(videoId, downloaded);
+            const pick = rankedStreams[Number(id)];
+            if (pick) playVideo(videoId, pick.stream);
+          }}
+          canParty={canParty}
+          partyColumns={partyColumns}
+        />
+      ) : (
+        <>
       <OptionsOverlay
         open={options === "speed"}
         dockedTo={dock ? "speed" : undefined}
@@ -2572,6 +2781,8 @@ export function Player({
             : []),
         ]}
       />
+        </>
+      )}
 
       {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
       {/* Phones and tablets: the swipes' levels, each at the edge of its half. */}
@@ -2711,7 +2922,7 @@ export function Player({
         </div>
       )}
 
-      {canParty && (
+      {!deskPlayer && canParty && (
         <OptionsOverlay
           open={options === "party"}
           dockedTo={dock ? "party" : undefined}
@@ -2721,6 +2932,7 @@ export function Player({
         />
       )}
 
+      {!deskPlayer && (
       <OptionsOverlay
         open={options === "episodes"}
         dockedTo={dock ? "episodes" : undefined}
@@ -2831,6 +3043,8 @@ export function Player({
               ]
         }
       />
+      )}
+      {!deskPlayer && (
       <OptionsOverlay
         open={options === "sources"}
         dockedTo={dock ? "sources" : undefined}
@@ -2869,6 +3083,7 @@ export function Player({
           },
         ]}
       />
+      )}
       {sourceMenu && (
         <TvSourceMenu
           anchor={sourceMenu.anchor}

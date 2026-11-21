@@ -1,3 +1,5 @@
+import "../styles/detail.css";
+import "../styles/title/episode-ratings.css";
 import { LayoutList, LayoutRow, Reset, Volume, VolumeMuted } from "../components/icons";
 import { SwapIcon } from "../components/SwapIcon";
 import { randomEpisode, startShuffle } from "../lib/playback/shuffle";

@@ -124,6 +124,8 @@ export interface Prefs {
   autoDownloadUpdates: boolean;
   /** The TV mode button in the navbar (Settings → Controls & TV). */
   showTvButton: boolean;
+  /** On a computer or tablet, the previous layout (top bar, pages) instead of the Netflix-style one (src/desk). */
+  classicDesktop: boolean;
 
   // Notifications (#209), on this device: each kind off until switched on (phones ask for permission then).
   /** A series being followed has a new episode out. */
@@ -256,6 +258,7 @@ const DEFAULTS: Prefs = {
   searchSuggestions: true,
   autoDownloadUpdates: true,
   showTvButton: true,
+  classicDesktop: false,
   notifyEpisodes: false,
   notifySeasons: false,
   notifyDownloads: false,

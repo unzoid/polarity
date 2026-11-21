@@ -13,12 +13,17 @@ import { serveMedia } from "./media";
  * element to hold still over two frames runs out on clicks and hovers there.
  * In WebKit every page is drawn without it; no test looks at the blur.
  */
-export const test = base.extend<{ tv: boolean; account: boolean; app: Page }>({
+export const test = base.extend<{ tv: boolean; account: boolean; desk: boolean; app: Page }>({
+  /**
+   * On a computer, start in the Netflix-style layout (src/desk, `test.use({ desk: true })`) rather than the classic
+   * one the older desktop tests were written for (Settings → Appearance → Classic layout).
+   */
+  desk: [false, { option: true }],
   /** Start in TV mode (`test.use({ tv: true })`), as the Controls page's switch leaves it. */
   tv: [false, { option: true }],
   /** Start signed in to the fake shell's account, with watch parties in the page (`test.use({ account: true })`). */
   account: [false, { option: true }],
-  app: async ({ page, baseURL, tv, account, browserName }, use) => {
+  app: async ({ page, baseURL, tv, account, desk, browserName }, use) => {
     const errors: string[] = [];
     const refused = new Set<string>();
     page.on("pageerror", (e) => {
@@ -42,6 +47,10 @@ export const test = base.extend<{ tv: boolean; account: boolean; app: Page }>({
         }),
       );
     if (tv) await page.addInitScript(() => localStorage.setItem("polar.tvMode", "1"));
+    await page.addInitScript((classic) => {
+      const prefs = JSON.parse(localStorage.getItem("polar.prefs") ?? "{}");
+      if (prefs.classicDesktop === undefined) localStorage.setItem("polar.prefs", JSON.stringify({ ...prefs, classicDesktop: classic }));
+    }, !desk);
     await page.goto(account ? "/fake.html?account=1" : "/fake.html");
     await expect(page.locator("#root > *").first()).toBeAttached();
     await use(page);

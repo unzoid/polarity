@@ -1,3 +1,6 @@
+import "../styles/anime.css";
+import "../styles/detail.css";
+import "../styles/title/episode-ratings.css";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";

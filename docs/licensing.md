@@ -25,6 +25,7 @@ installed by the user.
 | The player's media keys and now playing (`src-tauri/src/media_session`): the `windows` crate's Media, Storage.Streams and WinRT interop parts (Windows); Apple's MediaPlayer framework (macOS, iOS) | MIT or Apache-2.0 (windows); the system's own framework | `Cargo.lock`; MediaPlayer is part of the OS and isn't shipped |
 | QR code on the TV's sign-in screen (#133): `uqr` 0.1.2, a QR encoder with no dependencies of its own (Anthony Fu, after Project Nayuki's QR Code generator) | MIT | `uqr` in `package.json`, pinned; its `LICENSE` has both copyright lines. Used by `src/screens/account/TvSignInQr.tsx`, which draws the SVG itself |
 | Progressive blur (`src/components/EdgeBlur.tsx`): the layered, banded backdrop-blur technique and its gradient-stop arithmetic, adapted from motion-primitives' ProgressiveBlur (ibelick) | MIT | `src/components/EdgeBlur.LICENSE-motion-primitives.txt` (motion-primitives' licence, unchanged); no package is installed |
+| Dialogs, popovers and tabs of the computer and tablet layout (`src/desk`): `@ui-sdk/core` and `@ui-sdk/react` 0.1.0-beta.13 (Vercel), behaviour only, no styles | Apache-2.0 | `@ui-sdk/core`, `@ui-sdk/react` in `package.json`, pinned; each package's `LICENSE` has the licence text (neither ships a NOTICE file) |
 | npm and Rust dependencies | Each package's own | `bun.lock`, `Cargo.lock` |
 
 Third-party logos (TMDB's in Settings → About → Credits) are shown only as credits and links to

@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 
-import { App } from "./App";
+import { App, preloadActiveShell } from "./App";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { api } from "./lib/api";
 import { keys, queryClient } from "./lib/net";
@@ -31,22 +31,15 @@ import "./styles/ui/menu.css";
 import "./styles/ui/layer.css";
 import "./styles/title/poster-grid.css";
 import "./styles/title/playlist-checklist.css";
-import "./styles/title/episode-ratings.css";
 import "./styles/title/more-text.css";
 import "./styles/shell.css";
 import "./styles/cards.css";
-import "./styles/detail.css";
 import "./styles/sheet.css";
 import "./styles/party.css";
 import "./styles/friends.css";
 import "./styles/open-files.css";
-import "./styles/screens.css";
-import "./styles/account.css";
 import "./styles/pin.css";
-import "./styles/anime.css";
-import "./styles/tv.css";
 import "./styles/updates.css";
-import "./styles/phone.css";
 import { installGamepad } from "./tv/gamepad";
 import { polyfillCountryFlagEmojis } from "country-flag-emoji-polyfill";
 import flagFont from "country-flag-emoji-polyfill/dist/TwemojiCountryFlags.woff2?url";
@@ -106,10 +99,11 @@ if (!inShell) {
   );
 } else {
   installGamepad();
-  // Warm stored settings alongside the account backend so App() applies theme, scheme, font and motion on frame 0.
+  // Warm stored settings and the active UI shell chunk alongside the account backend so App() renders with zero waterfall.
   await Promise.all([
     startAccountBackend().catch(() => undefined),
     queryClient.prefetchQuery({ queryKey: keys.settings, queryFn: api.settings }).catch(() => undefined),
+    preloadActiveShell(),
   ]);
   root.render(
     <StrictMode>

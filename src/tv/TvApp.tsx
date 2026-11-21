@@ -1,4 +1,10 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import "../styles/account.css";
+import "../styles/anime.css";
+import "../styles/detail.css";
+import "../styles/screens.css";
+import "../styles/title/episode-ratings.css";
+import "../styles/tv.css";
 import { PlayerLayer, usePlayerLayer } from "../components/PlayerLayer";
 import { rootTab, useRouter, type Route } from "../lib/router";
 import { TV_ACTION_EVENT, type TvAction } from "./gamepad";

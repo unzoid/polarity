@@ -45,6 +45,8 @@ export interface AppWindow {
   workArea(): Promise<WorkArea | null>;
   /** Logical pixels; null for none. */
   setMinSize(size: { width: number; height: number } | null): Promise<void>;
+  /** Windows: the system's own title bar and frame (true) or none, the page drawing its own buttons (false). */
+  setDecorations(on: boolean): Promise<void>;
 }
 
 // Looked up on each use: the Tauri handle can't be made outside the shell, and importing this file must not fail there.
@@ -89,6 +91,7 @@ export const appWindow: AppWindow = {
     return { x: p.x, y: p.y, width: s.width, height: s.height, scale: m.scaleFactor };
   },
   setMinSize: (size) => win().setMinSize(size ? new LogicalSize(size.width, size.height) : null),
+  setDecorations: (on) => (isDesktop && os === "windows" ? win().setDecorations(on) : Promise.resolve()),
 };
 
 export type FileDrag = { type: "enter"; paths: string[] } | { type: "leave" } | { type: "drop" };

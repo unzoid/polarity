@@ -88,7 +88,7 @@ export function useArtFocus(src: string | undefined, on: boolean): { style?: CSS
  */
 export function DetailFade() {
   const phone = useFormFactor().form === "phone";
-  return phone ? <EdgeBlur className="detail-bg-fade" edge="bottom" layers={6} step={4} /> : <EdgeBlur className="detail-bg-fade" edge="bottom" layers={8} step={1.2} curve={1.6} />;
+  return phone ? <EdgeBlur className="detail-bg-fade" edge="bottom" layers={6} step={4} strength={1.05} /> : <EdgeBlur className="detail-bg-fade" edge="bottom" layers={8} step={1.2} curve={1.6} />;
 }
 
 export function DetailArt({ src, children }: { src: string | undefined; children: ReactNode }) {

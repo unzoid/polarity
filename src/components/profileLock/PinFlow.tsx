@@ -1,3 +1,4 @@
+import "../../styles/account.css";
 import { useEffect, useState } from "react";
 import type { Profile } from "../../lib/account/backend";
 import { waitLeft, triesOf, waitText } from "../../lib/account/pinTries";

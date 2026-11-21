@@ -4,7 +4,7 @@ import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LookaheadRow } from "../../src/screens/settings/AdvancedPage";
 import { getPrefs, setPrefs } from "../../src/lib/settings/prefs";
-import { settingDef } from "../../src/lib/settings";
+import { settingDef } from "../../src/lib/settings/catalog";
 import { click, render } from "./render";
 
 // The player: like `mpv_lookahead`, it says nothing while the setting is off, and once it's on

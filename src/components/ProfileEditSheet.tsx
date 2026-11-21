@@ -1,3 +1,4 @@
+import "../styles/account.css";
 import { useEffect, useState } from "react";
 import { type AvatarId, useAccount } from "../lib/account";
 import { errorMessage } from "../lib/errors";

@@ -538,15 +538,18 @@
 }
 /* Like .row-paddle (#134), drop the 6 masked backdrop-filter surfaces once faded out at the top of the page. */
 .edge-blur.navbar-fade i {
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition:
     opacity var(--dur-base) var(--ease-std),
+    -webkit-backdrop-filter 0s linear var(--dur-base),
     backdrop-filter 0s linear var(--dur-base);
 }
 .navbar[data-scrolled="true"] .navbar-fade {
   --edge-shown: 1;
 }
 .navbar[data-scrolled="true"] .edge-blur.navbar-fade i {
+  -webkit-backdrop-filter: var(--edge-filter);
   backdrop-filter: var(--edge-filter);
   transition: opacity var(--dur-base) var(--ease-std);
 }
@@ -1317,6 +1320,7 @@ html[data-os="mac"] {
 /* Large, track-less variant: tvOS season tabs ("Season 1  Season 2  [Season 3]"). */
 .segmented[data-variant="large"] {
   background: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
   padding: 0;

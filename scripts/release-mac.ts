@@ -75,7 +75,7 @@ if (!flags.has("--no-build")) {
     [
       "tauri", "build", "--bundles", "app,dmg",
       "-c", "src-tauri/vendor/libmpv/tauri.conf.json",
-      "-c", JSON.stringify({ version, bundle: { macOS: { signingIdentity: "-" } } }),
+      "-c", JSON.stringify({ version, bundle: { macOS: { signingIdentity: "-", hardenedRuntime: false } } }),
     ],
     env,
   );

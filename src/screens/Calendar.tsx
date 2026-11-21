@@ -1,3 +1,4 @@
+import "../styles/screens.css";
 import { useEffect, useMemo, useRef } from "react";
 import { cardMenu } from "../components/CardMenu";
 import { Img } from "../components/Img";

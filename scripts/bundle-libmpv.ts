@@ -86,8 +86,10 @@ for (const [lib, name] of libs) {
   for (const [command, real] of edges.get(lib)!) args.push("-change", command, `@loader_path/${libs.get(real)}`);
   for (const r of rpaths(dest)) args.push("-delete_rpath", r);
   run("install_name_tool", [...args, dest]);
-  // Rewriting voids the signature, and arm64 refuses unsigned code.
-  run("codesign", ["--force", "--sign", "-", dest]);
+  // Rewriting voids the signature, and arm64 refuses unsigned code. Match APPLE_SIGNING_IDENTITY when set.
+  const identity = process.env.APPLE_SIGNING_IDENTITY?.trim() || "-";
+  const signArgs = identity === "-" ? ["--force", "--sign", "-"] : ["--force", "--options", "runtime", "--timestamp", "--sign", identity];
+  run("codesign", [...signArgs, dest]);
 }
 for (const name of libs.values()) {
   const left = linked(join(out, name)).filter((d) => !isSystem(d) && !d.startsWith("@"));

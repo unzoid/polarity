@@ -4,6 +4,7 @@
   padding: 0.375rem;
   border-radius: var(--r-md);
   background: var(--glass-heavy);
+  -webkit-backdrop-filter: var(--blur-glass);
   backdrop-filter: var(--blur-glass);
   box-shadow: 0 0 0 1px var(--glass-edge), var(--glass-highlight), 0 18px 48px var(--scrim-2);
   outline: none;

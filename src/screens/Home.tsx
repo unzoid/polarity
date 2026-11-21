@@ -1,3 +1,4 @@
+import "../styles/detail.css";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";

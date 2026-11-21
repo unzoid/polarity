@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { type PlayRequest, useTitlePlayback } from "../../lib/playback";
-import { useFormFactor } from "../../lib/ui";
-import { SourcesOverlay } from "../../phone/SourcesOverlay";
+import { lazyNamed, useFormFactor } from "../../lib/ui";
+import { useDeskUi } from "../../desk/mode";
 import { Sheet } from "../Sheet";
 import { StreamList } from "../StreamList";
+
+const SourcesOverlay = lazyNamed(() => import("../../phone/SourcesOverlay"), "SourcesOverlay");
 
 /**
  * Play, and the source sheet it may need (docs/ui-components.md U5, U6). `play(req)` opens the player or, when
@@ -30,23 +32,29 @@ export function useSourcePicker(onOpen?: (open: boolean) => void) {
 
 export type SourcePickerState = ReturnType<typeof useSourcePicker>;
 
-/** The source chooser: a full-screen overlay on phones, a side sheet on larger screens. */
+/** The source chooser: a full-screen overlay on phones and in the desk layout (src/desk), a side sheet in the classic one. */
 export function SourcePicker({ picker }: { picker: SourcePickerState }) {
   const { request, open, close, play } = picker;
-  const phone = useFormFactor().form === "phone";
+  const desk = useDeskUi();
+  const phone = useFormFactor().form === "phone" || desk;
+  const [everOpen, setEverOpen] = useState(open);
+  if (open && !everOpen) setEverOpen(true);
   if (phone) {
+    if (!everOpen) return null;
     return (
-      <SourcesOverlay
-        open={open}
-        onClose={close}
-        title="Sources"
-        subtitle={request?.subtitle}
-        request={request ? { type: request.type, videoId: request.videoId } : null}
-        onPick={(s) => {
-          close();
-          if (request) play(request, s);
-        }}
-      />
+      <Suspense fallback={null}>
+        <SourcesOverlay
+          open={open}
+          onClose={close}
+          title="Sources"
+          subtitle={request?.subtitle}
+          request={request ? { type: request.type, videoId: request.videoId } : null}
+          onPick={(s) => {
+            close();
+            if (request) play(request, s);
+          }}
+        />
+      </Suspense>
     );
   }
   return (

@@ -11,7 +11,7 @@ import { cardArtUrl } from "../lib/ui";
 import { TabHeader } from "./Header";
 import { BrandMark, IconChevronRight, IconPlus } from "./icons";
 import { Poster, Row } from "./Rows";
-import { ContinueRow } from "../screens/Home";
+import { ContinueRow } from "../components/ContinueRow";
 
 /**
  * My Polarity: the profile in the bar (a tap opens Profiles; Downloads and the bell sit beside it as on every tab),

@@ -734,9 +734,11 @@
    blur goes once the fade-out has finished, and comes at once with the fade-in. */
 /* Comes in slower than it goes, on an ease-out, so the edge softens into focus rather than switching on. */
 .row-paddle .edge-blur i {
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition:
     opacity 240ms var(--ease-std),
+    -webkit-backdrop-filter 0s linear 240ms,
     backdrop-filter 0s linear 240ms;
 }
 .row-paddle .edge-blur::before {
@@ -744,6 +746,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .row-viewport:hover .row-paddle .edge-blur i {
+    -webkit-backdrop-filter: var(--edge-filter);
     backdrop-filter: var(--edge-filter);
     transition: opacity 380ms var(--ease-out);
   }
@@ -752,12 +755,14 @@
   }
 }
 .row-viewport:has(:focus-visible) .row-paddle .edge-blur i {
+  -webkit-backdrop-filter: var(--edge-filter);
   backdrop-filter: var(--edge-filter);
   transition: opacity 380ms var(--ease-out);
 }
 .row-viewport[data-start="true"] .row-paddle[data-dir="prev"] .edge-blur i,
 .row-viewport[data-end="true"] .row-paddle[data-dir="next"] .edge-blur i,
 .row-paddle[data-visible="false"] .edge-blur i {
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 /* Without a mouse the paddles never show, so they mustn't be there at all: a
@@ -791,6 +796,10 @@
   transition: opacity var(--dur-fast) var(--ease-std);
 }
 .edge-blur i {
+  background: rgb(0 0 0 / 0.001);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backdrop-filter: var(--edge-filter);
   backdrop-filter: var(--edge-filter);
   -webkit-mask-image: var(--band);
   mask-image: var(--band);
@@ -1326,6 +1335,7 @@
   padding: 2px 4px;
   background: none;
   box-shadow: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 :root[data-form="phone"] .hero-dot {
@@ -1512,6 +1522,7 @@ video.trailer-video {
   padding: 0.125rem 0.5rem;
   border-radius: var(--r-pill);
   background: rgb(255 255 255 / 0.16);
+  -webkit-backdrop-filter: var(--blur-control);
   backdrop-filter: var(--blur-control);
   font-size: var(--fs-xs);
   font-weight: 650;
@@ -1542,6 +1553,7 @@ video.trailer-video {
   color: var(--text);
   background: var(--fill-2);
   box-shadow: inset 0 0 0 1px var(--hairline);
+  -webkit-backdrop-filter: var(--blur-control);
   backdrop-filter: var(--blur-control);
   transition:
     opacity 220ms var(--ease-out) calc(var(--i, 0) * 45ms + 40ms),
