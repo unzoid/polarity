@@ -1,3 +1,4 @@
+import "../../styles/account.css";
 import { useEffect, type ReactNode } from "react";
 import logo from "../../assets/polarity-white.png";
 import { FlutedGlow } from "../../components/FlutedGlow";

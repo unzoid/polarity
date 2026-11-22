@@ -1,3 +1,4 @@
+import "../styles/screens.css";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Close, Filters, Play, Shuffle } from "../components/icons";

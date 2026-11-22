@@ -2989,6 +2989,7 @@ img.load-mark-base[data-logo-look^="halo"] {
   --edge-shown: 0;
 }
 .episode-rail-viewport:has(.episode-rail-main:focus-visible):not(:hover) .row-paddle .edge-blur i {
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 /* Settings → Browsing → Spoilers, as on the title page: blur unwatched stills and hide unwatched synopses. */

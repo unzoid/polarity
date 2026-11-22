@@ -158,6 +158,7 @@ export function useIsAnime(videoId: string | undefined) {
     select: (zip) => !!zip,
     enabled: !!imdb,
     staleTime: 24 * 60 * 60_000,
+    retry: false,
   });
   return !!videoId && (isKitsuId(videoId) || !!anime);
 }

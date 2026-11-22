@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   downloadFraction,
@@ -20,9 +20,11 @@ import { Spinner } from "./Spinner";
 import { StreamList } from "./StreamList";
 import { buttonClass } from "./ui/Button";
 import { MenuHeader, MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "./ui/Menu";
-import { useFormFactor } from "../lib/ui";
-import { SourcesOverlay } from "../phone/SourcesOverlay";
+import { lazyNamed, useFormFactor } from "../lib/ui";
+import { useDeskUi } from "../desk/mode";
 import { isTvMode } from "../tv/tvMode";
+
+const SourcesOverlay = lazyNamed(() => import("../phone/SourcesOverlay"), "SourcesOverlay");
 
 /**
  * The download control, as on Netflix and Apple TV: an arrow to start; while
@@ -54,7 +56,10 @@ export function DownloadButton({
   const videoId = video?.id ?? item.id;
   const { download: d, pending } = useDownload(videoId);
   const [choosing, setChoosing] = useState(false);
-  const phone = useFormFactor().form === "phone";
+  const [everChoosing, setEverChoosing] = useState(false);
+  if (choosing && !everChoosing) setEverChoosing(true);
+  const desk = useDeskUi();
+  const phone = useFormFactor().form === "phone" || desk;
   const what = video ? (labelled ? shortCode(video) : "Episode") : "Movie";
 
   // The glyph pops in when the state changes, not on first paint.
@@ -71,17 +76,21 @@ export function DownloadButton({
 
   const subtitle = video ? `${episodeCode(video.season, video.episode)} · ${video.title}` : item.name;
   const sheet = phone ? (
-    <SourcesOverlay
-      open={choosing}
-      onClose={() => setChoosing(false)}
-      title="Download"
-      subtitle={subtitle}
-      request={{ type: item.type, videoId }}
-      onPick={(s) => {
-        setChoosing(false);
-        void startDownload(item, video, s);
-      }}
-    />
+    everChoosing ? (
+      <Suspense fallback={null}>
+        <SourcesOverlay
+          open={choosing}
+          onClose={() => setChoosing(false)}
+          title="Download"
+          subtitle={subtitle}
+          request={{ type: item.type, videoId }}
+          onPick={(s) => {
+            setChoosing(false);
+            void startDownload(item, video, s);
+          }}
+        />
+      </Suspense>
+    ) : null
   ) : (
     createPortal(
       <Sheet open={choosing} onClose={() => setChoosing(false)} title="Download" subtitle={subtitle}>

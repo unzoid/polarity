@@ -69,7 +69,8 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "entitlements": "entitlements.plist"
     },
     "resources": {
       "fonts/OpenDyslexic-Regular.otf": "fonts/OpenDyslexic-Regular.otf",

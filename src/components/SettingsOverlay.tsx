@@ -1,3 +1,4 @@
+import "../styles/screens.css";
 import "../styles/settings-overlay.css";
 import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
@@ -18,12 +19,11 @@ import {
   type PageId,
   prefsCustomized,
   resetPrefs,
-  searchSettings,
   sectionOf,
-  type SettingEntry,
   usePrefs,
   useSettingsOverlay,
 } from "../lib/settings";
+import { searchSettings, type SettingEntry } from "../lib/settings/catalog";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PAGES } from "./settings/pages";
 

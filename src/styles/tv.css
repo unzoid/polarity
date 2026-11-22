@@ -659,6 +659,7 @@
   padding: 0.2rem 0.6rem;
   border-radius: var(--r-pill);
   background: rgb(0 0 0 / 0.6);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   font-size: 0.85rem;
   font-weight: 600;
@@ -1372,6 +1373,7 @@
   inset: 0;
   z-index: 5;
   background: color-mix(in srgb, var(--tone-sunk) 86%, transparent);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
   backdrop-filter: blur(32px) saturate(140%);
   animation: tv-panel-in 280ms var(--ease-out);
 }
@@ -2246,6 +2248,7 @@
   gap: 2rem;
   padding: 4rem 2rem;
   background: color-mix(in srgb, var(--tone-2) 94%, transparent);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
   backdrop-filter: blur(32px) saturate(140%);
   box-shadow: 1px 0 0 var(--hairline);
   animation: tv-menu-in 240ms var(--ease-drawer);
@@ -2559,6 +2562,7 @@
   padding: 0.45rem 1rem;
   border-radius: var(--r-pill);
   background: var(--scrim-2);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   font-size: 0.8rem;
   font-weight: 600;
@@ -2603,6 +2607,7 @@
   padding: 0 1rem;
   border-radius: var(--r-pill);
   background: rgb(0 0 0 / 0.55);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   box-shadow: 0 0 0 1px var(--glass-edge);
   font-size: 0.9rem;
@@ -3023,6 +3028,7 @@
   padding: 1.5rem 1.5rem 1.75rem;
   border-radius: var(--r-panel);
   background: var(--surface-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
   backdrop-filter: var(--blur-popover);
   box-shadow: 0 2rem 4rem -1rem rgb(0 0 0 / 0.6);
   animation: tv-week-in var(--dur-base) var(--ease-out);

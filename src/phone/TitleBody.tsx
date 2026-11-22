@@ -1,10 +1,13 @@
+import "../styles/anime.css";
+import "../styles/title/episode-ratings.css";
 import { useQuery } from "@tanstack/react-query";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBatchDownload } from "../components/BatchDownload";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
 import { DownloadButton } from "../components/DownloadButton";
 import { Img } from "../components/Img";
+import { preloadPlayerNow } from "../components/PlayerLayer";
 import { playExtra } from "../components/title/ExtrasShelf";
 import { useLibraryToggle } from "../components/title/LibraryButton";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
@@ -22,6 +25,7 @@ import { useNavigation } from "../lib/router";
 import { trailerFor, useFileTrailer, usePlayTarget, type PlayRequest } from "../lib/playback";
 import type { ContentType, Extra, Meta, MetaPreview, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
+import { useHorizontalWindow, useVerticalWindow } from "../lib/ui/windowing";
 import { LazyAnimeDetail } from "../screens/lazyScreens";
 import { IconBack, IconCheck, IconClose, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
 import { ListOverlay } from "./ListOverlay";
@@ -197,7 +201,13 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
           <div className="ps-scores">
             <ScoreRow ratings={ratings} />
           </div>
-          <button type="button" className="ps-btn ps-btn-white" disabled={!request} onClick={() => request && picker.play(request)}>
+          <button
+            type="button"
+            className="ps-btn ps-btn-white"
+            disabled={!request}
+            onPointerDown={preloadPlayerNow}
+            onClick={() => request && picker.play(request)}
+          >
             <IconPlay size={27} />
             {playLabel}
           </button>
@@ -236,7 +246,7 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
           ))}
         </nav>
         <div className="ps-tab-body">
-          {shownTab === "episodes" && meta && <Episodes meta={meta} episode={episode} onSheet={onSheet} />}
+          {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} onSheet={onSheet} />}
           {shownTab === "collection" && meta?.details?.collection && <CollectionGrid id={meta.details.collection.id} current={meta.id} />}
           {shownTab === "more" && <MoreLikeThis type={type} id={id} />}
           {shownTab === "trailers" && <Trailers item={item} meta={meta} />}
@@ -388,8 +398,7 @@ function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta;
 }
 
 /** A show's episodes: the season (a chooser when there's more than one, else its name and ⓘ), then the list. */
-function Episodes({ meta, episode, onSheet }: { meta: Meta; episode?: string; onSheet: (open: boolean) => void }) {
-  const { data: progress } = useProgress(meta.id);
+function Episodes({ meta, progress, episode, onSheet }: { meta: Meta; progress?: Progress[]; episode?: string; onSheet: (open: boolean) => void }) {
   const orders = useEpisodeOrders(meta);
   const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
@@ -453,18 +462,7 @@ function Episodes({ meta, episode, onSheet }: { meta: Meta; episode?: string; on
       {layout === "row" ? (
         <EpisodeStrip key={current} meta={meta} episodes={episodes} numbers={view?.number} progress={map} upNextId={upNextId} onPlay={(v) => picker.play(request(v))} />
       ) : (
-        <ol className="ps-episode-list">
-          {episodes.map((v) => (
-            <EpisodeRow
-              key={v.id}
-              meta={meta}
-              video={v}
-              number={view?.number?.get(v.id) ?? v.episode}
-              progress={map.get(v.id)}
-              onPlay={() => picker.play(request(v))}
-            />
-          ))}
-        </ol>
+        <EpisodeList key={current} meta={meta} episodes={episodes} numbers={view?.number} progress={map} onPlay={(v) => picker.play(request(v))} />
       )}
       <ListOverlay
         open={choosing}
@@ -482,6 +480,44 @@ function Episodes({ meta, episode, onSheet }: { meta: Meta; episode?: string; on
   );
 }
 
+const fullDateFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
+const shortDateFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+
+function EpisodeList({
+  meta,
+  episodes,
+  numbers,
+  progress,
+  onPlay,
+}: {
+  meta: Meta;
+  episodes: Video[];
+  numbers?: Map<string, number>;
+  progress: Map<string, Progress>;
+  onPlay: (v: Video) => void;
+}) {
+  const listRef = useRef<HTMLOListElement>(null);
+  const win = useVerticalWindow(listRef, episodes.length, { estimateRowHeight: 148 });
+  const visible = win.active ? episodes.slice(win.start, win.end) : episodes;
+  const runtime = formatRuntime(meta.runtime);
+  return (
+    <ol className="ps-episode-list" ref={listRef}>
+      {win.topPx > 0 && <li data-spacer aria-hidden style={{ height: win.topPx }} />}
+      {visible.map((v) => (
+        <EpisodeRow
+          key={v.id}
+          meta={meta}
+          video={v}
+          number={numbers?.get(v.id) ?? v.episode}
+          runtime={runtime}
+          progress={progress.get(v.id)}
+          onPlay={onPlay}
+        />
+      ))}
+      {win.bottomPx > 0 && <li data-spacer aria-hidden style={{ height: win.bottomPx }} />}
+    </ol>
+  );
+}
 
 /**
  * A season's episodes side by side (Polarity's own layout): a wide still each with where you are along its foot, its
@@ -503,6 +539,8 @@ function EpisodeStrip({
   onPlay: (v: Video) => void;
 }) {
   const strip = useRef<HTMLOListElement>(null);
+  const upNextIndex = useMemo(() => (upNextId ? Math.max(0, episodes.findIndex((v) => v.id === upNextId)) : 0), [episodes, upNextId]);
+  const win = useHorizontalWindow(strip, episodes.length, { initialIndex: upNextIndex, estimateWidth: 230, estimateGap: 12 });
   useLayoutEffect(() => {
     const el = strip.current?.querySelector<HTMLElement>("[data-up-next]");
     if (el && strip.current) strip.current.scrollLeft = el.offsetLeft - 12;
@@ -510,54 +548,97 @@ function EpisodeStrip({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const runtime = formatRuntime(meta.runtime);
+  const visible = win.active ? episodes.slice(win.start, win.end) : episodes;
   return (
-    <ol className="ps-ep-strip" ref={strip}>
-      {episodes.map((v) => {
-        const p = progress.get(v.id);
-        const aired = !v.released || new Date(v.released).getTime() <= Date.now();
-        const number = numbers?.get(v.id) ?? v.episode;
-        return (
-          <li key={v.id} className="ps-ep-card" data-up-next={v.id === upNextId || undefined} {...cardMenu(meta, episodeEntry(meta, v, p), { episode: true })}>
-            <button type="button" className="ps-ep-still scheme-dark" aria-label={`Play episode ${number}`} disabled={!aired} onClick={() => onPlay(v)}>
-              <Img src={v.thumbnail ? sizedArt(v.thumbnail, "w500") : undefined} fallbacks={[cardArtUrl(meta.background, "landscape")]} alt="" loading="lazy" />
-              {aired ? (
-                <span className="ps-ep-play" aria-hidden>
-                  <IconPlay size={18} />
-                </span>
-              ) : (
-                <span className="ps-ep-soon">{v.released ? new Date(v.released).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Soon"}</span>
-              )}
-              {p && p.duration > 0 && (
-                <span className="ph-progress" aria-hidden>
-                  <i style={{ width: `${Math.round(Math.min(1, p.position / p.duration) * 100)}%` }} />
-                </span>
-              )}
-            </button>
-            <div className="ps-ep-head">
-              <strong>
-                <span className="ps-ep-num">{number}</span>
-                {v.title?.trim() || `Episode ${v.episode}`}
-              </strong>
-              {aired && <DownloadButton item={meta} video={v} className="ps-episode-dl" size={20} />}
-            </div>
-            <span className="ps-ep-meta">{[runtime, v.released && aired ? new Date(v.released).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined].filter(Boolean).join(" · ")}</span>
-            {v.overview && <p className="ps-ep-text">{v.overview}</p>}
-          </li>
-        );
-      })}
+    <ol className="ps-ep-strip" ref={strip} onScroll={win.onScroll}>
+      {win.leadPx > 0 && <li data-spacer aria-hidden style={{ flex: "none", width: win.leadPx }} />}
+      {visible.map((v) => (
+        <EpisodeCard
+          key={v.id}
+          meta={meta}
+          video={v}
+          number={numbers?.get(v.id) ?? v.episode}
+          runtime={runtime}
+          progress={progress.get(v.id)}
+          isUpNext={v.id === upNextId}
+          onPlay={onPlay}
+        />
+      ))}
+      {win.trailPx > 0 && <li data-spacer aria-hidden style={{ flex: "none", width: win.trailPx }} />}
     </ol>
   );
 }
 
-function EpisodeRow({ meta, video: v, number, progress, onPlay }: { meta: Meta; video: Video; number: number; progress?: Progress; onPlay: () => void }) {
+const EpisodeCard = memo(function EpisodeCard({
+  meta,
+  video: v,
+  number,
+  runtime,
+  progress: p,
+  isUpNext,
+  onPlay,
+}: {
+  meta: Meta;
+  video: Video;
+  number: number;
+  runtime?: string;
+  progress?: Progress;
+  isUpNext: boolean;
+  onPlay: (v: Video) => void;
+}) {
+  const aired = !v.released || new Date(v.released).getTime() <= Date.now();
+  return (
+    <li className="ps-ep-card" data-up-next={isUpNext || undefined} {...cardMenu(meta, episodeEntry(meta, v, p), { episode: true })}>
+      <button type="button" className="ps-ep-still scheme-dark" aria-label={`Play episode ${number}`} disabled={!aired} onClick={() => onPlay(v)}>
+        <Img src={v.thumbnail ? sizedArt(v.thumbnail, "w500") : undefined} fallbacks={[cardArtUrl(meta.background, "landscape")]} alt="" loading="lazy" />
+        {aired ? (
+          <span className="ps-ep-play" aria-hidden>
+            <IconPlay size={18} />
+          </span>
+        ) : (
+          <span className="ps-ep-soon">{v.released ? shortDateFmt.format(new Date(v.released)) : "Soon"}</span>
+        )}
+        {p && p.duration > 0 && (
+          <span className="ph-progress" aria-hidden>
+            <i style={{ width: `${Math.round(Math.min(1, p.position / p.duration) * 100)}%` }} />
+          </span>
+        )}
+      </button>
+      <div className="ps-ep-head">
+        <strong>
+          <span className="ps-ep-num">{number}</span>
+          {v.title?.trim() || `Episode ${v.episode}`}
+        </strong>
+        {aired && <DownloadButton item={meta} video={v} className="ps-episode-dl" size={20} />}
+      </div>
+      <span className="ps-ep-meta">{[runtime, v.released && aired ? fullDateFmt.format(new Date(v.released)) : undefined].filter(Boolean).join(" · ")}</span>
+      {v.overview && <p className="ps-ep-text">{v.overview}</p>}
+    </li>
+  );
+});
+
+const EpisodeRow = memo(function EpisodeRow({
+  meta,
+  video: v,
+  number,
+  runtime,
+  progress,
+  onPlay,
+}: {
+  meta: Meta;
+  video: Video;
+  number: number;
+  runtime?: string;
+  progress?: Progress;
+  onPlay: (v: Video) => void;
+}) {
   const [failed, setFailed] = useState(false);
   const still = v.thumbnail ? sizedArt(v.thumbnail, "w300") : undefined;
   const aired = !v.released || new Date(v.released).getTime() <= Date.now();
-  const runtime = formatRuntime(meta.runtime);
   return (
     <li className="ps-episode" {...cardMenu(meta, episodeEntry(meta, v, progress), { episode: true })}>
       <div className="ps-episode-head">
-        <button type="button" className="ps-episode-still scheme-dark" aria-label={`Play episode ${number}`} disabled={!aired} onClick={onPlay}>
+        <button type="button" className="ps-episode-still scheme-dark" aria-label={`Play episode ${number}`} disabled={!aired} onClick={() => onPlay(v)}>
           {still && !failed ? <Img src={still} fallbacks={[cardArtUrl(meta.background, "landscape")]} alt="" loading="lazy" onFail={() => setFailed(true)} /> : <span className="ps-episode-blank" />}
           {aired && (
             <span className="ps-episode-play" aria-hidden>
@@ -574,14 +655,14 @@ function EpisodeRow({ meta, video: v, number, progress, onPlay }: { meta: Meta; 
           <strong>
             {number}. {v.title?.trim() || `Episode ${v.episode}`}
           </strong>
-          <span>{aired ? runtime : v.released ? `Coming ${new Date(v.released).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</span>
+          <span>{aired ? runtime : v.released ? `Coming ${shortDateFmt.format(new Date(v.released))}` : ""}</span>
         </div>
         {aired && <DownloadButton item={meta} video={v} className="ps-episode-dl" size={22} />}
       </div>
       {v.overview && <p className="ps-episode-text">{v.overview}</p>}
     </li>
   );
-}
+});
 
 /** Recommendations, three posters across. */
 function MoreLikeThis({ type, id }: { type: ContentType; id: string }) {

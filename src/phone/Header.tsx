@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useNavigation } from "../lib/router";
 import { openSettings } from "../lib/settings";
 import { IconBell, IconDownload, IconSettings } from "./icons";
@@ -10,7 +10,7 @@ import { notifications } from "./store";
  * backing and the name eases down to 92% (Netflix's: 24.7 pt → 22.6 pt, measured), all from one value the
  * scroll sets (`--c`, 0–1) without rendering anything again.
  */
-export function TabHeader({ lead, children, scroller, actions = true }: { lead?: ReactNode; children: ReactNode; scroller: RefObject<HTMLElement | null>; actions?: boolean }) {
+export function TabHeader({ lead, children, scroller, actions = true, tint }: { lead?: ReactNode; children: ReactNode; scroller: RefObject<HTMLElement | null>; actions?: boolean; tint?: CSSProperties }) {
   const head = useRef<HTMLElement>(null);
   // On the tab's page, not just the bar: the chips under it fade with the same value (phone.css).
   const page = useRef<HTMLElement | null>(null);
@@ -21,7 +21,7 @@ export function TabHeader({ lead, children, scroller, actions = true }: { lead?:
   const { navigate } = useNavigation();
   return (
     <header className="ph-head" ref={head}>
-      <div className="ph-head-bg" aria-hidden />
+      <div className="ph-head-bg" style={tint} aria-hidden />
       <div className="ph-head-row">
         <div className="ph-head-title">
           {lead}

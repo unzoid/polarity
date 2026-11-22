@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
+import "../styles/phone.css";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { Avatar } from "../components/Avatar";
 import { CardMenuHost } from "../components/CardMenu";
@@ -20,19 +21,20 @@ import { useSettings } from "../lib/net";
 import { leaveApp, systemBack } from "../lib/platform";
 import { rootTab, useRouter, type Entry, type Route } from "../lib/router";
 import { isSettingsOpen, usePrefs } from "../lib/settings";
-import { dismissDepth, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality } from "../lib/ui";
+import { dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality, whenIdle } from "../lib/ui";
 import { IconAnime, IconBack, IconHome, IconSearch } from "./icons";
-import { ListOverlay } from "./ListOverlay";
 import { OPEN_MS, OPEN_OMEGA, samples, reduced } from "./motion";
-import { NotificationsSheet } from "./NotificationsSheet";
 import { takeOrigin, watchOrigins, type Origin } from "./origin";
 import { PhoneHome, type HomeView } from "./PhoneHome";
-import { PhoneMy } from "./PhoneMy";
-import { PhoneSearch } from "./PhoneSearch";
-import { PhoneSection } from "./PhoneSection";
 import { TabHeader } from "./Header";
-import { categories } from "./store";
-import { TitleSheet } from "./TitleSheet";
+import { categories, notifications } from "./store";
+
+const ListOverlay = lazyNamed(() => import("./ListOverlay"), "ListOverlay");
+const NotificationsSheet = lazyNamed(() => import("./NotificationsSheet"), "NotificationsSheet");
+const PhoneMy = lazyNamed(() => import("./PhoneMy"), "PhoneMy");
+const PhoneSearch = lazyNamed(() => import("./PhoneSearch"), "PhoneSearch");
+const PhoneSection = lazyNamed(() => import("./PhoneSection"), "PhoneSection");
+const TitleSheet = lazyNamed(() => import("./TitleSheet"), "TitleSheet");
 
 type Run = { key: number; kind: "sheet"; entries: Entry[] } | { key: number; kind: "page"; entries: [Entry] };
 type Shown = Run & { leaving?: boolean };
@@ -72,6 +74,19 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
   }, []);
   useEffect(() => watchOrigins(), []);
   useEffect(watchInputModality, []);
+  useEffect(() => {
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
+    const c = nav.connection;
+    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    let cancelIdle: (() => void) | undefined;
+    const t = window.setTimeout(() => {
+      cancelIdle = whenIdle(() => void TitleSheet.preload().catch(() => {}), 3000);
+    }, 3500);
+    return () => {
+      window.clearTimeout(t);
+      cancelIdle?.();
+    };
+  }, []);
 
   // Each sheet's poster, noted the first time its run is seen (the tap that opened it was just now).
   const origins = useRef(new Map<number, Origin | undefined>());
@@ -155,7 +170,13 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
       data-rating-colors={settings?.ratingColors ?? false}
       data-player-leaving={playerLeaving}
     >
-      <div className="ph-main" inert={!!playing || undefined}>
+      <div
+        className="ph-main"
+        inert={!!playing || undefined}
+        onPointerDownCapture={(e) => {
+          if ((e.target as Element | null)?.closest?.("[data-origin]")) void TitleSheet.preload().catch(() => {});
+        }}
+      >
         <div className="ph-stage" ref={stage}>
           {tabs.map((e) => (
             <section key={e.key} className="ph-tab" data-tab-key={e.key} data-active={e === root} inert={e !== root || runs.length > 0 || undefined}>
@@ -175,7 +196,9 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
           if (r.kind === "sheet")
             return (
               <ErrorBoundary key={r.key} where="title sheet">
-                <TitleSheet entries={r.entries} leaving={!!r.leaving} origin={origins.current.get(r.key)} z={z} onGone={() => finish(r.key)} onClose={close} onBack={back} />
+                <Suspense fallback={null}>
+                  <TitleSheet entries={r.entries} leaving={!!r.leaving} origin={origins.current.get(r.key)} z={z} onGone={() => finish(r.key)} onClose={close} onBack={back} />
+                </Suspense>
               </ErrorBoundary>
             );
           return <PushedPage key={r.key} entry={r.entries[0]} leaving={!!r.leaving} z={z} top={i === shown.length - 1} onGone={() => finish(r.key)} onBack={back} Screen={Screen} />;
@@ -188,7 +211,7 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
       }} />
       <div className="sheet-host" />
       <ProfileMenu trigger={false} />
-      <NotificationsSheet />
+      <LazyNotificationsSheet />
       <ErrorBoundary where="toasts" quiet>
         <div className="toast-stack">
           <SeriesPickToast />
@@ -235,8 +258,18 @@ function TabPage({
   Screen: ComponentType<{ route: Route }>;
 }) {
   if (route.name === "home") return <PhoneHome view={homeView} onView={onHomeView} />;
-  if (route.name === "search") return <PhoneSearch active={active} />;
-  if (route.name === "library") return <PhoneMy />;
+  if (route.name === "search")
+    return (
+      <Suspense fallback={null}>
+        <PhoneSearch active={active} />
+      </Suspense>
+    );
+  if (route.name === "library")
+    return (
+      <Suspense fallback={null}>
+        <PhoneMy />
+      </Suspense>
+    );
   if (route.name === "anime") return <AnimeTab Screen={Screen} route={route} />;
   // Another section opened as a tab (the start page, a link): the app's own screen under a plain bar.
   return (
@@ -371,7 +404,9 @@ function PushedPage({
       {entry.route.name === "discover" ? (
         // A section: the phone's own page for it, with its own bar.
         <ErrorBoundary where="section">
-          <PhoneSection type={entry.route.type} catalog={entry.route.catalog} genre={entry.route.genre} addon={entry.route.addon} onBack={onBack} />
+          <Suspense fallback={null}>
+            <PhoneSection type={entry.route.type} catalog={entry.route.catalog} genre={entry.route.genre} addon={entry.route.addon} onBack={onBack} />
+          </Suspense>
         </ErrorBoundary>
       ) : (
         <>
@@ -426,21 +461,39 @@ function titleOf(route: Route): string {
   }
 }
 
+/** Notifications sheet, loaded the first time the bell is tapped. */
+function LazyNotificationsSheet() {
+  const open = notifications.use();
+  const [everOpened, setEverOpened] = useState(open);
+  if (open && !everOpened) setEverOpened(true);
+  if (!everOpened) return null;
+  return (
+    <Suspense fallback={null}>
+      <NotificationsSheet />
+    </Suspense>
+  );
+}
+
 /** Home's Categories: the genres for what Home shows (all, Shows or Movies), in Netflix's full-screen list. */
 function Categories({ onPick }: { onPick: (genre: string, type?: "movie" | "series") => void }) {
   const scope = categories.use();
+  const [everOpened, setEverOpened] = useState(scope !== null);
+  if (scope !== null && !everOpened) setEverOpened(true);
+  if (!everOpened) return null;
   const list = scope === "movie" || scope === "series" ? BROWSE_GENRES[scope] : ALL_GENRES;
   return (
-    <ListOverlay
-      open={scope !== null}
-      label="Categories"
-      options={list.map((g) => ({ id: g, label: g }))}
-      onPick={(g) => {
-        categories.set(null);
-        onPick(g, scope === "movie" || scope === "series" ? scope : undefined);
-      }}
-      onClose={() => categories.set(null)}
-    />
+    <Suspense fallback={null}>
+      <ListOverlay
+        open={scope !== null}
+        label="Categories"
+        options={list.map((g) => ({ id: g, label: g }))}
+        onPick={(g) => {
+          categories.set(null);
+          onPick(String(g), scope === "movie" || scope === "series" ? scope : undefined);
+        }}
+        onClose={() => categories.set(null)}
+      />
+    </Suspense>
   );
 }
 

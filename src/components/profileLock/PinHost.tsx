@@ -23,7 +23,19 @@ export function PinHost() {
   const current = useRef<Pending | null>(null);
   const tv = useTvMode();
 
-  useEffect(() => whenIdle(() => void import("./PinFlow")), []);
+  useEffect(() => {
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
+    const c = nav.connection;
+    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    let cancelIdle: (() => void) | undefined;
+    const t = window.setTimeout(() => {
+      cancelIdle = whenIdle(() => void PinFlow.preload().catch(() => {}), 5000);
+    }, 6000);
+    return () => {
+      window.clearTimeout(t);
+      cancelIdle?.();
+    };
+  }, []);
 
   useEffect(
     () =>

@@ -302,6 +302,7 @@
 /* The trailer button is a plain pill, like the icon buttons beside it: no fill until you point at it. */
 .btn.detail-trailer-btn {
   background: transparent;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
   transition:
@@ -674,6 +675,7 @@
 }
 .seasons-bar > .segmented {
   background: transparent;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
 }
@@ -914,6 +916,7 @@
   height: 32px;
   color: #fff;
   background: rgb(0 0 0 / 0.42);
+  -webkit-backdrop-filter: var(--blur-control);
   backdrop-filter: var(--blur-control);
   transition:
     opacity var(--dur-fast) var(--ease-std),
@@ -1905,6 +1908,7 @@
   margin-top: 0;
   color: var(--text-2);
   background: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download):active {

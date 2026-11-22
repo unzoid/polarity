@@ -713,6 +713,7 @@
   corner-shape: superellipse(1.45);
   background: var(--t3-control);
   box-shadow: var(--t3-control-shade);
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   color: var(--t3-fg);
   font-size: 13px;

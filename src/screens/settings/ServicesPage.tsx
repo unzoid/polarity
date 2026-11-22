@@ -31,7 +31,7 @@ import {
 } from "../../lib/lists";
 import { onTraktFull, setTraktWatchlist, traktReady, unlinkTrakt, useTraktLink } from "../../lib/trakt";
 import { setSimklWatchlist, simklReady, unlinkSimkl, useSimklLink } from "../../lib/simkl";
-import { TRAKT_NOTICE } from "../../lib/settings";
+import { TRAKT_NOTICE } from "../../lib/settings/catalog";
 
 const AniListIcon = brandIcon("anilist");
 const MalIcon = brandIcon("myanimelist");

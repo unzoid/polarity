@@ -5,10 +5,23 @@ import { cssEase, ease, prefersReducedMotion } from "../../lib/ui";
  * Gate) while its backdrop fades and the chosen avatar flies into the navbar's profile button.
  */
 const FLIGHT_MS = 500;
-export const PROFILES_EXIT_MS = FLIGHT_MS + 80;
+export const PROFILES_EXIT_MS = FLIGHT_MS + 220;
 
-/** Where the avatar lands: the desktop navbar's profile button, or TV mode's. */
-const TARGET = ".navbar-profile .avatar, .tv-nav-me .avatar";
+/** Where the avatar lands: DeskApp's bar, the classic navbar's profile button, or TV mode's. */
+const TARGET = ".dk-profile-btn .avatar, .navbar-profile .avatar, .tv-nav-me .avatar";
+
+function findTarget(): HTMLElement | null {
+  for (const el of document.querySelectorAll<HTMLElement>(TARGET)) {
+    // Note: <Avatar> carries aria-hidden itself (decorative), so only skip hidden/inert *ancestors*.
+    if (el.closest("[inert], .dk-profile-legacy") || el.parentElement?.closest("[aria-hidden='true']")) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return el;
+  }
+  return null;
+}
+
+/** True once the destination navbar avatar is mounted and laid out. */
+export const hasNavbarTarget = () => !!findTarget();
 
 /**
  * The flight's path bends: its control point sits this far along the way across and up, so the
@@ -31,7 +44,7 @@ function radiusPx(el: HTMLElement, width: number) {
  * land (the phone's native tabs) or reduced motion, returns `false` so the avatar fades with the picker.
  */
 export function flyToNavbar(avatar: HTMLElement): boolean {
-  const target = document.querySelector<HTMLElement>(TARGET);
+  const target = findTarget();
   if (!target || prefersReducedMotion()) return false;
 
   const from = avatar.getBoundingClientRect();
@@ -55,7 +68,7 @@ export function flyToNavbar(avatar: HTMLElement): boolean {
     width: `${size}px`,
     margin: "0",
     borderRadius: `${r0}px`,
-    zIndex: "var(--z-overlay)",
+    zIndex: "var(--z-popover)",
     pointerEvents: "none",
     willChange: "transform",
   });

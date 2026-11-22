@@ -1,3 +1,4 @@
+import "../styles/detail.css";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Entry } from "../lib/router";
 import { CLOSE_MS, CLOSE_TAU, easeOutSamples, lerp, lerpRect, OPEN_MS, OPEN_OMEGA, play, ramp, reduced, samples, type Rect } from "./motion";

@@ -1,3 +1,4 @@
+import "../styles/account.css";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Calendar, ChevronLeft, ChevronRight, Edit, Feedback, Lock, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
@@ -6,7 +7,7 @@ import { appVersion } from "../lib/updater";
 import { feedbackContext, feedbackUrl } from "../lib/feedback";
 
 /** Report a Problem: the bug form, with the version once it's known (never held up by it). */
-function reportProblem() {
+export function reportProblem() {
   void appVersion()
     .catch(() => undefined)
     .then((v) => api.openExternal(feedbackUrl("bug", feedbackContext(v))))
@@ -415,8 +416,20 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
     sheetOpeners.add(open);
     return () => void sheetOpeners.delete(open);
   }, [list]);
-  // Settings is loaded once the app has settled, so opening it later shows it at once instead of a spinner.
-  useEffect(() => whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 1500), []);
+  // Settings is loaded once the app has genuinely settled on fast connections, so initial load on slow networks never competes with it.
+  useEffect(() => {
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
+    const c = nav.connection;
+    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    let cancelIdle: (() => void) | undefined;
+    const later = window.setTimeout(() => {
+      cancelIdle = whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 5000);
+    }, 5000);
+    return () => {
+      window.clearTimeout(later);
+      cancelIdle?.();
+    };
+  }, []);
   // The sheet sits in its own place beside the pages and the top bar (App.tsx `.sheet-host`), not among the bar's
   // actions: anything that scales them or the pages under it (the actions once scrolled, the pages stepping back as
   // it opens) would otherwise hold the sheet's fixed layers inside its box.

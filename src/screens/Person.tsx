@@ -1,3 +1,4 @@
+import "../styles/screens.css";
 import { useMemo, useState } from "react";
 import { HeroGlow } from "../components/HeroGlow";
 import { Img } from "../components/Img";

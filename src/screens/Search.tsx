@@ -1,3 +1,4 @@
+import "../styles/screens.css";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cardArtUrl } from "../lib/ui";

@@ -51,10 +51,11 @@ export function PhoneSection({ type, catalog, genre, addon, onBack }: { type: Co
     return () => io.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const tintStyle = tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined;
   return (
-    <div className="ph-section" style={tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined}>
+    <div className="ph-section">
       <header className="ph-sect-head" ref={(el) => void (head.current = el)}>
-        <div className="ph-head-bg" aria-hidden />
+        <div className="ph-head-bg" style={tintStyle} aria-hidden />
         <button type="button" className="ph-round" aria-label="Back" onClick={onBack}>
           <IconBack size={24} stroke={2.2} />
         </button>
@@ -62,7 +63,7 @@ export function PhoneSection({ type, catalog, genre, addon, onBack }: { type: Co
         <span className="ph-round-spacer" aria-hidden />
       </header>
       <div className="ph-scroll" ref={scroller}>
-        <div className="ph-tint" aria-hidden />
+        <div className="ph-tint" style={tintStyle} aria-hidden />
         <div className="ph-sect-pills">
           <button type="button" className="ph-pill" data-set={d.own || d.catalog !== "trending" || undefined} onClick={() => setChoosing("list")}>
             {listName}

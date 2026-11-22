@@ -1,9 +1,10 @@
+import "../../styles/account.css";
 import { useState } from "react";
 import { useAccount, type Profile } from "../../lib/account";
 import { guardLockChange, setNewPin } from "../../lib/account/profileGuard";
 import { hasPin, isRestricted, locksAvailable, needsGuardianAdvice } from "../../lib/account/profileRules";
 import { errorMessage } from "../../lib/errors";
-import { choicesOf, settingDef } from "../../lib/settings";
+import { choicesOf, settingDef } from "../../lib/settings/catalog";
 import { Dropdown } from "../Dropdown";
 import { Button } from "../ui/Button";
 import { Switch } from "../ui/Switch";

@@ -1,3 +1,4 @@
+import "../styles/screens.css";
 import { useMemo, useState, type ReactNode } from "react";
 import { FilteredCollection } from "../components/library/CollectionFilters";
 import { ConfirmDeleteButton } from "../components/ConfirmDeleteButton";

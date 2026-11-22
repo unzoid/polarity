@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import "../styles/sources-overlay.css";
 import { AlertCircle, Check, Filters, Instant, Puzzle, Reset } from "../components/icons";
 import { activeSourceFilters, sourceFilterSections, type SourceFilterSection } from "../components/SourceFilters";
 import { useSourceInfo, useSourceRowPress } from "../components/SourceInfo";

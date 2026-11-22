@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import logo from "../assets/polarity-white.png";
 import { useArtFocus } from "../components/DetailArt";
 import { Img } from "../components/Img";
@@ -19,15 +19,16 @@ import {
 import { useProgress } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import type { ContentType, MetaPreview } from "../lib/types";
-import { heroBackdropUrl, prefersReducedMotion, sizedArt, useNearViewport } from "../lib/ui";
-import { useHomeFeed, useShelfItems } from "../screens/Home";
+import { heroBackdropUrl, lazyNamed, prefersReducedMotion, sizedArt, useNearViewport, useOffscreenMark } from "../lib/ui";
+import { useHomeFeed, useShelfItems } from "../screens/homeFeed";
 import { TabHeader } from "./Header";
 import { IconCheck, IconChevronDown, IconClose, IconPlay, IconPlus } from "./icons";
-import { PlayNow } from "./PlayNow";
 import { Row } from "./Rows";
-import { ContinueRow } from "../screens/Home";
+import { ContinueRow } from "../components/ContinueRow";
 import { categories } from "./store";
 import { useArtTint } from "./tint";
+
+const PlayNow = lazyNamed(() => import("./PlayNow"), "PlayNow");
 
 /** What Home shows: everything, one kind (Shows, Movies), or one genre picked from Categories. */
 export type HomeView = { kind: "all" } | { kind: "type"; type: ContentType } | { kind: "genre"; genre: string; type?: ContentType };
@@ -67,13 +68,14 @@ export function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeVi
 
   const tint = useArtTint(current ? sizedArt(current.background ?? current.poster, "w300") : undefined);
 
+  const tintStyle = useMemo<CSSProperties | undefined>(() => (tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined), [tint]);
   return (
-    <div className="ph-tab-page ph-home" style={tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined}>
-      <TabHeader scroller={scroller} lead={<img className="ph-wordmark" src={logo} alt="Polarity" draggable={false} />}>
+    <div className="ph-tab-page ph-home">
+      <TabHeader scroller={scroller} tint={tintStyle} lead={<img className="ph-wordmark" src={logo} alt="Polarity" draggable={false} />}>
         {view.kind !== "all" && <span className="ph-head-sub">{view.kind === "type" ? (view.type === "movie" ? "Movies" : "Shows") : view.genre}</span>}
       </TabHeader>
       <div className="ph-scroll" ref={scroller}>
-        <div className="ph-tint" aria-hidden />
+        <div className="ph-tint" style={tintStyle} aria-hidden />
         <Chips view={view} onView={onView} />
         {featured.length ? (
           <Carousel key={`${view.kind}:${typed ?? ""}:${view.kind === "genre" ? view.genre : ""}`} items={featured} onShown={setShown} />
@@ -340,6 +342,7 @@ function HeroBody({ item, kicker, wide }: { item: MetaPreview; kicker?: string; 
         <button
           type="button"
           className="ph-btn ph-btn-white"
+          onPointerDown={() => void PlayNow.preload().catch(() => {})}
           onClick={(e) => {
             e.stopPropagation();
             setPlaying(true);
@@ -361,15 +364,20 @@ function HeroBody({ item, kicker, wide }: { item: MetaPreview; kicker?: string; 
           My List
         </button>
       </div>
-      {playing && <PlayNow item={item} onDone={() => setPlaying(false)} />}
+      {playing && (
+        <Suspense fallback={null}>
+          <PlayNow item={item} onDone={() => setPlaying(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
 
 /** A Home shelf: held as grey posters until it's near the screen, then its titles. */
-function ShelfRow({ shelf, eager, exclude }: { shelf: Shelf; eager: boolean; exclude: Set<string> }) {
+const ShelfRow = memo(function ShelfRow({ shelf, eager, exclude }: { shelf: Shelf; eager: boolean; exclude: Set<string> }) {
   const [ref, near] = useNearViewport<HTMLDivElement>(eager);
   const { items, skip } = useShelfItems(shelf, near, exclude);
+  useOffscreenMark(ref, !items && !skip);
   const { navigate } = useNavigation();
   const to = shelfRoute(shelf);
   return (
@@ -377,13 +385,14 @@ function ShelfRow({ shelf, eager, exclude }: { shelf: Shelf; eager: boolean; exc
       {!skip && <Row title={shelf.title} items={items} onMore={to && (() => navigate(to))} />}
     </div>
   );
-}
+});
 
 /** One of the user's add-on catalogs, as a row; left out when it fails or has nothing. */
-function AddonRow({ catalog }: { catalog: AddonCatalog }) {
+const AddonRow = memo(function AddonRow({ catalog }: { catalog: AddonCatalog }) {
   const [ref, near] = useNearViewport<HTMLDivElement>();
   const { data: found, isError } = useAddonCatalogRow(catalog, near);
   const data = useBrowseVisible(useListable(found));
+  useOffscreenMark(ref, !data && !isError);
   const { navigate } = useNavigation();
   return (
     <div ref={ref} className="ph-row-slot" data-addon-row={catalog.id}>
@@ -396,4 +405,4 @@ function AddonRow({ catalog }: { catalog: AddonCatalog }) {
       )}
     </div>
   );
-}
+});

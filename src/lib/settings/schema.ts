@@ -726,6 +726,15 @@ export const SETTINGS: SettingDef[] = [
   { id: "theme", page: "appearance", title: "Theme", keywords: "colour color accent highlight background black oled dark create custom" },
   { id: "uiScale", page: "appearance", title: "Interface size", keywords: "zoom scale bigger smaller text" },
   {
+    id: "classicDesktop",
+    page: "appearance",
+    title: "Classic layout",
+    caption: "The previous top bar and full-page titles, on computers and tablets",
+    keywords: "layout old previous classic navbar design tab bar",
+    bind: p("classicDesktop"),
+    control: toggle,
+  },
+  {
     id: "cardSize",
     page: "appearance",
     title: "Card size",

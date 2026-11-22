@@ -1,3 +1,4 @@
+import "../styles/anime.css";
 import { useQueries } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimeCard, AnimeLandscapeCard, useAnimeHandlers, useOpenAnime } from "../components/anime/AnimeCard";

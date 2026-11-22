@@ -372,6 +372,7 @@
   padding: 2rem 1.75rem 1.25rem;
   border-radius: var(--r-panel);
   background: var(--glass-heavy);
+  -webkit-backdrop-filter: var(--blur-glass);
   backdrop-filter: var(--blur-glass);
   box-shadow:
     var(--glass-highlight),
@@ -1321,6 +1322,7 @@ body:has(.player[data-started="true"]) :is(.party-link-card, .party-popover) {
   color: #fff;
   font-size: var(--fs-xs);
   font-weight: 600;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   animation: party-reaction-rise 2.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

@@ -127,7 +127,7 @@ jobs:
           bun scripts/bundle-libmpv.ts
           bunx tauri build --bundles app,dmg \
             -c src-tauri/vendor/libmpv/tauri.conf.json \
-            -c '{"bundle":{"macOS":{"signingIdentity":"-"}}}' \
+            -c '{"bundle":{"macOS":{"signingIdentity":"-","hardenedRuntime":false}}}' \
             -c "$RUNNER_TEMP/dev.conf.json" \
             -- --locked
       - name: Pack the mpv sources (macOS)

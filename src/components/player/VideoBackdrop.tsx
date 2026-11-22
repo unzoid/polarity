@@ -31,6 +31,7 @@ export function VideoBackdrop({
   className,
   crop = false,
   cropSize = [CROP_W, CROP_H],
+  cropFilter = "blur(8px) saturate(140%)",
   fade = false,
 }: {
   media: MediaLike | null;
@@ -38,6 +39,8 @@ export function VideoBackdrop({
   crop?: boolean;
   /** The crop canvas's size: about the element's own shape, so the blur is even both ways (the HUD's is a tall pill). */
   cropSize?: readonly [number, number];
+  /** Canvas filter used when `crop` is true. */
+  cropFilter?: string;
   /**
    * Two canvases, each new frame painted into the hidden one and faded in over the last for as long as frames are
    * apart: the copy drifts with the picture instead of stepping from one frame to the next (a docked menu's frost,
@@ -56,7 +59,7 @@ export function VideoBackdrop({
     if (!media || !el || ctxs.some((c) => !c)) return;
     // The overlay's copy is blurred once, here: at 160 px wide, 2px reads as about 18px on a 1440px window. The
     // CSS adds only a light smoothing of the upscale (player.css), and no saturation: the picture's own colour.
-    for (const c of ctxs) c!.filter = crop ? "blur(8px) saturate(140%)" : "blur(2px)";
+    for (const c of ctxs) c!.filter = crop ? cropFilter : "blur(2px)";
     const mark = box.current ?? el;
     // Faded frames can come oftener: each is a small GPU draw, blended into the last over the time between them.
     const fps = fade ? FADE_FPS : FPS;
@@ -144,7 +147,7 @@ export function VideoBackdrop({
       else video.cancelVideoFrameCallback(handle);
       delete mark.dataset.ready;
     };
-  }, [media, crop, fade]);
+  }, [media, crop, cropFilter, fade]);
 
   const width = crop ? cropSize[0] : W;
   const height = crop ? cropSize[1] : H;
