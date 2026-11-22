@@ -405,7 +405,9 @@ mod tests {
             buffer: BufferSize::Large,
             ..Tune::default()
         };
-        assert!(t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm=f=250:g=31"));
+        assert!(
+            t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm=f=250:g=31")
+        );
         let off = Tune { dialogue_boost: false, volume_leveling: false, ..t };
         assert_eq!(off.audio_filters(), "");
         assert_eq!(t.cache_with(false), (300, "768MiB"));
@@ -424,7 +426,13 @@ mod tests {
         assert!(surround.audio_filters().starts_with("lavfi=[pan=stereo"));
 
         // Passthrough bypasses all software audio filters and DRC scale.
-        let pt = Tune { dialogue_boost: true, volume_leveling: true, drc_profile: DrcProfile::LateNight, passthrough: true, ..Tune::default() };
+        let pt = Tune {
+            dialogue_boost: true,
+            volume_leveling: true,
+            drc_profile: DrcProfile::LateNight,
+            passthrough: true,
+            ..Tune::default()
+        };
         assert_eq!(pt.audio_filters(), "");
         assert_eq!(pt.drc_scale(), "");
 
@@ -445,7 +453,10 @@ mod tests {
         let t_true = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":true}"#)).unwrap();
         let t_auto = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":"auto"}"#)).unwrap();
         let t_on = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":"on"}"#)).unwrap();
-        assert_eq!((t_false.deband, t_true.deband, t_auto.deband, t_on.deband), (DebandMode::Off, DebandMode::On, DebandMode::Auto, DebandMode::On));
+        assert_eq!(
+            (t_false.deband, t_true.deband, t_auto.deband, t_on.deband),
+            (DebandMode::Off, DebandMode::On, DebandMode::Auto, DebandMode::On)
+        );
         assert_eq!(t_auto.deband.mpv_deband(), "no");
         assert_eq!(t_on.deband.mpv_deband(), "yes");
         assert!(t_auto.deband.is_auto());
@@ -459,10 +470,14 @@ mod tests {
         // Windowed or passthrough: never enable display-resample.
         let windowed = Tune { frame_rate_match: FrameRateMatch::Seamless, fullscreen: false, ..Tune::default() };
         assert_eq!(windowed.frame_rate_props(), &[("video-sync", "audio"), ("interpolation", "no")]);
-        let pt_fs = Tune { frame_rate_match: FrameRateMatch::Always, fullscreen: true, passthrough: true, ..Tune::default() };
+        let pt_fs =
+            Tune { frame_rate_match: FrameRateMatch::Always, fullscreen: true, passthrough: true, ..Tune::default() };
         assert_eq!(pt_fs.frame_rate_props(), &[("video-sync", "audio"), ("interpolation", "no")]);
         let fs = Tune { frame_rate_match: FrameRateMatch::Seamless, fullscreen: true, ..Tune::default() };
-        assert_eq!(fs.frame_rate_props(), &[("video-sync", "display-resample"), ("interpolation", "yes"), ("tscale", "oversample")]);
+        assert_eq!(
+            fs.frame_rate_props(),
+            &[("video-sync", "display-resample"), ("interpolation", "yes"), ("tscale", "oversample")]
+        );
     }
 
     #[test]

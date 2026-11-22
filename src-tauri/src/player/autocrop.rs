@@ -93,7 +93,8 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     use polar_player::png::decode_stored;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, banding: None, written: 0, ours: Duration::ZERO };
+    let mut shot =
+        Shot { load, size: g.size, still, pts: None, measured: None, banding: None, written: 0, ours: Duration::ZERO };
     let path = super::shots_dir().join(format!("autocrop-{}.png", NEXT.fetch_add(1, Ordering::Relaxed)));
     let mpv = &app.state::<AppState>().mpv;
     let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "video"])).await;
@@ -135,7 +136,8 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     /// The reader of the running player's frames, by the player it reads.
     static FRAMES: StdMutex<Option<(usize, Arc<Frames>)>> = StdMutex::new(None);
 
-    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, banding: None, written: 0, ours: Duration::ZERO };
+    let mut shot =
+        Shot { load, size: g.size, still, pts: None, measured: None, banding: None, written: 0, ours: Duration::ZERO };
     let time_pos = || async {
         let mpv = &app.state::<AppState>().mpv;
         mpv.request(json!(["get_property", "time-pos"])).await.ok().and_then(|t| t.as_f64())

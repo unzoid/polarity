@@ -210,11 +210,8 @@ impl TasteBias {
         let genre_avg = if m.genres.is_empty() {
             0.0
         } else {
-            let sum: f64 = m
-                .genres
-                .iter()
-                .map(|g| self.genres.get(&g.trim().to_ascii_lowercase()).copied().unwrap_or(0.0))
-                .sum();
+            let sum: f64 =
+                m.genres.iter().map(|g| self.genres.get(&g.trim().to_ascii_lowercase()).copied().unwrap_or(0.0)).sum();
             sum / m.genres.len() as f64
         };
         let type_bias = if m.ty == "movie" { self.movie_bias } else { -self.movie_bias };

@@ -232,7 +232,8 @@ impl Indexer {
             }
             _ => return Err(IndexError::NotFound),
         };
-        let metas = self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
+        let metas =
+            self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
     }
 
@@ -259,7 +260,8 @@ impl Indexer {
                 curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect()
             }
         };
-        let metas = self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
+        let metas =
+            self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
     }
 
@@ -297,7 +299,8 @@ impl Indexer {
             Backend::Tmdb(t) => t.search(ty, query, year).await?,
             Backend::Cinemeta(c) => c.search(ty, query).await?,
         };
-        let metas = self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
+        let metas =
+            self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
     }
 
@@ -492,12 +495,10 @@ fn meta_ttl(meta: &Meta, today_day: u64) -> Duration {
     const SETTLED: Duration = Duration::from_secs(24 * 60 * 60);
 
     if meta.preview.ty == "series" {
-        let airing_near = meta.videos.iter().any(|v| {
-            v.released
-                .as_deref()
-                .and_then(parse_day)
-                .is_some_and(|d| d.abs_diff(today_day) <= 2)
-        });
+        let airing_near = meta
+            .videos
+            .iter()
+            .any(|v| v.released.as_deref().and_then(parse_day).is_some_and(|d| d.abs_diff(today_day) <= 2));
         if airing_near {
             return LIVE;
         }
@@ -579,7 +580,8 @@ mod tests {
     #[test]
     fn meta_ttl_matches_title_volatility() {
         let today = parse_day("2026-11-22").unwrap();
-        let ended_show = test_meta("series", MetaDetails { status: Some("Ended".into()), ..Default::default() }, vec![]);
+        let ended_show =
+            test_meta("series", MetaDetails { status: Some("Ended".into()), ..Default::default() }, vec![]);
         assert_eq!(meta_ttl(&ended_show, today), Duration::from_secs(24 * 60 * 60));
 
         let airing_show = test_meta("series", MetaDetails::default(), vec![ep("tt1:1:5", 1, 5, Some("2026-11-23"))]);
@@ -604,7 +606,7 @@ mod tests {
         let populated: Vec<MetaPreview> = (0..12).map(|_| preview("movie")).collect();
         assert!(!catalog_valid(&populated, &[]));
         assert!(!catalog_valid(&populated, &[preview("movie")]));
-        assert!(catalog_valid(&populated, &populated[..5].to_vec()));
+        assert!(catalog_valid(&populated, &populated[..5]));
     }
 
     #[test]

@@ -45,6 +45,7 @@ async function mainThread(cdp: CDPSession, run: () => Promise<void>) {
 
 /** Peak memory & DOM object footprint via CDP Performance.getMetrics (Netflix CI perf tracking). */
 async function peakMetrics(cdp: CDPSession) {
+  await cdp.send("HeapProfiler.collectGarbage").catch(() => {});
   await cdp.send("Performance.enable");
   const { metrics } = (await cdp.send("Performance.getMetrics")) as { metrics: { name: string; value: number }[] };
   await cdp.send("Performance.disable");
@@ -158,6 +159,12 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
   await app.waitForTimeout(1500);
   expect.soft(await layerCount(app, cdp)).toBeLessThan(150);
 
+  // Peak JS heap / DOM nodes stay bounded after scrolling all shelves (measured before layoutUnit creates
+  // throwaway calibration spans in the DOM).
+  const peak = await peakMetrics(cdp);
+  expect.soft(peak.jsHeapUsedMb, `peak metrics ${JSON.stringify(peak)}`).toBeLessThan(350);
+  expect.soft(peak.nodes, `peak metrics ${JSON.stringify(peak)}`).toBeLessThan(25_000);
+
   // Scrolling back up the loaded page: each frame's main-thread part stays small. In units of this machine's
   // speed (layoutUnit), not milliseconds: on a shared CI runner the same page took 16.4 ms where it takes
   // 9.5 here. The median is about 3 units now and 8-10 before #134, also with the CPU throttled 2x. A frame
@@ -190,10 +197,7 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
     .toBeLessThan(budget);
   expect.soft(p75Frame, `p75 frame ${p75Frame} ms`).toBeLessThan(budget * 1.8);
 
-  // Peak JS heap / DOM nodes and visible poster empty-box rate stay bounded after scrolling all shelves.
-  const peak = await peakMetrics(cdp);
-  expect.soft(peak.jsHeapUsedMb, `peak metrics ${JSON.stringify(peak)}`).toBeLessThan(350);
-  expect.soft(peak.nodes, `peak metrics ${JSON.stringify(peak)}`).toBeLessThan(25_000);
+  // Visible poster empty-box rate stays bounded after scrolling back up.
   const boxes = await emptyBoxRate(app);
   expect.soft(boxes.rate, `empty box rate ${JSON.stringify(boxes)}`).toBeLessThanOrEqual(0.2);
 });

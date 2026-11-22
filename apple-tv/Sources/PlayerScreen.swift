@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import CoreMedia
 import SwiftUI
 import UIKit
 
@@ -148,11 +149,21 @@ private struct PlayerStage: View {
             .first(where: \.isKeyWindow)
         guard let displayManager = window?.avDisplayManager else { return }
         if fps.isFinite && fps >= 12 && fps <= 120 {
-            // videoDynamicRange: 0 = SDR (AVDisplayCriteria matches refresh rate without forcing an HDR mode switch).
-            displayManager.preferredDisplayCriteria = AVDisplayCriteria(
-                refreshRate: Float(fps),
-                videoDynamicRange: 0
+            var formatDescription: CMFormatDescription?
+            let status = CMVideoFormatDescriptionCreate(
+                allocator: kCFAllocatorDefault,
+                codecType: kCMVideoCodecType_H264,
+                width: 1920,
+                height: 1080,
+                extensions: nil,
+                formatDescriptionOut: &formatDescription
             )
+            if status == noErr, let formatDescription {
+                displayManager.preferredDisplayCriteria = AVDisplayCriteria(
+                    refreshRate: Float(fps),
+                    formatDescription: formatDescription
+                )
+            }
         } else {
             displayManager.preferredDisplayCriteria = nil
         }

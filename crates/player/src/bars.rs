@@ -307,7 +307,13 @@ fn scale_banding(grid: &[u8], w: usize, h: usize) -> f32 {
                         || (c == d1 && c == d2 && (2..=8).contains(&c.abs_diff(u1)));
                     if h_step || v_step {
                         let jump = c.abs_diff(r1).max(c.abs_diff(l1)).max(c.abs_diff(d1)).max(c.abs_diff(u1)) as f32;
-                        let dark_weight = if c < 64 { 1.4 } else if c < 128 { 1.15 } else { 1.0 };
+                        let dark_weight = if c < 64 {
+                            1.4
+                        } else if c < 128 {
+                            1.15
+                        } else {
+                            1.0
+                        };
                         plateau_steps += (jump.min(6.0) / 3.0) * dark_weight;
                         step_events += 1;
                     }

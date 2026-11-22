@@ -7,6 +7,8 @@ use std::path::Path;
 
 /// Minimum free bytes kept in reserve so downloads never starve OS/store writes.
 pub const MIN_FREE_RESERVE_BYTES: u64 = 512 * 1024 * 1024; // 512 MiB
+/// Upper bound on the percentage reserve so multi-terabyte drives with tens of GiB free aren't flagged full.
+pub const MAX_RESERVE_CAP_BYTES: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
 /// Maximum fraction of a disk allowed to be used before downloads pause cleanly (Netflix 95% guard).
 pub const MAX_DISK_USED_RATIO: f64 = 0.95;
 
@@ -27,9 +29,10 @@ impl DiskUsage {
         (used as f64) / (self.total as f64)
     }
 
-    /// True when the disk is at or above 95% full, or below the 512 MiB safety floor.
+    /// True when the disk is below the 512 MiB safety floor, or at/above 95% full with under 10 GiB free.
     pub fn is_full(self) -> bool {
-        self.free < MIN_FREE_RESERVE_BYTES || self.used_ratio() >= MAX_DISK_USED_RATIO
+        self.free < MIN_FREE_RESERVE_BYTES
+            || (self.used_ratio() >= MAX_DISK_USED_RATIO && self.free < MAX_RESERVE_CAP_BYTES)
     }
 }
 

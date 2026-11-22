@@ -399,9 +399,8 @@ impl CropTracker {
             } else {
                 let cur_bar = newest_raw[2 * axis].min(newest_raw[2 * axis + 1]);
                 let locked = shown[axis] > 0 && self.static_lock[axis] >= STATIC_LOCK_FRAMES;
-                let within_deadzone = |candidate: i64| {
-                    locked && candidate > 0 && (candidate - shown[axis]).abs() <= STATIC_LOCK_DEADZONE
-                };
+                let within_deadzone =
+                    |candidate: i64| locked && candidate > 0 && (candidate - shown[axis]).abs() <= STATIC_LOCK_DEADZONE;
                 if let Some(thinner) = self.revealed(axis, shown[axis]).filter(|&b| !within_deadzone(b)) {
                     next[axis] = thinner;
                 } else if let Some(bars) = self.settled(axis, shown, display).filter(|&b| !within_deadzone(b)) {

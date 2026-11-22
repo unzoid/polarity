@@ -385,7 +385,9 @@ pub enum SniffedContainer {
     Matroska,
     Webm,
     /// MP4/MOV container with optional notable ISO BMFF brand (`dvhe`/`dvh1`/`dby1`/`av01`).
-    Mp4 { brand: Option<String> },
+    Mp4 {
+        brand: Option<String>,
+    },
     MpegTs,
     Hls,
     Dash,
@@ -469,8 +471,8 @@ pub fn sniff_container(bytes: &[u8]) -> Option<SniffedContainer> {
         if notable.iter().any(|b| b.as_bytes() == major) {
             brand = Some(String::from_utf8_lossy(major).into_owned());
         } else if end >= 16 {
-            for chunk in bytes[16..end].chunks_exact(4) {
-                if notable.iter().any(|b| b.as_bytes() == chunk) {
+            for chunk in bytes[16..end].as_chunks::<4>().0 {
+                if notable.iter().any(|b| b.as_bytes() == chunk.as_slice()) {
                     brand = Some(String::from_utf8_lossy(chunk).into_owned());
                     break;
                 }
@@ -1061,10 +1063,7 @@ mod tests {
     #[test]
     fn sniffs_containers_and_masquerading_html_pages() {
         assert_eq!(sniff_container(&[0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86]), Some(SniffedContainer::Matroska));
-        assert_eq!(
-            sniff_container(b"\x1A\x45\xDF\xA3\x42\x82\x84webm"),
-            Some(SniffedContainer::Webm)
-        );
+        assert_eq!(sniff_container(b"\x1A\x45\xDF\xA3\x42\x82\x84webm"), Some(SniffedContainer::Webm));
         let mp4_dv = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00dvheav01";
         assert_eq!(sniff_container(mp4_dv), Some(SniffedContainer::Mp4 { brand: Some("dvhe".into()) }));
         let mut ts = vec![0u8; 200];
@@ -1077,10 +1076,7 @@ mod tests {
             sniff_container(b"  <!DOCTYPE html><html><body>Error 522</body></html>"),
             Some(SniffedContainer::ErrorPage("html"))
         );
-        assert_eq!(
-            sniff_container(br#"{"error":"rate limited"}"#),
-            Some(SniffedContainer::ErrorPage("json"))
-        );
+        assert_eq!(sniff_container(br#"{"error":"rate limited"}"#), Some(SniffedContainer::ErrorPage("json")));
     }
 
     #[test]

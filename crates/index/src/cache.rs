@@ -72,8 +72,7 @@ impl<K: Eq + Hash + Clone, V: Clone> TtlCache<K, V> {
             entries.clear();
         } else if f > 0.0 && !entries.is_empty() {
             let to_drop = ((entries.len() as f32) * f).ceil() as usize;
-            let mut by_age: Vec<(K, Instant)> =
-                entries.iter().map(|(k, e)| (k.clone(), e.inserted_at)).collect();
+            let mut by_age: Vec<(K, Instant)> = entries.iter().map(|(k, e)| (k.clone(), e.inserted_at)).collect();
             by_age.sort_by_key(|(_, ts)| *ts);
             for (k, _) in by_age.into_iter().take(to_drop) {
                 entries.remove(&k);
@@ -153,9 +152,7 @@ impl<K: Eq + Hash + Clone, V: Clone> TtlCache<K, V> {
             // Drop expired entries first, then the oldest inserted if still full.
             entries.retain(|_, e| now < e.expires_at);
             if entries.len() >= self.capacity {
-                if let Some(oldest) =
-                    entries.iter().min_by_key(|(_, e)| e.inserted_at).map(|(k, _)| k.clone())
-                {
+                if let Some(oldest) = entries.iter().min_by_key(|(_, e)| e.inserted_at).map(|(k, _)| k.clone()) {
                     entries.remove(&oldest);
                 }
             }
@@ -198,14 +195,15 @@ mod tests {
         assert_eq!(cache.get(&"show"), None);
         // Upstream returns HTTP 200 with an empty list: guard rejects overwrite and restores LKG.
         let kept = cache.insert_if_valid("show", Vec::new(), Duration::from_secs(3600), |old, new| {
-            !(old.len() > 0 && new.is_empty())
+            !(!old.is_empty() && new.is_empty())
         });
         assert_eq!(kept, vec!["ep1", "ep2", "ep3"]);
         assert_eq!(cache.get(&"show"), Some(vec!["ep1", "ep2", "ep3"]));
         // A valid update still overwrites normally.
-        let updated = cache.insert_if_valid("show", vec!["ep1", "ep2", "ep3", "ep4"], Duration::from_secs(3600), |old, new| {
-            !(old.len() > 0 && new.is_empty())
-        });
+        let updated =
+            cache.insert_if_valid("show", vec!["ep1", "ep2", "ep3", "ep4"], Duration::from_secs(3600), |old, new| {
+                !(!old.is_empty() && new.is_empty())
+            });
         assert_eq!(updated.len(), 4);
     }
 
