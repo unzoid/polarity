@@ -250,21 +250,22 @@ pub fn run() {
                 player::set_scratch_dir(cache.join("mpv"));
                 player::preload();
             }
-            let indexer = Indexer::new(index_config(&store.locked().data.settings));
+            let http = polar_addon::shared_http_client();
+            let indexer = Indexer::with_client(index_config(&store.locked().data.settings), http.clone());
             app.manage(AppState {
                 indexer: RwLock::new(Arc::new(indexer)),
-                addons: AddonClient::new(),
+                addons: AddonClient::with_client(http.clone()),
                 subtitle_urls: Default::default(),
                 saver: store_saver(store.clone(), vault.clone()),
                 vault,
                 store,
-                seekr: seekr::Seekr::default(),
+                seekr: seekr::Seekr::with_client(http.clone()),
                 mpv: player::Mpv::default(),
-                introdb: introdb::IntroDb::default(),
+                introdb: introdb::IntroDb::with_client(http.clone()),
                 mal: mal::Mal::default(),
-                ratings: ratings::RatingsClient::default(),
-                fillers: polar_anime::Fillers::new(cache.clone()),
-                anime_lists: polar_anime::AnimeLists::new(cache.clone()),
+                ratings: ratings::RatingsClient::with_client(http.clone()),
+                fillers: polar_anime::Fillers::with_client(cache.clone(), http.clone()),
+                anime_lists: polar_anime::AnimeLists::with_client(cache.clone(), http),
                 pictures: polar_addon::pictures::Pictures::default(),
             });
             #[cfg(not(target_os = "ios"))]
@@ -294,6 +295,7 @@ pub fn run() {
             commands::search,
             commands::search_movies,
             commands::meta,
+            commands::meta_display,
             commands::imdb_for_tmdb,
             commands::episode_orders,
             commands::episode_order,

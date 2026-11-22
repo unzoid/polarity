@@ -382,6 +382,11 @@ impl Downloads {
             return Ok(false);
         };
         let path = part(file);
+        if let Some(dir) = path.parent() {
+            if crate::disk::is_disk_full(dir) {
+                return Err("Low disk space (over 95% full). Free up space to continue downloading.".into());
+            }
+        }
         // Finished just as it was paused, or paused by an older build that
         // wrote straight into `file`: carry on from there.
         if !path.exists() && Path::new(file).exists() {
@@ -473,6 +478,11 @@ impl Downloads {
                     let persist = last_save.elapsed() > Duration::from_secs(5);
                     if persist {
                         last_save = Instant::now();
+                        if path.parent().is_some_and(crate::disk::is_disk_full) {
+                            let _ = out.flush().await;
+                            self.update_file(file, |d| d.received = received, true);
+                            return Err("Low disk space (over 95% full). Free up space to continue downloading.".into());
+                        }
                     }
                     self.update_file(file, |d| d.received = received, persist);
                 }

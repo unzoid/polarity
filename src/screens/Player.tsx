@@ -43,6 +43,8 @@ import {
   airedAt,
   autoPickOrder,
   autoplayStreak,
+  buildFixPlan,
+  classifyPlaybackError,
   warmLinks,
   countAutoplay,
   describeStream,
@@ -135,7 +137,7 @@ import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
 import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds } from "../lib/format";
-import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
+import { cachedStreams, keys, loadCoordinator, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
@@ -266,9 +268,19 @@ export function Player({
   const { settings, anime, original } = useTitleSettings(type, videoId);
   const { touch, form, compact } = useFormFactor();
   // Engine: embedded mpv when installed (plays every codec, AC3/DTS audio, every
-  // subtitle format), else the WebView's own <video>.
+  // subtitle format), else the WebView's own <video>. `forceHtml` allows "Fix Playback"
+  // to fall back to the built-in player for a session.
+  const [forceHtml, setForceHtml] = useState(false);
   const engineQuery = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
-  const engine: "mpv" | "html" | "youtube" | null = ytId ? "youtube" : engineQuery.isFetched ? (engineQuery.data ? "mpv" : "html") : null;
+  const engine: "mpv" | "html" | "youtube" | null = ytId
+    ? "youtube"
+    : forceHtml
+      ? "html"
+      : engineQuery.isFetched
+        ? engineQuery.data
+          ? "mpv"
+          : "html"
+        : null;
   const mpv = useMemo(() => new MpvMedia(), []);
   const yt = useMemo(() => new YouTubeMedia(), []);
   const [ytFrame, setYtFrame] = useState<HTMLIFrameElement | null>(null);
@@ -413,7 +425,7 @@ export function Player({
   const hideAfter = Math.max(1, settings?.controlsHideSecs ?? 2) * 1000;
   const countdown = Math.max(3, settings?.autoplayCountdown ?? 8);
   const timeDisplay = settings?.timeDisplay ?? "remaining";
-  useMpvTune(engine === "mpv" ? mpv : null);
+  useMpvTune(engine === "mpv" ? mpv : null, fullscreen || tv);
   // Subtitle look (saved) and timing offset (this source of this episode, remembered on this device, #418).
   const subStyle = settings?.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE;
   const playingStream = source.state.status === "ready" ? source.state.stream : undefined;
@@ -781,6 +793,63 @@ export function Player({
       setOptions("sources");
     }
   }, [source.kind, sourceNext, logStep, flashNotice]);
+
+  // 4-tier load shedding: while playback is starting or buffering, mark critical traffic active
+  // so background readiness probes / next-episode warming yield bandwidth automatically.
+  const criticalPlayback = !started || buffering;
+  useEffect(() => {
+    if (!criticalPlayback) return;
+    return loadCoordinator.enterCritical();
+  }, [criticalPlayback]);
+
+  // Self-healing "Diagnose & Fix Playback" runner: classifies failures deterministically and steps
+  // through safe non-destructive fixes (audio filters -> SDR -> sw decode -> next source -> built-in).
+  const [appliedFixes, setAppliedFixes] = useState<string[]>([]);
+  const [lastFixLabel, setLastFixLabel] = useState<string | null>(null);
+  const failedNow = source.state.status === "failed" || !!error;
+  const activeErrorText = error ?? (source.state.status === "failed" ? source.state.reason : null);
+  const diagnosis = useMemo(
+    () => (failedNow ? classifyPlaybackError(steps, activeErrorText) : null),
+    [failedNow, steps, activeErrorText],
+  );
+  const currentPrefs = usePrefs();
+  const fixPlan = useMemo(() => {
+    if (!diagnosis) return [];
+    return buildFixPlan(diagnosis, currentPrefs, {
+      engine,
+      hasNextSource: !link && !local,
+      canHtmlFallback: engine === "mpv" && !forceHtml && !ytId,
+    }).filter((a) => !appliedFixes.includes(a.id));
+  }, [diagnosis, currentPrefs, engine, link, local, forceHtml, ytId, appliedFixes]);
+  const nextFix = fixPlan[0];
+
+  useEffect(() => {
+    if (started && lastFixLabel) {
+      flashNotice(`Fixed playback: ${lastFixLabel}. Saved on this device.`, 4500);
+      setLastFixLabel(null);
+    }
+  }, [started, lastFixLabel, flashNotice]);
+
+  const runPlaybackFix = useCallback(() => {
+    if (!nextFix) return;
+    setAppliedFixes((prev) => [...prev, nextFix.id]);
+    logStep(`Fix Playback: ${nextFix.label}`, "info", "player");
+    if (nextFix.id === "nextSource") {
+      setError(null);
+      if (!sourceNext()) setOptions("sources");
+      return;
+    }
+    if (nextFix.id === "htmlFallback") {
+      setError(null);
+      setForceHtml(true);
+      setLastFixLabel(nextFix.label);
+      return;
+    }
+    setPrefs(nextFix.prefsPatch);
+    setLastFixLabel(nextFix.label);
+    setError(null);
+    source.retry();
+  }, [nextFix, logStep, sourceNext, source]);
 
   // Debounce single-click play/pause on desktop mouse so double-click fullscreen never stutters.
   const clickTimer = useRef<number>(undefined);
@@ -1222,7 +1291,7 @@ export function Player({
       sourceInfo.show(
         r,
         sourceRow(r).title,
-        { filter: sourceFilters.filter, sort: sourceFilters.sort, match: sourceFilters.match(r), playing: report },
+        { filter: sourceFilters.filter, sort: sourceFilters.sort, match: sourceFilters.match(r), best: sourceFilters.bestMatch, playing: report },
         anchor,
       ),
     );
@@ -2080,6 +2149,9 @@ export function Player({
             onSources={link || local ? undefined : () => setOptions("sources")}
             onSettings={openSettingsPage}
             onRetry={source.retry}
+            onFix={!ytOutside && nextFix ? runPlaybackFix : undefined}
+            fixLabel={nextFix ? `Fix Playback · ${nextFix.label}` : undefined}
+            diagnosisNote={diagnosis && diagnosis.kind !== "unknown" ? diagnosis.summary : undefined}
             onYouTube={ytOutside ? () => void api.openExternal(youtubeUrl(ytOutside)) : undefined}
           />
         )}

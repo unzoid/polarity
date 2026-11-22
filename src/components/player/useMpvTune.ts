@@ -10,22 +10,39 @@ import type { MpvMedia } from "./mpvMedia";
  * whenever one of them is switched. Rust turns them into fixed mpv values
  * (polar_player `Tune`).
  */
-export function useMpvTune(mpv: MpvMedia | null) {
-  const { dialogueBoost, volumeLeveling, hwdec, deband, cropMode, autocropLookahead, autocropEveryFrame, buffer, passthrough, hdrOutput, subtitleHdrPeak } = usePrefs();
+export function useMpvTune(mpv: MpvMedia | null, fullscreen = false) {
+  const {
+    dialogueBoost,
+    volumeLeveling,
+    drcProfile,
+    hwdec,
+    deband,
+    frameRateMatch,
+    cropMode,
+    autocropLookahead,
+    autocropEveryFrame,
+    buffer,
+    passthrough,
+    hdrOutput,
+    subtitleHdrPeak,
+  } = usePrefs();
   const autocrop = cropsBars(cropMode);
 
   useEffect(() => {
     if (!mpv) return;
     const apply = () => {
-      // Folding down only helps (and only makes sense) with a centre channel.
       const track = mpv.playing("audio");
-      const surround = (track?.["demux-channel-count"] ?? 0) > 2;
+      const audioChannels = Math.max(0, Math.min(255, Math.round(track?.["demux-channel-count"] ?? 0)));
       void call("mpv_tune", {
         tune: {
-          dialogueBoost: dialogueBoost && surround,
+          dialogueBoost,
           volumeLeveling,
+          drcProfile,
           hwdec,
           deband,
+          frameRateMatch,
+          audioChannels,
+          fullscreen,
           autocrop,
           lookahead: autocropLookahead,
           everyFrame: autocropEveryFrame,
@@ -43,5 +60,21 @@ export function useMpvTune(mpv: MpvMedia | null) {
       mpv.removeEventListener("loadedmetadata", apply);
       mpv.removeEventListener("tracks", apply);
     };
-  }, [mpv, dialogueBoost, volumeLeveling, hwdec, deband, autocrop, autocropLookahead, autocropEveryFrame, buffer, passthrough, hdrOutput, subtitleHdrPeak]);
+  }, [
+    mpv,
+    fullscreen,
+    dialogueBoost,
+    volumeLeveling,
+    drcProfile,
+    hwdec,
+    deband,
+    frameRateMatch,
+    autocrop,
+    autocropLookahead,
+    autocropEveryFrame,
+    buffer,
+    passthrough,
+    hdrOutput,
+    subtitleHdrPeak,
+  ]);
 }

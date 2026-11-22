@@ -15,6 +15,6 @@
   "Readiness.slow": ["ms","state"],
   "Readiness.unchecked": ["state"],
   "Stream": ["behaviorHints","description","externalUrl","fileIdx","infoHash","name","sources","title","url","ytId"],
-  "StreamQuality": ["codec","direct","dolbyVision","hdr","languages","lowQualitySource","resolution","sizeBytes","source","tags"],
+  "StreamQuality": ["codec","direct","dolbyVision","hdr","hdr10Plus","languages","lowQualitySource","resolution","sizeBytes","source","tags"],
   "Video": ["episode","id","overview","rating","released","season","thumbnail","title"]
 }

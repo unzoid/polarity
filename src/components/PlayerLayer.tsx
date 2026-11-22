@@ -8,7 +8,7 @@ import { EmptyState } from "./ui/EmptyState";
 import { appWindow } from "../lib/platform";
 import { type Route, useNavigation } from "../lib/router";
 import { forgetPlayerSourceChoices } from "../lib/playback";
-import { lazyNamed, whenIdle } from "../lib/ui";
+import { canPreloadChunks, lazyNamed, whenIdle } from "../lib/ui";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 
 /** How long the player layer takes to fade back to the page (matches player.css). */
@@ -18,11 +18,7 @@ export const PLAYER_EXIT_MS = 260;
 const Player = lazyNamed(() => import("../screens/Player"), "Player");
 export const preloadPlayerNow = () => void Player.preload().catch(() => {});
 export const preloadPlayer = () => {
-  const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } }) : undefined;
-  const c = nav?.connection;
-  if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) {
-    return () => {};
-  }
+  if (!canPreloadChunks()) return () => {};
   let cancelIdle: (() => void) | undefined;
   const later = window.setTimeout(() => {
     cancelIdle = whenIdle(() => void Player.preload().catch(() => {}), 5000);

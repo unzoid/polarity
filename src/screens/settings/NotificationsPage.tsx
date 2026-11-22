@@ -38,6 +38,7 @@ export function NotificationsPage() {
         <SettingRow id="notifyEpisodes" onChanged={turned} />
         <SettingRow id="notifySeasons" onChanged={turned} />
         <SettingRow id="notifyScope" disabled={!notifyEpisodes && !notifySeasons} />
+        <SettingRow id="notifyPacing" disabled={!notifyEpisodes && !notifySeasons} />
       </Card>
       <Card title="Downloads">
         <SettingRow id="notifyDownloads" onChanged={turned} />

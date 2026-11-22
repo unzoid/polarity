@@ -25,14 +25,14 @@ import { useNotifications } from "./lib/notifications";
 import { isTvMode, setTvMode, useTvMode } from "./tv/tvMode";
 import {
   detailBackdropUrl,
+  canPreloadChunks,
   lazyNamed,
   useFormFactor,
   usePresence,
-  whenIdle,
 } from "./lib/ui";
 import { PROFILES_EXIT_MS } from "./screens/account/profileHandoff";
 import { startUpdateChecks } from "./lib/updater";
-import { appWindow, formFactor, guardTaps, isDesktop, longPressMenus, onLongPress, openContextMenu } from "./lib/platform";
+import { appWindow, formFactor, guardTaps, isDesktop, longPressMenus, onLongPress, openContextMenu, os } from "./lib/platform";
 import { PartyHost } from "./components/party/PartyHost";
 import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
@@ -211,9 +211,25 @@ function SettingsRoute({ page }: { page?: string }) {
  */
 export function App() {
   const tv = useTvMode();
+  const desk = useDeskUi();
   const { data: settings } = useSettings();
   const prefersLight = useSystemPrefersLight();
   const scheme = tv ? "dark" : resolveScheme(settings?.colorScheme, prefersLight);
+
+  // On Windows, the desk layout keeps the system's native title bar across the entire app
+  // (Sign In, Who's watching? / Manage Profiles, and DeskApp) so in-app window buttons never
+  // reappear when switching profiles. Classic desktop and TV mode keep a frameless window.
+  const nativeFrame = isDesktop && os === "windows" && desk;
+  useLayoutEffect(() => {
+    if (!nativeFrame) return;
+    const html = document.documentElement;
+    html.dataset.nativeFrame = "";
+    void appWindow.setDecorations(true).catch(() => delete html.dataset.nativeFrame);
+    return () => {
+      delete html.dataset.nativeFrame;
+      void appWindow.setDecorations(false).catch(() => {});
+    };
+  }, [nativeFrame]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.font = uiFontOf(settings?.uiFont);
@@ -428,19 +444,18 @@ function LazySettingsOverlay() {
   if (open && !opened) setOpened(true);
   // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
   const phone = useFormFactor().form === "phone";
-  // Fetched once the app has genuinely settled (skipping phones and metered/slow connections), so initial load never competes with it.
+  // Fetched right after the first painted frame so the first click on Settings never suspends.
   useEffect(() => {
-    if (phone) return;
-    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
-    const c = nav.connection;
-    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
-    let cancelIdle: (() => void) | undefined;
-    const later = window.setTimeout(() => {
-      cancelIdle = whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 5000);
-    }, 5000);
+    if (phone || !canPreloadChunks()) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        void SettingsOverlay.preload().catch(() => {});
+      });
+    });
     return () => {
-      window.clearTimeout(later);
-      cancelIdle?.();
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
     };
   }, [phone]);
   if (!opened || phone) return null;

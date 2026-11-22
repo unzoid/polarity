@@ -1,0 +1,86 @@
+{
+  "description": "Synthetic bestMatch differential snapshot corpus (AGENTS.md compliant: reserved example.com domains, invented release titles).",
+  "scenarios": [
+    {
+      "name": "av1-efficient-beats-bloated-h264",
+      "runtimeSec": 5400,
+      "connectionMbps": 40,
+      "device": { "screen": 2160, "preferScreen": false, "hdr": true, "dolbyVision": false, "hevc": true, "av1": true, "av14k": true, "form": "desktop" },
+      "candidates": [
+        {
+          "id": "h264-1080p",
+          "url": "https://media.example.com/film-h264.mkv",
+          "quality": { "resolution": 1080, "codec": "H.264", "sizeBytes": 6000000000, "direct": true }
+        },
+        {
+          "id": "av1-4k-efficient",
+          "url": "https://media.example.com/film-av1.mkv",
+          "quality": { "resolution": 2160, "codec": "AV1", "hdr": true, "sizeBytes": 5400000000, "direct": true }
+        }
+      ],
+      "expectedWinner": "av1-4k-efficient"
+    },
+    {
+      "name": "remux-burst-yields-to-fit-encode-on-50mbps",
+      "runtimeSec": 5400,
+      "connectionMbps": 50,
+      "device": { "screen": 2160, "preferScreen": false, "hdr": true, "dolbyVision": false, "hevc": true, "av1": true, "form": "tv" },
+      "candidates": [
+        {
+          "id": "remux-45mbps-avg",
+          "url": "https://media.example.com/film-remux.mkv",
+          "quality": { "resolution": 2160, "codec": "HEVC", "source": "Remux", "hdr": true, "sizeBytes": 30375000000, "direct": true }
+        },
+        {
+          "id": "webdl-18mbps",
+          "url": "https://media.example.com/film-webdl.mkv",
+          "quality": { "resolution": 2160, "codec": "HEVC", "source": "WEB-DL", "hdr": true, "sizeBytes": 12150000000, "direct": true }
+        }
+      ],
+      "expectedWinner": "webdl-18mbps"
+    },
+    {
+      "name": "clean-1080p-beats-starved-4k-h264-on-phone",
+      "runtimeSec": 5400,
+      "connectionMbps": 100,
+      "device": { "screen": 1080, "preferScreen": true, "hdr": false, "dolbyVision": false, "hevc": true, "av1": true, "form": "phone" },
+      "candidates": [
+        {
+          "id": "starved-4k-h264",
+          "url": "https://media.example.com/starved-4k.mkv",
+          "quality": { "resolution": 2160, "codec": "H.264", "sizeBytes": 2700000000, "direct": true }
+        },
+        {
+          "id": "clean-1080p-hevc",
+          "url": "https://media.example.com/clean-1080p.mkv",
+          "quality": { "resolution": 1080, "codec": "HEVC", "sizeBytes": 5400000000, "direct": true }
+        }
+      ],
+      "expectedWinner": "clean-1080p-hevc"
+    },
+    {
+      "name": "hdr10plus-beats-static-hdr10-and-tier1-blocks-cam",
+      "runtimeSec": 5400,
+      "connectionMbps": 100,
+      "device": { "screen": 2160, "preferScreen": false, "hdr": true, "dolbyVision": false, "hevc": true, "av1": true, "form": "tv" },
+      "candidates": [
+        {
+          "id": "cam-4k",
+          "url": "https://media.example.com/cam.mkv",
+          "quality": { "resolution": 2160, "codec": "HEVC", "lowQualitySource": true, "sizeBytes": 12000000000, "direct": true }
+        },
+        {
+          "id": "static-hdr10",
+          "url": "https://media.example.com/hdr10.mkv",
+          "quality": { "resolution": 2160, "codec": "HEVC", "hdr": true, "sizeBytes": 12000000000, "direct": true }
+        },
+        {
+          "id": "dynamic-hdr10plus",
+          "url": "https://media.example.com/hdr10plus.mkv",
+          "quality": { "resolution": 2160, "codec": "HEVC", "hdr": true, "hdr10Plus": true, "sizeBytes": 12000000000, "direct": true }
+        }
+      ],
+      "expectedWinner": "dynamic-hdr10plus"
+    }
+  ]
+}

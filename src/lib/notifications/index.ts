@@ -3,6 +3,7 @@
 
 export * from "./check";
 export * from "./messages";
+export * from "./pacing";
 export * from "./store";
 export * from "./useNotifications";
 export * from "./whatsNew";

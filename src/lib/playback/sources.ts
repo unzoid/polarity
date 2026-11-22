@@ -7,7 +7,7 @@ import { usePrefs } from "../settings/prefs";
 import { languageName, langMatches } from "./languages";
 import { formatBytes } from "../format";
 import { NEUTRAL, scoreSources, type Match, type MatchContext } from "./bestMatch";
-import { useDeviceCaps } from "./device";
+import { detectDeviceForm, useDeviceCaps } from "./device";
 import { knownReadiness } from "./readiness";
 import { connectionMbps, sourceRecord } from "./sourceHistory";
 import type { RankedStream, Settings, SourceSort } from "../types";
@@ -73,6 +73,7 @@ export const TAG_LABELS: Record<string, string> = {
   "10-bit": "10-bit",
   hevc: "HEVC",
   av1: "AV1",
+  av2: "AV2",
   "h.264": "H.264",
   imax: "IMAX",
   "3d": "3D",
@@ -87,6 +88,10 @@ export function tagsOf(r: RankedStream): string[] {
   const q = r.quality;
   const out = new Set<string>();
   if (q.dolbyVision) out.add("dv");
+  if (q.hdr10Plus) {
+    out.add("hdr10+");
+    out.add("hdr");
+  }
   if (q.hdr) out.add("hdr");
   const addRaw = (raw?: string) => {
     const low = raw?.trim().toLowerCase();
@@ -103,6 +108,7 @@ export function tagsOf(r: RankedStream): string[] {
     if (/(?:^|\b)5\.1(?:\b|$)/.test(low)) out.add("5.1");
     if (low.includes("hevc") || low === "x265" || low === "h.265" || low === "h265") out.add("hevc");
     if (low === "av1") out.add("av1");
+    if (low === "av2") out.add("av2");
     if (low === "h.264" || low === "h264" || low === "x264" || low === "avc") out.add("h.264");
     if (low.includes("10-bit") || low.includes("10bit")) out.add("10-bit");
     if (low.includes("remux")) out.add("remux");
@@ -178,6 +184,7 @@ export function featuredMatchSummary(match: Match | undefined): string | null {
   const concise = (reason: string): string => {
     if (/on a \S+ screen$/.test(reason)) return "Fits this display";
     if (reason === "Dolby Vision on an HDR screen") return "Dolby Vision";
+    if (reason === "HDR10+ on an HDR screen") return "HDR10+";
     if (reason === "HDR on an HDR screen") return "HDR display";
     if (reason.endsWith(", decoded by this device's hardware")) {
       return `${reason.split(",")[0]} hardware decode`;
@@ -263,6 +270,7 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
   const engine = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   const caps = useDeviceCaps(engine.isFetched ? (engine.data ? "mpv" : "html") : null, hwdec);
   const screen = useMemo(screenResolution, []);
+  const form = useMemo(detectDeviceForm, []);
   const preferScreen = settings?.preferScreenResolution ?? true;
   const groups = useMemo(() => preferredGroups(animePreferredGroups), [animePreferredGroups]);
   const tags = settings?.sourceAutoTags;
@@ -274,7 +282,7 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
   }, [original]);
   return useMemo(
     () => ({
-      device: { screen, preferScreen, ...caps },
+      device: { screen, preferScreen, form, ...caps },
       connectionMbps: connectionMbps(),
       runtimeSec: runtimeSec || null,
       audioLanguage: audio,
@@ -287,7 +295,7 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
     }),
     // The capabilities are a new object each render; their values are what count.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [screen, preferScreen, caps.hdr, caps.dolbyVision, caps.hevc, caps.av1, runtimeSec, audio, own, tags, groups, aired],
+    [screen, preferScreen, form, caps.hdr, caps.dolbyVision, caps.hevc, caps.av1, caps.hevc4k, caps.av14k, runtimeSec, audio, own, tags, groups, aired],
   );
 }
 
@@ -556,6 +564,8 @@ export function useSourceFilters(
     total: all.length,
     /** Best Match's score and reasons for a source of this list. */
     match: (r: RankedStream) => scores.get(r),
+    /** The #1 ranked Match in this list (for differential "Why #1 beat this" inspection). */
+    bestMatch: [...scores.values()].find((m) => m.rank?.position === 1),
     facets,
     screenRes,
   };

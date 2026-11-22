@@ -306,6 +306,7 @@
   background: none;
   box-shadow: none;
   text-align: left;
+  cursor: pointer;
   transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out);
 }
 /* Whisper-quiet divider between consecutive rows in the same section â€” never a card box. */
@@ -432,6 +433,66 @@
   font-size: 12px;
   font-weight: 500;
   color: rgb(var(--ink) / 0.44);
+}
+.ph-src-lead,
+.ph-src-main,
+.ph-src-tag,
+.ph-src-detail,
+.ph-src-size,
+.ph-src-why {
+  transition: color 140ms var(--ease-out), opacity 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+/* Desktop pointer clarity: resting rows sit slightly subdued and brighten cleanly to full white on hover/focus. */
+@media (hover: hover) and (pointer: fine) {
+  .ph-sources-overlay .ph-src-row .ph-src-lead {
+    opacity: 0.56;
+  }
+  .ph-sources-overlay .ph-src-row[data-featured="true"] .ph-src-lead,
+  .ph-sources-overlay .ph-src-row[data-current="true"] .ph-src-lead {
+    opacity: 0.78;
+  }
+  .ph-sources-overlay .ph-src-row .ph-src-main {
+    color: rgb(var(--ink) / 0.64);
+  }
+  .ph-sources-overlay .ph-src-row[data-featured="true"] .ph-src-main,
+  .ph-sources-overlay .ph-src-row[data-current="true"] .ph-src-main {
+    color: rgb(var(--ink) / 0.8);
+  }
+  .ph-sources-overlay .ph-src-row .ph-src-tag:not(.ph-src-tag-bad) {
+    box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.18);
+    color: rgb(var(--ink) / 0.56);
+  }
+  .ph-sources-overlay .ph-src-row .ph-src-tag[data-kind="range"] {
+    box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.28);
+    color: rgb(var(--ink) / 0.76);
+  }
+  .ph-sources-overlay .ph-src-row .ph-src-detail {
+    color: rgb(var(--ink) / 0.4);
+  }
+  .ph-sources-overlay .ph-src-row .ph-src-size {
+    color: rgb(var(--ink) / 0.52);
+  }
+  .ph-sources-overlay .ph-src-row[data-featured="true"] .ph-src-size {
+    color: rgb(var(--ink) / 0.74);
+  }
+  .ph-sources-overlay .ph-src-row:is(:hover, :focus-visible) .ph-src-lead {
+    opacity: 1;
+    color: var(--text);
+  }
+  .ph-sources-overlay .ph-src-row:is(:hover, :focus-visible) .ph-src-main,
+  .ph-sources-overlay .ph-src-row:is(:hover, :focus-visible) .ph-src-size {
+    color: var(--text);
+  }
+  .ph-sources-overlay .ph-src-row:is(:hover, :focus-visible) .ph-src-tag:not(.ph-src-tag-bad) {
+    box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.44);
+    color: var(--text);
+  }
+  .ph-sources-overlay .ph-src-row:is(:hover, :focus-visible) .ph-src-detail {
+    color: rgb(var(--ink) / 0.76);
+  }
+  .ph-sources-overlay .ph-src-row:is(:hover, :focus-visible) .ph-src-why {
+    color: rgb(var(--ink) / 0.7);
+  }
 }
 
 /* Add-on sub-view: 1:1 with Categories ListOverlay. */

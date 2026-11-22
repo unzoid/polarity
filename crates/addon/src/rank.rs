@@ -18,6 +18,8 @@ pub struct StreamQuality {
     /// Vertical resolution: 2160, 1080, 720, 480 — `None` if unknown.
     pub resolution: Option<u16>,
     pub hdr: bool,
+    /// Dynamic HDR10+ metadata (scored above static HDR10 and safe as a fallback layer for DV).
+    pub hdr10_plus: bool,
     pub dolby_vision: bool,
     pub codec: Option<&'static str>,
     pub size_bytes: Option<u64>,
@@ -55,6 +57,7 @@ static RES: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\b(2160p|4k|uhd|1440p|1080p|720p|576p|480p)\b").unwrap());
 static SIZE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)(\d+(?:[.,]\d+)?)\s?(TB|GB|MB)\b").unwrap());
 static HDR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\bHDR(10\+?)?\b").unwrap());
+static HDR10_PLUS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\bHDR10(?:\+|plus)").unwrap());
 static DV: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\b(DV|DoVi|Dolby\s?Vision)\b").unwrap());
 static CAM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\b(CAM|CAMRIP|HDCAM|TS|TELESYNC|HDTS|TC)\b").unwrap());
 
@@ -100,7 +103,9 @@ pub fn parse_quality(stream: &Stream) -> StreamQuality {
     });
 
     let lower = text.to_ascii_lowercase();
-    let codec = if lower.contains("av1") {
+    let codec = if lower.contains("av2") {
+        Some("AV2")
+    } else if lower.contains("av1") {
         Some("AV1")
     } else if ["hevc", "x265", "h265", "h.265"].iter().any(|c| lower.contains(c)) {
         Some("HEVC")
@@ -110,9 +115,11 @@ pub fn parse_quality(stream: &Stream) -> StreamQuality {
         None
     };
 
+    let hdr10_plus = HDR10_PLUS.is_match(&text);
     StreamQuality {
         resolution,
-        hdr: HDR.is_match(&text),
+        hdr: hdr10_plus || HDR.is_match(&text),
+        hdr10_plus,
         dolby_vision: DV.is_match(&text),
         codec,
         size_bytes,
@@ -343,6 +350,8 @@ pub fn label(q: &StreamQuality) -> String {
     }
     if q.dolby_vision {
         parts.push("Dolby Vision".into());
+    } else if q.hdr10_plus {
+        parts.push("HDR10+".into());
     } else if q.hdr {
         parts.push("HDR".into());
     }
@@ -753,5 +762,17 @@ mod tests {
         let (_, hidden) =
             rank_streams_filtered(all(), &StreamFilter { exclude_words: vec!["ire".into()], ..Default::default() });
         assert_eq!(hidden, 0);
+    }
+
+    #[test]
+    fn recognizes_hdr10_plus_and_av2() {
+        let q = parse_quality(&stream("Addon\n4k", "Film.2026.2160p.WEB-DL.HDR10+.AV2-GROUP\n💾 9.5 GB"));
+        assert!(q.hdr && q.hdr10_plus && !q.dolby_vision);
+        assert_eq!(q.codec, Some("AV2"));
+        assert_eq!(label(&q), "4K · HDR10+ · AV2 · 9.5 GB");
+
+        let plus_word = parse_quality(&stream("Addon", "Film.2026.2160p.HDR10Plus.AV1-GROUP"));
+        assert!(plus_word.hdr && plus_word.hdr10_plus);
+        assert_eq!(plus_word.codec, Some("AV1"));
     }
 }

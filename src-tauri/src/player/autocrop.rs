@@ -8,7 +8,7 @@
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use polar_player::bars::{levels_for, Levels, Measured};
+use polar_player::bars::{banding_score, levels_for, Levels, Measured, DEBAND_OFF_SCORE, DEBAND_ON_SCORE};
 use polar_player::crop::{cropdetect_for, cropdetect_reading, zoom_for, CropZoom, Rect, CROPDETECT};
 use polar_player::frames::{Ask, Frames, Jumps};
 use polar_player::sampler::Sampler;
@@ -75,6 +75,8 @@ struct Shot {
     pts: Option<f64>,
     /// The reading (`Some(None)`: a black frame), `None` if no frame came.
     measured: Option<Option<Measured>>,
+    /// CAMBI-inspired banding score computed on the same decoded frame (for `DebandMode::Auto`).
+    banding: Option<f32>,
     /// Bytes mpv wrote for it (none on macOS, where it comes in memory).
     written: u64,
     /// Time spent reading it here (the file and our detector).
@@ -91,7 +93,7 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     use polar_player::png::decode_stored;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, written: 0, ours: Duration::ZERO };
+    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, banding: None, written: 0, ours: Duration::ZERO };
     let path = super::shots_dir().join(format!("autocrop-{}.png", NEXT.fetch_add(1, Ordering::Relaxed)));
     let mpv = &app.state::<AppState>().mpv;
     let taken = mpv.request(json!(["screenshot-to-file", path.to_string_lossy(), "video"])).await;
@@ -100,13 +102,21 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     let _ = tokio::fs::remove_file(&path).await;
     let Some(bytes) = bytes.filter(|_| taken.is_ok()) else { return shot };
     shot.written = bytes.len() as u64;
-    shot.measured = tokio::task::spawn_blocking(move || {
+    let check_banding = mpv.tuned.locked().deband.is_auto();
+    let parsed = tokio::task::spawn_blocking(move || {
         let img = decode_stored(&bytes)?;
-        Some(detect(&img.frame(), g.levels).map(|m| m.scaled((img.w as i64, img.h as i64), g.size)))
+        let frame = img.frame();
+        let measured = detect(&frame, g.levels).map(|m| m.scaled((img.w as i64, img.h as i64), g.size));
+        let banding = check_banding.then(|| banding_score(&frame));
+        Some((measured, banding))
     })
     .await
     .ok()
     .flatten();
+    if let Some((m, b)) = parsed {
+        shot.measured = Some(m);
+        shot.banding = b;
+    }
     shot.ours = started.elapsed();
     shot
 }
@@ -125,11 +135,12 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     /// The reader of the running player's frames, by the player it reads.
     static FRAMES: StdMutex<Option<(usize, Arc<Frames>)>> = StdMutex::new(None);
 
-    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, written: 0, ours: Duration::ZERO };
+    let mut shot = Shot { load, size: g.size, still, pts: None, measured: None, banding: None, written: 0, ours: Duration::ZERO };
     let time_pos = || async {
         let mpv = &app.state::<AppState>().mpv;
         mpv.request(json!(["get_property", "time-pos"])).await.ok().and_then(|t| t.as_f64())
     };
+    let check_banding = app.state::<AppState>().mpv.tuned.locked().deband.is_auto();
     let frames = {
         let state = app.state::<AppState>();
         let guard = state.mpv.conn.lock().await;
@@ -148,7 +159,11 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     let started = Instant::now();
     let before = time_pos().await;
     let read = tokio::task::spawn_blocking(move || {
-        frames.read(|frame| detect(&frame, g.levels).map(|m| m.scaled((frame.w as i64, frame.h as i64), g.size)))
+        frames.read(|frame| {
+            let measured = detect(&frame, g.levels).map(|m| m.scaled((frame.w as i64, frame.h as i64), g.size));
+            let banding = check_banding.then(|| banding_score(&frame));
+            (measured, banding)
+        })
     })
     .await
     .ok()
@@ -160,7 +175,10 @@ async fn take_shot(app: AppHandle, load: u64, g: CropGeometry, still: Option<u64
     // A new frame shown meanwhile: which of the two was read isn't sure.
     let after = time_pos().await;
     shot.pts = before.zip(after).filter(|(b, a)| (a - b).abs() <= PTS_SLACK).map(|(b, _)| b);
-    shot.measured = read;
+    if let Some((m, b)) = read {
+        shot.measured = Some(m);
+        shot.banding = b;
+    }
     shot.ours = started.elapsed();
     shot
 }
@@ -239,6 +257,7 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
     let mut reading_ahead = None; // the load the lookahead was started for, while its setting stays on
     let (shot_tx, mut shot_rx) = mpsc::unbounded_channel::<Shot>();
     let mut in_flight: Option<Instant> = None; // the screenshot on its way, since when
+    let mut auto_deband_active = false;
     let mut cost = Cost::default();
     loop {
         let event = tokio::select! {
@@ -249,6 +268,19 @@ pub(super) async fn autocrop(app: AppHandle, run: u64) {
                 let state = app.state::<AppState>();
                 let mpv = &state.mpv;
                 let load = mpv.loads.load(Ordering::SeqCst);
+                if let Some(score) = shot.banding {
+                    if mpv.tuned.locked().deband.is_auto() {
+                        let next_on = if auto_deband_active {
+                            score >= DEBAND_OFF_SCORE
+                        } else {
+                            score >= DEBAND_ON_SCORE
+                        };
+                        if next_on != auto_deband_active {
+                            auto_deband_active = next_on;
+                            let _ = mpv.request(json!(["set_property", "deband", if next_on { "yes" } else { "no" }])).await;
+                        }
+                    }
+                }
                 let Some((g, _)) = geometry.filter(|(g, _)| shot.load == load && g.size == shot.size) else {
                     if frames.give_up() {
                         paused = false;

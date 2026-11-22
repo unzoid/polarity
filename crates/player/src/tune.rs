@@ -8,15 +8,19 @@ use crate::sampler::Sampling;
 #[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tune {
-    /// Fold surround down to stereo with the centre (dialogue) channel
-    /// louder. Only sent for tracks with more than two channels.
+    /// Make speech clearer: surround tracks boost the centre channel on downmix;
+    /// stereo (1–2 ch) tracks apply a clean vocal-presence EQ + limiter.
     pub dialogue_boost: bool,
     /// Even out loud and quiet scenes ("night mode").
     pub volume_leveling: bool,
+    /// Dynamic range profile: Pure (bitstream/no DRC), Living Room, or Late Night.
+    #[serde(default)]
+    pub drc_profile: DrcProfile,
     /// Hardware decoding. Off is a troubleshooting switch for broken drivers.
     pub hwdec: bool,
-    /// Smooth colour banding in gradients (dark scenes, anime skies).
-    pub deband: bool,
+    /// Smooth colour banding in gradients (dark scenes, anime skies): Off, Auto (CAMBI), or On.
+    #[serde(default)]
+    pub deband: DebandMode,
     /// Read-ahead: "small", "normal" or "large".
     pub buffer: BufferSize,
     /// Crop black bars burnt into the picture (a 2.39:1 film inside a 16:9
@@ -35,7 +39,7 @@ pub struct Tune {
     pub every_frame: bool,
     /// Send Dolby and DTS audio to an AV receiver as it is (S/PDIF or HDMI
     /// passthrough). The receiver decodes it; mpv's volume and audio filters
-    /// don't apply then.
+    /// are bypassed automatically.
     #[serde(default)]
     pub passthrough: bool,
     /// How HDR video reaches the screen.
@@ -44,6 +48,86 @@ pub struct Tune {
     /// How bright subtitles are over HDR video shown in HDR.
     #[serde(default)]
     pub sub_hdr: SubtitleHdr,
+    /// Match display refresh rate / cadence during full-screen playback (#515).
+    #[serde(default)]
+    pub frame_rate_match: FrameRateMatch,
+    /// Channel count of the active audio track (0 = unknown/legacy surround assumption,
+    /// 1–2 = mono/stereo, >2 = surround).
+    #[serde(default)]
+    pub audio_channels: u8,
+    /// Whether playback is currently full-screen (frame-rate matching only runs in full-screen).
+    #[serde(default)]
+    pub fullscreen: bool,
+}
+
+/// Dynamic range compression profile: Pure preserves full cinema dynamics,
+/// Living Room applies mild leveling only when volume leveling is on, and
+/// Late Night engages full AC-3/E-AC-3 DRC plus anti-pumping loudness leveling.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DrcProfile {
+    Pure,
+    #[default]
+    LivingRoom,
+    LateNight,
+}
+
+/// Debanding mode. Accepts both legacy booleans (`false`/`true`) and strings (`"off"`/`"auto"`/`"on"`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DebandMode {
+    #[default]
+    Off,
+    Auto,
+    On,
+}
+
+impl DebandMode {
+    /// Initial mpv `deband` property value ("yes" or "no"). `Auto` starts at "no" and
+    /// toggles dynamically when the CAMBI banding detector sees banding.
+    pub fn mpv_deband(self) -> &'static str {
+        match self {
+            DebandMode::On => "yes",
+            DebandMode::Off | DebandMode::Auto => "no",
+        }
+    }
+
+    pub fn is_auto(self) -> bool {
+        matches!(self, DebandMode::Auto)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DebandMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = DebandMode;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a boolean or one of \"off\", \"auto\", \"on\"")
+            }
+            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(if v { DebandMode::On } else { DebandMode::Off })
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                match v {
+                    "off" => Ok(DebandMode::Off),
+                    "auto" => Ok(DebandMode::Auto),
+                    "on" => Ok(DebandMode::On),
+                    other => Err(E::unknown_variant(other, &["off", "auto", "on"])),
+                }
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+/// Display refresh rate / motion cadence matching during full-screen playback (#515).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FrameRateMatch {
+    #[default]
+    Off,
+    Seamless,
+    Always,
 }
 
 /// Subtitle brightness over HDR video shown in HDR, where white text can be glaring: mpv's own choice, the
@@ -87,6 +171,15 @@ impl HdrOutput {
             HdrOutput::Auto => "auto",
             HdrOutput::Screen => "yes",
             HdrOutput::Sdr => "no",
+        }
+    }
+
+    /// Dynamic HDR→SDR tone-mapping properties when tone-mapping to SDR (Netflix dynamic metadata
+    /// / per-frame peak tracking), or mpv defaults when passing HDR through.
+    pub fn tone_mapping_props(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            HdrOutput::Sdr => &[("hdr-compute-peak", "auto"), ("tone-mapping", "spline")],
+            HdrOutput::Auto | HdrOutput::Screen => &[("hdr-compute-peak", "no"), ("tone-mapping", "auto")],
         }
     }
 }
@@ -136,8 +229,9 @@ impl Default for Tune {
         Self {
             dialogue_boost: false,
             volume_leveling: false,
+            drc_profile: DrcProfile::LivingRoom,
             hwdec: true,
-            deband: false,
+            deband: DebandMode::Off,
             buffer: BufferSize::Normal,
             autocrop: false,
             lookahead: true,
@@ -145,6 +239,9 @@ impl Default for Tune {
             passthrough: false,
             hdr: HdrOutput::Auto,
             sub_hdr: SubtitleHdr::Auto,
+            frame_rate_match: FrameRateMatch::Off,
+            audio_channels: 0,
+            fullscreen: false,
         }
     }
 }
@@ -159,16 +256,60 @@ impl Tune {
         }
     }
 
+    /// Native AC-3/E-AC-3 decoder DRC (`ad-lavc-o`), or empty when passthrough is active.
+    pub fn drc_scale(&self) -> &'static str {
+        if self.passthrough {
+            return "";
+        }
+        match self.drc_profile {
+            DrcProfile::Pure => "drc_scale=0",
+            DrcProfile::LivingRoom => {
+                if self.volume_leveling {
+                    "drc_scale=0.5"
+                } else {
+                    "drc_scale=0"
+                }
+            }
+            DrcProfile::LateNight => "drc_scale=1",
+        }
+    }
+
+    /// Audio filter chain (`af`). Bypassed automatically when `passthrough` is on so
+    /// encoded bitstreams reach the receiver untouched.
     pub fn audio_filters(&self) -> String {
+        if self.passthrough {
+            return String::new();
+        }
         let mut chain: Vec<&str> = Vec::new();
         if self.dialogue_boost {
-            // The well-known mpv downmix: centre at full level, the rest at 30%.
-            chain.push("lavfi=[pan=stereo|FL<FC+0.30*FL+0.30*BL+0.30*SL|FR<FC+0.30*FR+0.30*BR+0.30*SR]");
+            if matches!(self.audio_channels, 1 | 2) {
+                // Stereo / mono vocal-presence boost: roll off low rumble, lift 2.5 kHz speech band, soft-limit peaks.
+                chain.push("lavfi=[highpass=f=100,equalizer=f=2500:t=q:w=1.2:g=4,alimiter=limit=0.95]");
+            } else {
+                // Surround downmix: centre (dialogue) at full level, rest attenuated.
+                chain.push("lavfi=[pan=stereo|FL<FC+0.30*FL+0.30*BL+0.30*SL|FR<FC+0.30*FR+0.30*BR+0.30*SR]");
+            }
         }
-        if self.volume_leveling {
-            chain.push("lavfi=[dynaudnorm=f=150:g=15:p=0.9]");
+        let apply_drc = match self.drc_profile {
+            DrcProfile::Pure => false,
+            DrcProfile::LivingRoom => self.volume_leveling,
+            DrcProfile::LateNight => true,
+        };
+        if apply_drc {
+            // Anti-pumping loudness normalization: wider frame/Gaussian window, bounded max gain, coupled channels.
+            chain.push("lavfi=[dynaudnorm=f=250:g=31:p=0.85:m=4:r=0.5:b=1]");
         }
         chain.join(",")
+    }
+
+    /// Desktop frame-rate / display-cadence properties (#515). Strictly active only during
+    /// full-screen playback when passthrough is off (resampling audio breaks bitstream passthrough).
+    pub fn frame_rate_props(&self) -> &'static [(&'static str, &'static str)] {
+        if self.fullscreen && !self.passthrough && self.frame_rate_match != FrameRateMatch::Off {
+            &[("video-sync", "display-resample"), ("interpolation", "yes"), ("tscale", "oversample")]
+        } else {
+            &[("video-sync", "audio"), ("interpolation", "no")]
+        }
     }
 
     /// Whether autocrop runs cropdetect inside mpv. Not on macOS and iOS, where
@@ -260,20 +401,68 @@ mod tests {
         let t = Tune {
             dialogue_boost: true,
             volume_leveling: true,
-            hwdec: true,
-            deband: false,
+            deband: DebandMode::Off,
             buffer: BufferSize::Large,
-            autocrop: false,
-            lookahead: true,
-            every_frame: false,
-            passthrough: false,
-            hdr: HdrOutput::Auto,
-            sub_hdr: SubtitleHdr::Auto,
+            ..Tune::default()
         };
-        assert!(t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm"));
+        assert!(t.audio_filters().starts_with("lavfi=[pan=stereo") && t.audio_filters().contains("dynaudnorm=f=250:g=31"));
         let off = Tune { dialogue_boost: false, volume_leveling: false, ..t };
         assert_eq!(off.audio_filters(), "");
         assert_eq!(t.cache_with(false), (300, "768MiB"));
+    }
+
+    #[test]
+    fn stereo_dialogue_boost_and_passthrough_and_drc_profiles() {
+        // Stereo track gets vocal-presence EQ + limiter instead of surround pan.
+        let stereo = Tune { dialogue_boost: true, audio_channels: 2, ..Tune::default() };
+        assert!(stereo.audio_filters().contains("equalizer=f=2500"));
+        assert!(stereo.audio_filters().contains("alimiter"));
+        assert!(!stereo.audio_filters().contains("pan=stereo"));
+
+        // Surround track keeps center-boost pan.
+        let surround = Tune { dialogue_boost: true, audio_channels: 6, ..Tune::default() };
+        assert!(surround.audio_filters().starts_with("lavfi=[pan=stereo"));
+
+        // Passthrough bypasses all software audio filters and DRC scale.
+        let pt = Tune { dialogue_boost: true, volume_leveling: true, drc_profile: DrcProfile::LateNight, passthrough: true, ..Tune::default() };
+        assert_eq!(pt.audio_filters(), "");
+        assert_eq!(pt.drc_scale(), "");
+
+        // DRC profiles: Pure bypasses dynaudnorm; LateNight engages full DRC + leveling.
+        let pure = Tune { volume_leveling: true, drc_profile: DrcProfile::Pure, ..Tune::default() };
+        assert_eq!(pure.audio_filters(), "");
+        assert_eq!(pure.drc_scale(), "drc_scale=0");
+
+        let night = Tune { drc_profile: DrcProfile::LateNight, ..Tune::default() };
+        assert!(night.audio_filters().contains("dynaudnorm=f=250:g=31:p=0.85:m=4:r=0.5:b=1"));
+        assert_eq!(night.drc_scale(), "drc_scale=1");
+    }
+
+    #[test]
+    fn deband_mode_accepts_bool_and_strings() {
+        let base = r#"{"dialogueBoost":false,"volumeLeveling":false,"hwdec":true,"buffer":"normal"}"#;
+        let t_false = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":false}"#)).unwrap();
+        let t_true = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":true}"#)).unwrap();
+        let t_auto = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":"auto"}"#)).unwrap();
+        let t_on = serde_json::from_str::<Tune>(&base.replace('}', r#","deband":"on"}"#)).unwrap();
+        assert_eq!((t_false.deband, t_true.deband, t_auto.deband, t_on.deband), (DebandMode::Off, DebandMode::On, DebandMode::Auto, DebandMode::On));
+        assert_eq!(t_auto.deband.mpv_deband(), "no");
+        assert_eq!(t_on.deband.mpv_deband(), "yes");
+        assert!(t_auto.deband.is_auto());
+    }
+
+    #[test]
+    fn hdr_tone_mapping_and_frame_rate_match_are_gated() {
+        assert_eq!(HdrOutput::Sdr.tone_mapping_props(), &[("hdr-compute-peak", "auto"), ("tone-mapping", "spline")]);
+        assert_eq!(HdrOutput::Auto.tone_mapping_props(), &[("hdr-compute-peak", "no"), ("tone-mapping", "auto")]);
+
+        // Windowed or passthrough: never enable display-resample.
+        let windowed = Tune { frame_rate_match: FrameRateMatch::Seamless, fullscreen: false, ..Tune::default() };
+        assert_eq!(windowed.frame_rate_props(), &[("video-sync", "audio"), ("interpolation", "no")]);
+        let pt_fs = Tune { frame_rate_match: FrameRateMatch::Always, fullscreen: true, passthrough: true, ..Tune::default() };
+        assert_eq!(pt_fs.frame_rate_props(), &[("video-sync", "audio"), ("interpolation", "no")]);
+        let fs = Tune { frame_rate_match: FrameRateMatch::Seamless, fullscreen: true, ..Tune::default() };
+        assert_eq!(fs.frame_rate_props(), &[("video-sync", "display-resample"), ("interpolation", "yes"), ("tscale", "oversample")]);
     }
 
     #[test]

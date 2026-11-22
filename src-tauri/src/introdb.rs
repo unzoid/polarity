@@ -58,19 +58,14 @@ pub struct IntroDb {
 
 impl Default for IntroDb {
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .timeout(Duration::from_secs(10))
-                .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
-                .build()
-                .expect("http client"),
-            cache: Mutex::new(HashMap::new()),
-        }
+        Self::with_client(polar_addon::shared_http_client())
     }
 }
 
 impl IntroDb {
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http, cache: Mutex::new(HashMap::new()) }
+    }
     /// `video_id` is a movie `tt…` or an episode `tt…:season:episode`.
     pub async fn segments(&self, video_id: &str) -> Result<Segments, String> {
         if let Some((at, hit)) = self.cache.locked().get(video_id) {
@@ -91,7 +86,14 @@ impl IntroDb {
             _ => query.push(("is_movie", "true".to_owned())),
         }
 
-        let res = self.http.get(API).query(&query).send().await.map_err(|e| e.without_url().to_string())?;
+        let res = self
+            .http
+            .get(API)
+            .timeout(Duration::from_secs(10))
+            .query(&query)
+            .send()
+            .await
+            .map_err(|e| e.without_url().to_string())?;
         let segments = if res.status().is_success() {
             let raw: Raw = res.json().await.map_err(|e| e.without_url().to_string())?;
             Segments {

@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { setPinAsker, type PinAnswer, type PinRequest } from "../../lib/account/unlock";
-import { lazyNamed, whenIdle } from "../../lib/ui";
+import { canPreloadChunks, lazyNamed, whenIdle } from "../../lib/ui";
 import { useDismiss } from "../../lib/ui/dismiss";
 import { useTvMode } from "../../tv/tvMode";
 import { Avatar } from "../Avatar";
@@ -24,9 +24,7 @@ export function PinHost() {
   const tv = useTvMode();
 
   useEffect(() => {
-    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
-    const c = nav.connection;
-    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    if (!canPreloadChunks()) return;
     let cancelIdle: (() => void) | undefined;
     const t = window.setTimeout(() => {
       cancelIdle = whenIdle(() => void PinFlow.preload().catch(() => {}), 5000);

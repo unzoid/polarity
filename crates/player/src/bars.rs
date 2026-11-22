@@ -192,6 +192,144 @@ pub fn detect(frame: &Frame, levels: Levels) -> Option<Measured> {
     })
 }
 
+/// CAMBI-inspired banding score thresholds (hysteresis prevents rapid toggling).
+pub const DEBAND_ON_SCORE: f32 = 5.0;
+pub const DEBAND_OFF_SCORE: f32 = 3.5;
+
+/// Estimate perceived colour banding severity (Netflix CAMBI-inspired, pure Rust).
+///
+/// 1. Downsamples luma with a 2×2 box filter (suppressing 1-pixel film grain / dithering
+///    while preserving flat banding plateaus).
+/// 2. Evaluates flat-gradient quantization steps across two spatial scales (1× and 2×) so
+///    coarse 8-bit ramps score high while both textured scenes and smooth gradients score low.
+/// 3. Pools the worst 10% of spatial tiles so localized banding (e.g. a dark sky or vignette)
+///    still triggers auto-deband.
+pub fn banding_score(frame: &Frame<'_>) -> f32 {
+    if frame.w < 32 || frame.h < 32 || frame.data.len() < frame.stride.saturating_mul(frame.h) {
+        return 0.0;
+    }
+    let step_x = (frame.w / 320).max(1) * 2;
+    let step_y = (frame.h / 180).max(1) * 2;
+    let gw = (frame.w / step_x).max(1);
+    let gh = (frame.h / step_y).max(1);
+    if gw < 16 || gh < 16 {
+        return 0.0;
+    }
+
+    let mut grid = vec![0u8; gw * gh];
+    for gy in 0..gh {
+        let y0 = gy * step_y;
+        let y1 = (y0 + step_y / 2).min(frame.h - 1);
+        for gx in 0..gw {
+            let x0 = gx * step_x;
+            let x1 = (x0 + step_x / 2).min(frame.w - 1);
+            let sum = frame.luma(x0, y0) as u16
+                + frame.luma(x1, y0) as u16
+                + frame.luma(x0, y1) as u16
+                + frame.luma(x1, y1) as u16;
+            grid[gy * gw + gx] = ((sum + 2) / 4) as u8;
+        }
+    }
+
+    let s1 = scale_banding(&grid, gw, gh);
+    let (gw2, gh2) = (gw / 2, gh / 2);
+    let s2 = if gw2 >= 12 && gh2 >= 12 {
+        let mut g2 = vec![0u8; gw2 * gh2];
+        for y in 0..gh2 {
+            for x in 0..gw2 {
+                let a = grid[(2 * y) * gw + (2 * x)] as u16;
+                let b = grid[(2 * y) * gw + (2 * x + 1)] as u16;
+                let c = grid[(2 * y + 1) * gw + (2 * x)] as u16;
+                let d = grid[(2 * y + 1) * gw + (2 * x + 1)] as u16;
+                g2[y * gw2 + x] = ((a + b + c + d + 2) / 4) as u8;
+            }
+        }
+        scale_banding(&g2, gw2, gh2)
+    } else {
+        0.0
+    };
+    s1.max(s2)
+}
+
+/// Whether `frame` exhibits enough colour banding to enable mpv's deband filter.
+pub fn needs_deband(frame: &Frame<'_>) -> bool {
+    banding_score(frame) >= DEBAND_ON_SCORE
+}
+
+fn scale_banding(grid: &[u8], w: usize, h: usize) -> f32 {
+    const TILE: usize = 8;
+    let tx = (w.saturating_sub(4)) / TILE;
+    let ty = (h.saturating_sub(4)) / TILE;
+    if tx == 0 || ty == 0 {
+        return 0.0;
+    }
+
+    let mut tiles = Vec::with_capacity(tx * ty);
+    for by in 0..ty {
+        for bx in 0..tx {
+            let x_start = 2 + bx * TILE;
+            let y_start = 2 + by * TILE;
+            let mut plateau_steps = 0.0f32;
+            let mut step_events = 0u32;
+            let mut flat_pixels = 0u32;
+            let mut textured_pixels = 0u32;
+
+            for y in y_start..y_start + TILE {
+                let row = y * w;
+                for x in x_start..x_start + TILE {
+                    let c = grid[row + x];
+                    let l1 = grid[row + x - 1];
+                    let r1 = grid[row + x + 1];
+                    let u1 = grid[(y - 1) * w + x];
+                    let d1 = grid[(y + 1) * w + x];
+                    let l2 = grid[row + x - 2];
+                    let r2 = grid[row + x + 2];
+                    let u2 = grid[(y - 2) * w + x];
+                    let d2 = grid[(y + 2) * w + x];
+
+                    let min_v = c.min(l1).min(r1).min(u1).min(d1).min(l2).min(r2).min(u2).min(d2);
+                    let max_v = c.max(l1).max(r1).max(u1).max(d1).max(l2).max(r2).max(u2).max(d2);
+                    let span = max_v - min_v;
+                    if span > 14 {
+                        textured_pixels += 1;
+                        continue;
+                    }
+                    if span == 0 {
+                        flat_pixels += 1;
+                        continue;
+                    }
+
+                    // Band contour signature: along x or y, one side is flat (diff == 0) while
+                    // the opposite side jumps by a discrete quantization step (diff in 2..=8).
+                    let h_step = (c == l1 && c == l2 && (2..=8).contains(&c.abs_diff(r1)))
+                        || (c == r1 && c == r2 && (2..=8).contains(&c.abs_diff(l1)));
+                    let v_step = (c == u1 && c == u2 && (2..=8).contains(&c.abs_diff(d1)))
+                        || (c == d1 && c == d2 && (2..=8).contains(&c.abs_diff(u1)));
+                    if h_step || v_step {
+                        let jump = c.abs_diff(r1).max(c.abs_diff(l1)).max(c.abs_diff(d1)).max(c.abs_diff(u1)) as f32;
+                        let dark_weight = if c < 64 { 1.4 } else if c < 128 { 1.15 } else { 1.0 };
+                        plateau_steps += (jump.min(6.0) / 3.0) * dark_weight;
+                        step_events += 1;
+                    }
+                }
+            }
+
+            let area = (TILE * TILE) as f32;
+            if textured_pixels > 8 || step_events == 0 || flat_pixels < 4 {
+                tiles.push(0.0);
+            } else {
+                let plateau_ratio = (flat_pixels as f32 / area).min(1.0);
+                let score = (plateau_steps * (0.5 + plateau_ratio) * 2.4).min(24.0);
+                tiles.push(score);
+            }
+        }
+    }
+
+    tiles.sort_by(|a, b| b.total_cmp(a));
+    let top_n = (tiles.len() / 10).max(1);
+    tiles[..top_n].iter().sum::<f32>() / top_n as f32
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -338,5 +476,41 @@ pub(crate) mod tests {
         let data: Vec<u8> = letterboxed(1920, 1080, (140, 0), scene).into_iter().map(|v| v.max(16)).collect();
         let m = detect(&luma(1920, 1080, &data), Levels { black: 16, ..SDR }).unwrap();
         assert_eq!(m.rect.y, 140);
+    }
+
+    #[test]
+    fn cambi_distinguishes_banded_gradients_from_clean_and_textured_frames() {
+        let (w, h) = (320, 180);
+        // 1. Uniform black frame: zero banding.
+        let black = vec![16u8; w * h];
+        assert_eq!(banding_score(&luma(w, h, &black)), 0.0);
+        assert!(!needs_deband(&luma(w, h, &black)));
+
+        // 2. Textured detailed scene: low banding.
+        let textured = letterboxed(w, h, (0, 0), scene);
+        let tex_score = banding_score(&luma(w, h, &textured));
+        assert!(tex_score < DEBAND_OFF_SCORE, "textured score too high: {tex_score}");
+
+        // 3. Smooth unquantized gradient (1 luma step per pixel, no flat plateaus + big jumps).
+        let mut smooth = vec![0u8; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                smooth[y * w + x] = (20 + (x / 2).min(180)) as u8;
+            }
+        }
+        let smooth_score = banding_score(&luma(w, h, &smooth));
+        assert!(smooth_score < DEBAND_ON_SCORE, "smooth gradient should not trigger deband: {smooth_score}");
+
+        // 4. Coarse 8-bit banded dark gradient (16px wide flat plateaus with 4-luma jumps).
+        let mut banded = vec![0u8; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                let band = (x / 16) as u8;
+                banded[y * w + x] = 16 + band.saturating_mul(4);
+            }
+        }
+        let banded_score = banding_score(&luma(w, h, &banded));
+        assert!(banded_score >= DEBAND_ON_SCORE, "banded gradient should trigger deband: {banded_score}");
+        assert!(needs_deband(&luma(w, h, &banded)));
     }
 }

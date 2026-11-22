@@ -11,11 +11,13 @@ import { type AnimeCard as Card, retryTitle, useAnimeAliases, useAnimeGenreArt, 
 import { api } from "../lib/api";
 import {
   addRecentSearch,
+  applySmartFilters,
   catalogKey,
   catalogTitle,
   clearRecentSearches,
   FOCUS_SEARCH_EVENT,
   genreOf,
+  parseSmartQuery,
   SEARCH_ANIME,
   SEARCH_GENRES,
   searchMinLength,
@@ -256,23 +258,43 @@ function Results({ text }: { text: string }) {
 
 const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { query: string; typing: boolean }) {
   const [filter, setFilter] = useState<SearchFilter>("all");
+  const [dismissedChips, setDismissedChips] = useState<Set<string>>(() => new Set());
   const { animeEnabled } = usePrefs();
   const { navigate } = useNavigation();
-  useEffect(() => setFilter("all"), [deferred]);
+  useEffect(() => {
+    setFilter("all");
+    setDismissedChips(new Set());
+  }, [deferred]);
 
-  const { data, isPlaceholderData, isError, refetch } = useSearch(deferred);
+  const parsed = useMemo(() => parseSmartQuery(deferred), [deferred]);
+  const activeChips = useMemo(
+    () => parsed.chips.filter((c) => !dismissedChips.has(c.id)),
+    [parsed.chips, dismissedChips],
+  );
+  // When smart chips are active and literal text remains, search the cleaned text; otherwise search the raw query.
+  const effectiveQuery = activeChips.length > 0 && parsed.textQuery.length >= searchMinLength(parsed.textQuery) ? parsed.textQuery : deferred;
+  const activeTypeChip = activeChips.find((c) => c.kind === "type")?.mediaType;
+  const activeGenreChip = activeChips.find((c) => c.kind === "genre")?.genre;
+
+  const { data, isPlaceholderData, isError, refetch } = useSearch(effectiveQuery);
   const hasQuery = deferred.length >= searchMinLength(deferred);
-  const genre = hasQuery ? genreOf(deferred) : undefined;
+  const genre = hasQuery ? (genreOf(deferred) ?? activeGenreChip) : undefined;
   // What the catalogs found (they forgive typos): what AniList is asked for when the typed words find nothing.
-  const anime = useAnimeResults(animeEnabled && hasQuery ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
+  const anime = useAnimeResults(animeEnabled && hasQuery ? effectiveQuery : "", retryTitle(data?.series ?? [], data?.movies ?? []));
   const aliases = useAnimeAliases();
-  const fromAddons = useAddonSearches(hasQuery ? deferred : "");
+  const fromAddons = useAddonSearches(hasQuery ? effectiveQuery : "");
   const viewing = useViewingLimit();
 
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
-  const movies = withoutAnime(data?.movies, anime.all, aliases);
-  const series = withoutAnime(data?.series, anime.all, aliases);
+  const movies = useMemo(
+    () => applySmartFilters(withoutAnime(data?.movies, anime.all, aliases), parsed, dismissedChips),
+    [data?.movies, anime.all, aliases, parsed, dismissedChips],
+  );
+  const series = useMemo(
+    () => applySmartFilters(withoutAnime(data?.series, anime.all, aliases), parsed, dismissedChips),
+    [data?.series, anime.all, aliases, parsed, dismissedChips],
+  );
   const people = data?.people ?? [];
   const waiting = !hasQuery || (!data && !isError);
   const stale = !waiting && !isError && (typing || isPlaceholderData);
@@ -300,11 +322,22 @@ const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { que
     return opts;
   }, [movies?.length, series?.length, people.length, animeEnabled, anime.items?.length, genre, filter]);
 
+  const effectiveFilter: SearchFilter =
+    filter !== "all"
+      ? filter
+      : activeTypeChip === "movie"
+        ? "movies"
+        : activeTypeChip === "series"
+          ? "series"
+          : activeTypeChip === "anime"
+            ? "anime"
+            : "all";
+
   const showRow = (row: SearchRow) => {
-    if (filter === "all") return true;
-    if (filter === "movies") return row === "movies" || row === "movieGenre";
-    if (filter === "series") return row === "series" || row === "seriesGenre";
-    if (filter === "anime") return row === "anime";
+    if (effectiveFilter === "all") return true;
+    if (effectiveFilter === "movies") return row === "movies" || row === "movieGenre";
+    if (effectiveFilter === "series") return row === "series" || row === "seriesGenre";
+    if (effectiveFilter === "anime") return row === "anime";
     return false;
   };
   const rows: Record<SearchRow, ReactNode> = {
@@ -340,6 +373,22 @@ const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { que
 
   return (
     <>
+      {activeChips.length > 0 && (
+        <div className="search-filters" role="group" aria-label="Detected search filters">
+          {activeChips.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              className="search-recent-item"
+              onClick={() => setDismissedChips((prev) => new Set(prev).add(chip.id))}
+              title={`Remove filter "${chip.label}" and search literally`}
+            >
+              <span>{chip.label}</span>
+              <span aria-hidden>×</span>
+            </button>
+          ))}
+        </div>
+      )}
       {filterOptions.length > 2 && (
         <div className="search-filters">
           <Segmented label="Filter results" options={filterOptions} value={filter} onChange={setFilter} />

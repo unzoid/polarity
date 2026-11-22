@@ -1211,6 +1211,11 @@ html[data-os="mac"] {
   margin-left: auto;
   align-self: flex-start;
 }
+/* With the system's own title bar (Windows desk layout), hide in-app window buttons everywhere
+   (including AccountShell / Who's watching? before desk.css loads). */
+:root[data-native-frame] .window-controls {
+  display: none !important;
+}
 .window-controls button {
   display: grid;
   place-items: center;

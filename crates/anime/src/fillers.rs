@@ -91,9 +91,23 @@ impl Fillers {
         Self::with_endpoints(cache_dir, JIKAN, ANIMEFILLERLIST)
     }
 
+    /// Reuses an existing shared HTTP connection pool.
+    pub fn with_client(cache_dir: PathBuf, http: reqwest::Client) -> Self {
+        Self {
+            path: cache_dir.join(FILE),
+            http,
+            jikan: JIKAN.into(),
+            animefillerlist: ANIMEFILLERLIST.into(),
+            pace: Duration::from_millis(400),
+            backoff: Duration::from_millis(1500),
+            cache: Mutex::new(None),
+        }
+    }
+
     fn with_endpoints(cache_dir: PathBuf, jikan: &str, animefillerlist: &str) -> Self {
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
+            .http2_adaptive_window(true)
             .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
             .build()
             .unwrap_or_default();

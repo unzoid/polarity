@@ -21,7 +21,7 @@ import { useSettings } from "../lib/net";
 import { leaveApp, systemBack } from "../lib/platform";
 import { rootTab, useRouter, type Entry, type Route } from "../lib/router";
 import { isSettingsOpen, usePrefs } from "../lib/settings";
-import { dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality, whenIdle } from "../lib/ui";
+import { canPreloadChunks, dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality, whenIdle } from "../lib/ui";
 import { IconAnime, IconBack, IconHome, IconSearch } from "./icons";
 import { OPEN_MS, OPEN_OMEGA, samples, reduced } from "./motion";
 import { takeOrigin, watchOrigins, type Origin } from "./origin";
@@ -75,9 +75,7 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
   useEffect(() => watchOrigins(), []);
   useEffect(watchInputModality, []);
   useEffect(() => {
-    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
-    const c = nav.connection;
-    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    if (!canPreloadChunks()) return;
     let cancelIdle: (() => void) | undefined;
     const t = window.setTimeout(() => {
       cancelIdle = whenIdle(() => void TitleSheet.preload().catch(() => {}), 3000);

@@ -194,9 +194,78 @@ pub fn similar(seed: &MetaPreview, lists: &[Vec<MetaPreview>], day: u64) -> Vec<
     scored.into_iter().map(|(_, m)| m.clone()).collect()
 }
 
+/// Lightweight shared taste profile for Rust-side personalization (Apple TV / `crates/ffi` parity, #521).
+#[derive(Debug, Clone, Default)]
+pub struct TasteBias {
+    /// Lowercase genre -> normalized affinity in `[-1.0, 1.0]`.
+    pub genres: std::collections::HashMap<String, f64>,
+    /// Explicitly hidden or "not interested" title IDs excluded from recommendations.
+    pub hidden: std::collections::HashSet<String>,
+    /// Subtle movie vs. series preference in `[-0.25, 0.25]` (positive favours movies).
+    pub movie_bias: f64,
+}
+
+impl TasteBias {
+    pub fn affinity(&self, m: &MetaPreview) -> f64 {
+        let genre_avg = if m.genres.is_empty() {
+            0.0
+        } else {
+            let sum: f64 = m
+                .genres
+                .iter()
+                .map(|g| self.genres.get(&g.trim().to_ascii_lowercase()).copied().unwrap_or(0.0))
+                .sum();
+            sum / m.genres.len() as f64
+        };
+        let type_bias = if m.ty == "movie" { self.movie_bias } else { -self.movie_bias };
+        genre_avg + type_bias
+    }
+}
+
+/// Personalized "More like this": filters out hidden titles and blends the profile's genre/type
+/// affinity into [`similar`] so Apple TV (`crates/ffi`) and Desktop share one Rust ranker.
+pub fn similar_personalized(
+    seed: &MetaPreview,
+    lists: &[Vec<MetaPreview>],
+    day: u64,
+    taste: &TasteBias,
+) -> Vec<MetaPreview> {
+    let base = similar(seed, lists, day);
+    let n = (base.len().max(10)) as f64;
+    let mut scored: Vec<(f64, MetaPreview)> = base
+        .into_iter()
+        .enumerate()
+        .filter(|(_, m)| !taste.hidden.contains(&m.id))
+        .map(|(rank, m)| {
+            let base_rank = 1.0 - rank as f64 / n;
+            let score = base_rank * 0.55 + taste.affinity(&m) * 0.45;
+            (score, m)
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.into_iter().map(|(_, m)| m).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mock_preview(id: &str, ty: &str, genres: &[&str], rating: &str) -> MetaPreview {
+        MetaPreview {
+            id: id.into(),
+            ty: ty.into(),
+            name: id.into(),
+            poster: None,
+            background: None,
+            logo: None,
+            logos: Vec::new(),
+            description: None,
+            release_info: Some("2020".into()),
+            imdb_rating: Some(rating.into()),
+            genres: genres.iter().map(|s| (*s).into()).collect(),
+            certification: None,
+        }
+    }
 
     #[test]
     fn civil_dates() {
@@ -208,5 +277,21 @@ mod tests {
     fn classic_genres_rotate_but_hold_within_a_day() {
         assert_eq!(classic_genres("movie", 100, 3), classic_genres("movie", 100, 3));
         assert!((100..110).any(|d| classic_genres("movie", d, 3) != classic_genres("movie", 100, 3)));
+    }
+
+    #[test]
+    fn personalized_similar_respects_taste_and_hides_dismissed_titles() {
+        let seed = mock_preview("tt0000001", "movie", &["Drama", "Sci-Fi"], "8.0");
+        let a = mock_preview("tt0000002", "movie", &["Drama", "Sci-Fi"], "7.8");
+        let b = mock_preview("tt0000003", "movie", &["Drama", "Sci-Fi", "Thriller"], "7.8");
+        let hidden = mock_preview("tt0000004", "movie", &["Drama", "Sci-Fi"], "8.5");
+        let mut taste = TasteBias::default();
+        taste.genres.insert("thriller".into(), 1.0);
+        taste.hidden.insert("tt0000004".into());
+
+        let ranked = similar_personalized(&seed, &[vec![hidden, a, b]], 100, &taste);
+        let ids: Vec<&str> = ranked.iter().map(|m| m.id.as_str()).collect();
+        assert!(!ids.contains(&"tt0000004"));
+        assert_eq!(ids[0], "tt0000003");
     }
 }

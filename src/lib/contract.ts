@@ -156,6 +156,7 @@ export const contract = {
     direct: true,
     dolbyVision: true,
     hdr: true,
+    hdr10Plus: true,
     languages: true,
     lowQualitySource: true,
     resolution: true,

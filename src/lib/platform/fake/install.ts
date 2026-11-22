@@ -83,6 +83,7 @@ const commands: Record<string, (a: Args) => unknown> = {
     return fx.movies.filter((m) => m.name.toLowerCase().includes(q) && (a.year == null || m.releaseInfo === String(a.year)));
   },
   meta: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
+  meta_display: (a) => fx.meta(String(a.id)) ?? Promise.reject({ code: "not_found", message: "not found" }),
   // TMDB title N is the fixtures' Nth movie or show here (tt9100000 + N, tt9200000 + N); from 900000 on there's no IMDb id (#208).
   // Every show has a made-up DVD order: discs of four, its specials left out (lib/library/episodeOrder.ts).
   episode_orders: (a) => {

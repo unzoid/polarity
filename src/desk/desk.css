@@ -1337,20 +1337,22 @@
 .dk-t-media {
   position: relative;
   aspect-ratio: 16 / 9;
+  margin-bottom: -1px;
   overflow: hidden;
   background: var(--dk-sheet);
 }
-/* Smooth vignette fading the hero art cleanly into the dialog canvas (no blur smear). */
+/* Smooth vignette fading the hero art cleanly into the dialog canvas (overlaps bottom edge so scaled transforms never expose a 1px seam). */
 .dk-t-media::after {
   content: "";
   position: absolute;
-  inset: 42% 0 0 0;
+  inset: 42% -2px -2px -2px;
   z-index: 1;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--dk-sheet) 34%, transparent) 46%,
-    color-mix(in srgb, var(--dk-sheet) 82%, transparent) 78%,
+    color-mix(in srgb, var(--dk-sheet) 34%, transparent) 44%,
+    color-mix(in srgb, var(--dk-sheet) 84%, transparent) 76%,
+    var(--dk-sheet) 94%,
     var(--dk-sheet) 100%
   );
   pointer-events: none;
@@ -1373,9 +1375,9 @@
 .dk-t-media video,
 .dk-t-media iframe {
   position: absolute;
-  inset: 0;
+  inset: 0 0 1px 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% - 1px);
   object-fit: cover;
 }
 .dk-t-mute {
@@ -1880,12 +1882,24 @@
   color: var(--text-2);
 }
 .dk-eps-layout {
-  display: flex;
+  display: inline-flex;
+  align-items: center;
   padding: 3px;
   border-radius: 10px;
   background: rgb(var(--ink) / 0.1);
 }
-.dk-eps-layout button {
+.dk-eps-radios {
+  display: flex;
+  align-items: center;
+}
+.dk-eps-layout-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: rgb(var(--ink) / 0.14);
+}
+.dk-eps-radios button {
   display: grid;
   place-items: center;
   width: 34px;
@@ -1895,23 +1909,168 @@
   border-radius: 7px;
   background: none;
   color: var(--text-3) !important;
+  transition: background-color 140ms ease, color 140ms ease;
 }
-.dk-eps-layout button[aria-checked="true"] {
+.dk-eps-radios button:hover {
+  color: var(--text) !important;
+}
+.dk-eps-radios button[aria-checked="true"] {
   background: rgb(var(--ink) / 0.16);
   color: var(--text) !important;
 }
-/* An episode: a 161 pt still, its number and name with the runtime under, Download at the far end, the story beside. */
+.dk-eps-search {
+  display: flex;
+  align-items: center;
+  width: 34px;
+  height: 28px;
+  border-radius: 7px;
+  overflow: hidden;
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease;
+}
+.dk-eps-search[data-open] {
+  width: clamp(148px, 24vw, 210px);
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-eps-search-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3) !important;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.dk-eps-search:not([data-open]) .dk-eps-search-btn:hover {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text) !important;
+}
+.dk-eps-search[data-open] .dk-eps-search-btn {
+  width: 28px;
+  color: var(--text-2) !important;
+}
+.dk-eps-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.dk-eps-search[data-open] .dk-eps-search-input {
+  opacity: 1;
+  pointer-events: auto;
+}
+.dk-eps-search-input::placeholder {
+  color: var(--text-3);
+}
+.dk-eps-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+.dk-eps-search-clear {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3) !important;
+  cursor: pointer;
+}
+.dk-eps-search-clear:hover {
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text) !important;
+}
+/* Episode Ratings trigger pill in the episodes bar */
+.dk-eps-ratings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.1);
+  color: var(--text-2) !important;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.dk-eps-ratings-btn:hover {
+  background: rgb(var(--ink) / 0.16);
+  color: var(--text) !important;
+}
+.dk-eps-ratings-btn svg {
+  color: #f6c453;
+}
+
+/* Classic Polarity episode list & side-by-side cards: rounded 10px stills with outline, bottom-left ▶ 42m pill,
+   full-row hover card with hairline dividers, number column, and circular right-aligned actions. */
 .dk-ep-list {
   margin: 0;
-  padding: 0 var(--dk-pad, calc(24 * var(--pt)));
+  padding: calc(6 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
   list-style: none;
 }
 .dk-ep {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgb(var(--ink) / 0.08);
+}
+.dk-ep:last-child {
+  border-bottom: 0;
+}
+.dk-ep-main {
+  flex: 1;
+  min-width: 0;
   display: grid;
-  grid-template-columns: calc(161 * var(--pt)) 1fr auto;
+  grid-template-columns: calc(30 * var(--pt)) calc(184 * var(--pt)) minmax(0, 1fr);
   gap: calc(16 * var(--pt));
-  align-items: start;
-  padding: calc(14 * var(--pt)) calc(4 * var(--pt));
+  align-items: center;
+  padding: calc(12 * var(--pt)) calc(84 * var(--pt)) calc(12 * var(--pt)) calc(6 * var(--pt));
+  margin: calc(3 * var(--pt)) 0;
+  border: 0;
+  border-radius: calc(12 * var(--pt));
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+.dk-ep[data-up-next] .dk-ep-main {
+  background: rgb(var(--ink) / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-ep:not([data-unreleased]) .dk-ep-main:hover {
+    background: rgb(var(--ink) / 0.085);
+    box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+  }
+}
+.dk-ep-main:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: -2px;
+}
+.dk-ep-row-num {
+  justify-self: center;
+  font-size: calc(16 * var(--pt));
+  font-weight: 500;
+  color: var(--text-2);
 }
 .dk-ep-row-still,
 .dk-ep-still {
@@ -1922,11 +2081,13 @@
   padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: calc(3 * var(--pt));
+  border-radius: calc(10 * var(--pt));
   background: rgb(var(--ink) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
 }
 .dk-ep-row-still img,
 .dk-ep-still img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1942,45 +2103,142 @@
   display: grid;
   place-items: center;
   color: #fff;
-  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.6));
-  transition: scale 0.2s;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.7));
+  transition: opacity 160ms ease, scale 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-:is(.dk-ep-row-still, .dk-ep-still, .dk-t-trailer):hover .dk-ep-play {
+.dk-ep-play-hover {
+  opacity: 0;
+  scale: 0.92;
+}
+.dk-ep-main:not(:disabled):hover .dk-ep-play-hover,
+.dk-ep-main:not(:disabled):focus-visible .dk-ep-play-hover,
+.dk-ep-still:not(:disabled):hover .dk-ep-play-hover,
+.dk-ep-still:not(:disabled):focus-visible .dk-ep-play-hover {
+  opacity: 1;
+  scale: 1;
+}
+:is(.dk-t-trailer):hover .dk-ep-play {
   scale: 1.08;
 }
+.dk-ep-runtime {
+  position: absolute;
+  left: calc(8 * var(--pt));
+  bottom: calc(8 * var(--pt));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--pt));
+  padding: calc(2.5 * var(--pt)) calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
+}
+.dk-ep-row-still[data-progress] .dk-ep-runtime,
+.dk-ep-still[data-progress] .dk-ep-runtime {
+  bottom: calc(14 * var(--pt));
+}
+.dk-ep-row-still .dk-progress,
+.dk-ep-still .dk-progress {
+  left: calc(8 * var(--pt));
+  right: calc(8 * var(--pt));
+  bottom: calc(6 * var(--pt));
+  height: 3.5px;
+  min-height: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.28);
+  overflow: hidden;
+}
+.dk-ep-row-still .dk-progress i,
+.dk-ep-still .dk-progress i {
+  border-radius: 999px;
+  background: var(--progress, #f5f5f7);
+}
+/* Classic Netflix / Apple TV watched indicator: crisp white circular check badge at top-left of the still. */
+.dk-ep-watched {
+  position: absolute;
+  top: calc(8 * var(--pt));
+  left: calc(8 * var(--pt));
+  z-index: 2;
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--pill-light, #fff);
+  color: var(--text-on-light, #000);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+/* Smooth view swapper (AnimatedSwap in EpisodeTools.tsx) */
+.dk-swap-frame {
+  overflow: clip;
+}
+.dk-swap-inner {
+  position: relative;
+}
+.dk-swap-panel {
+  width: 100%;
+}
 .dk-ep-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4 * var(--pt));
   min-width: 0;
 }
 .dk-ep-name {
   display: flex;
   flex-direction: column;
-  gap: calc(4 * var(--pt));
+  gap: calc(3 * var(--pt));
 }
 .dk-ep-name strong {
-  font-size: calc(14 * var(--pt));
-  font-weight: 600;
+  font-size: calc(15 * var(--pt));
+  font-weight: 650;
+  line-height: 1.28;
+  color: var(--text);
 }
 .dk-ep-name span,
 .dk-ep-meta {
   color: rgb(var(--ink) / 0.55);
   font-size: calc(12 * var(--pt));
 }
+.dk-ep-date {
+  display: block;
+  margin-top: calc(3 * var(--pt));
+  color: var(--text-3);
+  font-size: calc(12 * var(--pt));
+  font-weight: 500;
+}
 .dk-ep-text {
   display: -webkit-box;
-  margin: calc(8 * var(--pt)) 0 0;
+  margin: calc(3 * var(--pt)) 0 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  color: rgb(var(--ink) / 0.6);
+  -webkit-line-clamp: 2;
+  color: var(--text-2);
   font-size: calc(12.5 * var(--pt));
-  line-height: 1.45;
+  line-height: 1.44;
+}
+.dk-ep-card .dk-ep-text {
+  -webkit-line-clamp: 3;
+}
+.dk-ep > .dk-ep-dl-slot {
+  position: absolute;
+  right: calc(10 * var(--pt));
+  top: 50%;
+  translate: 0 -50%;
 }
 .dk-ep-dl {
   color: var(--text) !important;
 }
 .dk-ep-strip {
   display: flex;
-  gap: calc(12 * var(--pt));
+  gap: calc(14 * var(--pt));
   margin: 0;
   padding: calc(14 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) calc(6 * var(--pt));
   overflow-x: auto;
@@ -1993,7 +2251,7 @@
   display: none;
 }
 .dk-ep-strip-wrap .dk-pager {
-  top: calc(74 * var(--pt));
+  top: calc(84 * var(--pt));
   opacity: 0.92;
 }
 .dk-ep-strip-wrap .dk-pager:hover {
@@ -2001,10 +2259,49 @@
 }
 .dk-ep-card {
   flex: none;
-  width: calc(230 * var(--pt));
+  display: flex;
+  flex-direction: column;
+  width: calc(264 * var(--pt));
+}
+.dk-ep-card .dk-ep-still {
+  cursor: pointer;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-ep-card:not([data-unreleased]) .dk-ep-still:hover {
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22), 0 10px 26px rgb(0 0 0 / 0.38);
+  }
 }
 .dk-ep-card[data-up-next] .dk-ep-still {
-  box-shadow: 0 0 0 2px var(--dk-accent);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+}
+.dk-ep-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8 * var(--pt));
+  margin-top: calc(10 * var(--pt));
+  min-height: calc(26 * var(--pt));
+}
+.dk-ep-kicker {
+  font-size: calc(10.5 * var(--pt));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.dk-ep-card[data-up-next] .dk-ep-kicker {
+  color: var(--text);
+}
+.dk-ep-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: calc(2 * var(--pt));
+  font-size: calc(15 * var(--pt));
+  font-weight: 650;
+  line-height: 1.28;
+  color: var(--text);
 }
 .dk-ep-head {
   display: flex;
@@ -2027,11 +2324,43 @@
   left: calc(8 * var(--pt));
   bottom: calc(8 * var(--pt));
   padding: 2px 8px;
-  border-radius: 4px;
-  background: rgb(0 0 0 / 0.6);
-  color: #fff;
+  border-radius: 5px;
+  background: rgb(10 10 14 / 0.78);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset;
+  color: rgb(255 255 255 / 0.9);
   font-size: calc(11 * var(--pt));
   font-weight: 600;
+}
+/* Unreleased episodes: muted/desaturated artwork + subtle Upcoming pill so aired vs TBA reads at a glance. */
+.dk-ep[data-unreleased],
+.dk-ep-card[data-unreleased] {
+  opacity: 0.62;
+}
+.dk-ep[data-unreleased] .dk-ep-row-still,
+.dk-ep-card[data-unreleased] .dk-ep-still {
+  cursor: default;
+}
+.dk-ep[data-unreleased] .dk-ep-row-still img,
+.dk-ep-card[data-unreleased] .dk-ep-still img {
+  filter: grayscale(0.65) brightness(0.66);
+}
+.dk-ep[data-unreleased] .dk-ep-name strong,
+.dk-ep-card[data-unreleased] .dk-ep-head strong {
+  color: var(--text-2);
+}
+.dk-ep-upcoming-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: calc(8 * var(--pt));
+  padding: 1px calc(7 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text-2);
+  font-size: calc(10.5 * var(--pt));
+  font-weight: 600;
+  vertical-align: middle;
 }
 
 .dk-sk {
@@ -2104,13 +2433,169 @@
   vertical-align: middle;
 }
 .dk-t-anime-details {
+  --gutter: 0px;
+  --content-start: 0px;
   display: flex;
   flex-direction: column;
-  gap: calc(20 * var(--pt));
-  padding: 0 var(--dk-pad, calc(24 * var(--pt))) calc(12 * var(--pt));
+  gap: calc(18 * var(--pt));
+  padding: calc(4 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) calc(16 * var(--pt));
 }
+.dk-t-anime-details .about,
+.dk-t-anime-details .details {
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  border-top: 0;
+}
+.dk-t-anime-details .anime-characters-wrap {
+  padding-bottom: 0;
+}
+.dk-t-anime-details .anime-cast-heading,
 .dk-t-anime-details .anime-section-title {
   margin-top: 0;
+}
+
+/* Cardless full-screen frosted Episode Ratings overlay (matches ListDialog & SourcesOverlay) */
+.dk-ratings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 619;
+  background: rgb(0 0 0 / 0.78);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  transition: opacity 200ms var(--ease-out);
+}
+.dk-ratings-backdrop:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+.dk-ratings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 620;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(18 * var(--pt));
+  padding: calc(28 * var(--pt)) calc(24 * var(--pt)) calc(96 * var(--pt));
+  margin: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  background: none;
+  color: var(--text);
+  outline: none;
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.dk-ratings-overlay:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  transform: scale(0.985);
+}
+.dk-ratings-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.dk-ratings-title {
+  margin: 0;
+  font-size: calc(22 * var(--pt));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.dk-ratings-sub {
+  margin: 0;
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.56);
+}
+.dk-ratings-body {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: min(78rem, calc(100vw - 3rem));
+  min-height: 0;
+}
+.dk-ratings-overlay .ratings-views {
+  --ratings-card: transparent;
+  --body-max: min(64vh, 44rem);
+  width: 100%;
+}
+.dk-ratings-overlay .ratings-views-bar {
+  justify-content: center;
+  margin: 0 0 1.25rem;
+}
+.dk-ratings-overlay .episode-ratings[data-variant="dialog"] .episode-ratings-box {
+  --cell-bg: transparent;
+  background: transparent;
+}
+/* Non-sticky headers/averages on the transparent cardless overlay so scrolled ratings never collide behind AVG. or axis labels. */
+.dk-ratings-overlay .episode-ratings-table thead th,
+.dk-ratings-overlay .episode-ratings-table .episode-ratings-episode,
+.dk-ratings-overlay .episode-ratings-table .episode-ratings-corner,
+.dk-ratings-overlay .episode-ratings-table tfoot :is(th, td) {
+  position: static;
+  background: transparent;
+}
+.dk-ratings-overlay .episode-ratings-table tfoot :is(th, td) {
+  padding-top: 0.75rem;
+}
+/* Generous cell scaling in the full-screen overlay: bold on compact shows, comfortable on long-running shows. */
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-table {
+  border-spacing: 6px;
+}
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-table th {
+  font-size: 0.875rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-cell {
+  width: 4.35rem;
+  height: 3.05rem;
+  border-radius: 9px;
+  font-size: 1.2rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-avg {
+  width: 4.35rem;
+  font-size: 1.25rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-table {
+  border-spacing: 5px;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-table th {
+  font-size: 0.8125rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-cell {
+  width: 3.65rem;
+  height: 2.6rem;
+  border-radius: 8px;
+  font-size: 1.08rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-avg {
+  width: 3.65rem;
+  font-size: 1.15rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="compact"] .episode-ratings-cell {
+  width: 3.15rem;
+  height: 2.25rem;
+  border-radius: 7px;
+  font-size: 0.98rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="compact"] .episode-ratings-avg {
+  width: 3.15rem;
+  font-size: 1.08rem;
+}
+.dk-ratings-overlay .ratings-views > .episode-ratings-legend {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
+.dk-ratings-close {
+  position: fixed;
+  left: 50%;
+  bottom: calc(28 * var(--pt));
+  translate: -50% 0;
 }
 
 /* --- Search: the field across the top where the page's name would be. */
@@ -3108,16 +3593,29 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .dk-main {
 .dk-ep-dl-slot :is(button, a) {
   display: grid;
   place-items: center;
-  width: calc(34 * var(--pt));
-  height: calc(34 * var(--pt));
+  width: calc(28 * var(--pt));
+  height: calc(28 * var(--pt));
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   background: none;
-  color: var(--text) !important;
+  box-shadow: none;
+  color: rgb(var(--ink) / 0.58) !important;
+  cursor: pointer;
+  transition: color 140ms ease, transform 120ms ease;
 }
 .dk-ep-dl-slot :is(button, a):hover {
-  background: rgb(var(--ink) / 0.1);
+  background: none;
+  box-shadow: none;
+  color: var(--text) !important;
+}
+.dk-ep-dl-slot :is(button, a):active {
+  transform: scale(0.92);
+}
+.dk-ep-kicker-row .dk-ep-dl-slot :is(button, a) {
+  width: calc(24 * var(--pt));
+  height: calc(24 * var(--pt));
+  background: none;
 }
 .dk-ep-head .dk-ep-dl-slot {
   margin-left: auto;
@@ -3817,6 +4315,407 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .dk-main {
 .dk-anime-chips .dk-chip-primary {
   background: rgb(var(--ink) / 0.16);
   border-color: rgb(var(--ink) / 0.24);
+}
+
+/* --- Desk Anime discovery cards: below-poster captions, badges, Airing Today tiles, hover quick-peek --- */
+.dk-row-acards .dk-pager {
+  top: calc(var(--dk-poster-w) * 0.75 + 5px);
+}
+.dk-acard {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--dk-poster-w);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dk-acard:focus-visible {
+  outline: none;
+}
+.dk-acard:focus-visible .dk-acard-art {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-acard-art {
+  width: 100%;
+  border-radius: calc(8 * var(--pt));
+  background: var(--cover, rgb(var(--ink) / 0.08));
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07) inset;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, filter 200ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-acard:hover .dk-acard-art {
+    filter: brightness(1.08);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.22) inset, 0 10px 24px rgb(0 0 0 / 0.42);
+  }
+}
+.dk-acard:active .dk-acard-art {
+  transform: scale(0.97);
+}
+.dk-acard-rank {
+  position: absolute;
+  top: calc(7 * var(--pt));
+  left: calc(7 * var(--pt));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(26 * var(--pt));
+  height: calc(22 * var(--pt));
+  padding: 0 calc(6 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.76);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset, 0 2px 8px rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+}
+.dk-acard-score {
+  position: absolute;
+  top: calc(7 * var(--pt));
+  right: calc(7 * var(--pt));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  height: calc(22 * var(--pt));
+  padding: 0 calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.74);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset, 0 2px 8px rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: calc(11 * var(--pt));
+  font-weight: 650;
+  pointer-events: none;
+}
+.dk-acard-score svg {
+  color: #f6c453;
+}
+.dk-acard-pill {
+  position: absolute;
+  left: calc(7 * var(--pt));
+  right: calc(7 * var(--pt));
+  bottom: calc(7 * var(--pt));
+  z-index: 2;
+  display: inline-block;
+  width: fit-content;
+  max-width: calc(100% - calc(14 * var(--pt)));
+  padding: calc(3 * var(--pt)) calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset;
+  color: rgb(255 255 255 / 0.94);
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.dk-acard-cap {
+  display: flex;
+  flex-direction: column;
+  gap: calc(3 * var(--pt));
+  padding: calc(8 * var(--pt)) calc(2 * var(--pt)) 0;
+  min-width: 0;
+}
+.dk-acard-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.01em;
+}
+.dk-acard-meta {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--pt));
+  color: var(--text-2);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 500;
+  line-height: 1.25;
+  min-width: 0;
+}
+.dk-acard-meta-score {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  color: var(--text);
+  font-weight: 600;
+}
+.dk-acard-meta-score svg {
+  color: #f6c453;
+}
+.dk-acard-meta-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-acard-sk {
+  cursor: default;
+  pointer-events: none;
+}
+.dk-acard-sk-line {
+  display: block;
+  height: calc(12 * var(--pt));
+  border-radius: calc(4 * var(--pt));
+  width: 86%;
+}
+.dk-acard-sk-short {
+  width: 58%;
+  height: calc(10 * var(--pt));
+  margin-top: calc(2 * var(--pt));
+}
+
+/* Compact broadcast schedule tiles for Airing Today */
+.dk-row-air .dk-strip {
+  gap: calc(12 * var(--pt));
+}
+.dk-air {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  width: clamp(272px, 22vw, 336px);
+  padding: calc(9 * var(--pt));
+  border: 1px solid rgb(var(--ink) / 0.1);
+  border-radius: calc(12 * var(--pt));
+  background: rgb(var(--ink) / 0.055);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease, border-color 180ms ease, box-shadow 200ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-air:hover {
+    background: rgb(var(--ink) / 0.1);
+    border-color: rgb(var(--ink) / 0.2);
+    box-shadow: 0 10px 24px rgb(0 0 0 / 0.28);
+  }
+}
+.dk-air:active {
+  transform: scale(0.98);
+}
+.dk-air:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-air-thumb {
+  position: relative;
+  flex: none;
+  display: block;
+  width: calc(60 * var(--pt));
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: calc(7 * var(--pt));
+  background: var(--cover, rgb(var(--ink) / 0.1));
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08) inset;
+}
+.dk-air-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-air-thumb-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: calc(14 * var(--pt));
+  font-weight: 700;
+  color: rgb(255 255 255 / 0.7);
+}
+.dk-air-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4 * var(--pt));
+  min-width: 0;
+  flex: 1;
+}
+.dk-air-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(6 * var(--pt));
+}
+.dk-air-time {
+  color: var(--text-2);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dk-air-time[data-soon] {
+  color: var(--accent);
+}
+.dk-air-score {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  color: var(--text-2);
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dk-air-score svg {
+  color: #f6c453;
+}
+.dk-air-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-size: calc(14 * var(--pt));
+  font-weight: 650;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
+}
+.dk-air-sub {
+  color: var(--text-2);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-air-sk {
+  height: calc(108 * var(--pt));
+  border-color: transparent;
+  pointer-events: none;
+}
+
+/* Floating hover quick-peek card */
+.dk-apeek {
+  position: fixed;
+  z-index: 620;
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--pt));
+  padding: calc(14 * var(--pt));
+  border-radius: calc(13 * var(--pt));
+  background: color-mix(in srgb, var(--surface, #141418) 88%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 0 0 1px rgb(var(--ink) / 0.14) inset, 0 18px 48px rgb(0 0 0 / 0.56);
+  color: var(--text);
+  pointer-events: none;
+  animation: dk-apeek-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+:root[data-scheme="light"] .dk-apeek {
+  background: rgb(255 255 255 / 0.92);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1) inset, 0 16px 40px rgb(0 0 0 / 0.16);
+}
+@keyframes dk-apeek-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.975);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dk-apeek {
+    animation: none;
+  }
+}
+.dk-apeek-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(8 * var(--pt));
+}
+.dk-apeek-title {
+  margin: 0;
+  font-size: calc(15 * var(--pt));
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dk-apeek-score {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  padding: calc(2 * var(--pt)) calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(var(--ink) / 0.09);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 700;
+}
+.dk-apeek-score svg {
+  color: #f6c453;
+}
+.dk-apeek-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(6 * var(--pt));
+  font-size: calc(11.5 * var(--pt));
+  color: var(--text-2);
+}
+.dk-apeek-status {
+  display: inline-flex;
+  align-items: center;
+  height: calc(19 * var(--pt));
+  padding: 0 calc(7 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.1);
+  color: var(--text);
+  font-weight: 600;
+}
+.dk-apeek-status[data-airing] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.dk-apeek-facts {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.dk-apeek-desc {
+  margin: 0;
+  font-size: calc(12.5 * var(--pt));
+  line-height: 1.42;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dk-apeek-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(5 * var(--pt));
+}
+.dk-apeek-genre {
+  padding: calc(2 * var(--pt)) calc(8 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text-2);
+  font-size: calc(11 * var(--pt));
+  font-weight: 550;
 }
 .dk-search-discover {
   display: flex;

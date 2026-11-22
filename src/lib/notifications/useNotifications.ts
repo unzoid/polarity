@@ -31,7 +31,7 @@ async function show(note: Parameters<typeof showNote>[0]) {
 export function useNotifications() {
   const { profile } = useAccount();
   const profileId = profile?.id ?? "guest";
-  const { notifyEpisodes, notifySeasons, notifyDownloads, notifyScope } = usePrefs();
+  const { notifyEpisodes, notifySeasons, notifyDownloads, notifyScope, notifyPacing } = usePrefs();
   const { navigate, tab } = useNavigation();
 
   // Clicks, also the one that started the app.
@@ -48,7 +48,7 @@ export function useNotifications() {
 
   // New episodes and seasons.
   useEffect(() => {
-    const options = { episodes: notifyEpisodes, seasons: notifySeasons, scope: notifyScope };
+    const options = { episodes: notifyEpisodes, seasons: notifySeasons, scope: notifyScope, pacing: notifyPacing };
     const lookup = cachedLookup(queryClient);
     const deps: CheckDeps = {
       library: api.library,
@@ -78,7 +78,7 @@ export function useNotifications() {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", back);
     };
-  }, [profileId, notifyEpisodes, notifySeasons, notifyScope]);
+  }, [profileId, notifyEpisodes, notifySeasons, notifyScope, notifyPacing]);
 
   // Downloads: compared each time the list changes (it's polled while one is moving).
   const { data: downloads } = useDownloads();

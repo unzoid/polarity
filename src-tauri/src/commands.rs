@@ -188,6 +188,16 @@ pub async fn meta(state: State<'_, AppState>, ty: String, id: String) -> Result<
     Ok(state.addons.meta(&addon.manifest_url, &ty, &id).await?)
 }
 
+/// Lightweight metadata projection for background library hydration (`fillUntitled`): skips
+/// Cinemeta episode renumbering and per-season TMDB fan-out (`MetaMask::Display`).
+#[tauri::command]
+pub async fn meta_display(state: State<'_, AppState>, ty: String, id: String) -> Result<Meta> {
+    if id.starts_with("tt") {
+        return Ok(state.indexer().meta_with(&ty, &id, polar_index::MetaMask::Display).await?);
+    }
+    meta(state, ty, id).await
+}
+
 /// The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); `None` without a TMDB key.
 #[tauri::command]
 pub async fn imdb_for_tmdb(state: State<'_, AppState>, ty: String, id: u64) -> Result<Option<String>> {

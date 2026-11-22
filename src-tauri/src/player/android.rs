@@ -14,9 +14,9 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-use jni::objects::{GlobalRef, JObject};
+use jni::objects::{GlobalRef, JObject, JValue};
 use jni::sys::jint;
-use jni::JNIEnv;
+use jni::{JNIEnv, JavaVM};
 
 use crate::locks::Locked;
 
@@ -263,12 +263,7 @@ impl Drop for Player {
 /// The certificate bundle mbedTLS reads (it can't use Android's certificate store).
 const CA_FILE: &str = "cacert.pem";
 
-/// Android's trusted certificates, one PEM file each (followed by a text dump), as one bundle.
-const SYSTEM_CERTS: &str = "/system/etc/security/cacerts";
-
-/// Write `fonts.conf` (fontconfig finds Android's fonts through it) and the certificate bundle
-/// into mpv's config folder. Failures only cost subtitles their font or HTTPS its checks, so
-/// they're logged and playback goes on.
+/// Android's trusted certificates: Android 14+ Conscrypt APEX first, then legacy `/system/etc/security/cacerts`.
 fn prepare_config(dir: &Path) {
     if let Err(e) = std::fs::create_dir_all(dir) {
         tracing::warn!("mpv config folder: {e}");
@@ -278,7 +273,8 @@ fn prepare_config(dir: &Path) {
     if let Err(e) = std::fs::write(dir.join("fonts.conf"), fonts_conf(&cache)) {
         tracing::warn!("mpv fonts.conf: {e}");
     }
-    match polar_player::certs::pem_bundle(Path::new(SYSTEM_CERTS)) {
+    let dirs: Vec<&Path> = polar_player::certs::ANDROID_CERT_DIRS.iter().map(Path::new).collect();
+    match polar_player::certs::pem_bundle_from_first(&dirs) {
         Ok(pem) if !pem.is_empty() => {
             if let Err(e) = std::fs::write(dir.join(CA_FILE), pem) {
                 tracing::warn!("mpv certificates: {e}");
@@ -339,6 +335,29 @@ pub extern "system" fn Java_app_getpolar_desktop_MpvSurface_changed<'a>(
     surface.height = height;
     if let (Some(mpv), Ok(api)) = (shared.mpv, api()) {
         set_property(api, mpv, "android-surface-size", &format!("{width}x{height}"));
+    }
+}
+
+/// Ask Android's `MpvSurface.setFrameRate(fps, seamlessOnly)` to match the display refresh rate
+/// during full-screen playback (#515), or reset to `0.0` on stop/exit.
+pub fn set_surface_frame_rate(fps: f32, seamless_only: bool) {
+    let ctx = ndk_context::android_context();
+    // SAFETY: `ndk_context` holds the process's live `JavaVM*` registered by Tauri's Android runtime.
+    let Ok(vm) = (unsafe { JavaVM::from_raw(ctx.vm().cast()) }) else {
+        return;
+    };
+    let Ok(mut env) = vm.attach_current_thread() else {
+        return;
+    };
+    let res = env.call_static_method(
+        "app/getpolar/desktop/MpvSurface",
+        "setFrameRate",
+        "(FZ)V",
+        &[JValue::Float(fps), JValue::Bool(u8::from(seamless_only))],
+    );
+    if let Err(e) = res {
+        let _ = env.exception_clear();
+        tracing::debug!("mpv setFrameRate({fps}, {seamless_only}): {e}");
     }
 }
 

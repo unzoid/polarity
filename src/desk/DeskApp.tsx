@@ -12,11 +12,12 @@ import { TrailerHost } from "../components/Trailer";
 import { ErrorBoundary } from "../components/ui/ErrorBoundary";
 import { UpdateToast, WhatsNewSheet } from "../components/Updates";
 import { SeriesPickToast } from "../components/anime/SeriesPickToast";
-import { useSettings } from "../lib/net";
-import { appWindow, isDesktop, leaveApp, os, systemBack } from "../lib/platform";
+import { animeLinks } from "../lib/anime";
+import { keys, queryClient, useSettings } from "../lib/net";
+import { leaveApp, systemBack } from "../lib/platform";
 import { rootTab, useRouter, type Entry, type Route } from "../lib/router";
 import { actionFor, isSettingsOpen } from "../lib/settings";
-import { dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality, whenIdle } from "../lib/ui";
+import { canPreloadChunks, dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality } from "../lib/ui";
 import { IconBack } from "../phone/icons";
 import { OPEN_MS, OPEN_OMEGA, reduced, samples } from "../phone/motion";
 import { takeOrigin, watchOrigins, type Origin } from "../phone/origin";
@@ -74,31 +75,26 @@ export function DeskApp({ Screen, Settings }: { Screen: ComponentType<{ route: R
       delete html.dataset.deskChrome;
     };
   }, [chrome]);
-  // On Windows the desk layout keeps the system's own title bar (and its buttons); the classic layout draws its own.
-  useEffect(() => {
-    if (!isDesktop || os !== "windows") return;
-    const html = document.documentElement;
-    html.dataset.nativeFrame = "";
-    void appWindow.setDecorations(true).catch(() => delete html.dataset.nativeFrame);
-    return () => {
-      delete html.dataset.nativeFrame;
-      void appWindow.setDecorations(false).catch(() => {});
-    };
-  }, []);
   useEffect(() => watchOrigins(), []);
   useEffect(watchInputModality, []);
-  // Warm TitleDialog only after initial load settles (skipping slow/metered connections so cold boot never competes).
+  // Warm primary overlay & tab chunks right after Home's first paint so the first click never suspends.
   useEffect(() => {
-    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
-    const c = nav.connection;
-    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
-    let cancelIdle: (() => void) | undefined;
-    const t = window.setTimeout(() => {
-      cancelIdle = whenIdle(() => void TitleDialog.preload().catch(() => {}), 3000);
-    }, 5500);
+    void queryClient.prefetchQuery({ queryKey: keys.animeLinks, queryFn: animeLinks, staleTime: Infinity });
+    if (!canPreloadChunks()) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        void TitleDialog.preload()
+          .then(() => import("./TitleView").then((m) => m.preloadAnimeTitleView()))
+          .catch(() => {});
+        void DeskSearch.preload().catch(() => {});
+        void DeskMy.preload().catch(() => {});
+        void DeskAnime.preload().catch(() => {});
+      });
+    });
     return () => {
-      window.clearTimeout(t);
-      cancelIdle?.();
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
     };
   }, []);
 
@@ -237,7 +233,7 @@ export function DeskApp({ Screen, Settings }: { Screen: ComponentType<{ route: R
           const target = e.target as Element | null;
           if (target?.closest?.("[data-origin]")) {
             void TitleDialog.preload().catch(() => {});
-            if (target.closest(".dk-anime, .dk-search")) void import("./AnimeTitleView").catch(() => {});
+            void import("./TitleView").then((m) => m.preloadAnimeTitleView()).catch(() => {});
           }
         }}
       >

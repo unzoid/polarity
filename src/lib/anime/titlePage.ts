@@ -78,14 +78,15 @@ export function syncTitlePage(
   if (anilistPrefix) return anime(Number(anilistPrefix[1]));
   const kitsu = Number(id.match(/^kitsu:(\d+)$/)?.[1]) || undefined;
   if (!kitsu && !id.startsWith("tt")) return TITLE;
-  if (!opts.links) return undefined;
-
-  const linked = linkedAnimeOf(opts.links, id, kitsu);
-  if (linked) return anime(linked.anilist);
+  if (opts.links) {
+    const linked = linkedAnimeOf(opts.links, id, kitsu);
+    if (linked) return anime(linked.anilist);
+  }
 
   const known = remembered(opts.storage)[id];
   if (known && (known[0] > 0 || opts.now - known[1] < NOT_ANIME_FOR)) return known[0] > 0 ? anime(known[0]) : TITLE;
 
+  if (!opts.links) return undefined;
   if (!kitsu && preview?.genres?.length && !isAnimated(preview)) return TITLE;
   return undefined;
 }

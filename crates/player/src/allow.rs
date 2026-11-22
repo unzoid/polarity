@@ -66,6 +66,9 @@ pub const READ_ONLY_PROPERTIES: &[&str] = &[
     "audio-bitrate",
     // Best Match (#230): what the connection carries while the cache fills, in bytes per second.
     "cache-speed",
+    // Source history & diagnostics: distinguish network stalls from local pause/EOF and report active hwdec.
+    "demuxer-cache-idle",
+    "hwdec-current",
 ];
 
 /// Media and subtitles only ever come from the network (addons, or a server
@@ -172,7 +175,15 @@ mod tests {
         assert!(check_command(&[json!("get_property"), json!("cache-speed")]).is_ok());
         assert!(check_command(&[json!("set"), json!("cache-speed"), json!(0)]).is_err());
         assert!(check_command(&[json!("set"), json!("time-pos"), json!(0)]).is_err());
-        for prop in ["file-format", "video-codec", "video-params", "video-bitrate", "audio-bitrate"] {
+        for prop in [
+            "file-format",
+            "video-codec",
+            "video-params",
+            "video-bitrate",
+            "audio-bitrate",
+            "demuxer-cache-idle",
+            "hwdec-current",
+        ] {
             assert!(check_command(&[json!("get_property"), json!(prop)]).is_ok(), "{prop} is readable");
             assert!(check_command(&[json!("set"), json!(prop), json!("x")]).is_err(), "{prop} isn't settable");
             assert!(check_property(prop).is_err(), "{prop} isn't settable through mpv_set");

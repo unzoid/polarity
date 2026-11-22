@@ -4,6 +4,7 @@
 export * from "./autoplay";
 export * from "./bestMatch";
 export * from "./device";
+export * from "./diagnose";
 export * from "./discordPresence";
 export * from "./headers";
 export * from "./languages";

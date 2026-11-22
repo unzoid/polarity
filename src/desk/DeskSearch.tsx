@@ -1,10 +1,28 @@
+import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Img } from "../components/Img";
 import { retryTitle, useAnimeAliases, useAnimeResults, withoutAnime, type AnimeCard } from "../lib/anime";
-import { addRecentSearch, clearRecentSearches, searchMinLength, setSearchText, useBrowseFeatured, useFeatured, useRecentSearches, useSearchText } from "../lib/catalog";
+import { api } from "../lib/api";
+import {
+  addRecentSearch,
+  applySmartFilters,
+  catalogBound,
+  clearRecentSearches,
+  keepWithinLimit,
+  parseSmartQuery,
+  searchMinLength,
+  setSearchText,
+  useBrowseFeatured,
+  useFeatured,
+  useRecentSearches,
+  useSearchText,
+  useViewingLimit,
+  type ParsedSmartQuery,
+} from "../lib/catalog";
 import { useSearch } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import { usePrefs } from "../lib/settings";
+import type { ContentType, MetaPreview } from "../lib/types";
 import { IconSearch } from "../phone/icons";
 import { BarActions } from "./Bar";
 import type { Chrome } from "./Nav";
@@ -127,52 +145,189 @@ function Popular() {
   );
 }
 
+/**
+ * Catalog-backed lookup for pure smart-filter queries (e.g. "90s romcom movies 8+", "80s horror")
+ * where no literal title text remains to send to `/search`.
+ */
+function useSmartCatalog(
+  parsed: ParsedSmartQuery,
+  dismissed: ReadonlySet<string>,
+  enabled: boolean,
+) {
+  const viewing = useViewingLimit();
+  const activeChips = useMemo(
+    () => parsed.chips.filter((c) => !dismissed.has(c.id)),
+    [parsed.chips, dismissed],
+  );
+  const genres = useMemo(
+    () => activeChips.filter((c) => c.kind === "genre" && c.genre).map((c) => c.genre!),
+    [activeChips],
+  );
+  const mediaType = activeChips.find((c) => c.kind === "type")?.mediaType;
+  const decade = activeChips.find((c) => c.kind === "decade")?.yearRange;
+  const types: ContentType[] = mediaType === "movie" ? ["movie"] : mediaType === "series" ? ["series"] : ["movie", "series"];
+  const key = [genres.join(","), types.join(","), decade?.join("-") ?? ""].join("|");
+
+  return useQuery({
+    queryKey: ["smart-search-catalog", key],
+    enabled: enabled && (genres.length > 0 || !!decade || activeChips.some((c) => c.kind === "rating")),
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const wantClassics = !!decade && decade[0] < 2010;
+      const catalogs = wantClassics ? ["classics", "top_rated", "popular"] : ["popular", "top_rated"];
+      const primaryGenres = genres.length ? genres.slice(0, 2) : [undefined];
+      const jobs: Promise<{ type: ContentType; items: MetaPreview[] }>[] = [];
+
+      for (const ty of types) {
+        const bound = catalogBound(ty);
+        for (const g of primaryGenres) {
+          for (const cat of catalogs) {
+            jobs.push(
+              api
+                .catalog(ty, cat, 0, g, bound)
+                .then((items) => ({ type: ty, items }))
+                .catch(() => ({ type: ty, items: [] })),
+            );
+            if (cat === "popular") {
+              jobs.push(
+                api
+                  .catalog(ty, cat, 20, g, bound)
+                  .then((items) => ({ type: ty, items }))
+                  .catch(() => ({ type: ty, items: [] })),
+              );
+            }
+          }
+        }
+      }
+
+      const settled = await Promise.all(jobs);
+      const seenMovie = new Set<string>();
+      const seenSeries = new Set<string>();
+      const movies: MetaPreview[] = [];
+      const series: MetaPreview[] = [];
+      for (const { type, items } of settled) {
+        for (const item of items) {
+          if (type === "movie") {
+            if (!seenMovie.has(item.id)) {
+              seenMovie.add(item.id);
+              movies.push(item);
+            }
+          } else if (!seenSeries.has(item.id)) {
+            seenSeries.add(item.id);
+            series.push(item);
+          }
+        }
+      }
+      return { movies, series };
+    },
+    select: (res) => ({
+      movies: keepWithinLimit(res.movies, viewing),
+      series: keepWithinLimit(res.series, viewing),
+    }),
+  });
+}
+
 function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const [scope, setScope] = useState<ResultScope>("all");
+  const [dismissedChips, setDismissedChips] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     const t = window.setTimeout(() => setQuery(text), 220);
     return () => window.clearTimeout(t);
   }, [text]);
-  useEffect(() => setScope("all"), [text]);
+  useEffect(() => {
+    setScope("all");
+    setDismissedChips(new Set());
+  }, [text]);
+
   const deferred = useDeferredValue(query);
   const { animeEnabled } = usePrefs();
-  const { data, isError, refetch } = useSearch(deferred);
-  const anime = useAnimeResults(animeEnabled ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
+  const parsed = useMemo(() => parseSmartQuery(deferred), [deferred]);
+  const activeChips = useMemo(
+    () => parsed.chips.filter((c) => !dismissedChips.has(c.id)),
+    [parsed.chips, dismissedChips],
+  );
+  const hasLiteralText = parsed.textQuery.length >= searchMinLength(parsed.textQuery);
+  // Pure filter query (e.g. "90s romcom movies 8+" or "80s horror"): query curated/genre catalogs instead of literal title search.
+  const pureFilterQuery = activeChips.length > 0 && !hasLiteralText;
+  const searchTerm = activeChips.length > 0 && hasLiteralText ? parsed.textQuery : pureFilterQuery ? "" : deferred;
+
+  const textSearch = useSearch(searchTerm);
+  const smartCatalog = useSmartCatalog(parsed, dismissedChips, pureFilterQuery);
+  const rawMovies = pureFilterQuery ? smartCatalog.data?.movies : textSearch.data?.movies;
+  const rawSeries = pureFilterQuery ? smartCatalog.data?.series : textSearch.data?.series;
+  const isError = pureFilterQuery ? smartCatalog.isError : textSearch.isError;
+  const ready = pureFilterQuery ? !!smartCatalog.data : !!textSearch.data;
+  const refetch = pureFilterQuery ? smartCatalog.refetch : textSearch.refetch;
+
+  const animeTerm = animeEnabled && !pureFilterQuery ? searchTerm : animeEnabled && activeChips.some((c) => c.mediaType === "anime") ? parsed.genres[0] ?? "anime" : "";
+  const anime = useAnimeResults(animeTerm, retryTitle(rawSeries ?? [], rawMovies ?? []));
   const aliases = useAnimeAliases();
-  const movies = useMemo(() => withoutAnime(data?.movies, anime.all, aliases) ?? [], [data?.movies, anime.all, aliases]);
-  const series = useMemo(() => withoutAnime(data?.series, anime.all, aliases) ?? [], [data?.series, anime.all, aliases]);
+  const movies = useMemo(
+    () => applySmartFilters(withoutAnime(rawMovies, anime.all, aliases), parsed, dismissedChips) ?? [],
+    [rawMovies, anime.all, aliases, parsed, dismissedChips],
+  );
+  const series = useMemo(
+    () => applySmartFilters(withoutAnime(rawSeries, anime.all, aliases), parsed, dismissedChips) ?? [],
+    [rawSeries, anime.all, aliases, parsed, dismissedChips],
+  );
   const animeItems = useMemo(() => (animeEnabled ? (anime.items ?? []) : []), [animeEnabled, anime.items]);
   const top = useMemo(() => interleave(series, movies), [series, movies]);
 
+  const chipsBar = activeChips.length > 0 && (
+    <div className="dk-search-scopes" role="group" aria-label="Smart search filters">
+      {activeChips.map((chip) => (
+        <button
+          key={chip.id}
+          type="button"
+          className="dk-search-pill"
+          onClick={() => setDismissedChips((prev) => new Set(prev).add(chip.id))}
+          title={`Remove "${chip.label}" filter`}
+        >
+          <span>{chip.label}</span>
+          <span aria-hidden>×</span>
+        </button>
+      ))}
+    </div>
+  );
+
   if (isError)
     return (
-      <div className="dk-state">
-        <p>Search isn't working right now.</p>
-        <button type="button" className="dk-btn dk-btn-glass" onClick={() => void refetch()}>
-          Try Again
-        </button>
-      </div>
-    );
-  if (!data)
-    return (
-      <div className="dk-grid-block">
-        <h2 className="dk-row-title">
-          <span className="dk-row-name">Top Results</span>
-        </h2>
-        <div className="dk-grid" aria-busy>
-          <PosterSkeletons count={14} />
+      <>
+        {chipsBar}
+        <div className="dk-state">
+          <p>Search isn't working right now.</p>
+          <button type="button" className="dk-btn dk-btn-glass" onClick={() => void refetch()}>
+            Try Again
+          </button>
         </div>
-      </div>
+      </>
+    );
+  if (!ready)
+    return (
+      <>
+        {chipsBar}
+        <div className="dk-grid-block">
+          <h2 className="dk-row-title">
+            <span className="dk-row-name">Top Results</span>
+          </h2>
+          <div className="dk-grid" aria-busy>
+            <PosterSkeletons count={14} />
+          </div>
+        </div>
+      </>
     );
 
   const totalCount = top.length + animeItems.length;
   if (!totalCount && !anime.loading)
     return (
-      <div className="dk-state">
-        <h2>No matches for “{deferred}”</h2>
-        <p>Try a different title, actor, or genre.</p>
-      </div>
+      <>
+        {chipsBar}
+        <div className="dk-state">
+          <h2>No matches for “{deferred}”</h2>
+          <p>{activeChips.length ? "Click × on a filter chip above to broaden your search." : "Try a different title, actor, or genre."}</p>
+        </div>
+      </>
     );
 
   const tabs: { id: ResultScope; label: string; count: number }[] = [
@@ -187,6 +342,7 @@ function Results({ text }: { text: string }) {
 
   return (
     <div onClickCapture={(e) => (e.target as HTMLElement).closest(".dk-poster") && addRecentSearch(deferred)}>
+      {chipsBar}
       {tabs.length > 2 && (
         <div className="dk-search-scopes" role="tablist" aria-label="Filter results">
           {tabs.map((t) => (

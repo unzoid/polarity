@@ -10,6 +10,7 @@ import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -390,16 +391,52 @@ object IncomingLinks {
 
 /** Hands the video surface to mpv in Rust (src-tauri/src/player/android.rs) as it comes and goes. */
 object MpvSurface : SurfaceHolder.Callback {
+  @Volatile private var activeSurface: Surface? = null
+
   private external fun created(surface: Surface, width: Int, height: Int)
   private external fun changed(width: Int, height: Int)
   private external fun destroyed()
 
   override fun surfaceCreated(holder: SurfaceHolder) {
+    activeSurface = holder.surface
     val frame = holder.surfaceFrame
     created(holder.surface, frame.width(), frame.height())
   }
 
-  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = changed(width, height)
+  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+    activeSurface = holder.surface
+    changed(width, height)
+  }
 
-  override fun surfaceDestroyed(holder: SurfaceHolder) = destroyed()
+  override fun surfaceDestroyed(holder: SurfaceHolder) {
+    setFrameRate(0f, true)
+    activeSurface = null
+    destroyed()
+  }
+
+  /**
+   * Native frame-rate switching on Android 11+ (API 30+, #515): matches the display refresh rate
+   * to the playing video during full-screen playback and resets to 0f on stop/destroy.
+   */
+  @JvmStatic
+  fun setFrameRate(fps: Float, seamlessOnly: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    val surface = activeSurface ?: return
+    if (!surface.isValid) return
+    val safeFps = if (fps.isFinite() && fps > 0f) fps else 0f
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val strategy = if (seamlessOnly) {
+          Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS
+        } else {
+          Surface.CHANGE_FRAME_RATE_ALWAYS
+        }
+        surface.setFrameRate(safeFps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, strategy)
+      } else {
+        surface.setFrameRate(safeFps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
+      }
+    } catch (_: Throwable) {
+      // Some TV firmwares reject unsupported rates; leave the display at its current rate.
+    }
+  }
 }

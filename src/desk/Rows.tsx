@@ -135,6 +135,7 @@ export const Row = memo(function Row({
   title,
   items,
   shape = "poster",
+  className,
   onMore,
   count,
   children,
@@ -142,6 +143,7 @@ export const Row = memo(function Row({
   title: ReactNode;
   items?: readonly MetaPreview[];
   shape?: "poster" | "landscape";
+  className?: string;
   onMore?: () => void;
   count?: number;
   children?: ReactNode;
@@ -156,7 +158,7 @@ export const Row = memo(function Row({
   );
   const wide = shape === "landscape";
   return (
-    <section className={wide ? "dk-row dk-row-wide" : "dk-row"}>
+    <section className={[wide ? "dk-row dk-row-wide" : "dk-row", className].filter(Boolean).join(" ")}>
       <h2 className="dk-row-title">
         {onMore ? (
           <button type="button" className="dk-row-more" onClick={onMore}>
