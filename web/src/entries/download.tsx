@@ -26,6 +26,8 @@ const REQUIREMENTS: Record<Platform, string> = {
   ios: "Preview. Unsigned: you sign it yourself to install it.",
 };
 
+const PHONES: Platform[] = ["android", "ios"];
+
 // The visitor's own platform goes first; the phone previews come after the desktop apps.
 const ORDER: Platform[] = (["windows", "macos", "linux", "android", "ios"] as Platform[]).sort(
   (a, b) => Number(b === platform) - Number(a === platform),
@@ -39,11 +41,11 @@ function Download() {
 
   return (
     <Layout>
-      <section class="px-gutter pt-[4vh]">
+      <section class="px-6 pt-36 text-center sm:pt-44">
         <h1 class="enter text-display" style={{ "--rise": "16px", "--dur": "800ms" }}>
           Download Polarity
         </h1>
-        <p class="enter text-lede mt-8 max-w-[30em]" style={{ "--rise": "10px", "--delay": "100ms" }}>
+        <p class="enter text-lede mx-auto mt-5 max-w-[32rem] text-mute" style={{ "--rise": "10px", "--delay": "100ms" }}>
           Free and open source. The desktop apps update themselves.
           <Show when={release()?.version}>
             {(v) => (
@@ -59,14 +61,15 @@ function Download() {
         </p>
       </section>
 
-      <section class="enter px-gutter mt-16 sm:mt-20" style={{ "--rise": "20px", "--delay": "200ms", "--dur": "900ms" }}>
-        <ul class="grid gap-4 md:grid-cols-3">
+      <section class="enter mx-auto mt-16 max-w-[1200px] px-6 sm:mt-20 sm:px-8" style={{ "--rise": "20px", "--delay": "200ms", "--dur": "900ms" }}>
+        {/* Three desktop apps on the first row, the two phone previews on the second. */}
+        <ul class="grid gap-4 md:grid-cols-6">
           <For each={ORDER}>
             {(p) => (
-              <li>
+              <li class={PHONES.includes(p) ? "md:col-span-3" : "md:col-span-2"}>
                 <Smooth radius={28} class="flex h-full min-h-72 flex-col bg-tile p-8">
                   <div class="flex items-center gap-3 text-icon">{ICONS[p]()}</div>
-                  <h2 class="text-title mt-5">
+                  <h2 class="mt-5 text-2xl font-semibold tracking-[-0.024em]">
                     {PLATFORM_NAMES[p]}
                     <Show when={p === platform}>
                       <span class="ml-2 align-middle text-xs font-medium tracking-normal text-faint">Your system</span>
@@ -106,7 +109,7 @@ function Download() {
                           <>
                             <a
                               href={installers()[0].url}
-                              class="btn btn-sm btn-solid w-full"
+                              class="press flex h-11 w-full items-center justify-center gap-2 rounded-full bg-accent font-medium text-accent-ink hover:bg-accent-hover"
                             >
                               <ArrowDownToLine class="size-4" stroke-width={2.2} />
                               {installers()[0].label}
@@ -133,7 +136,7 @@ function Download() {
             )}
           </For>
         </ul>
-        <p class="mt-8 text-sm text-faint">
+        <p class="mt-8 text-center text-sm text-faint">
           Looking for an older version?{" "}
           <a href="https://github.com/unzoid/polarity/releases" class="text-mute hover:text-ink hover:underline">
             All releases

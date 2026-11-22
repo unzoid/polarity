@@ -1,7 +1,11 @@
 # Polarity website
 
-Libre Franklin, the logo's lavender with a deep indigo ink, heavy headlines and full-width ink bands.
-SolidJS + Tailwind pages, with one Elysia route (`/api/release`) that reads the latest GitHub release.
+Inter, indigo-tinted neutrals around the app's #5E5CE6 and the logo's #A7ABFF, following the system's light or
+dark mode. Large rounded cards carry fluted glass drawn in WebGL (`src/components/Flutes.tsx`), with flutes shaped
+as the logo's four-point star, rings, rays or straight reeds.
+
+SolidJS + Tailwind pages, with two Elysia routes that read GitHub: `/api/release` (the latest release) and
+`/api/issues` (recently fixed issues, shown in the Open source section).
 Hosted on Cloudflare Workers: Cloudflare serves the built pages in `dist/`, the Worker answers `/api/*`.
 
 ```sh
