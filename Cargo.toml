@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/addon", "crates/anime", "crates/cast", "crates/ffi", "crates/index", "crates/library", "crates/player", "crates/torrent", "src-tauri"]
 
 [workspace.package]
-version = "0.20.0"
+version = "0.21.0"
 edition = "2021"
 license = "MIT"
 
