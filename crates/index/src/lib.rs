@@ -19,6 +19,7 @@ mod tmdb;
 
 pub use episode_order::{EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo};
 mod person;
+pub mod similar;
 
 pub use person::{PersonHit, PersonPage};
 
@@ -251,12 +252,16 @@ impl Indexer {
                 // so close matches outside those genres still surface.
                 let seed = self.meta(ty, id).await?.preview;
                 let genres: Vec<Option<String>> = seed.genres.iter().take(2).cloned().map(Some).chain([None]).collect();
-                let lists = futures::future::join_all(genres.iter().map(|g| {
+                let pools = futures::future::join_all(genres.iter().map(|g| {
                     let g = g.as_deref();
                     self.pooled(format!("{ty}/{}", g.unwrap_or("")), c.pool(ty, g))
-                }))
-                .await;
-                let lists: Vec<Vec<MetaPreview>> = lists.into_iter().filter_map(|l| l.ok()).collect();
+                }));
+                // Its sequels and spin-offs, which the popularity pools may not reach.
+                let root = similar::name_root(&seed.name);
+                let (pools, named) = futures::join!(pools, c.search(ty, &root));
+                let mut lists: Vec<Vec<MetaPreview>> = pools.into_iter().filter_map(|l| l.ok()).collect();
+                lists
+                    .extend(named.ok().map(|n| n.into_iter().filter(|m| similar::same_root(&root, &m.name)).collect()));
                 curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect()
             }
         };
@@ -623,5 +628,20 @@ mod tests {
         assert!(l2 >= 4, "level 2 should evict half of caches, trimmed {l2}");
         let l3 = ix.trim_memory(3);
         assert!(l3 >= 2, "level 3 should aggressively evict remaining entries, trimmed {l3}");
+    }
+
+    /// Prints the keyless (Cinemeta) row for each seed, for tuning by eye:
+    /// `POLAR_RECS_SEEDS=series:tt…,movie:tt… cargo test -p polar-index live_cinemeta_rows -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "needs POLAR_RECS_SEEDS and the network"]
+    async fn live_cinemeta_rows() {
+        let Ok(seeds) = std::env::var("POLAR_RECS_SEEDS") else { return };
+        let index = Indexer::new(IndexConfig::default());
+        for seed in seeds.split(',') {
+            let (ty, id) = seed.split_once(':').unwrap_or(("series", seed));
+            let row = index.recommend(ty, id).await.unwrap();
+            let names: Vec<&str> = row.iter().take(20).map(|m| m.name.as_str()).collect();
+            println!("\n== {id} ({ty}) {}", names.join(" | "));
+        }
     }
 }

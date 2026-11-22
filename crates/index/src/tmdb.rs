@@ -22,6 +22,7 @@ use crate::{curate, IndexError, Result, PAGE_SIZE};
 
 pub(crate) mod orders;
 mod people;
+mod recs;
 
 const API: &str = "https://api.themoviedb.org/3";
 const IMG: &str = "https://image.tmdb.org/t/p";
@@ -50,6 +51,14 @@ pub struct Tmdb {
     /// One growing list per catalog (type, id, genre), so a page asked for by
     /// `skip` is a slice of the same sequence whatever the earlier pages held.
     runs: TtlCache<String, Arc<Mutex<Run>>>,
+    /// Per TMDB id: details with keywords and credits, for "more like this" (`recs.rs`).
+    details: TtlCache<(char, u64), Arc<recs::Detail>>,
+    /// Per keyword id: how many titles carry it and the most voted on of them.
+    keyword_lists: TtlCache<(char, u64), Arc<recs::KeywordList>>,
+    /// Per person id: what they created, directed or produced.
+    work: TtlCache<(char, u64), Arc<recs::Work>>,
+    /// Per kind and set of genres: the most voted-on titles with all of them.
+    genre_lists: TtlCache<String, Arc<Vec<Item>>>,
 }
 
 type Query = Vec<(String, String)>;
@@ -81,6 +90,10 @@ impl Tmdb {
             lookups: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
             imdb_ids: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
             runs: TtlCache::new(Duration::from_secs(60 * 60), 256),
+            details: TtlCache::new(Duration::from_secs(24 * 60 * 60), 4_000),
+            keyword_lists: TtlCache::new(Duration::from_secs(24 * 60 * 60), 2_000),
+            work: TtlCache::new(Duration::from_secs(24 * 60 * 60), 500),
+            genre_lists: TtlCache::new(Duration::from_secs(24 * 60 * 60), 200),
         }
     }
 
@@ -185,18 +198,6 @@ impl Tmdb {
             run.done = last;
         }
         Ok(run.items.iter().skip(skip as usize).take(PAGE_SIZE as usize).cloned().collect())
-    }
-
-    /// TMDB's own "if you liked this" list, falling back to plain similarity.
-    pub async fn recommendations(&self, ty: &str, imdb_id: &str) -> Result<Vec<MetaPreview>> {
-        let tmdb_id = self.find(ty, imdb_id).await?;
-        let kind = tmdb_kind(ty);
-        let mut list: Paged = self.get(&format!("/{kind}/{tmdb_id}/recommendations"), &[]).await?;
-        if list.results.len() < 6 {
-            let similar: Paged = self.get(&format!("/{kind}/{tmdb_id}/similar"), &[]).await?;
-            list.results.extend(similar.results);
-        }
-        Ok(curate::dedupe(self.previews(ty, list.results).await?))
     }
 
     /// Films in a TMDB collection / franchise (`/collection/{id}`), in release order.
@@ -755,6 +756,8 @@ struct Paged {
     results: Vec<Item>,
     #[serde(default = "one")]
     total_pages: u32,
+    #[serde(default)]
+    total_results: u32,
 }
 
 fn one() -> u32 {
@@ -772,6 +775,8 @@ struct Item {
     release_date: Option<String>,
     first_air_date: Option<String>,
     vote_average: Option<f64>,
+    vote_count: Option<u64>,
+    original_language: Option<String>,
     /// Lists and searches name genres only by id.
     #[serde(default)]
     genre_ids: Vec<u32>,
