@@ -12,6 +12,7 @@ import {
   noSources,
   recordFail,
   recordTry,
+  rememberBingeGroup,
   savedDownload,
   savedSource,
   torrentBlocked,
@@ -95,7 +96,9 @@ export function useSource(
     () => savedDownload(saved, { metaId, videoId }, downloadedStream(downloads.data, videoId)),
     [saved, metaId, videoId, downloads.data],
   );
-  const needsRanking = !picked && !resumeLocal && (!!prefer || saved !== undefined);
+  // Start asking add-ons right away instead of waiting for progress/downloads to settle first;
+  // candidate selection below still waits for them so a local download or saved source wins.
+  const needsRanking = !picked && !resumeLocal;
   const streams = useStreams(type, needsRanking ? videoId : undefined);
   const { settings } = useTitleSettings(type, videoId);
   // Best Match for this device; the runtime gives the files' bitrates.
@@ -229,7 +232,12 @@ export function useSource(
     const fail = (reason: string) => {
       recordFail(candidate);
       log(reason, "fail", "link");
-      setState({ status: "failed", reason });
+      if (!halted.current && attempt + 1 < candidates.length) {
+        log("Trying the next source", "warn", "link");
+        setAttempt(attempt + 1);
+      } else {
+        setState({ status: "failed", reason });
+      }
     };
     let unlisten: Promise<() => void> | undefined;
     let unlistenStop: Promise<() => void> | undefined;
@@ -257,6 +265,7 @@ export function useSource(
         if (cancelled) return;
         if (p.kind === "url") {
           log(`Link: ${describeStream(candidate.stream, p.url)}`, "info", "link");
+          rememberBingeGroup(metaId, candidate.stream.behaviorHints?.bingeGroup);
           setState({ status: "ready", url: p.url, ...candidate });
         } else if (p.kind === "torrent") {
           if (getPrefs().torrentNotice) {
@@ -268,7 +277,10 @@ export function useSource(
           }
           log(`Link: ${describeStream(candidate.stream)}`, "info", "link");
           const url = await openTorrent();
-          if (!cancelled) setState({ status: "ready", url, ...candidate });
+          if (!cancelled) {
+            rememberBingeGroup(metaId, candidate.stream.behaviorHints?.bingeGroup);
+            setState({ status: "ready", url, ...candidate });
+          }
         } else if (p.kind === "unsupported") fail(p.reason);
         else fail("This source opens outside the player.");
       })
@@ -282,7 +294,7 @@ export function useSource(
       // user keeps sharing. One still opening gives up when it sees the close.
       if (torrent) void api.torrentClose(torrentLimits(getPrefs(), batterySaver())).catch(() => {});
     };
-  }, [candidates, attempt, log]);
+  }, [candidates, attempt, log, metaId]);
 
   return {
     state,
@@ -298,6 +310,8 @@ export function useSource(
     resume: saved ?? undefined,
     /** The add-on and release group of the source being tried, when it came from the ranked list. */
     kind: (candidates?.[attempt] ?? {}) as SourceKind,
+    /** Best Match context for this title & device (reused for next-episode link warming). */
+    match: matchRef,
     /** The engine was stopped while the app was in the background (#207): the player's own error waits behind the reason. */
     halted: () => halted.current,
     /**

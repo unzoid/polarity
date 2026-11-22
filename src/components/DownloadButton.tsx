@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   downloadFraction,
@@ -20,7 +20,11 @@ import { Spinner } from "./Spinner";
 import { StreamList } from "./StreamList";
 import { buttonClass } from "./ui/Button";
 import { MenuHeader, MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuTrigger } from "./ui/Menu";
+import { lazyNamed, useFormFactor } from "../lib/ui";
+import { useDeskUi } from "../desk/mode";
 import { isTvMode } from "../tv/tvMode";
+
+const SourcesOverlay = lazyNamed(() => import("../phone/SourcesOverlay"), "SourcesOverlay");
 
 /**
  * The download control, as on Netflix and Apple TV: an arrow to start; while
@@ -37,6 +41,7 @@ export function DownloadButton({
   className = buttonClass("glass", true),
   size = 20,
   labelled = false,
+  text,
 }: {
   item: MetaPreview;
   /** The episode, for a show; a movie downloads itself. */
@@ -45,10 +50,16 @@ export function DownloadButton({
   size?: number;
   /** The title page's button (#26): names what it downloads, "Download S2 E5" or "Download Movie". */
   labelled?: boolean;
+  /** Words after the glyph, in `className`'s button, before anything is downloading (the phone sheet's wide button). */
+  text?: string;
 }) {
   const videoId = video?.id ?? item.id;
   const { download: d, pending } = useDownload(videoId);
   const [choosing, setChoosing] = useState(false);
+  const [everChoosing, setEverChoosing] = useState(false);
+  if (choosing && !everChoosing) setEverChoosing(true);
+  const desk = useDeskUi();
+  const phone = useFormFactor().form === "phone" || desk;
   const what = video ? (labelled ? shortCode(video) : "Episode") : "Movie";
 
   // The glyph pops in when the state changes, not on first paint.
@@ -63,23 +74,37 @@ export function DownloadButton({
     </span>
   );
 
-  const sheet = createPortal(
-    <Sheet
-      open={choosing}
-      onClose={() => setChoosing(false)}
-      title="Download"
-      subtitle={video ? `${episodeCode(video.season, video.episode)} · ${video.title}` : item.name}
-    >
-      <StreamList
-        type={item.type}
-        videoId={videoId}
-        onPick={(s) => {
-          setChoosing(false);
-          void startDownload(item, video, s);
-        }}
-      />
-    </Sheet>,
-    document.body,
+  const subtitle = video ? `${episodeCode(video.season, video.episode)} · ${video.title}` : item.name;
+  const sheet = phone ? (
+    everChoosing ? (
+      <Suspense fallback={null}>
+        <SourcesOverlay
+          open={choosing}
+          onClose={() => setChoosing(false)}
+          title="Download"
+          subtitle={subtitle}
+          request={{ type: item.type, videoId }}
+          onPick={(s) => {
+            setChoosing(false);
+            void startDownload(item, video, s);
+          }}
+        />
+      </Suspense>
+    ) : null
+  ) : (
+    createPortal(
+      <Sheet open={choosing} onClose={() => setChoosing(false)} title="Download" subtitle={subtitle}>
+        <StreamList
+          type={item.type}
+          videoId={videoId}
+          onPick={(s) => {
+            setChoosing(false);
+            void startDownload(item, video, s);
+          }}
+        />
+      </Sheet>,
+      document.body,
+    )
   );
 
   let control: ReactNode;
@@ -101,6 +126,7 @@ export function DownloadButton({
       >
         {glyph(failed ? <AlertCircle size={labelled ? 18 : size} /> : <Download size={labelled ? 18 : size} />)}
         {labelled && `Download ${what}`}
+        {!labelled && text}
       </button>
     );
   } else if (d.state === "done") {

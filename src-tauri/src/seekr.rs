@@ -63,18 +63,14 @@ pub struct Seekr {
 
 impl Default for Seekr {
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .timeout(Duration::from_secs(12))
-                .build()
-                .expect("http client"),
-            cache: Mutex::new(HashMap::new()),
-        }
+        Self::with_client(polar_addon::shared_http_client())
     }
 }
 
 impl Seekr {
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http, cache: Mutex::new(HashMap::new()) }
+    }
     /// `video_id` is a movie `tt…` or an episode `tt…:season:episode`.
     pub async fn track(&self, key: &str, video_id: &str, duration_ms: u64) -> Result<Option<PreviewTrack>, String> {
         let cache_key = format!("{video_id}@{}", duration_ms / 1000);
@@ -97,6 +93,7 @@ impl Seekr {
         let res = self
             .http
             .get(format!("{API}/sprites"))
+            .timeout(Duration::from_secs(12))
             .header("X-API-Key", key)
             .query(&query)
             .send()
@@ -135,6 +132,7 @@ impl Seekr {
         let v: Validation = self
             .http
             .get(format!("{API}/v1/keys/validate"))
+            .timeout(Duration::from_secs(12))
             .header("X-API-Key", key)
             .send()
             .await

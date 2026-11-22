@@ -22,7 +22,7 @@ pub mod rank;
 pub mod subs;
 pub mod types;
 
-pub use client::{AddonClient, AddonError};
+pub use client::{shared_http_client, AddonClient, AddonError};
 pub use episode::WantedEpisode;
 pub use rank::{
     prepare_asked, rank_asked, rank_prepared, rank_streams, rank_streams_filtered, Asked, RankedStream, StreamFilter,

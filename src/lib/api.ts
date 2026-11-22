@@ -66,11 +66,16 @@ export const api = {
     call<MetaPreview[]>("catalog", { ty: type, id, skip, genre, ...bound }),
   /** Titles like `id`, for "Because you watched …". */
   recommend: (type: ContentType, id: string) => call<MetaPreview[]>("recommend", { ty: type, id }),
+  /** Films in a TMDB collection / franchise (`/collection/{id}`); empty without a TMDB key. */
+  collection: (id: number) => call<MetaPreview[]>("collection", { id }),
   search: (query: string) => call<SearchResults>("search", { query }),
   /** Films only, released in `year` where the catalog can narrow it (TMDB); Cinemeta answers the plain search. */
   searchMovies: (query: string, year?: number) => call<MetaPreview[]>("search_movies", { query, year: year ?? null }),
   // Anime with no IMDb page carry a Kitsu id; no metadata addon serves those, so they're built from AniList.
   meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
+  /** Lightweight `MetaMask::Display` projection (name/poster/backdrop only, skipping episodes & Cinemeta renumbering). */
+  metaDisplay: (type: ContentType, id: string) =>
+    isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta_display", { ty: type, id }),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
   /** The orders a show can be watched in besides as aired (TMDB's episode groups); empty without a TMDB key. */

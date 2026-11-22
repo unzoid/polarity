@@ -1,6 +1,18 @@
 import { expect, test } from "bun:test";
 import "./storageStub";
-import { FACTOR_LABELS, NEUTRAL, NEW_EPISODE_DAYS, scoreOne, scoreSources, WEIGHTS, type Device, type Factor, type MatchContext, type SourceRecord } from "../src/lib/playback/bestMatch";
+import {
+  explainDifference,
+  FACTOR_LABELS,
+  NEUTRAL,
+  NEW_EPISODE_DAYS,
+  scoreOne,
+  scoreSources,
+  WEIGHTS,
+  type Device,
+  type Factor,
+  type MatchContext,
+  type SourceRecord,
+} from "../src/lib/playback/bestMatch";
 import { deviceCaps } from "../src/lib/playback/device";
 import { autoPickOrder } from "../src/lib/playback/sources";
 import {
@@ -309,4 +321,89 @@ test("the rank is the score's place in the list, ties sharing it", () => {
     { position: 4, of: 4 },
   ]);
   expect(scoreOne(a).rank).toBeUndefined();
+});
+
+// --- Phase 1 perceptual & EWMA reliability upgrades ---------------------------
+
+test("codec-normalized bitrate floor: clean 6 Mbps 4K AV1 passes while 6 Mbps 4K H.264 is penalized", () => {
+  // 5.4 GB over 2 hours = 6.0 Mbps raw.
+  const av1 = source("Quiet.Orchard.2030.2160p.WEB-DL.AV1-NOTREAL", { resolution: 2160, codec: "AV1", sizeBytes: 5.4 * GB });
+  const h264 = source("Quiet.Orchard.2030.2160p.WEB-DL.H264-NOTREAL", { resolution: 2160, codec: "H.264", sizeBytes: 5.4 * GB });
+  const c = ctx({ device: device({ screen: 2160, av1: true }) });
+  expect(reasons(av1, c)["6 Mbps is low for 4K"]).toBeUndefined();
+  expect(reasons(h264, c)["6 Mbps is low for 4K"]).toBe(WEIGHTS.bitrateLow);
+  expect(top([h264, av1], c)).toBe(av1.label);
+});
+
+test("VBR/Remux burst headroom flags peak stalls on connections that match average bitrate", () => {
+  // 45 Mbps average over 2 hours = 40.5 GB. Remux bursts ~68 Mbps (1.5x).
+  const remux = source("Long.Voyage.2029.2160p.BluRay.Remux-MADEUP", {
+    resolution: 2160,
+    tags: ["Remux"],
+    sizeBytes: 40.5 * GB,
+  });
+  const r = reasons(remux, ctx({ device: device({ screen: 2160 }), connectionMbps: 60 }));
+  expect(r["45 Mbps (peaks ~68 Mbps) is more than this connection carries (60 Mbps)"]).toBe(WEIGHTS.connectionTooSlow);
+});
+
+test("viewing-distance form factor, AIM starved-4K penalty, desktop dav1d SW decode, and HDR10+", () => {
+  // Starved 8.5 Mbps 4K H.264 (7.65 GB / 2h) loses to clean 14 Mbps 1080p (12.6 GB / 2h).
+  const starved4k = source("Starved.2030.2160p.H264-NOTREAL", { resolution: 2160, codec: "H.264", sizeBytes: 7.65 * GB });
+  const clean1080 = source("Clean.2030.1080p.BluRay.H264-NOTREAL", { resolution: 1080, codec: "H.264", sizeBytes: 12.6 * GB });
+  expect(top([starved4k, clean1080], ctx({ device: device({ screen: 2160, form: "tv" }) }))).toBe(clean1080.label);
+
+  // Phone@5H flattens 4K resolution bonus relative to Desktop@1.5H.
+  const uhd = source("Harbor.2030.2160p.WEB-NOTREAL", { resolution: 2160 });
+  const phoneRes = scoreOne(uhd, ctx({ device: device({ screen: 2160, form: "phone" }) })).factors.find((f) => f.factor === "resolution")!.points;
+  const deskRes = scoreOne(uhd, ctx({ device: device({ screen: 2160, form: "desktop" }) })).factors.find((f) => f.factor === "resolution")!.points;
+  expect(phoneRes).toBeLessThan(deskRes);
+
+  // Desktop dav1d ≤1080p softens SW decode penalty to -2 while 4K SW decode stays -12.
+  const av1_1080 = source("Salt.2030.1080p.AV1-NOTREAL", { resolution: 1080, codec: "AV1" });
+  expect(reasons(av1_1080, ctx({ device: device({ av1: false, form: "desktop" }) }))["AV1 without hardware decoding here"]).toBe(-2);
+  expect(reasons(av1_1080, ctx({ device: device({ av1: false, form: "phone" }) }))["AV1 without hardware decoding here"]).toBe(WEIGHTS.softwareDecode);
+
+  // Dynamic HDR10+ outscores static HDR10 on HDR displays, and hybrid DV+HDR10+ isn't penalized as DV-only.
+  const hdr10 = source("Glow.2030.2160p.HDR-NOTREAL", { resolution: 2160, hdr: true });
+  const hdr10p = source("Glow.2030.2160p.HDR10+-NOTREAL", { resolution: 2160, hdr: true, hdr10Plus: true });
+  const dvHdr10p = source("Glow.2030.2160p.DV.HDR10+-NOTREAL", { resolution: 2160, dolbyVision: true, hdr: false, hdr10Plus: true });
+  expect(top([hdr10, hdr10p], ctx({ device: device({ screen: 2160, hdr: true }) }))).toBe(hdr10p.label);
+  expect(reasons(dvHdr10p, ctx({ device: device({ dolbyVision: false }) }))["Dolby Vision only, which this device can't show"]).toBeUndefined();
+});
+
+test("sourceHistory EWMA decays old outages, suppresses offline/content failures, and boosts 30-min streaks", () => {
+  localStorage.removeItem("polar.sourceHistory");
+  resetSourceHistory(localStorage);
+  const day = 86_400_000;
+  const t0 = 1_700_000_000_000;
+  const kind = { addon: "TuesdayOutage" };
+  // Tuesday evening outage: 4 fails in 10 minutes.
+  for (let i = 0; i < 4; i++) {
+    recordTry(kind, t0 + i * 60_000);
+    recordFail(kind, t0 + i * 60_000 + 1000, { offline: false });
+  }
+  const duringOutage = sourceRecord("addon", "TuesdayOutage")!;
+  expect(duringOutage.recentFails).toBe(4);
+
+  // Offline and content-override failures are ignored.
+  recordFail(kind, t0 + 5 * 60_000, { offline: true });
+  recordFail(kind, t0 + 6 * 60_000, { offline: false, kind: "content" });
+  expect(sourceRecord("addon", "TuesdayOutage")!.fails).toBe(duringOutage.fails);
+
+  // Three weeks later: EWMA decays Tuesday's outage so a healthy recovery heals cleanly.
+  const later = t0 + 21 * day;
+  recordTry(kind, later);
+  recordStart(kind, 1500, later + 1000);
+  recordPlayedThrough(kind, later + 2000);
+  const healed = sourceRecord("addon", "TuesdayOutage")!;
+  expect(healed.fails).toBeLessThan(0.6);
+  expect(healed.recentFails).toBeUndefined();
+});
+
+test("explainDifference highlights top deciding deltas against #1", () => {
+  const best = source("Best.2030.1080p.WEB-NOTREAL", { resolution: 1080, languages: ["en"] });
+  const dub = source("Dub.2030.720p.WEB-NOTREAL", { resolution: 720, languages: ["ru"] });
+  const scores = scoreSources([best, dub], ctx({ audioLanguage: "en" }));
+  const diffs = explainDifference(scores.get(dub)!, scores.get(best)!, 2);
+  expect(diffs.map((d) => d.factor)).toEqual(["audioOtherLanguage", "resolution"]);
 });

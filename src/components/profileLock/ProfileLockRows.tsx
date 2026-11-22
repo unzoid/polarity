@@ -1,9 +1,10 @@
+import "../../styles/account.css";
 import { useState } from "react";
 import { useAccount, type Profile } from "../../lib/account";
 import { guardLockChange, setNewPin } from "../../lib/account/profileGuard";
 import { hasPin, isRestricted, locksAvailable, needsGuardianAdvice } from "../../lib/account/profileRules";
 import { errorMessage } from "../../lib/errors";
-import { choicesOf, settingDef } from "../../lib/settings";
+import { choicesOf, settingDef } from "../../lib/settings/catalog";
 import { Dropdown } from "../Dropdown";
 import { Button } from "../ui/Button";
 import { Switch } from "../ui/Switch";
@@ -47,9 +48,25 @@ export function ProfileLockRows({ profile }: { profile: Profile }) {
   const me = account.profile;
   const offerPinFor = me && me.id !== profile.id && !isRestricted(me) && !hasPin(me) ? me : null;
   const advise = isRestricted(profile) && needsGuardianAdvice(profile, account.profiles);
+  const isKidsPreset = lock.viewingLimit === 10 && lock.hideUnrated;
 
   return (
     <section className="profile-lock" aria-label="PIN and viewing limit">
+      <label className="profile-lock-row">
+        <span className="profile-lock-text">
+          <span className="profile-lock-title">Kids profile</span>
+          <span className="profile-lock-caption">Family-friendly titles (up to 10+) and hides unrated titles</span>
+        </span>
+        <Switch
+          checked={isKidsPreset}
+          disabled={busy}
+          onChange={(on) =>
+            void change(() =>
+              account.setProfileLock(profile.id, on ? { viewingLimit: 10, hideUnrated: true } : { viewingLimit: null, hideUnrated: false }),
+            )
+          }
+        />
+      </label>
       <div className="profile-lock-row">
         <span className="profile-lock-text">
           <span className="profile-lock-title">PIN</span>

@@ -209,8 +209,11 @@ export class MpvMedia extends EventTarget implements MediaLike {
       if (turn !== this.turn) return;
       // The link check's verdict, or mpv not starting.
       const message = errorMessage(e);
-      this.step(message, "fail", errorCode(e) === "source" ? "server" : "player");
-      this.fail(message);
+      const code = errorCode(e);
+      this.step(message, "fail", code === "source" ? "server" : "player");
+      // If libmpv / mpv itself couldn't start, trying another source would hit the exact same error.
+      const fatalPlayer = code === "player" && /couldn't load libmpv|libmpv lacks|this build has no libmpv|mpv_create failed|mpv_initialize/i.test(message);
+      this.fail(message, fatalPlayer);
     });
   }
 

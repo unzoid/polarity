@@ -1,3 +1,6 @@
+import "../styles/anime.css";
+import "../styles/detail.css";
+import "../styles/title/episode-ratings.css";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useBackdropTrailer, usePageOnTop } from "../components/BackdropTrailer";
@@ -35,6 +38,7 @@ import {
   usePlayedZip,
 } from "../lib/anime";
 import { useMeta, useProgressOf } from "../lib/net";
+import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 import { usePrefs } from "../lib/settings";
 import { detailBackdropUrl, useFoldSnap, useFormFactor, usePageTogether } from "../lib/ui";
 import { DetailSkeleton } from "../components/title/DetailSkeleton";
@@ -57,7 +61,7 @@ import { useDarkHero, useShowDarkHero } from "../components/title/darkHero";
  * entry's alone: its episodes, no season tabs, and its prequel and sequel
  * among the related titles.
  */
-export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
+export function AnimeDetail({ id, preview, episode }: { id: number; preview?: Card; episode?: string }) {
   const { animeSeparateEntries: separate, animeTitles, pageBackdrop, pageBackdropIntensity } = usePrefs();
   const bgIntensity = Math.min(1, Math.max(0.1, pageBackdropIntensity / 100));
   const [activeId, setActiveId] = useState(id);
@@ -126,6 +130,8 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   // covers the whole franchise and its trailer is the base title's, so only on that entry.
   const root = useRef<HTMLDivElement>(null);
   const onTop = usePageOnTop(root);
+  const [sheets, setSheets] = useState(0);
+  const onSheet = useCallback((open: boolean) => setSheets((n) => Math.max(0, n + (open ? 1 : -1))), []);
   const bigTrailer = !!useTrailerOpen();
   // What the hero finds is kept with the entry it's for, so an answer for the entry it showed before doesn't count.
   const heroId = source.hero;
@@ -140,23 +146,44 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
   const kept = useRef<{ first: number; imdb: string | null }>(undefined);
   if (first && resolved !== undefined && kept.current?.first !== first.id) kept.current = { first: first.id, imdb: resolved };
   const franchiseImdb = first && kept.current?.first === first.id ? kept.current.imdb : resolved;
-  // A grouped page's trailer is the base title's on every tab, as its top is (#327).
-  const trailerId = found ? (firstKnown ? franchiseImdb : undefined) : firstEntry ? imdb : undefined;
-  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, { active: onTop, paused: bigTrailer, scroller });
   const { data: meta, isLoading: metaLoading } = useMeta(
     first?.format === "MOVIE" ? "movie" : "series",
     franchiseImdb ?? "",
     !!franchiseImdb?.startsWith("tt"),
   );
+  // Viewing limit enforcement on AnimeDetail (matching Detail.tsx): respects TMDB certification and AniList adult flag.
+  const limitSubject = useMemo(
+    () =>
+      meta ??
+      (shown
+        ? {
+            id: franchiseImdb ?? `anilist:${shown.id}`,
+            type: shown.format === "MOVIE" ? ("movie" as const) : ("series" as const),
+            name: title(shown.title),
+            certification: shown.genres?.some((g) => /^hentai$/i.test(g)) ? "NC-17" : undefined,
+          }
+        : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [meta, shown, franchiseImdb],
+  );
+  const verdict = useTitleVerdict(limitSubject, !!meta || (!metaLoading && franchiseImdb !== undefined) || isError);
+  // A grouped page's trailer is the base title's on every tab, as its top is (#327).
+  const trailerId = found ? (firstKnown ? franchiseImdb : undefined) : firstEntry ? imdb : undefined;
+  const trailer = useBackdropTrailer(trailerId?.startsWith("tt") ? trailerId : undefined, {
+    active: onTop && verdict === "show",
+    paused: sheets > 0 || bigTrailer,
+    scroller,
+  });
 
   // On a phone the page comes in whole, as a show's does (Detail.tsx).
   const together = usePageTogether(!!anime || isError);
   const darkHero = useDarkHero();
   const top = useRef<HTMLDivElement>(null);
-  useShowDarkHero(darkHero && onTop && !!shown, top);
+  useShowDarkHero(darkHero && onTop && !!shown && verdict === "show", top);
 
+  if (verdict === "hide") return <EmptyState>{LIMIT_NOTICE}</EmptyState>;
   if (isError && !shown) return <EmptyState>Couldn't load this anime from AniList. Try again in a minute.</EmptyState>;
-  if (!shown)
+  if (!shown || verdict === "wait")
     return phone ? (
       <div className="detail anime-detail" ref={together.ref} data-ready={together.state}>
         <DetailSkeleton />
@@ -198,11 +225,26 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
         fallbacks={coverFallbacks}
         name={title(base.card.title)}
         onImdb={onImdb}
+        onSheet={onSheet}
         trailer={trailer}
         franchise={heroFranchise}
       />
     ) : (
-      <AnimeHero item={shown} facts={base?.card} anime={anime} logo={art.logo} logos={art.logos} logoPending={art.pending} background={art.background} fallbacks={coverFallbacks} name={title(shown.title)} onImdb={onImdb} trailer={trailer} pickInTabs={!!franchise} />
+      <AnimeHero
+        item={shown}
+        facts={base?.card}
+        anime={anime}
+        logo={art.logo}
+        logos={art.logos}
+        logoPending={art.pending}
+        background={art.background}
+        fallbacks={coverFallbacks}
+        name={title(shown.title)}
+        onImdb={onImdb}
+        onSheet={onSheet}
+        trailer={trailer}
+        pickInTabs={!!franchise}
+      />
     );
 
   return (
@@ -246,7 +288,7 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
             {hero}
           </>
         )}
-        {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} />}
+        {loaded && <Body anime={loaded} franchise={franchise} switching={!anime} onSheet={onSheet} episode={episode} />}
       </div>
       {pinnedBackdrop && <EdgeBlur className="detail-fold" />}
     </div>
@@ -259,12 +301,24 @@ export function AnimeDetail({ id, preview }: { id: number; preview?: Card }) {
  * Everything below the hero on one page, as a show's own: the episodes in a
  * shelf (or a list, your choice), then the cast, details and franchise links.
  */
-function Body({ anime, franchise, switching }: { anime: Anime; franchise?: Franchise; switching: boolean }) {
+function Body({
+  anime,
+  franchise,
+  switching,
+  onSheet,
+  episode,
+}: {
+  anime: Anime;
+  franchise?: Franchise;
+  switching: boolean;
+  onSheet?: (open: boolean) => void;
+  episode?: string;
+}) {
   const isMovie = anime.format === "MOVIE";
   const hasRelated = anime.relations.edges.length > 0 || anime.recommendations.nodes.some((n) => !!n.mediaRecommendation);
   return (
     <div className="anime-body" data-switching={switching || undefined}>
-      {!isMovie && <AnimeEpisodes key={anime.id} anime={anime} franchise={franchise} />}
+      {!isMovie && <AnimeEpisodes key={anime.id} anime={anime} franchise={franchise} onSheet={onSheet} episode={episode} />}
       {/* A film in a franchise: the season tabs, then the film as one card to play, in place of the episodes (#352). */}
       {isMovie && franchise && (
         <section className="seasons">

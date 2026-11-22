@@ -1,3 +1,4 @@
+import "../../styles/account.css";
 import { ArrowLeft, Check, Edit, Lock, Plus } from "../../components/icons";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { Avatar } from "../../components/Avatar";
@@ -9,7 +10,7 @@ import { hasPin } from "../../lib/account/profileRules";
 import { errorMessage } from "../../lib/errors";
 import { prefersReducedMotion } from "../../lib/ui";
 import { AccountShell } from "./AccountShell";
-import { flyToNavbar } from "./profileHandoff";
+import { flyToNavbar, hasNavbarTarget } from "./profileHandoff";
 import { preloadRoute } from "../lazyScreens";
 import { useGuard } from "../../components/profileLock/useGuard";
 import { ProfileLockRows } from "../../components/profileLock/ProfileLockRows";
@@ -63,19 +64,24 @@ export function ProfilesScreen({ initial = "pick", leaving = false }: { initial?
       return;
     }
     document.documentElement.dataset.profileHandoff = "";
-    // Let MainApp + Home finish their first-boot mount & paint before starting the 500ms flight and fade,
-    // so frame 0 isn't eaten by initial layout.
-    let f2 = 0;
-    const f1 = requestAnimationFrame(() => {
-      f2 = requestAnimationFrame(() => {
+    // Let MainApp + Home finish loading settings & mounting their navbar avatar before starting the 500ms flight
+    // and fade, so frame 0 isn't eaten by initial layout and slower settings loads never miss the target.
+    let raf = 0;
+    let frames = 0;
+    const startedAt = performance.now();
+    const wait = () => {
+      frames += 1;
+      if (frames >= 2 && (hasNavbarTarget() || performance.now() - startedAt > 360)) {
         setHandoffGo(true);
         if (flyToNavbar(avatar)) flown.current = true;
         else delete document.documentElement.dataset.profileHandoff;
-      });
-    });
+        return;
+      }
+      raf = requestAnimationFrame(wait);
+    };
+    raf = requestAnimationFrame(wait);
     return () => {
-      cancelAnimationFrame(f1);
-      cancelAnimationFrame(f2);
+      cancelAnimationFrame(raf);
       if (!flown.current) delete document.documentElement.dataset.profileHandoff;
     };
   }, [leaving]);

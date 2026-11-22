@@ -7,6 +7,13 @@ import { earlierCropMode, type CropMode } from "./cropMode";
 /** TV mode's interface sound packs (tv/sounds.ts renders them). */
 export type SoundPack = "ambient" | "soft" | "wood" | "glass" | "pluck" | "classic";
 
+/** Dynamic range compression profile: Pure preserves full cinema dynamics, Living Room applies mild leveling when enabled, Late Night enables full DRC. */
+export type DrcProfile = "pure" | "livingRoom" | "lateNight";
+/** Debanding mode: Off, Auto (CAMBI banding detector), or On. */
+export type DebandMode = "off" | "auto" | "on";
+/** Match display refresh rate / motion cadence during full-screen playback (#515). */
+export type FrameRateMatch = "off" | "seamless" | "always";
+
 /**
  * Preferences that only the interface reads (TV sounds, controller alerts),
  * kept in localStorage. Most describe this machine and its controllers, so
@@ -72,10 +79,12 @@ export interface Prefs {
    * as "none". "device": whatever add-ons and keys are on the device, whoever's they are.
    */
   shareSetup: ShareSetup;
-  /** mpv: louder dialogue when surround is folded down to stereo. */
+  /** mpv: louder dialogue on stereo (vocal EQ) and surround (centre-channel boost). */
   dialogueBoost: boolean;
   /** mpv: even out loud and quiet scenes. */
   volumeLeveling: boolean;
+  /** mpv: dynamic range profile (Pure, Living Room, Late Night). */
+  drcProfile: DrcProfile;
   /** The loudest the volume goes, as a slider position: 1 (100%), 1.5 or 2 (lib/playback/volume.ts). Past 100% with mpv only. */
   maxVolume: number;
   /** mpv: Dolby and DTS go to an AV receiver undecoded (`audio-spdif`). */
@@ -92,8 +101,10 @@ export interface Prefs {
   secondSubtitleLanguage: string;
   /** mpv: hardware decoding. */
   hwdec: boolean;
-  /** mpv: smooth colour banding. */
-  deband: boolean;
+  /** mpv: smooth colour banding (off, auto CAMBI detection, or always on). */
+  deband: DebandMode;
+  /** Match display refresh rate / cadence during full-screen playback (#515). */
+  frameRateMatch: FrameRateMatch;
   /** Fit, Crop black bars (mpv's autocrop) or Fill window (#330, cropMode.ts). */
   cropMode: CropMode;
   /** mpv, with autocrop: read ahead so a change of bars lands on the cut. */
@@ -124,6 +135,8 @@ export interface Prefs {
   autoDownloadUpdates: boolean;
   /** The TV mode button in the navbar (Settings → Controls & TV). */
   showTvButton: boolean;
+  /** On a computer or tablet, the previous layout (top bar, pages) instead of the Netflix-style one (src/desk). */
+  classicDesktop: boolean;
 
   // Notifications (#209), on this device: each kind off until switched on (phones ask for permission then).
   /** A series being followed has a new episode out. */
@@ -138,6 +151,8 @@ export interface Prefs {
   autoDownloadRemoveWatched: boolean;
   /** Which series count as followed: the library and what's been started, or only what's been started. */
   notifyScope: "library" | "started";
+  /** Notification pacing policy (#642): quiet (<=3/wk), balanced (<=1/day, <=5/wk), or all. */
+  notifyPacing: "quiet" | "balanced" | "all";
 
   /** Ecchi anime (AniList's adult titles never show): as is, blurred, or left out. Synced. */
   matureContent: "show" | "blur" | "hide";
@@ -151,6 +166,10 @@ export interface Prefs {
   animeEnabled: boolean;
   /** Comma-separated shelves left off the Anime page (lib/anime/shelves.ts). */
   animeHiddenShelves: string;
+  /** Show title and compact metadata below each anime poster (independent of Home/Movies/Shows). */
+  animeCardTitles: boolean;
+  /** Show a floating synopsis & genre preview after resting the pointer on an anime card. */
+  animeCardPeek: boolean;
   /** The AniList score on anime posters. */
   animeCardScores: boolean;
   /** "Ep 5 in 2d" on posters of shows on air. */
@@ -232,6 +251,7 @@ const DEFAULTS: Prefs = {
   shareSetup: "account",
   dialogueBoost: false,
   volumeLeveling: false,
+  drcProfile: "livingRoom",
   maxVolume: 1,
   passthrough: false,
   hdrOutput: "auto",
@@ -240,7 +260,8 @@ const DEFAULTS: Prefs = {
   secondSubtitles: false,
   secondSubtitleLanguage: "",
   hwdec: true,
-  deband: false,
+  deband: "off",
+  frameRateMatch: "off",
   cropMode: "fit",
   autocropLookahead: true,
   autocropEveryFrame: false,
@@ -256,17 +277,21 @@ const DEFAULTS: Prefs = {
   searchSuggestions: true,
   autoDownloadUpdates: true,
   showTvButton: true,
+  classicDesktop: false,
   notifyEpisodes: false,
   notifySeasons: false,
   notifyDownloads: false,
   autoDownloadNext: 0,
   autoDownloadRemoveWatched: false,
   notifyScope: "library",
+  notifyPacing: "balanced",
   matureContent: "show",
   viewingLimit: 0,
   viewingHideUnrated: false,
   animeEnabled: true,
   animeHiddenShelves: "",
+  animeCardTitles: true,
+  animeCardPeek: true,
   animeCardScores: true,
   animeCardCountdown: true,
   animeSeparateEntries: false,
@@ -291,7 +316,14 @@ const DEFAULTS: Prefs = {
 const STORAGE = "polar.prefs";
 
 const stored = storedJson(localStorage, STORAGE);
-let prefs: Prefs = { ...DEFAULTS, ...earlierShare(stored), ...earlierUpload(stored), ...readPrefs(stored), ...earlierCrop(stored) };
+let prefs: Prefs = {
+  ...DEFAULTS,
+  ...earlierShare(stored),
+  ...earlierUpload(stored),
+  ...readPrefs(stored),
+  ...earlierCrop(stored),
+  ...earlierDeband(stored),
+};
 const listeners = new Set<() => void>();
 
 export const getPrefs = () => prefs;
@@ -318,9 +350,17 @@ function earlierCrop(stored: unknown): Partial<Prefs> {
   return { cropMode: earlierCropMode(stored) ?? DEFAULTS.cropMode };
 }
 
+/** Migrates legacy boolean `deband` values (`true` -> `"on"`, `false` -> `"off"`). */
+function earlierDeband(stored: unknown): Partial<Prefs> {
+  if (!isRecord(stored)) return {};
+  if (stored.deband === true) return { deband: "on" };
+  if (stored.deband === false) return { deband: "off" };
+  return {};
+}
+
 /** Stored or synced prefs: the known ones, each of the kind its default is (critique M9). */
 export function readPrefs(v: unknown): Partial<Prefs> {
-  return likeTemplate(DEFAULTS, v);
+  return { ...likeTemplate(DEFAULTS, v), ...earlierDeband(v) };
 }
 
 /** The ones that follow the profile rather than the machine (account/settingsSync.ts). */
@@ -342,6 +382,8 @@ export const SYNCED_PREFS = [
   "viewingHideUnrated",
   "animeEnabled",
   "animeHiddenShelves",
+  "animeCardTitles",
+  "animeCardPeek",
   "animeCardScores",
   "animeCardCountdown",
   "animeSeparateEntries",

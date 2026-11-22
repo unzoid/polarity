@@ -34,7 +34,43 @@ async function mainThread(cdp: CDPSession, run: () => Promise<void>) {
     .filter((e) => e.name === "ProxyMain::BeginMainFrame")
     .map((e) => (e.dur ?? 0) / 1000)
     .sort((a, b) => a - b);
-  return { busy: busy / 1000 / ms, medianFrame: frames[Math.floor(frames.length / 2)] ?? 0 };
+  const pct = (p: number) => (frames.length ? frames[Math.min(frames.length - 1, Math.floor(frames.length * p))] : 0);
+  return {
+    busy: busy / 1000 / ms,
+    medianFrame: pct(0.5),
+    p75Frame: pct(0.75),
+    p95Frame: pct(0.95),
+  };
+}
+
+/** Peak memory & DOM object footprint via CDP Performance.getMetrics (Netflix CI perf tracking). */
+async function peakMetrics(cdp: CDPSession) {
+  await cdp.send("HeapProfiler.collectGarbage").catch(() => {});
+  await cdp.send("Performance.enable");
+  const { metrics } = (await cdp.send("Performance.getMetrics")) as { metrics: { name: string; value: number }[] };
+  await cdp.send("Performance.disable");
+  const get = (name: string) => metrics.find((m) => m.name === name)?.value ?? 0;
+  return {
+    jsHeapUsedMb: get("JSHeapUsedSize") / (1024 * 1024),
+    nodes: get("Nodes"),
+    layoutObjects: get("LayoutObjects"),
+  };
+}
+
+/** Fraction of visible card poster slots in the viewport whose image is still blank or failed to load. */
+async function emptyBoxRate(app: Page) {
+  return app.evaluate(() => {
+    const imgs = [...document.querySelectorAll<HTMLImageElement>(".card img, .poster-card img")];
+    let visible = 0;
+    let empty = 0;
+    for (const img of imgs) {
+      const r = img.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0 || r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) continue;
+      visible++;
+      if (!img.complete || img.naturalWidth === 0) empty++;
+    }
+    return { visible, empty, rate: visible > 0 ? empty / visible : 0 };
+  });
 }
 
 /**
@@ -123,6 +159,12 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
   await app.waitForTimeout(1500);
   expect.soft(await layerCount(app, cdp)).toBeLessThan(150);
 
+  // Peak JS heap / DOM nodes stay bounded after scrolling all shelves (measured before layoutUnit creates
+  // throwaway calibration spans in the DOM).
+  const peak = await peakMetrics(cdp);
+  expect.soft(peak.jsHeapUsedMb, `peak metrics ${JSON.stringify(peak)}`).toBeLessThan(350);
+  expect.soft(peak.nodes, `peak metrics ${JSON.stringify(peak)}`).toBeLessThan(25_000);
+
   // Scrolling back up the loaded page: each frame's main-thread part stays small. In units of this machine's
   // speed (layoutUnit), not milliseconds: on a shared CI runner the same page took 16.4 ms where it takes
   // 9.5 here. The median is about 3 units now and 8-10 before #134, also with the CPU throttled 2x. A frame
@@ -131,7 +173,7 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
   // three times today's).
   // Measured RUNS times, scrolling back down unmeasured in between; the quickest frame and unit count.
   await app.mouse.move(720, 500);
-  const runs: { medianFrame: number; unit: number }[] = [];
+  const runs: { medianFrame: number; p75Frame: number; p95Frame: number; unit: number }[] = [];
   for (let run = 0; run < RUNS; run++) {
     if (run) {
       for (let i = 0; i < 40; i++) {
@@ -140,17 +182,24 @@ test("Home stays light while it sits still and while it scrolls (#134)", async (
       }
       await app.waitForTimeout(500);
     }
-    const { medianFrame } = await mainThread(cdp, async () => {
+    const { medianFrame, p75Frame, p95Frame } = await mainThread(cdp, async () => {
       for (let i = 0; i < 40; i++) {
         await app.mouse.wheel(0, -200);
         await app.waitForTimeout(30);
       }
     });
-    runs.push({ medianFrame, unit: await layoutUnit(app) });
+    runs.push({ medianFrame, p75Frame, p95Frame, unit: await layoutUnit(app) });
   }
-  const { medianFrame, unit } = quickest(runs);
+  const { medianFrame, p75Frame, p95Frame, unit } = quickest(runs);
   const budget = Math.max(5 * unit, 15);
-  expect.soft(medianFrame, `median frame ${medianFrame} ms, layout unit ${unit} ms, budget ${budget} ms, runs ${JSON.stringify(runs)}`).toBeLessThan(budget);
+  expect
+    .soft(medianFrame, `median ${medianFrame} ms, p75 ${p75Frame} ms, p95 ${p95Frame} ms, layout unit ${unit} ms, budget ${budget} ms, runs ${JSON.stringify(runs)}`)
+    .toBeLessThan(budget);
+  expect.soft(p75Frame, `p75 frame ${p75Frame} ms`).toBeLessThan(budget * 1.8);
+
+  // Visible poster empty-box rate stays bounded after scrolling back up.
+  const boxes = await emptyBoxRate(app);
+  expect.soft(boxes.rate, `empty box rate ${JSON.stringify(boxes)}`).toBeLessThanOrEqual(0.2);
 });
 
 /** The invented shows' AniList entries and ani.zip records (src/lib/platform/fake/longAnime.ts); the fake shell has their series. */

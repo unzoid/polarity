@@ -1,4 +1,10 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import "../styles/account.css";
+import "../styles/anime.css";
+import "../styles/detail.css";
+import "../styles/screens.css";
+import "../styles/title/episode-ratings.css";
+import "../styles/tv.css";
 import { PlayerLayer, usePlayerLayer } from "../components/PlayerLayer";
 import { rootTab, useRouter, type Route } from "../lib/router";
 import { TV_ACTION_EVENT, type TvAction } from "./gamepad";
@@ -49,7 +55,7 @@ const TvScreen = memo(function TvScreen({ route }: { route: Route }) {
     case "home":
       return <TvHome />;
     case "discover":
-      return <TvDiscover type={route.type} />;
+      return <TvDiscover type={route.type} catalog={route.catalog} genre={route.genre} />;
     case "library-collection":
       return route.view === "downloads" ? <TvDownloads /> : <TvLibrary />;
     case "library":

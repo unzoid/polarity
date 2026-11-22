@@ -16,10 +16,10 @@ const EDGE_WEIGHT = 3;
  * Where the glow's colour is held (HSL): a dark shade, as Netflix's page colours are (lightness 0.08–0.21 measured
  * from its app), never more saturated than the art itself, and no less dark however bright it is.
  */
-const SATURATION = [0.1, 0.55] as const;
-const LIGHTNESS = [0.1, 0.2] as const;
-/** A grey picture's shade: a near-neutral with a little blue, as Netflix's are. */
-const NEUTRAL = { hue: 228, saturation: 0.12, lightness: 0.11 } as const;
+const SATURATION = [0.14, 0.62] as const;
+const LIGHTNESS = [0.1, 0.205] as const;
+/** A grey picture's shade: a near-neutral cool slate whose brightness follows the poster (as Netflix's does). */
+const NEUTRAL = { hue: 216, saturation: 0.06, lightness: [0.09, 0.165] as const } as const;
 
 export type Rgb = [number, number, number];
 
@@ -40,6 +40,7 @@ export function glowColor(px: ArrayLike<number>, width?: number): Rgb | null {
   // of a grey, rainy picture doesn't make it a red one.
   let colourful = 0;
   let count = 0;
+  let lumSum = 0;
   for (let p = 0; p < n; p++) {
     const i = p * 4;
     if (px[i + 3] < 128) continue;
@@ -51,6 +52,7 @@ export function glowColor(px: ArrayLike<number>, width?: number): Rgb | null {
     count += place;
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
+    lumSum += ((max + min) / 510) * place;
     const v = max / 255;
     const s = max ? (max - min) / max : 0;
     if (v < MIN_VALUE || s < MIN_SATURATION) continue;
@@ -63,14 +65,34 @@ export function glowColor(px: ArrayLike<number>, width?: number): Rgb | null {
     sum[bucket][2] += b * k;
   }
   if (!count) return null;
-  if (colourful / count < MIN_COLOURFUL) return fromHsl(NEUTRAL.hue, NEUTRAL.saturation, NEUTRAL.lightness);
+  if (colourful / count < MIN_COLOURFUL) {
+    const avgL = lumSum / count;
+    return fromHsl(NEUTRAL.hue, NEUTRAL.saturation, clamp(avgL * 0.28, NEUTRAL.lightness[0], NEUTRAL.lightness[1]));
+  }
   let best = 0;
   for (let b = 1; b < BUCKETS; b++) if (weight[b] > weight[best]) best = b;
   const total = weight[best];
   const [h0, s0, l0] = toHsl(sum[best][0] / total, sum[best][1] / total, sum[best][2] / total);
   // Muted by how little of the picture is in colour: a small coloured area tints, a colourful poster glows.
-  const share = Math.min(1, colourful / count / 0.5);
-  return fromHsl(h0, clamp(s0 * (0.4 + 0.4 * share), SATURATION[0], SATURATION[1]), clamp(l0 * 0.45, LIGHTNESS[0], LIGHTNESS[1]));
+  const share = Math.min(1, colourful / count / 0.45);
+  return fromHsl(h0, clamp(s0 * (0.52 + 0.36 * share), SATURATION[0], SATURATION[1]), clamp(l0 * 0.42, LIGHTNESS[0], LIGHTNESS[1]));
+}
+
+/**
+ * Netflix's top-right ambient spotlight derived from `base`: keeps the exact hue and saturation
+ * (never washing out with white) while lifting lightness ~2.45×, capped lower on warm yellow/green
+ * hues so white navbar chrome stays crisp.
+ */
+export function glowSpotlight(base: Rgb): Rgb {
+  const [h, s, l] = toHsl(base[0], base[1], base[2]);
+  const maxL = h >= 35 && h <= 165 ? 0.31 : 0.38;
+  return fromHsl(h, s, clamp(l * 2.45, 0.2, maxL));
+}
+
+/** Deep saturated shade for the hero card's bottom scrim so it melts into the art's colour instead of flat black. */
+export function glowScrim(base: Rgb): Rgb {
+  const [h, s, l] = toHsl(base[0], base[1], base[2]);
+  return fromHsl(h, clamp(s * 0.85, 0, 0.5), clamp(l * 0.62, 0.04, 0.11));
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));

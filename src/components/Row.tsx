@@ -176,7 +176,7 @@ export function RowPaddle({
       tabIndex={-1}
     >
       {/* Barely blurred where it starts, gathering toward the edge, so it has no visible inner line. */}
-      <EdgeBlur edge={prev ? "left" : "right"} layers={6} step={0.9} curve={1.6} />
+      <EdgeBlur edge={prev ? "left" : "right"} layers={6} step={0.9} curve={1.6} strength={0.85} />
       {prev ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
     </button>
   );

@@ -14,6 +14,7 @@ import {
   Fullscreen,
   Pause,
   Play,
+  Reset,
   Settings as Cog,
   Shuffle,
   SkipForward,
@@ -24,9 +25,12 @@ import {
   VolumeMuted,
 } from "../components/icons";
 import { AnimatePresence, motion } from "motion/react";
-import { ease, useDismiss, useFormFactor, useLayer } from "../lib/ui";
+import { ease, lazyNamed, useDismiss, useFormFactor, useLayer } from "../lib/ui";
+import { useDeskUi } from "../desk/mode";
+import { DeskPlayerChrome } from "../desk/DeskPlayerChrome";
+import { DeskPlayerSheets } from "../desk/DeskPlayerSheets";
 import { anchorOf, appWindow, canEmbedOtherSites, isDesktop, isMac, isTvDevice, keepScreenOn, nativeDialogsAvailable, os, setImmersive, showNativeDialog } from "../lib/platform";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "../components/BackButton";
 import { Img } from "../components/Img";
 import { Spinner } from "../components/Spinner";
@@ -39,6 +43,8 @@ import {
   airedAt,
   autoPickOrder,
   autoplayStreak,
+  buildFixPlan,
+  classifyPlaybackError,
   warmLinks,
   countAutoplay,
   describeStream,
@@ -131,12 +137,12 @@ import { Segmented } from "../components/Segmented";
 import { api } from "../lib/api";
 import { useAccount } from "../lib/account";
 import { airLabel, episodeCode, formatRemaining, formatTime, runtimeSeconds } from "../lib/format";
-import { cachedStreams, keys, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
+import { cachedStreams, keys, loadCoordinator, prefetchStreams, useMeta, useProgress, useStreams, useUpdateSettings } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import type { ContentType, Meta, Progress, RankedStream, Stream, Video } from "../lib/types";
 import { playContext, stillFor } from "../lib/anime";
 import { useMpvTune } from "../components/player/useMpvTune";
-import { setTvMode, useTvMode } from "../tv/tvMode";
+import { useTvMode } from "../tv/tvMode";
 import { usePadGlyph } from "../tv/TvChrome";
 import { fileId, filePlace, fileStream, isFileId, recentPosition, useRecentFiles } from "../lib/localFiles";
 import {
@@ -172,7 +178,6 @@ import { errorMessage, storeLocal, warnFailed } from "../lib/errors";
 import { PLAYER_EXIT_MS } from "../components/PlayerLayer";
 import { PlayerStatus } from "../components/player/PlayerStatus";
 import { useLoadingArt } from "../components/player/useLoadingArt";
-import { TorrentNotice } from "../components/player/TorrentNotice";
 import { FrameLabel, PlayerClock, TIME_DISPLAYS } from "../components/player/PlayerClock";
 import { useMediaTime } from "../components/player/useMediaTime";
 import { usePlayerChrome } from "../components/player/usePlayerChrome";
@@ -187,9 +192,18 @@ import { useAirPlay } from "../components/player/useAirPlay";
 import { PlayerPauseScreen } from "../components/player/PauseScreen";
 import { PlayerRatingPrompt } from "../components/player/RatingPrompt";
 
+const TorrentNotice = lazyNamed(() => import("../components/player/TorrentNotice"), "TorrentNotice");
+
 const win = appWindow;
 /** In a watch party, how long a source gets to start before the next one is tried. */
 const PARTY_START_MS = 20_000;
+/** Solo playback: how long a direct link (or torrent) gets to render frame 1 before auto-failing over. */
+const SOLO_START_MS = 15_000;
+const TORRENT_START_MS = 45_000;
+/** Continuous mid-playback buffering before offering a one-click switch to the next source. */
+const STALL_PROMPT_MS = 12_000;
+/** Short delay on desktop mouse click so double-click to fullscreen never pauses and unpauses the video. */
+const CLICK_PAUSE_DELAY_MS = 200;
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 /** What Subtitles & Audio and Speed say for a YouTube video outside TV mode: they're YouTube's own controls there (#384). TV mode has menus for them (#434). */
 const YT_CAPTIONS = "Captions for a YouTube video are in YouTube's player: its CC button and settings.";
@@ -210,6 +224,7 @@ export function Player({
   videoId,
   stream,
   shuffle = false,
+  startParty: autoParty = false,
   leaving = false,
 }: {
   type: ContentType;
@@ -218,10 +233,12 @@ export function Player({
   stream?: Stream;
   /** The show's episodes in random order; nothing is saved or scrobbled (lib/playback/shuffle.ts). */
   shuffle?: boolean;
+  /** Automatically open a Watch Party room once playback starts (one-click "Watch Together" from Detail). */
+  startParty?: boolean;
   /** Route already popped; only the exit fade is left. Ignore input. */
   leaving?: boolean;
 }) {
-  const { back, replace, tab } = useNavigation();
+  const { back, navigate, replace, tab } = useNavigation();
   // TV mode keeps the window fullscreen: no fullscreen toggle, and Esc simply goes back.
   const tv = useTvMode();
   // With a controller in TV mode, controls show the button that triggers them.
@@ -251,9 +268,19 @@ export function Player({
   const { settings, anime, original } = useTitleSettings(type, videoId);
   const { touch, form, compact } = useFormFactor();
   // Engine: embedded mpv when installed (plays every codec, AC3/DTS audio, every
-  // subtitle format), else the WebView's own <video>.
+  // subtitle format), else the WebView's own <video>. `forceHtml` allows "Fix Playback"
+  // to fall back to the built-in player for a session.
+  const [forceHtml, setForceHtml] = useState(false);
   const engineQuery = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
-  const engine: "mpv" | "html" | "youtube" | null = ytId ? "youtube" : engineQuery.isFetched ? (engineQuery.data ? "mpv" : "html") : null;
+  const engine: "mpv" | "html" | "youtube" | null = ytId
+    ? "youtube"
+    : forceHtml
+      ? "html"
+      : engineQuery.isFetched
+        ? engineQuery.data
+          ? "mpv"
+          : "html"
+        : null;
   const mpv = useMemo(() => new MpvMedia(), []);
   const yt = useMemo(() => new YouTubeMedia(), []);
   const [ytFrame, setYtFrame] = useState<HTMLIFrameElement | null>(null);
@@ -398,7 +425,7 @@ export function Player({
   const hideAfter = Math.max(1, settings?.controlsHideSecs ?? 2) * 1000;
   const countdown = Math.max(3, settings?.autoplayCountdown ?? 8);
   const timeDisplay = settings?.timeDisplay ?? "remaining";
-  useMpvTune(engine === "mpv" ? mpv : null);
+  useMpvTune(engine === "mpv" ? mpv : null, fullscreen || tv);
   // Subtitle look (saved) and timing offset (this source of this episode, remembered on this device, #418).
   const subStyle = settings?.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE;
   const playingStream = source.state.status === "ready" ? source.state.stream : undefined;
@@ -575,6 +602,15 @@ export function Player({
     const v = videoRef.current;
     if (!party && profile && v) startParty({ ...partyMedia, hint }, v.currentTime, v.paused, profile);
   };
+  const autoPartyStarted = useRef(false);
+  useEffect(() => {
+    if (!autoParty || autoPartyStarted.current || !ready || !started || !profile || party || !videoRef.current) return;
+    autoPartyStarted.current = true;
+    const v = videoRef.current;
+    startParty({ ...partyMedia, hint }, v.currentTime, v.paused, profile);
+    setOptions("party");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoParty, ready, started, profile, party]);
 
   // --- mpv lifecycle ----------------------------------------------------------
   useEffect(() => {
@@ -711,18 +747,113 @@ export function Player({
     if (videoRef.current) videoRef.current.playbackRate = inParty ? 1 : playRate;
   }, [playRate, source.state, media, inParty]);
 
-  // In a party, a source that won't start keeps the whole room waiting: move
-  // on to the next one, as picking another source by hand would.
+  // A source that hangs before showing frame 1 shouldn't trap the viewer (party OR solo): move on to the next candidate.
   const sourceNext = source.next;
   useEffect(() => {
-    if (!inParty || started || source.state.status !== "ready") return;
+    if (started || source.state.status !== "ready" || local || link) return;
+    const isTorrent = !!source.state.stream.infoHash;
+    const limit = inParty ? PARTY_START_MS : isTorrent ? TORRENT_START_MS : SOLO_START_MS;
     const t = window.setTimeout(() => {
-      logStep(`Not playing after ${PARTY_START_MS / 1000} s; the watch party is waiting`, "warn", "player");
+      logStep(
+        inParty ? `Not playing after ${limit / 1000} s; the watch party is waiting` : `No picture after ${limit / 1000} s; trying another source`,
+        "warn",
+        "player",
+      );
       if (sourceNext()) flashNotice("That source was slow to start. Trying the next best one.", 3500);
-    }, PARTY_START_MS);
+    }, limit);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a new attempt is a new source.state
-  }, [inParty, started, source.state]);
+  }, [inParty, started, source.state, local, link]);
+
+  // Mid-playback stall recovery: if buffering runs continuously for 12s, offer a non-blocking source switch.
+  const [stallPrompt, setStallPrompt] = useState(false);
+  const [stallDismissed, setStallDismissed] = useState(false);
+  useEffect(() => {
+    setStallDismissed(false);
+    setStallPrompt(false);
+  }, [source.state]);
+  useEffect(() => {
+    if (!started || paused || ended || !buffering || castingAway || local || link || !!options || stallDismissed) {
+      setStallPrompt(false);
+      return;
+    }
+    const t = window.setTimeout(() => setStallPrompt(true), STALL_PROMPT_MS);
+    return () => window.clearTimeout(t);
+  }, [started, paused, ended, buffering, castingAway, local, link, options, stallDismissed]);
+
+  const switchStalledSource = useCallback(() => {
+    setStallPrompt(false);
+    const at = videoRef.current?.currentTime;
+    if (at != null && Number.isFinite(at) && at > 0) reached.current = at;
+    recordFail(source.kind);
+    if (sourceNext()) {
+      logStep("Switched source after stall", "warn", "player");
+      flashNotice("Switching to the next best source…", 3000);
+    } else {
+      setOptions("sources");
+    }
+  }, [source.kind, sourceNext, logStep, flashNotice]);
+
+  // 4-tier load shedding: while playback is starting or buffering, mark critical traffic active
+  // so background readiness probes / next-episode warming yield bandwidth automatically.
+  const criticalPlayback = !started || buffering;
+  useEffect(() => {
+    if (!criticalPlayback) return;
+    return loadCoordinator.enterCritical();
+  }, [criticalPlayback]);
+
+  // Self-healing "Diagnose & Fix Playback" runner: classifies failures deterministically and steps
+  // through safe non-destructive fixes (audio filters -> SDR -> sw decode -> next source -> built-in).
+  const [appliedFixes, setAppliedFixes] = useState<string[]>([]);
+  const [lastFixLabel, setLastFixLabel] = useState<string | null>(null);
+  const failedNow = source.state.status === "failed" || !!error;
+  const activeErrorText = error ?? (source.state.status === "failed" ? source.state.reason : null);
+  const diagnosis = useMemo(
+    () => (failedNow ? classifyPlaybackError(steps, activeErrorText) : null),
+    [failedNow, steps, activeErrorText],
+  );
+  const currentPrefs = usePrefs();
+  const fixPlan = useMemo(() => {
+    if (!diagnosis) return [];
+    return buildFixPlan(diagnosis, currentPrefs, {
+      engine,
+      hasNextSource: !link && !local,
+      canHtmlFallback: engine === "mpv" && !forceHtml && !ytId,
+    }).filter((a) => !appliedFixes.includes(a.id));
+  }, [diagnosis, currentPrefs, engine, link, local, forceHtml, ytId, appliedFixes]);
+  const nextFix = fixPlan[0];
+
+  useEffect(() => {
+    if (started && lastFixLabel) {
+      flashNotice(`Fixed playback: ${lastFixLabel}. Saved on this device.`, 4500);
+      setLastFixLabel(null);
+    }
+  }, [started, lastFixLabel, flashNotice]);
+
+  const runPlaybackFix = useCallback(() => {
+    if (!nextFix) return;
+    setAppliedFixes((prev) => [...prev, nextFix.id]);
+    logStep(`Fix Playback: ${nextFix.label}`, "info", "player");
+    if (nextFix.id === "nextSource") {
+      setError(null);
+      if (!sourceNext()) setOptions("sources");
+      return;
+    }
+    if (nextFix.id === "htmlFallback") {
+      setError(null);
+      setForceHtml(true);
+      setLastFixLabel(nextFix.label);
+      return;
+    }
+    setPrefs(nextFix.prefsPatch);
+    setLastFixLabel(nextFix.label);
+    setError(null);
+    source.retry();
+  }, [nextFix, logStep, sourceNext, source]);
+
+  // Debounce single-click play/pause on desktop mouse so double-click fullscreen never stutters.
+  const clickTimer = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
 
   // Fullscreen carries over from the previous episode; Settings → Playback
   // can also start every video in it.
@@ -1032,14 +1163,13 @@ export function Player({
   }, [back, tv, miniPlayer]);
 
   /**
-   * The Settings page a playback problem names. In TV mode (#435): Sources is TV's own Sources settings; Add-ons, which
-   * TV mode has no page for, is desktop mode's.
+   * The Settings page a playback problem names. In TV mode (#435): both Sources and Add-ons stay in TV's own
+   * Settings so remote/controller users are never booted into pointer-only desktop UI.
    */
   const openSettingsPage = useCallback(
     (page: "sources" | "addons") => {
-      if (tv && page === "sources") return tab({ name: "settings", page: "sources" });
+      if (tv) return tab({ name: "settings", page });
       void exit();
-      if (tv) setTvMode(false);
       openSettings(page);
     },
     [tv, tab, exit],
@@ -1161,7 +1291,7 @@ export function Player({
       sourceInfo.show(
         r,
         sourceRow(r).title,
-        { filter: sourceFilters.filter, sort: sourceFilters.sort, match: sourceFilters.match(r), playing: report },
+        { filter: sourceFilters.filter, sort: sourceFilters.sort, match: sourceFilters.match(r), best: sourceFilters.bestMatch, playing: report },
         anchor,
       ),
     );
@@ -1381,20 +1511,36 @@ export function Player({
     }
   }, [next, pastThreeQuarters, type]);
 
-  // Autoplay countdown once the episode ends, unless it's time to ask
-  // whether anyone's still watching (Settings → Playback). Pauses while playback is
-  // paused before EOF or while a picker/menu is open so browsing sources/subtitles never hijacks playback.
+  // With IntroDB / chapter credit timings, "Up next" arrives as soon as credits
+  // roll (Netflix-style) and counts down immediately unless there's a post-credits
+  // scene or the user prefers waiting until the very end.
+  const creditsStart = skip.segments?.outro?.start;
+  const postCredits = !!skip.segments?.postCredits;
+  const atEnd = settings?.nextUpTiming === "end";
+  const nearEnd = useMediaTime(media, (t) => {
+    if (!(t.duration > 0)) return "unknown";
+    const remaining = t.duration - t.current;
+    const inCredits = creditsStart != null && t.current >= creditsStart && !postCredits;
+    return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
+  });
+  const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
+  const creditsRoll = creditsStart != null && !postCredits && !atEnd && nearEnd === "yes";
+
+  // Autoplay countdown once credits start (when known) or once the episode ends,
+  // unless it's time to ask whether anyone's still watching (Settings → Playback).
+  // Pauses while playback is paused before EOF or while a picker/menu is open.
   const askAfter = settings?.stillWatchingAfter ?? 0;
   const stillWatching = askAfter > 0 && autoplayStreak() >= askAfter;
   // A sleep timer set to the end of this episode (or run out) stops here: no next one (#270).
   const willAutoplay = !!settings?.autoplayNext && !stillWatching && sleep.choice !== "episode" && !sleep.asleep;
+  const autoAdvancing = showNextUp && willAutoplay && (ended || creditsRoll);
   const countdownPaused = (paused && !ended) || !!options || moreOpen || !!sourceMenu;
   const autoplayLeft = useRef(countdown * 1000);
   useEffect(() => {
     autoplayLeft.current = countdown * 1000;
-  }, [ended, videoId, countdown]);
+  }, [autoAdvancing, videoId, countdown]);
   useEffect(() => {
-    if (!ended || !next || nextDismissed || !willAutoplay || countdownPaused) return;
+    if (!autoAdvancing || !next || countdownPaused) return;
     const startedAt = performance.now();
     const wait = autoplayLeft.current;
     const t = window.setTimeout(() => {
@@ -1406,21 +1552,8 @@ export function Player({
       window.clearTimeout(t);
       autoplayLeft.current = Math.max(0, wait - (performance.now() - startedAt));
     };
-  }, [ended, next, nextDismissed, willAutoplay, countdownPaused, playVideo]);
+  }, [autoAdvancing, next, countdownPaused, playVideo]);
 
-  // With IntroDB credit timings, "Up next" arrives exactly when the credits
-  // roll (Netflix-style); without them, fall back to the last ~40s. Settings
-  // can hold it back until the very end instead.
-  const creditsStart = skip.segments?.outro?.start;
-  const postCredits = !!skip.segments?.postCredits;
-  const atEnd = settings?.nextUpTiming === "end";
-  const nearEnd = useMediaTime(media, (t) => {
-    if (!(t.duration > 0)) return "unknown";
-    const remaining = t.duration - t.current;
-    const inCredits = creditsStart != null && t.current >= creditsStart && !postCredits;
-    return (atEnd ? remaining <= NEXT_UP_AT_END : inCredits || (creditsStart == null && remaining <= Math.max(40, t.duration * 0.04))) ? "yes" : "no";
-  });
-  const showNextUp = !!next && !nextDismissed && nearEnd !== "unknown" && (ended || nearEnd === "yes");
   const sleepEndedRef = useRef<HTMLDivElement>(null);
   useDismiss(showNextUp && !!next && !options, () => setNextDismissed(true));
   useDismiss(sleep.warning && !sleep.asleep && !options, () => sleep.cancel());
@@ -1432,7 +1565,7 @@ export function Player({
     if (!nextId || local || link || nearEnd !== "yes") return;
     const streams = cachedStreams(type, nextId);
     if (!streams?.length) return;
-    return warmLinks(autoPickOrder(streams, settings, metaId).slice(0, 2));
+    return warmLinks(autoPickOrder(streams, settings, metaId, source.match.current).slice(0, 2));
     // The settings at that moment: a change later doesn't need another look.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextId, nearEnd, local, link, type, metaId]);
@@ -1482,8 +1615,10 @@ export function Player({
       );
   };
 
-  /** "More" has items of its own (screenshots, Picture in Picture, other players), so it shows whatever fits. */
-  const moreItems = canShoot || canMini || canHandOff;
+  /** On a phone, secondary actions (Sleep Timer, Watch Party) live in the top-right "…" menu so the bottom bar never clips. */
+  const phoneMore = !tv && form === "phone";
+  /** "More" has items of its own (screenshots, Picture in Picture, other players, phone overflow), so it shows whatever fits. */
+  const moreItems = canShoot || canMini || canHandOff || phoneMore;
 
   // A narrow window (#396): the bars give way in steps (useBarFit). Pin and fill are the top controls "More" takes.
   const topBar = useRef<HTMLDivElement>(null);
@@ -1492,7 +1627,26 @@ export function Player({
   const showFill = !tv && isDesktop;
   // A desktop window (not a phone, a compact window, TV or Picture in Picture): one row of controls under the
   // timeline, and each panel a small menu above its button instead of a layer over the whole picture.
-  const dock = !tv && form === "desktop" && !mini;
+  // The desk layout (src/desk) plays with its own 1:1 Netflix player chrome and edge sheets.
+  const desk = useDeskUi();
+  const deskPlayer = desk && !mini && !tv;
+  const dock = !tv && form === "desktop" && !mini && !desk;
+  // In the desk player, keep mpv subtitles lifted clear of the bottom scrubber/actions bar or Speed sheet while
+  // visible — including while tuning subtitle style/lift, so the live subtitle never collides with the timeline.
+  const deskSubLift = deskPlayer
+    ? options === "speed"
+      ? 16
+      : chromeVisible && (!options || options === "tracks" || options === "episodes")
+        ? 13
+        : 0
+    : 0;
+  useEffect(() => {
+    if (engine !== "mpv" || !deskPlayer) return;
+    const applyPos = () => void mpv.set("sub-pos", 100 - Math.min(60, subStyle.raise + deskSubLift));
+    applyPos();
+    mpv.addEventListener("loadedmetadata", applyPos);
+    return () => mpv.removeEventListener("loadedmetadata", applyPos);
+  }, [engine, mpv, deskPlayer, subStyle.raise, deskSubLift]);
   const dockZoom = useDockZoom(dock);
   // The dock's popup menus (Cast, More) share its panels' look and scale (player.css `.menu-dock`).
   // Zoomed only past 1× (player.css data-zoomed): at 1× nothing carries a zoom, which WebKit doesn't treat as a no-op.
@@ -1504,16 +1658,17 @@ export function Player({
         // The same smoked glass as the dock's panels: a frosted copy of the picture behind the menu.
         backdrop: <VideoBackdrop media={media} className="options-frost" crop cropSize={[192, 168]} fade />,
       }
-    : {};
+    : { className: "scheme-dark" };
   const barFit = useBarFit(
     topBar,
     actionRow,
     Number(showPin) + Number(showFill),
     !tv && form !== "phone" && !compact && !dock,
-    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems].join(
+    [heading, title, rate, party?.members.length, next?.id, airplay.available, chromecast.available, showPin, showFill, fullscreen, canParty, ytId, link, local, moreItems, phoneMore].join(
       "|",
     ),
     !!watchLog || moreItems,
+    !tv && !dock,
   );
   const more = barFit.more;
   // Folded, the slider opens below the volume icon: on hover or focus, and on a touch screen from a tap on the icon.
@@ -1791,9 +1946,14 @@ export function Player({
             {`Crop: ${cropModeLabel(crop)}`}
           </MenuCheckItem>
         )}
-        {dock && (
+        {(dock || phoneMore) && (
           <MenuItem onClick={() => setOptions("sleep")} meta={sleep.left != null ? sleepLabel(sleep.left) : undefined}>
             Sleep Timer
+          </MenuItem>
+        )}
+        {phoneMore && canParty && !castingAway && (
+          <MenuItem onClick={() => setOptions("party")} meta={party ? `${party.members.length}` : undefined}>
+            Watch Party
           </MenuItem>
         )}
         {canMini && (
@@ -1855,6 +2015,8 @@ export function Player({
       data-options={!!options}
       data-options-instant={optionsByKey}
       data-dock={dock || undefined}
+      data-desk-player={deskPlayer || undefined}
+      data-desk-sheet={deskPlayer && options ? options : undefined}
       data-zoomed={zoomed || undefined}
       style={zoomed ? ({ "--pz": dockZoom } as React.CSSProperties) : undefined}
       data-started={started}
@@ -1922,13 +2084,22 @@ export function Player({
             touchChain.current = null;
             if (e.detail <= 1) chromeBeforeTap.current = chromeAtPress.current;
           }
-          if (!touch && settings?.clickAction !== "controls") return togglePlay();
+          if (!touch && settings?.clickAction !== "controls") {
+            window.clearTimeout(clickTimer.current);
+            clickTimer.current = window.setTimeout(() => {
+              clickTimer.current = undefined;
+              togglePlay();
+            }, CLICK_PAUSE_DELAY_MS);
+            return;
+          }
           if (chromeAtPress.current) hideChrome("tap");
           else poke(false, "tap");
         }}
         // A finger double-taps the left or right third to skip back or ahead, as phone players do;
-        // the middle (and a mouse anywhere) toggles fullscreen.
+        // the middle (and a mouse anywhere) toggles fullscreen without first pausing on click 1.
         onDoubleClick={(e) => {
+          window.clearTimeout(clickTimer.current);
+          clickTimer.current = undefined;
           const third = e.currentTarget.clientWidth / 3;
           const x = e.nativeEvent.offsetX;
           if (touch && (x < third || x > third * 2)) {
@@ -1978,27 +2149,32 @@ export function Player({
             onSources={link || local ? undefined : () => setOptions("sources")}
             onSettings={openSettingsPage}
             onRetry={source.retry}
+            onFix={!ytOutside && nextFix ? runPlaybackFix : undefined}
+            fixLabel={nextFix ? `Fix Playback · ${nextFix.label}` : undefined}
+            diagnosisNote={diagnosis && diagnosis.kind !== "unknown" ? diagnosis.summary : undefined}
             onYouTube={ytOutside ? () => void api.openExternal(youtubeUrl(ytOutside)) : undefined}
           />
         )}
       </AnimatePresence>
 
       {torrentNotice && !leaving && (
-        <TorrentNotice
-          onPlay={() => source.answerNotice(true)}
-          onCancel={() => {
-            source.answerNotice(false);
-            void exit();
-          }}
-          onSettings={
-            tv
-              ? undefined
-              : () => {
-                  source.answerNotice(false);
-                  openSettingsPage("sources");
-                }
-          }
-        />
+        <Suspense fallback={null}>
+          <TorrentNotice
+            onPlay={() => source.answerNotice(true)}
+            onCancel={() => {
+              source.answerNotice(false);
+              void exit();
+            }}
+            onSettings={
+              tv
+                ? undefined
+                : () => {
+                    source.answerNotice(false);
+                    openSettingsPage("sources");
+                  }
+            }
+          />
+        </Suspense>
       )}
 
       {airplay.casting && (
@@ -2036,8 +2212,122 @@ export function Player({
         {party && ready && started && <PartyHold party={party} videoId={videoId} />}
         {notice && <div className="player-notice t-callout">{notice}</div>}
       </div>
+      {stallPrompt && !notice && (
+        <div className="stall-prompt" role="status">
+          <span className="stall-prompt-text t-callout">Stream is buffering</span>
+          <Button size="sm" variant="primary" onClick={switchStalledSource}>
+            Try Next Source
+          </Button>
+          <Button size="sm" variant="glass" onClick={() => setOptions("sources")}>
+            Sources
+          </Button>
+          <IconButton
+            variant="plain"
+            className="stall-prompt-dismiss"
+            onClick={() => {
+              setStallDismissed(true);
+              setStallPrompt(false);
+            }}
+            label="Dismiss"
+          >
+            <Close size={15} />
+          </IconButton>
+        </div>
+      )}
       {party && <PartyNotes party={party} />}
 
+      {deskPlayer ? (
+        <DeskPlayerChrome
+          type={type}
+          metaId={metaId}
+          title={title}
+          current={current}
+          local={local}
+          link={link}
+          ytId={ytId}
+          pinned={pinned}
+          fullscreen={fullscreen}
+          isDesktop={isDesktop}
+          ready={ready}
+          started={started}
+          paused={paused}
+          spinner={frameSteps.spinner}
+          chromeVisible={chromeVisible}
+          options={options}
+          onExit={() => void exit()}
+          onTogglePlay={togglePlay}
+          seekStep={seekStep}
+          kicks={kicks}
+          onSeekBack={() => (seekBy(-seekStep), kick("back"))}
+          onSeekForward={() => (seekBy(seekStep), kick("forward"))}
+          media={media}
+          seekTrack={seekTrack}
+          segments={skip.segments}
+          onSeekTo={seekTo}
+          onScrubChange={onScrubChange}
+          timeDisplay={timeDisplay}
+          playRate={playRate}
+          onCycleClock={cycleClock}
+          steppingFps={frameSteps.stepping ? (fps ?? DEFAULT_FPS) : null}
+          sleepLeft={sleep.left}
+          systemVolume={systemVolume}
+          volume={volume}
+          volumeTop={volumeTop}
+          muted={muted}
+          onVolume={(v) => {
+            setVolume(v);
+            setMuted(false);
+          }}
+          onToggleMute={() => setMuted((m) => !m)}
+          brightnessAvailable={brightness.available}
+          brightnessLevel={brightness.level}
+          onBrightness={brightness.set}
+          airplay={airplay}
+          chromecast={chromecast}
+          canMini={canMini}
+          mini={mini}
+          onToggleMini={toggleMini}
+          canPin={canPin}
+          onTogglePin={togglePin}
+          showFill={showFill}
+          crop={crop}
+          onCycleCrop={cycleCrop}
+          touchLockAvailable={touchLock.available}
+          onTouchLock={touchLock.lock}
+          onToggleFullscreen={() => void toggleFullscreen()}
+          canShoot={canShoot}
+          shotSaved={shotSaved}
+          onScreenshot={takeScreenshot}
+          onRevealScreenshot={() => void api.revealScreenshot().catch(warnFailed("reveal screenshot"))}
+          canHandOff={canHandOff}
+          otherPlayers={otherPlayers}
+          onHandOff={handOff}
+          watchLog={!!watchLog}
+          onCopyWatchLog={() =>
+            void watchLogText(engine ?? "not chosen yet")
+              .then((text) => navigator.clipboard.writeText(text))
+              .then(
+                () => flashNotice("Watch log copied", 2000),
+                () => flashNotice("Couldn't copy the watch log", 2500),
+              )
+          }
+          onMoreOpenChange={(open) => {
+            setMoreOpen(open);
+            if (open) setOptions(null);
+          }}
+          rate={rate}
+          inParty={inParty}
+          canParty={canParty}
+          castingAway={castingAway}
+          partyMembers={party?.members.length ?? 0}
+          partyBadge={party ? <PartyBadge party={party} onOpen={() => setOptions("party")} /> : undefined}
+          next={next}
+          onPlayNext={() => next && playVideo(next.id)}
+          onOpenSheet={(s) => setOptions((curr) => (curr === s ? null : s))}
+          controlHover={controlHover}
+        />
+      ) : (
+        <>
       {/* Top: back, what's playing, window-level controls. Drag lives here. */}
       {/* Pinned (#266), nothing moves the window. */}
       <div ref={topBar} className="player-top" data-tauri-drag-region={pinned ? undefined : true} {...controlHover}>
@@ -2265,14 +2555,14 @@ export function Player({
             {!party && (
               <ActionButton icon={<Speed size={22} />} label={`Speed (${rate}x)`} glyph={pad("speed")} onClick={(el) => openOptions("speed", el)} />
             )}
-            <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />
+            {!phoneMore && <ActionButton icon={<Moon size={22} />} label="Sleep Timer" onClick={() => setOptions("sleep")} />}
             {type === "series" && (
               <ActionButton icon={<Episodes size={22} />} label={local ? "In this folder" : "Episodes"} glyph={pad("episodes")} onClick={() => setOptions("episodes")} />
             )}
             {/* YouTube's player keeps its own captions and audio. */}
             {!ytId && <ActionButton icon={<Captions size={22} />} label="Subtitles & Audio" glyph={pad("tracks")} onClick={(el) => openOptions("tracks", el)} />}
             {!link && !local && <ActionButton icon={<Sources size={22} />} label="Sources" glyph={pad("sources")} onClick={() => setOptions("sources")} />}
-            {canParty && !castingAway && (
+            {!phoneMore && canParty && !castingAway && (
               <ActionButton
                 icon={<WatchParty size={22} />}
                 label={party ? `Watch Party (${party.members.length})` : "Watch Party"}
@@ -2290,6 +2580,11 @@ export function Player({
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* Paused on a stepped frame: once the controls hide, its number stays where the clock was (#346). */}
+      {deskPlayer && frameSteps.stepping && <FrameLabel media={media} fps={fps ?? DEFAULT_FPS} />}
 
       {/* The sleep timer's last minute: more time, or no timer (#270). */}
       {sleep.warning && !sleep.asleep && (
@@ -2321,6 +2616,91 @@ export function Player({
           </Button>
         </div>
       )}
+      {deskPlayer ? (
+        <DeskPlayerSheets
+          media={media}
+          options={options}
+          instant={optionsByKey}
+          onClose={() => {
+            setOptions(null);
+            setSubSettingsOpen(false);
+            setAudioSettingsOpen(false);
+          }}
+          speeds={SPEEDS}
+          rate={rate}
+          onRate={setRate}
+          speedLabel={speedLabel}
+          type={type}
+          sleepChoice={sleep.choice}
+          onSleepChoice={sleep.set}
+          audioOptions={tracks.audio.length ? tracks.audio : [{ id: "default", label: "Default" }]}
+          audioValue={tracks.audio.length ? tracks.audioId : "default"}
+          onSelectAudio={tracks.selectAudio}
+          canAudioSettings={engine === "mpv" && !castingAway}
+          audioSettingsOpen={audioSettingsOpen}
+          onToggleAudioSettings={() => setAudioSettingsOpen((v) => !v)}
+          audioDelay={audioDelay}
+          onAudioDelay={changeAudioDelay}
+          subOptions={canPickSubtitle ? [...tracks.subtitles, { id: PICK_SUBTITLE, label: "Add from a File…", heading: "On This Computer" }] : tracks.subtitles}
+          subValue={tracks.subId}
+          onSelectSub={(id) =>
+            id === PICK_SUBTITLE
+              ? void api.pickSubtitleFile().catch((e: unknown) => flashNotice(`Couldn't add the subtitle: ${errorMessage(e)}`, 4000))
+              : void tracks.selectSubtitle(id)
+          }
+          subsLoading={tracks.subtitlesLoading}
+          subSettingsOpen={subSettingsOpen}
+          onToggleSubSettings={() => setSubSettingsOpen((v) => !v)}
+          subStyle={subStyle}
+          onSubStyleChange={(patch) => updateSettings.mutate({ subtitleStyle: { ...subStyle, ...patch } })}
+          subDelay={subDelay}
+          onSubDelay={changeSubDelay}
+          onStepLine={engine === "mpv" && !castingAway ? (by) => void stepLine(by) : undefined}
+          secondSubtitles={engine === "mpv" && !castingAway && secondSubtitles}
+          onSecondSubtitlesChange={engine === "mpv" && !castingAway ? (on) => setPrefs({ secondSubtitles: on }) : undefined}
+          secondSubValue={tracks.secondId}
+          onSelectSecondSub={engine === "mpv" && !castingAway ? (id) => void tracks.selectSecond(id) : undefined}
+          canPosition={engine === "mpv"}
+          local={local}
+          meta={meta}
+          seasonGroups={seasonGroups.map((g) => ({ id: g.id, label: g.label, count: g.videos.length }))}
+          shownSeason={shownSeason}
+          onSeason={setPickSeason}
+          episodes={shownEpisodes}
+          numbers={order?.number}
+          playing={videoId}
+          progress={progressById}
+          still={(v) => stillFor(v.id) ?? v.thumbnail}
+          onPlayEpisode={(id) => (local ? playVideo(id) : pickEpisode(id))}
+          folderItems={folderItems}
+          shuffling={shuffling}
+          onToggleShuffle={toggleShuffle}
+          sourceFilters={sourceFilters}
+          hiddenSources={hiddenSources}
+          sourceOptions={sourceOptions}
+          currentSource={currentSource}
+          sourcesEmpty={
+            streams.isLoading
+              ? "Finding sources…"
+              : streams.isError
+                ? "Couldn't load sources."
+                : sourceFilters.total > 0
+                  ? "No sources match these filters."
+                  : hiddenSources > 0
+                    ? `All ${hiddenSources} sources are hidden by your filters in Settings → Sources.`
+                    : "No sources found."
+          }
+          onSelectSource={(id) => {
+            if (id === currentSource) return;
+            if (id === DOWNLOADED) return downloaded && playVideo(videoId, downloaded);
+            const pick = rankedStreams[Number(id)];
+            if (pick) playVideo(videoId, pick.stream);
+          }}
+          canParty={canParty}
+          partyColumns={partyColumns}
+        />
+      ) : (
+        <>
       <OptionsOverlay
         open={options === "speed"}
         dockedTo={dock ? "speed" : undefined}
@@ -2331,7 +2711,10 @@ export function Player({
             title: "Playback Speed",
             value: String(rate),
             options: SPEEDS.map((r) => ({ id: String(r), label: speedLabel(r) })),
-            onSelect: (id: string) => setRate(Number(id)),
+            onSelect: (id: string) => {
+              setRate(Number(id));
+              if (!dock) setOptions(null);
+            },
             // The dock: Netflix's line of speeds, the chosen one named beside the title.
             ...(dock
               ? {
@@ -2379,6 +2762,7 @@ export function Player({
       <OptionsOverlay
         open={options === "tracks"}
         dockedTo={dock ? "tracks" : undefined}
+        live={form !== "phone" && (audioSettingsOpen || subSettingsOpen)}
         onClose={() => {
           setOptions(null);
           setSubSettingsOpen(false);
@@ -2469,6 +2853,8 @@ export function Player({
             : []),
         ]}
       />
+        </>
+      )}
 
       {tv && <VolumeHud volume={Math.min(volume, volumeTop)} max={volumeTop} muted={muted} ping={volumePing} media={media} />}
       {/* Phones and tablets: the swipes' levels, each at the edge of its half. */}
@@ -2480,6 +2866,7 @@ export function Player({
       <SkipButton
         active={started ? skip.active : null}
         onSkip={skip.skipActive}
+        onCancel={skip.cancelCountdown}
         chromeVisible={chromeVisible}
         countdown={skip.countdown}
         paused={paused}
@@ -2502,9 +2889,13 @@ export function Player({
             </div>
             <div className="next-up-text">
               <span className="next-up-kicker">
-                {ended && stillWatching ? "Are you still watching?" : local ? "Up Next" : `Up Next · ${episodeCode(next.season, next.episode)}`}
+                {(ended || creditsRoll) && stillWatching
+                  ? "Are you still watching?"
+                  : local
+                    ? "Up Next"
+                    : `Up Next · ${episodeCode(next.season, next.episode)}`}
               </span>
-              {skipped.length > 0 && !(ended && stillWatching) && (
+              {skipped.length > 0 && !((ended || creditsRoll) && stillWatching) && (
                 <span className="next-up-skipping">
                   Skipping filler: {skipped.length === 1 ? `episode ${skipped[0].episode}` : `episodes ${skipped[0].episode}–${skipped[skipped.length - 1].episode}`}
                 </span>
@@ -2514,15 +2905,17 @@ export function Player({
                 <Button
                   variant="primary"
                   className="next-up-play"
+                  title={withShortcut("Play next episode", "nextEpisode")}
                   onClick={() => {
                     resetAutoplay();
                     playVideo(next.id);
                   }}
                 >
-                  {ended && willAutoplay && (
+                  {autoAdvancing && (
                     <span className="next-up-countdown" data-paused={countdownPaused} style={{ animationDuration: `${countdown}s` }} />
                   )}
-                  {pad("skipOrNext", "nextEpisode") ?? <Play size={16} fill="currentColor" />} {ended && stillWatching ? "Keep Watching" : "Play Now"}
+                  {pad("skipOrNext", "nextEpisode") ?? <Play size={16} fill="currentColor" />}{" "}
+                  {(ended || creditsRoll) && stillWatching ? "Keep Watching" : "Play Now"}
                 </Button>
                 <IconButton variant="glass" className="next-up-dismiss" onClick={() => setNextDismissed(true)} label="Dismiss">
                   <Close size={16} />
@@ -2533,11 +2926,39 @@ export function Player({
         )}
       </AnimatePresence>
 
+      {/* Finished a movie or series finale: offer Replay and Back to Title instead of freezing on a black frame. */}
+      {ended && !showNextUp && !castingAway && !sleep.asleep && !ytFramed && (
+        <div className="player-ended-card" role="region" aria-label="Playback finished">
+          <span className="player-ended-kicker">Finished</span>
+          <span className="player-ended-title">{heading || title}</span>
+          <div className="player-ended-actions">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setEnded(false);
+                seekTo(0);
+                void videoRef.current?.play().catch(() => {});
+              }}
+            >
+              <Reset size={15} /> Replay
+            </Button>
+            <Button variant="glass" size="sm" onClick={() => void exit()}>
+              Back to Title
+            </Button>
+          </div>
+        </div>
+      )}
+
       <PlayerPauseScreen
         meta={meta}
         videoId={videoId}
         media={media}
         unwatched={currentUnwatched}
+        onSelectPerson={(person) => {
+          if (person.tmdbId == null) return;
+          void exit().then(() => navigate({ name: "person", id: person.tmdbId!, title: person.name }));
+        }}
         state={{
           engine,
           playing: ready && started,
@@ -2560,7 +2981,20 @@ export function Player({
         state={{ ended, nextUp: showNextUp, follower: !!party && party.hostId !== party.me, local, link: isLinkId(metaId), shuffle: shuffled || shuffling }}
       />
 
-      {canParty && (
+      {party && (party.reactions?.length ?? 0) > 0 && (
+        <div className="party-reactions-stage" aria-live="polite" aria-label="Party reactions">
+          {(party.reactions ?? []).map((r) => (
+            <span key={r.id} className="party-reaction-float">
+              <span className="party-reaction-emoji" aria-hidden>
+                {r.emoji}
+              </span>
+              {r.who?.name && <span className="party-reaction-who">{r.who.name}</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {!deskPlayer && canParty && (
         <OptionsOverlay
           open={options === "party"}
           dockedTo={dock ? "party" : undefined}
@@ -2570,6 +3004,7 @@ export function Player({
         />
       )}
 
+      {!deskPlayer && (
       <OptionsOverlay
         open={options === "episodes"}
         dockedTo={dock ? "episodes" : undefined}
@@ -2680,6 +3115,8 @@ export function Player({
               ]
         }
       />
+      )}
+      {!deskPlayer && (
       <OptionsOverlay
         open={options === "sources"}
         dockedTo={dock ? "sources" : undefined}
@@ -2718,6 +3155,7 @@ export function Player({
           },
         ]}
       />
+      )}
       {sourceMenu && (
         <TvSourceMenu
           anchor={sourceMenu.anchor}

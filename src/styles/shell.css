@@ -43,9 +43,10 @@
 .tv-page[data-active="false"]:not([data-under-player="true"]) *::after {
   animation-play-state: paused !important;
 }
-/* The page the player returns to stays rendered (only not painted), so it's back in the
-   first frame: no black frame, no entrance played again (test report 1, item 6). */
+/* The page the player or a pushed phone page returns to stays rendered (only not painted), so returning
+   by Back or swipe-back is ready on frame 0 with zero layout or texture-upload stall (test report 1, item 6). */
 .page[data-under-player="true"],
+.page[data-under-top="true"],
 .tv-page[data-under-player="true"] {
   content-visibility: visible;
 }
@@ -55,44 +56,56 @@
   overflow-x: hidden;
   padding-bottom: 4rem;
 }
-/* iOS's Back following the finger (lib/ui/pageDrag.ts, #451): the page on top slides right with it over the
-   one under it, which shows for this and comes in from a little to the left, dimmed less as it comes. Each
-   is its own layer for the move, below the navbar. */
+/* iOS's Back following the finger (lib/ui/pageDrag.ts, #451): the page on top moves with the finger over the
+   one under it, dimmed by a dedicated zero-children .drag-scrim so dragging never triggers inherited CSS var
+   style recalculations on the underlying page's descendants. */
 .page[data-drag] {
   z-index: 0;
   isolation: isolate;
   will-change: transform;
 }
 .page[data-drag="top"] {
+  z-index: 2;
   background: var(--bg);
-  box-shadow: -10px 0 28px rgb(0 0 0 / 0.45);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 0.35);
 }
-/* A title page from a card going back with the finger (pageDrag.ts): it shrinks with its corners rounding, over the
-   page under it, which stays in place and brightens. */
+/* A title page from a card going back with the finger (pageDrag.ts): uniform scale + constant rounded corners
+   (no per-frame border-radius mutation or heavy drop-shadow repaint), over the live page under it. */
 .page[data-drag="card"] {
   z-index: 2;
   overflow: hidden;
   background: var(--bg);
-  box-shadow: 0 18px 60px rgb(0 0 0 / 0.55);
 }
 .page[data-drag="under"] {
   visibility: visible;
   content-visibility: visible;
 }
-.page[data-drag="under"]::after {
+.page[data-drag="under"]:not([data-drag-scrim])::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
   background: #000;
-  opacity: calc(0.35 * (1 - var(--drag-in, 0)));
+  opacity: calc(0.36 * (1 - var(--drag-in, 0)));
   pointer-events: none;
 }
-.page[data-drag-settle] {
-  transition: transform 280ms var(--ease-out);
+.drag-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
 }
-.page[data-drag-settle]::after {
-  transition: opacity 280ms var(--ease-out);
+.drag-scrim[data-drag-settle] {
+  transition: opacity 220ms var(--ease-out);
+}
+.page[data-drag-settle] {
+  transition: transform 220ms var(--ease-out);
+}
+.page[data-drag-settle]:not([data-drag-scrim])::after {
+  transition: opacity 220ms var(--ease-out);
 }
 /* Page transitions are driven by usePageMotion (lib/ui/pageMotion.ts) across all form factors.
    will-change is scoped strictly to .page[data-motion] so idle compositor layer count stays tiny. */
@@ -343,17 +356,14 @@
 :root[data-form="phone"] .main:has(> .page[data-tab]) :is(.navbar-brand, .navbar-title, .navbar-actions) {
   transition-duration: var(--page-tab);
 }
-/* A title opened from a card (pageMotion.ts `card`), and back into it: the motion itself is lib/ui/cardMotion.ts,
-   Netflix's measured from its app, played from the commit with the Web Animations API. These are the pieces it
-   moves. The title's page is the card's box at first (transformed from its top left corner, its corners the card's
-   at that size). On it, the card's picture (.card-ghost, App.tsx): a plain panel in the page's grey, a soft copy
-   and a sharp one. Between it and the page behind, a shade of the page's own colour (.card-scrim). */
+/* A title opened from a card (pageMotion.ts `card`), and back into it: Netflix / iOS 18 zoom transition
+   (lib/ui/cardMotion.ts) driven by WAAPI with uniform scale + continuous clip-path inset+round. */
 :root[data-form="phone"] .page[data-card="open"][data-motion="enter"],
 :root[data-form="phone"] .page[data-card="close"][data-motion="leave"] {
   z-index: 2;
   transform-origin: 0 0;
-  border-radius: var(--card-r);
   overflow: hidden;
+  will-change: transform, clip-path;
 }
 
 .card-ghost {
@@ -362,23 +372,41 @@
   z-index: 10;
   overflow: hidden;
   pointer-events: none;
+  will-change: opacity;
 }
-/* The picture fills the page's box, so at the card's box it's the card's picture exactly. */
-.card-ghost > * {
+.card-ghost-panel {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0;
+}
+/* Aspect-matched poster media box scaled uniformly from the card's exact aspect ratio to full-viewport cover. */
+.card-ghost-media {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  transform-origin: 50% 0%;
+  will-change: transform;
+}
+.card-ghost-media > * {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: cover;
   opacity: 0;
 }
-/* Netflix's panel is a step lighter than the page around it. */
-.card-ghost-panel {
-  background: color-mix(in srgb, var(--bg), rgb(var(--ink)) 9%);
+/* Static GPU Gaussian blur on the full-resolution poster (opacity-only animation; zero CORS or downscale pixelation). */
+.card-ghost-soft {
+  filter: blur(18px);
+  transform: scale(1.14);
 }
 
-/* What's behind fades towards the page's own colour (Netflix's goes black), without a blur: a blur over the whole
-   screen, taken again every frame the page above it moves, is what a phone drops frames over. */
+/* Pure compositor dim over the underlying page during the card zoom transition (no full-screen backdrop-filter
+   re-blur stall on WKWebView frame 0). */
 .card-scrim {
   position: absolute;
   inset: 0;
@@ -386,6 +414,7 @@
   background: var(--bg);
   pointer-events: none;
   opacity: 0;
+  will-change: opacity;
 }
 /* Less motion: the pair crossfades in place (unless Settings → Reduce motion is explicitly "Off"). */
 @media (prefers-reduced-motion: reduce) {
@@ -509,17 +538,25 @@
 }
 /* Like .row-paddle (#134), drop the 6 masked backdrop-filter surfaces once faded out at the top of the page. */
 .edge-blur.navbar-fade i {
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition:
     opacity var(--dur-base) var(--ease-std),
+    -webkit-backdrop-filter 0s linear var(--dur-base),
     backdrop-filter 0s linear var(--dur-base);
 }
 .navbar[data-scrolled="true"] .navbar-fade {
   --edge-shown: 1;
 }
 .navbar[data-scrolled="true"] .edge-blur.navbar-fade i {
+  -webkit-backdrop-filter: var(--edge-filter);
   backdrop-filter: var(--edge-filter);
   transition: opacity var(--dur-base) var(--ease-std);
+}
+:root:not([data-engine="chromium"]) .navbar[data-scrolled="true"] .edge-blur.navbar-fade i {
+  background: rgb(0 0 0 / 0.001);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 /* A phone: once the page scrolls, a plain frosted bar the header's own height, as phone apps have, instead of
    the stacked blurs. Six masked blurs taken again on every frame of a scroll are more than a phone's web view
@@ -770,8 +807,8 @@ html[data-os="mac"] {
 :root[data-form="phone"] .navbar-back {
   transition:
     transform var(--dur-press) var(--ease-out),
-    opacity 300ms var(--ease-std),
-    margin-left 380ms var(--ease-out);
+    opacity 280ms var(--ease-std),
+    margin-left 360ms var(--ease-out);
 }
 /* On iOS the system draws Back (NativeBack.tsx) over this one: it keeps its place, unseen. */
 [data-native-back] {
@@ -1174,6 +1211,11 @@ html[data-os="mac"] {
   margin-left: auto;
   align-self: flex-start;
 }
+/* With the system's own title bar (Windows desk layout), hide in-app window buttons everywhere
+   (including AccountShell / Who's watching? before desk.css loads). */
+:root[data-native-frame] .window-controls {
+  display: none !important;
+}
 .window-controls button {
   display: grid;
   place-items: center;
@@ -1288,6 +1330,7 @@ html[data-os="mac"] {
 /* Large, track-less variant: tvOS season tabs ("Season 1  Season 2  [Season 3]"). */
 .segmented[data-variant="large"] {
   background: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
   padding: 0;
@@ -1435,6 +1478,10 @@ html[data-os="mac"] {
   height: 14px;
   color: var(--text-3);
 }
+.search-recent-item[data-active="true"] {
+  background: var(--fill-2);
+  color: var(--text);
+}
 @media (hover: hover) and (pointer: fine) {
   .search-recent-item:hover {
     background: var(--selection-bg);
@@ -1457,13 +1504,17 @@ html[data-os="mac"] {
 }
 .discover-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
 }
 /* Series and Movies: the navbar's tab names the page, so the controls lead and the title is for screen
    readers only. */
 .discover-header {
+  flex-direction: column;
+  align-items: stretch;
   justify-content: flex-start;
+  gap: 0.875rem;
 }
 .discover-title,
 .library-title {
@@ -1477,6 +1528,7 @@ html[data-os="mac"] {
 }
 /* A page toolbar's pickers: native macOS bezel pop-up pills matching the segmented control's height. */
 .discover-controls .select-trigger,
+.discover-primary .select-trigger,
 .library-toolbar .select-trigger,
 .library-filters .select-trigger,
 .downloads-toolbar .select-trigger,

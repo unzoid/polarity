@@ -1,7 +1,9 @@
-import { useState } from "react";
+import "../styles/screens.css";
+import { useMemo, useState } from "react";
 import { HeroGlow } from "../components/HeroGlow";
 import { Img } from "../components/Img";
 import { PosterCard } from "../components/PosterCard";
+import { Segmented } from "../components/Segmented";
 import { CardSkeleton } from "../components/title/Card";
 import { PosterGrid } from "../components/title/PosterGrid";
 import { Button } from "../components/ui/Button";
@@ -10,20 +12,36 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { bioPreview, filmography, lifeFacts } from "../lib/catalog";
 import { errorMessage } from "../lib/errors";
 import { usePerson } from "../lib/net";
+import type { ContentType } from "../lib/types";
+
+type KindFilter = "all" | ContentType;
 
 /**
  * A person's page (from a title's cast or credits): their photo, name and biography (its start, with More),
- * then the titles they act in and those they directed, as poster grids that open each title's page.
+ * then the titles they act in, directed, and wrote, as poster grids that open each title's page.
  */
 export function Person({ id, name }: { id: number; name?: string }) {
   const { data: person, isError, error } = usePerson(id);
   const [whole, setWhole] = useState(false);
   const [failedPhoto, setFailedPhoto] = useState<string>();
+  const [kind, setKind] = useState<KindFilter>("all");
   const shownName = person?.name || name || "";
   const bio = bioPreview(person?.biography);
   const facts = person ? lifeFacts(person) : [];
   const loading = !person && !isError;
   const photo = person?.photo && failedPhoto !== person.photo ? person.photo : undefined;
+  const allRows = useMemo(() => (person ? filmography(person) : []), [person]);
+  const hasBothKinds = useMemo(() => {
+    const types = new Set(allRows.flatMap((r) => r.items.map((i) => i.type)));
+    return types.has("movie") && types.has("series");
+  }, [allRows]);
+  const rows = useMemo(
+    () =>
+      kind === "all"
+        ? allRows
+        : allRows.map((r) => ({ ...r, items: r.items.filter((i) => i.type === kind) })).filter((r) => r.items.length > 0),
+    [allRows, kind],
+  );
 
   return (
     <div className="scroll person-page">
@@ -62,6 +80,20 @@ export function Person({ id, name }: { id: number; name?: string }) {
               )}
             </div>
           )}
+          {hasBothKinds && (
+            <div className="person-filter">
+              <Segmented
+                label="Filter credits"
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { id: "all", label: "All" },
+                  { id: "movie", label: "Movies" },
+                  { id: "series", label: "Series" },
+                ]}
+              />
+            </div>
+          )}
         </div>
       </header>
       {loading && (
@@ -77,9 +109,9 @@ export function Person({ id, name }: { id: number; name?: string }) {
         </section>
       )}
       {isError && <EmptyState>Couldn't load this page: {errorMessage(error)}</EmptyState>}
-      {person && filmography(person).length === 0 && <EmptyState>No titles to show for {shownName}.</EmptyState>}
+      {person && allRows.length === 0 && <EmptyState>No titles to show for {shownName}.</EmptyState>}
       {person &&
-        filmography(person).map((row) => (
+        rows.map((row) => (
           <section key={row.key} className="person-titles">
             <h2 className="t-title2">{row.title}</h2>
             <PosterGrid>

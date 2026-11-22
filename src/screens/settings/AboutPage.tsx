@@ -4,7 +4,7 @@ import { Reset, Download, Feedback, Info, Lock, Trash } from "../../components/i
 import { FEEDBACK_EMAIL, FEEDBACK_KINDS, feedbackContext, feedbackUrl } from "../../lib/feedback";
 import { api } from "../../lib/api";
 import tmdbLogo from "../../assets/tmdb-short.svg";
-import { CREDITS, PRIVACY_URL, TERMS_URL, TMDB_NOTICE } from "../../lib/settings";
+import { CREDITS, PRIVACY_URL, TERMS_URL, TMDB_NOTICE } from "../../lib/settings/catalog";
 import { ReleaseNotes } from "../../components/Updates";
 import {
   appVersion,

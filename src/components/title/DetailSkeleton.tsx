@@ -14,7 +14,7 @@ export function DetailSkeleton() {
         <Skeleton shape="line" width="55%" />
         <Skeleton className="detail-skeleton-play" />
         <div className="detail-skeleton-buttons">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="detail-skeleton-button" />
           ))}
         </div>

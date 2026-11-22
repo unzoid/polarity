@@ -16,6 +16,31 @@ body,
   margin: 0;
 }
 
+/* Shared base primitives used before account.css loads (navbar/tab avatars and Gate loading shell). */
+.avatar {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 14%;
+  background: linear-gradient(160deg, var(--avatar-from), var(--avatar-to));
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.12);
+  overflow: hidden;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+.account-shell {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+  animation: fade-in var(--dur-slow) var(--ease-out);
+}
+
 body {
   overscroll-behavior: none;
   background: var(--bg);

@@ -1,8 +1,27 @@
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use serde::Deserialize;
 
 use crate::types::*;
+
+/// Shared HTTP/2 + rustls client pool reused across add-ons, metadata indexers and enrichers
+/// so cold start avoids duplicate TLS handshakes and saves file descriptors/RAM on low-RAM TVs.
+static SHARED_HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(20))
+        .http2_adaptive_window(true)
+        .pool_idle_timeout(Duration::from_secs(90))
+        .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .expect("http client")
+});
+
+/// Returns a cheap handle (`Arc`-backed) to Polarity's shared HTTP/2 connection pool.
+pub fn shared_http_client() -> reqwest::Client {
+    SHARED_HTTP.clone()
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AddonError {
@@ -40,14 +59,7 @@ impl Default for AddonClient {
 
 impl AddonClient {
     pub fn new() -> Self {
-        Self::with_client(
-            reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .timeout(Duration::from_secs(20))
-                .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
-                .build()
-                .expect("http client"),
-        )
+        Self::with_client(shared_http_client())
     }
 
     pub fn with_client(http: reqwest::Client) -> Self {

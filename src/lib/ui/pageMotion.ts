@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Entry, TabRoute } from "../router";
 import { tabId } from "../navTabs";
+import { warmCardGhost } from "./cardGhost";
 import { CARD_CLOSE_MS, CARD_OPEN_MS } from "./cardMotion";
 import { prefersReducedMotion } from "./reducedMotion";
 
@@ -11,7 +12,7 @@ const ORDER = ["home", "discover:series", "discover:movie", "anime", "library", 
  * How long a change's pages keep their motion, and a couple of frames to spare: crisp settle budgets on
  * desktop & tablet (shell.css --desk-*) vs full-screen slides and card morphs on phone (--page-*, cardMotion.ts).
  */
-const PHONE_SETTLE = { tab: 420, fade: 220, push: 340, cardOpen: CARD_OPEN_MS, cardClose: CARD_CLOSE_MS + 40 };
+const PHONE_SETTLE = { tab: 420, fade: 220, push: 340, cardOpen: CARD_OPEN_MS + 20, cardClose: CARD_CLOSE_MS + 20 };
 const DESKTOP_SETTLE = { tab: 210, fade: 190, push: 240 };
 
 function settleOf(m: PageMotion, phone: boolean) {
@@ -21,8 +22,8 @@ function settleOf(m: PageMotion, phone: boolean) {
   return m.dir === 0 ? s.fade : s.push;
 }
 
-/** A card's place on the screen, in CSS pixels, and the picture on it. */
-export type CardRect = { x: number; y: number; w: number; h: number; src?: string; el?: Element };
+/** A card's place on the screen, in CSS pixels, its corner radius, and the picture on it. */
+export type CardRect = { x: number; y: number; w: number; h: number; src?: string; el?: HTMLElement; img?: HTMLImageElement; radius?: number };
 
 /**
  * A page change on a phone, for shell.css to play: `enter` is the page coming in, `leave` the one going, `dir`
@@ -59,14 +60,15 @@ export function cardOrigin(key: number): CardRect | undefined {
  * the picture showing on it riding along.
  */
 export function cardAt(target: Element | null): CardRect | undefined {
-  const banner = target?.closest(".hero-card");
-  const card = banner ?? target?.closest(".card");
-  const frame = banner ?? card?.querySelector(".card-frame") ?? card;
+  const banner = target?.closest<HTMLElement>(".hero-card");
+  const card = banner ?? target?.closest<HTMLElement>(".card");
+  const frame = banner ?? card?.querySelector<HTMLElement>(".card-frame") ?? card;
   const r = frame?.getBoundingClientRect();
   if (!r || r.width <= 0) return undefined;
   const img = banner ? banner.querySelector<HTMLImageElement>('.hero-backdrop[data-current="true"]') : frame?.querySelector("img");
-  const src = img?.complete && img.naturalWidth > 0 ? img.currentSrc || img.src : undefined;
-  return { x: r.left, y: r.top, w: r.width, h: r.height, src, el: frame ?? undefined };
+  const loaded = img?.complete && img.naturalWidth > 0 ? img : undefined;
+  const src = loaded ? loaded.currentSrc || loaded.src : undefined;
+  return { x: r.left, y: r.top, w: r.width, h: r.height, src, el: frame ?? undefined, img: loaded, radius: banner ? 14 : 8 };
 }
 
 /**
@@ -79,14 +81,26 @@ export function liveCard(card: CardRect): CardRect {
   return r && r.width > 0 ? { ...card, x: r.left, y: r.top, w: r.width, h: r.height } : card;
 }
 
-/** Notes the card a click lands on (`cardAt`), for the page it opens to grow out of. */
+/**
+ * Notes the card a click lands on (`cardAt`), for the page it opens to grow out of, and warms the tiny
+ * blurred ghost copy on pointerdown so frame 0 of open and close never stalls decoding or blurring.
+ */
 export function watchCardTaps() {
+  const onDown = (e: PointerEvent) => {
+    const rect = cardAt(e.target instanceof Element ? e.target : null);
+    if (rect?.src && rect.img) warmCardGhost(rect.src, rect.img);
+  };
   const onClick = (e: MouseEvent) => {
     const rect = cardAt(e.target instanceof Element ? e.target : null);
+    if (rect?.src && rect.img) warmCardGhost(rect.src, rect.img);
     tapped = rect ? { rect, at: performance.now() } : undefined;
   };
+  document.addEventListener("pointerdown", onDown, { capture: true, passive: true });
   document.addEventListener("click", onClick, true);
-  return () => document.removeEventListener("click", onClick, true);
+  return () => {
+    document.removeEventListener("pointerdown", onDown, true);
+    document.removeEventListener("click", onClick, true);
+  };
 }
 
 const isTitlePage = (e: Entry) => e.route.name === "detail" || e.route.name === "anime-detail";
@@ -137,10 +151,21 @@ export function usePageMotion(pages: Entry[], enabled: boolean, phone = false): 
     let live = true;
     let timer = 0;
     let frame = 0;
+    const clear = () => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s));
+    // Card zoom transitions start immediately in App.tsx's layout effect (the page beneath stays warm via
+    // data-under-top), so don't hold close behind two extra animation frames before counting its settle clock.
+    if (motion.card) {
+      setGone(seen);
+      timer = window.setTimeout(clear, settleOf(motion, phone));
+      return () => {
+        live = false;
+        window.clearTimeout(timer);
+      };
+    }
     const start = () => {
       if (!live) return;
       setGone(seen);
-      timer = window.setTimeout(() => setSeen((s) => (s === seen ? { ...s, motion: undefined } : s)), settleOf(motion, phone));
+      timer = window.setTimeout(clear, settleOf(motion, phone));
     };
     frame = requestAnimationFrame(() => (frame = requestAnimationFrame(start)));
     return () => {
@@ -150,7 +175,7 @@ export function usePageMotion(pages: Entry[], enabled: boolean, phone = false): 
     };
   }, [seen, phone]);
 
-  return now.motion && { ...now.motion, go: gone === now };
+  return now.motion && { ...now.motion, go: !!now.motion.card || gone === now };
 }
 
 function motionOf(seen: Seen, prev: Entry, top: Entry, pages: Entry[], phone: boolean): PageMotion {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { askedLine, describeProbe, describeStream, failedStage, formatBytes, formatReport, hostOf, noneFound, noSources, redact, type StartStep } from "../src/lib/playback/startLog";
+import { askedLine, describeProbe, describeStream, failedStage, formatBytes, formatReport, hostOf, isSplitBrainTls, noneFound, noSources, redact, type StartStep } from "../src/lib/playback/startLog";
 
 test("links keep only their host", () => {
   expect(hostOf("https://addon.example.com/eyJrZXkiOiJzZWNyZXQifQ/stream/movie/tt1.json")).toBe("addon.example.com");
@@ -112,4 +112,25 @@ describe("asking the add-ons (#360)", () => {
     expect(noSources({ asked: 2, answered: 1, found: 0, filtered: 0 }).reason).toBe("Your add-ons found no sources for this.");
     expect(noSources({ asked: 2, answered: 2, found: 3, filtered: 3 })).toEqual({ reason: "Your source filters left out every source.", settings: "sources" });
   });
+});
+
+test("split-brain TLS diagnosis and sniffed container reporting", () => {
+  const sniffed = describeProbe({
+    kind: "response",
+    host: "cdn.example.com",
+    status: 206,
+    reason: "Partial Content",
+    contentType: "application/octet-stream",
+    container: "matroska",
+    ms: 95,
+  });
+  expect(sniffed.text).toContain("sniffed matroska");
+
+  const tlsSteps: StartStep[] = [
+    { at: 100, text: "206 Partial Content from cdn.example.com · 95 ms", tone: "ok", stage: "server" },
+    { at: 250, text: "tls: certificate verify failed", tone: "fail", stage: "player" },
+  ];
+  expect(isSplitBrainTls(tlsSteps, "Playback failed")).toBe(true);
+  const report = formatReport(tlsSteps, { app: "0.18.0", platform: "Android", backend: "mpv", outcome: "Playback failed" });
+  expect(report).toContain("split-brain TLS");
 });

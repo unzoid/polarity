@@ -2,14 +2,10 @@
 // Its public surface: code outside src/lib imports this folder, code inside src/lib imports the file.
 
 export * from "./changes";
-export * from "./credits";
 export * from "./cropMode";
+export * from "./episodeLayout";
 export * from "./fonts";
 export * from "./keybinds";
-export * from "./legal";
 export * from "./overlay";
 export * from "./pages";
 export * from "./prefs";
-export * from "./schema";
-export * from "./searchIndex";
-export * from "./useSetting";

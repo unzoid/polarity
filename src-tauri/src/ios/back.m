@@ -104,9 +104,9 @@ static UIMenu *history_menu(NSArray *history) {
     return items.count ? [UIMenu menuWithChildren:items] : nil;
 }
 
-// The button comes and goes with the page change, on its clock (shell.css: the card's 620ms, its curve): it slides
-// in from the left as the wordmark makes room for it, and back out the same way, rather than appearing in place.
-static const NSTimeInterval MOTION = 0.62;
+// The button comes and goes with the page change, on its clock (cardMotion.ts: 460ms open / 380ms close):
+// it slides in from the left as the wordmark makes room for it, and back out cleanly on close.
+static const NSTimeInterval MOTION = 0.42;
 static BOOL wanted;
 
 static void move(NSTimeInterval duration, void (^changes)(void), void (^done)(void)) {

@@ -1,0 +1,4803 @@
+@layer ui-sdk;
+
+/* The app on computers and tablets (src/desk), laid out on Netflix's iPad app: every size is in iPad points measured
+   off a 1194 × 834 pt landscape screen, and one point (--pt) is a 1194th of the window's width, so the page keeps
+   the iPad's proportions at any window size (1 px at most windows' smallest, up to 1.5 px on wide screens).
+   Dressed as Polarity: its mark and four-point star, the theme's accent where Netflix puts its red, the art's colour
+   behind the featured card, the page stepping back under a title. */
+
+@property --dk-tint {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: #141414;
+}
+
+:root[data-desk-ui] {
+  --pt: clamp(1px, calc(100vw / 1194), 1.5px);
+  --dk-accent: var(--accent, #5e5ce6);
+  --dk-bar-h: calc(64 * var(--pt));
+  --dk-gutter: calc(26 * var(--pt));
+  --dk-poster-w: calc(164 * var(--pt));
+  --dk-poster-gap: calc(16 * var(--pt));
+  --dk-poster-r: calc(4 * var(--pt));
+  --dk-tabs-h: calc(62 * var(--pt));
+  --dk-tabs-bottom: calc(21 * var(--pt));
+  --dk-field: color-mix(in srgb, var(--bg) 70%, rgb(var(--ink) / 0.3));
+  --dk-sheet: color-mix(in srgb, var(--bg) 94%, var(--step, #fff));
+  /* What the app's own screens (pushed pages, the Anime tab) leave for the bar above them and the tabs below. */
+  --nav-h: var(--dk-bar-h);
+  --tabbar-h: calc(var(--dk-tabs-h) + var(--dk-tabs-bottom) + 16px);
+  background: var(--bg);
+}
+
+.dk {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+:where(.dk button, .dk input) {
+  font: inherit;
+  color: inherit;
+}
+:where(.dk button) {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.dk-flex {
+  flex: 1;
+}
+
+.dk-main {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: #000;
+}
+.dk-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform-origin: 50% 40%;
+  background: var(--bg);
+  transition: border-radius 0.32s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.dk-stage[data-recede] {
+  border-radius: calc(18 * var(--pt));
+}
+.dk-tab-page {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+.dk-tab-page[data-active="true"] {
+  z-index: 1;
+}
+/* Shown means it's the tab on screen, a title dialog over it or not: the dialog blurs it, so it must stay drawn. */
+.dk-tab-page:not([data-shown="true"]):not([data-fading]) {
+  visibility: hidden;
+  content-visibility: hidden;
+}
+.dk-tab-page:not([data-tab-key]) {
+  visibility: visible;
+}
+.dk-page {
+  position: absolute;
+  inset: 0;
+}
+.dk-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: var(--dk-bar-h);
+  padding-bottom: calc(var(--dk-tabs-h) + var(--dk-tabs-bottom) + 40 * var(--pt));
+  scrollbar-width: none;
+}
+.dk-scroll::-webkit-scrollbar,
+.dk-profiles::-webkit-scrollbar,
+.dk-notes::-webkit-scrollbar,
+:root[data-desk-ui] .t3s-sidebar::-webkit-scrollbar,
+:root[data-desk-ui] .t3s-scroll::-webkit-scrollbar {
+  display: none;
+}
+.dk-profiles,
+.dk-notes,
+:root[data-desk-ui] .t3s-sidebar,
+:root[data-desk-ui] .t3s-scroll {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+
+/* --- The bar: the mark and the page's name left (Netflix's N and "Home"), Downloads, the bell and Settings right,
+       56 pt apart as Netflix's three are. Clear at the top; scrolled, it takes the page's top colour. */
+.dk-bar {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  height: var(--dk-bar-h);
+  padding: 0 0 0 max(calc(10 * var(--pt)), var(--traffic-lights, 0px));
+}
+.dk-bar-bg {
+  position: absolute;
+  inset: 0;
+  background: var(--dk-tint, var(--bg));
+  box-shadow: 0 1px 0 rgb(var(--ink) / 0.06);
+  opacity: var(--c, 0);
+  pointer-events: none;
+}
+.dk-bar-lead {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  height: 100%;
+}
+.dk-bar-mark {
+  flex: none;
+  width: calc(30 * var(--pt));
+  height: calc(30 * var(--pt));
+  color: var(--text);
+}
+.dk-bar-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: calc(27 * var(--pt));
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dk-bar-actions {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  padding-right: calc(13 * var(--pt));
+}
+.dk-icon-btn {
+  display: grid;
+  place-items: center;
+  width: calc(44 * var(--pt));
+  height: calc(44 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text);
+  transition: background-color 0.15s, opacity 0.15s;
+}
+.dk-icon-btn svg {
+  width: calc(26 * var(--pt));
+  height: calc(26 * var(--pt));
+}
+.dk-icon-btn:hover,
+.dk-icon-btn[data-open] {
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-icon-btn:active {
+  opacity: 0.6;
+}
+.dk-icon-btn[data-busy] {
+  color: var(--dk-accent);
+}
+.dk-bar-actions .navbar-profile {
+  width: calc(40 * var(--pt));
+  height: calc(40 * var(--pt));
+  margin: 0 calc(2 * var(--pt)) 0 calc(4 * var(--pt));
+}
+.dk-bar-actions .navbar-profile .avatar {
+  width: calc(32 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+}
+.dk-bar-actions .window-controls {
+  align-self: center;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 0 calc(4 * var(--pt));
+  padding-left: calc(10 * var(--pt));
+  border-left: 1px solid rgb(var(--ink) / 0.16);
+}
+.dk-bar-actions .window-controls button {
+  width: 40px;
+  height: 36px;
+  border-radius: 10px;
+}
+:is(.dk-icon-btn, .dk-round, .dk-tab, .dk-chip, .dk-btn, .dk-t-btn, .dk-t-action, .dk-poster, .dk-billboard):focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+
+/* A round glass button: Back on a pushed page, Close and Back on a title. */
+.dk-round {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: calc(36 * var(--pt));
+  height: calc(36 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.14);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: var(--text);
+  transition: background-color 0.15s;
+}
+.dk-round:hover {
+  background: rgb(var(--ink) / 0.24);
+}
+.dk-round svg {
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+}
+.dk-back {
+  margin-right: calc(4 * var(--pt));
+}
+
+/* --- Home and sections: the page takes the featured art's dominant colour (phone/tint.ts) and fades it into its own
+       background down one screen, as Netflix's does; it eases from one title's to the next. Held on the zero-children
+       leaf layers (.dk-tint, .dk-bar-bg) with inherits:false so the 900ms transition never recalculates descendant styles. */
+:is(.dk-home, .dk-section) :is(.dk-tint, .dk-bar-bg) {
+  --dk-tint: var(--tint-dark, var(--bg));
+  transition: --dk-tint 0.9s ease;
+}
+:root[data-scheme="light"] :is(.dk-home, .dk-section) :is(.dk-tint, .dk-bar-bg) {
+  --dk-tint: var(--tint-light, var(--bg));
+}
+.dk-tint {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  background: linear-gradient(
+    to bottom,
+    var(--dk-tint) 0,
+    var(--dk-tint) 14%,
+    color-mix(in srgb, var(--dk-tint) 86%, var(--bg)) 34%,
+    color-mix(in srgb, var(--dk-tint) 60%, var(--bg)) 56%,
+    color-mix(in srgb, var(--dk-tint) 30%, var(--bg)) 74%,
+    var(--bg) 92%
+  );
+  pointer-events: none;
+}
+.dk-home .dk-scroll,
+.dk-section .dk-scroll {
+  isolation: isolate;
+}
+
+/* Chips: Netflix's are rounded rectangles, 45 pt tall, 8 pt corners, 8 pt apart, 12 pt in from the edge. */
+.dk-chips {
+  display: flex;
+  gap: calc(8 * var(--pt));
+  padding: calc(5 * var(--pt)) calc(12 * var(--pt)) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dk-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--pt));
+  height: calc(45 * var(--pt));
+  padding: 0 calc(16 * var(--pt));
+  border: 1px solid rgb(var(--ink) / 0.24);
+  border-radius: calc(8 * var(--pt));
+  background: rgb(var(--ink) / 0.1);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  font-size: calc(16 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.dk-chip:hover {
+  background: rgb(var(--ink) / 0.18);
+}
+.dk-chip:active {
+  background: rgb(var(--ink) / 0.26);
+}
+.dk-chip[aria-pressed="true"] {
+  border-color: rgb(var(--ink) / 0.75);
+  background: rgb(var(--ink) / 0.2);
+}
+.dk-chip-x {
+  justify-content: center;
+  width: calc(45 * var(--pt));
+  padding: 0;
+  border-radius: 50%;
+}
+.dk-chip-x svg {
+  width: calc(20 * var(--pt));
+  height: calc(20 * var(--pt));
+}
+.dk-chip-caret {
+  width: calc(12 * var(--pt));
+  height: calc(12 * var(--pt));
+}
+
+/* --- The featured card: 24 pt in, 20 pt under the chips, 2.35 : 1, 12 pt corners, a hairline edge. Its words sit
+       16 pt in from its bottom left: the logo up to 40% of its width, a line, three lines of story, two 236 × 40 pt
+       buttons. */
+.dk-billboard {
+  position: relative;
+  margin: calc(20 * var(--pt)) calc(24 * var(--pt)) 0;
+  aspect-ratio: 2.353;
+  max-height: 60vh;
+  min-height: calc(330 * var(--pt));
+  overflow: hidden;
+  border-radius: calc(12 * var(--pt));
+  background: rgb(var(--ink) / 0.07);
+  box-shadow: 0 calc(10 * var(--pt)) calc(36 * var(--pt)) rgb(0 0 0 / 0.38);
+  cursor: pointer;
+  outline-offset: 3px;
+}
+.dk-billboard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.dk-billboard.dk-skeleton {
+  box-shadow: none;
+}
+.dk-bb-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.dk-bb-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--art-x, 50%) 35%;
+  transition: scale 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-billboard:hover .dk-bb-art:not([data-under]) {
+  scale: 1.015;
+}
+.dk-bb-art[data-under] {
+  z-index: 0;
+}
+.dk-bb-art[data-entering] {
+  z-index: 1;
+  opacity: 0;
+}
+.dk-bb-art[data-entering][data-loaded="true"] {
+  animation: dk-art-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes dk-art-in {
+  from {
+    opacity: 0;
+    scale: 1.05;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+.dk-bb-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, rgb(0 0 0 / 0.62) 0%, rgb(0 0 0 / 0.36) 30%, transparent 58%),
+    linear-gradient(to bottom, transparent 45%, rgb(0 0 0 / 0.5) 100%);
+  pointer-events: none;
+}
+.dk-bb-body {
+  position: absolute;
+  left: calc(16 * var(--pt));
+  right: 40%;
+  bottom: calc(16 * var(--pt));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: #fff;
+  animation: dk-body-in 0.6s 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes dk-body-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(12 * var(--pt));
+  }
+}
+.dk-bb-logo {
+  display: block;
+  width: auto;
+  max-width: min(100%, calc(452 * var(--pt)));
+  height: auto;
+  max-height: calc(130 * var(--pt));
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 2px 14px rgb(0 0 0 / 0.4));
+}
+.dk-bb-name {
+  margin: 0;
+  font-size: calc(48 * var(--pt));
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-wrap: balance;
+  text-shadow: 0 2px 18px rgb(0 0 0 / 0.45);
+}
+.dk-bb-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 calc(8 * var(--pt));
+  margin: calc(14 * var(--pt)) 0 0;
+  font-size: calc(17 * var(--pt));
+  line-height: 1.3;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+.dk-bb-line span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--pt));
+}
+.dk-bb-line i {
+  font-style: normal;
+  font-size: 0.6em;
+  opacity: 0.7;
+}
+.dk-bb-desc {
+  display: -webkit-box;
+  max-width: calc(478 * var(--pt));
+  margin: calc(10 * var(--pt)) 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: calc(15 * var(--pt));
+  line-height: calc(18 * var(--pt));
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+.dk-bb-actions {
+  display: flex;
+  gap: calc(9 * var(--pt));
+  margin-top: calc(18 * var(--pt));
+}
+.dk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(10 * var(--pt));
+  width: calc(236 * var(--pt));
+  height: calc(40 * var(--pt));
+  padding: 0 calc(16 * var(--pt));
+  border: 0;
+  border-radius: 999px;
+  font-size: calc(17 * var(--pt));
+  font-weight: 700;
+  transition: background-color 0.15s, transform 0.12s;
+}
+.dk-btn svg {
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+}
+.dk-btn:active {
+  transform: scale(0.97);
+}
+.dk-btn-white {
+  background: #fff;
+  color: #000 !important;
+}
+.dk-btn-white:hover {
+  background: rgb(255 255 255 / 0.82);
+}
+.dk-btn-glass {
+  background: rgb(110 110 112 / 0.55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.dk-btn-glass:hover {
+  background: rgb(130 130 132 / 0.6);
+}
+.dk-btn-glass[aria-pressed="true"] svg {
+  color: var(--dk-accent);
+}
+:root[data-scheme="light"] .dk-btn-glass:not(.scheme-dark *) {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text) !important;
+}
+
+/* --- Rows: the name 16 pt under what's above, 21 pt bold, 26 pt in; posters 164 × 246 pt, 16 pt apart, 4 pt corners. */
+.dk-rows {
+  padding-top: calc(4 * var(--pt));
+}
+.dk-row-slot {
+  min-height: calc(320 * var(--pt));
+}
+.dk-row-slot[data-shape="landscape"] {
+  min-height: calc(224 * var(--pt));
+}
+:root[data-engine="chromium"] .dk-row-slot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(320 * var(--pt));
+}
+:root[data-engine="chromium"] .dk-row-slot[data-shape="landscape"] {
+  contain-intrinsic-size: auto calc(224 * var(--pt));
+}
+.dk-row-slot:empty {
+  min-height: 0;
+  content-visibility: visible;
+}
+.dk-row {
+  padding-top: calc(16 * var(--pt));
+}
+.dk-row-title {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  margin: 0;
+  padding: 0 var(--dk-gutter) calc(12 * var(--pt));
+  font-size: calc(21 * var(--pt));
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.dk-row-more {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--pt));
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: inherit;
+}
+.dk-row-chev {
+  width: calc(18 * var(--pt));
+  height: calc(18 * var(--pt));
+  opacity: 0.55;
+  transition: translate 0.2s, opacity 0.2s;
+}
+.dk-row-more:hover .dk-row-chev {
+  translate: 3px 0;
+  opacity: 1;
+}
+.dk-row-count {
+  color: var(--text-3);
+  font-weight: 600;
+}
+.dk-text-btn {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: calc(15 * var(--pt));
+  font-weight: 600;
+}
+.dk-text-btn:hover {
+  color: var(--text);
+}
+.dk-strip-wrap {
+  position: relative;
+}
+.dk-strip {
+  display: flex;
+  gap: var(--dk-poster-gap);
+  padding: 5px var(--dk-gutter);
+  margin-block: -5px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: var(--dk-gutter);
+  scrollbar-width: none;
+}
+.dk-strip::-webkit-scrollbar {
+  display: none;
+}
+.dk-pager {
+  position: absolute;
+  top: 50%;
+  right: calc(8 * var(--pt));
+  display: grid;
+  place-items: center;
+  width: calc(40 * var(--pt));
+  height: calc(40 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(20 20 20 / 0.72);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4), inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  color: #fff !important;
+  opacity: 0;
+  translate: 0 -50%;
+  transition: opacity 0.2s, background-color 0.15s;
+}
+.dk-pager svg {
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+}
+.dk-pager-back {
+  right: auto;
+  left: calc(8 * var(--pt));
+}
+.dk-pager-back svg {
+  rotate: 180deg;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-strip-wrap:hover .dk-pager {
+    opacity: 1;
+  }
+}
+.dk-pager:hover {
+  background: rgb(40 40 40 / 0.9);
+}
+
+.dk-poster {
+  position: relative;
+  flex: none;
+  display: block;
+  width: var(--dk-poster-w);
+  aspect-ratio: 2 / 3;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--dk-poster-r);
+  background: rgb(var(--ink) / 0.08);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s;
+}
+.dk-poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-poster:hover {
+    filter: brightness(1.1);
+  }
+}
+.dk-poster:active {
+  transform: scale(0.97);
+}
+.dk-poster:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-poster-name {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: calc(10 * var(--pt));
+  font-size: calc(15 * var(--pt));
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.dk-skeleton {
+  background: rgb(var(--ink) / 0.08) !important;
+  animation: dk-pulse 1.4s ease-in-out infinite;
+}
+[data-offscreen] .dk-skeleton {
+  animation: none;
+}
+@keyframes dk-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.dk-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(3 * var(--pt));
+  min-height: 3px;
+  background: rgb(128 128 128 / 0.75);
+}
+.dk-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 0 2px 2px 0;
+  background: var(--dk-accent);
+}
+
+/* Continue Watching (Apple TV wide 16:9 landscape cards: artwork + logo + bottom scrim + inline progress bar & time left). */
+.dk-strip-cw {
+  gap: calc(14 * var(--pt));
+}
+.dk-cw {
+  position: relative;
+  flex: none;
+  width: clamp(254px, 21.5vw, 332px);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: calc(12 * var(--pt));
+  background: rgb(var(--ink) / 0.08);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.1) inset;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
+}
+.dk-cw:hover {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.22) inset, 0 12px 28px rgb(0 0 0 / 0.42);
+}
+.dk-cw:has(:focus-visible) {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-cw-art:focus-visible {
+  outline: none;
+}
+.dk-cw-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.dk-cw-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-cw:hover .dk-cw-img {
+  transform: scale(1.035);
+}
+.dk-cw-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  color: rgb(255 255 255 / 0.88);
+}
+.dk-cw-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.76) 0%,
+    rgb(0 0 0 / 0.46) 28%,
+    rgb(0 0 0 / 0.12) 56%,
+    transparent 80%
+  );
+}
+.dk-cw-brand {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 30px;
+  pointer-events: none;
+}
+.dk-cw-brand .card-art-scrim {
+  display: none;
+}
+.dk-cw-brand .card-logo {
+  position: static;
+  max-width: 68%;
+  max-height: 52px;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.65));
+}
+.dk-cw-brand .card-art-title {
+  position: static;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.018em;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.72);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dk-cw-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.14);
+  color: #fff;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.55));
+  pointer-events: none;
+}
+.dk-cw-play svg {
+  width: calc(44 * var(--pt));
+  height: calc(44 * var(--pt));
+  padding: calc(10 * var(--pt));
+  border: 1.5px solid rgb(255 255 255 / 0.9);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
+}
+.dk-cw-foot {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.dk-cw-track {
+  flex: none;
+  width: 44px;
+  height: 3.5px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.34);
+  overflow: hidden;
+}
+.dk-cw-track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #fff;
+}
+.dk-cw-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgb(255 255 255 / 0.9);
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.6);
+}
+.dk-cw-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.dk-cw:is(:hover, :focus-within) .dk-cw-tools {
+  opacity: 1;
+}
+@media (hover: none) {
+  .dk-cw-tools {
+    opacity: 1;
+  }
+}
+.dk-cw-tool {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 50%;
+  background: rgb(18 18 20 / 0.68);
+  color: rgb(255 255 255 / 0.92) !important;
+  transition: background-color 140ms ease, transform 120ms ease;
+}
+.dk-cw-tool:hover {
+  background: rgb(28 28 32 / 0.92);
+  color: #fff !important;
+}
+.dk-cw-tool:active {
+  transform: scale(0.92);
+}
+
+/* --- The floating bar at the foot: Netflix's iPad capsule, 62 pt tall and 21 pt off the bottom, 78 pt a place, the
+       current one under a lighter capsule that slides. */
+.dk-tabs-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+}
+.dk-tabs {
+  position: absolute;
+  left: 50%;
+  bottom: var(--dk-tabs-bottom);
+  display: flex;
+  width: calc(var(--n) * 78 * var(--pt) + 13 * var(--pt));
+  height: var(--dk-tabs-h);
+  padding: calc(6 * var(--pt)) calc(6.5 * var(--pt));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  box-shadow:
+    0 calc(10 * var(--pt)) calc(30 * var(--pt)) rgb(0 0 0 / 0.45),
+    inset 0 0 0 1px rgb(var(--ink) / 0.12),
+    inset 0 1px 0 rgb(var(--ink) / 0.14);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  transform: translateX(-50%);
+  transition: translate 0.35s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.25s;
+}
+.dk-tabs[data-hidden] {
+  opacity: 0;
+  translate: 0 calc(100% + 30px);
+}
+:root[data-scheme="light"] .dk-tabs {
+  box-shadow:
+    0 8px 28px rgb(0 0 0 / 0.14),
+    inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+.dk-tabs-lens {
+  position: absolute;
+  top: calc(6 * var(--pt));
+  left: calc(6.5 * var(--pt));
+  width: calc(78 * var(--pt));
+  height: calc(50 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.14);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.12);
+  transform: translateX(calc(var(--at) * 78 * var(--pt)));
+}
+.dk-tabs[data-moved] .dk-tabs-lens {
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s;
+}
+.dk-tabs-lens[data-hidden] {
+  opacity: 0;
+}
+.dk-tab {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(3 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: rgb(var(--ink) / 0.6) !important;
+  transition: color 0.2s;
+}
+.dk-tab:hover {
+  color: rgb(var(--ink) / 0.85) !important;
+}
+.dk-tab[aria-current="page"] {
+  color: var(--text) !important;
+}
+.dk-tab-glyph {
+  display: grid;
+  place-items: center;
+  height: calc(26 * var(--pt));
+}
+.dk-tab-glyph svg {
+  width: calc(24 * var(--pt));
+  height: calc(24 * var(--pt));
+}
+.dk-tab:active .dk-tab-glyph {
+  scale: 0.88;
+}
+.dk-tab-avatar {
+  width: calc(25 * var(--pt)) !important;
+  height: calc(25 * var(--pt)) !important;
+  border-radius: calc(5 * var(--pt)) !important;
+  opacity: 0.75;
+}
+.dk-tab[aria-current="page"] .dk-tab-avatar {
+  opacity: 1;
+  box-shadow: 0 0 0 1.5px var(--text);
+}
+.dk-tab-label {
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+}
+
+/* --- Notifications: a panel under the bell. */
+.dk-notes {
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(560px, var(--available-height, 560px));
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.45), inset 0 0 0 1px rgb(var(--ink) / 0.1);
+  color: var(--text);
+  transform-origin: var(--transform-origin);
+  transition: opacity 0.16s, scale 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-notes:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  scale: 0.96;
+}
+.dk-notes-title {
+  margin: 6px 10px 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.dk-notes-empty {
+  margin: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.dk-notes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dk-notes-list button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+}
+.dk-notes-list button:hover {
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-notes-still {
+  flex: none;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-notes-still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-notes-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.dk-notes-text strong {
+  font-size: 14px;
+}
+.dk-notes-text small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* --- Netflix's chooser (Categories, seasons, lists): the screen blurred dark, the choices centred, ✕ at the foot. */
+.dk-list-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgb(0 0 0 / 0.55);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
+  transition: opacity 0.25s;
+}
+.dk-list {
+  position: fixed;
+  inset: 0;
+  z-index: 901;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  color: #fff;
+  transition: opacity 0.25s;
+  outline: none;
+}
+:is(.dk-list-backdrop, .dk-list):is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+.dk-list-items {
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  padding: 12vh 0 4vh;
+  overflow-y: auto;
+  list-style: none;
+  text-align: center;
+  scrollbar-width: none;
+  mask-image: linear-gradient(transparent, #000 10%, #000 88%, transparent);
+}
+.dk-list-items button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(10 * var(--pt));
+  padding: calc(12 * var(--pt)) calc(24 * var(--pt));
+  border: 0;
+  background: none;
+  color: rgb(255 255 255 / 0.62) !important;
+  font-size: calc(19 * var(--pt));
+  font-weight: 500;
+  transition: color 0.15s, scale 0.15s;
+}
+.dk-list-meta {
+  font-size: 0.72em;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.44);
+}
+.dk-list-items button[aria-current="true"] .dk-list-meta {
+  color: rgb(255 255 255 / 0.62);
+}
+.dk-list-items button:hover {
+  color: #fff !important;
+}
+.dk-list-items button[aria-current="true"] {
+  color: #fff !important;
+  font-size: calc(23 * var(--pt));
+  font-weight: 700;
+}
+.dk-list-items button:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  border-radius: 8px;
+}
+.dk-list-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(58 * var(--pt));
+  height: calc(58 * var(--pt));
+  margin: calc(10 * var(--pt)) 0 calc(36 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #000 !important;
+  transition: scale 0.15s;
+}
+.dk-list-close:hover {
+  scale: 1.05;
+}
+.dk-list-close svg {
+  width: calc(28 * var(--pt));
+  height: calc(28 * var(--pt));
+}
+
+/* --- A title's dialog, measured off Netflix's iPad app (IMG_3243, 3245): 667 pt wide, the window's height less 6 pt
+       at each end, 12 pt corners, black. The page behind blurs and darkens (and, Polarity's, steps back a little). */
+.dk-layer {
+  position: absolute;
+  inset: 0;
+}
+.dk-catch {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+.dk-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.42);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backdrop-filter: blur(22px) saturate(110%);
+  backdrop-filter: blur(22px) saturate(110%);
+}
+:root[data-scheme="light"] .dk-scrim {
+  background: rgb(0 0 0 / 0.35);
+}
+.dk-dlg-frame {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  background: none;
+  pointer-events: none;
+  outline: none;
+}
+.dk-dlg {
+  --dk-sheet: #0c0c0d;
+  --dk-pad: calc(24 * var(--pt));
+  /* Best of Netflix Web + iPad: generous reading width with crisp proportions. */
+  --pt: clamp(1px, calc(100vw / 1400), 1.24px);
+  position: absolute;
+  top: calc(16 * var(--pt));
+  bottom: calc(16 * var(--pt));
+  left: 0;
+  right: 0;
+  width: min(calc(820 * var(--pt)), calc(100vw - 44px));
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: calc(12 * var(--pt));
+  background: var(--dk-sheet);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07), 0 32px 96px rgb(0 0 0 / 0.72);
+  transform-origin: 0 0;
+  pointer-events: auto;
+  color: var(--text);
+}
+:root[data-scheme="light"] .dk-dlg {
+  --dk-sheet: var(--bg);
+  box-shadow: 0 30px 90px rgb(0 0 0 / 0.35);
+}
+.dk-dlg-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--dk-sheet);
+  opacity: 0;
+  pointer-events: none;
+}
+.dk-dlg-content {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transform-origin: 0 0;
+  scrollbar-width: none;
+}
+.dk-dlg-content::-webkit-scrollbar {
+  display: none;
+}
+.dk-dlg-page:not([data-top]) {
+  display: none;
+}
+/* Close (and Back) as Netflix draws them: bare white glyphs on the picture, 32 pt in from the corner. */
+.dk-dlg-buttons {
+  position: absolute;
+  z-index: 3;
+  top: calc(16 * var(--pt));
+  left: calc(16 * var(--pt));
+  right: calc(18 * var(--pt));
+  display: flex;
+  pointer-events: none;
+}
+.dk-dlg-buttons > * {
+  pointer-events: auto;
+}
+.dk-dlg-buttons .dk-round {
+  width: calc(40 * var(--pt));
+  height: calc(40 * var(--pt));
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: #fff;
+  filter: drop-shadow(0 1px 4px rgb(0 0 0 / 0.6));
+}
+.dk-dlg-buttons .dk-round svg {
+  width: calc(28 * var(--pt));
+  height: calc(28 * var(--pt));
+}
+.dk-dlg-buttons .dk-round:hover {
+  background: rgb(0 0 0 / 0.35);
+}
+.dk-dlg-ghost {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.dk-dlg-ghost img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-layer[data-leaving] .dk-dlg {
+  pointer-events: none;
+}
+
+.dk-t {
+  padding-bottom: calc(40 * var(--pt));
+}
+.dk-t-note {
+  margin: calc(80 * var(--pt)) calc(28 * var(--pt));
+  color: var(--text-2);
+  text-align: center;
+}
+.dk-t-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin-bottom: -1px;
+  overflow: hidden;
+  background: var(--dk-sheet);
+}
+/* Smooth vignette fading the hero art cleanly into the dialog canvas (overlaps bottom edge so scaled transforms never expose a 1px seam). */
+.dk-t-media::after {
+  content: "";
+  position: absolute;
+  inset: 42% -2px -2px -2px;
+  z-index: 1;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--dk-sheet) 34%, transparent) 44%,
+    color-mix(in srgb, var(--dk-sheet) 84%, transparent) 76%,
+    var(--dk-sheet) 94%,
+    var(--dk-sheet) 100%
+  );
+  pointer-events: none;
+}
+.dk-t-logo {
+  position: absolute;
+  z-index: 2;
+  left: var(--dk-pad, calc(24 * var(--pt)));
+  bottom: calc(18 * var(--pt));
+  max-width: min(46%, calc(340 * var(--pt)));
+  max-height: calc(108 * var(--pt));
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 4px 18px rgb(0 0 0 / 0.72));
+  pointer-events: none;
+}
+.dk-t-art,
+.dk-t-media video,
+.dk-t-media iframe {
+  position: absolute;
+  inset: 0 0 1px 0;
+  width: 100%;
+  height: calc(100% - 1px);
+  object-fit: cover;
+}
+.dk-t-mute {
+  position: absolute;
+  z-index: 2;
+  right: var(--dk-pad, calc(24 * var(--pt)));
+  bottom: calc(16 * var(--pt));
+  width: calc(32 * var(--pt));
+  height: calc(32 * var(--pt));
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+}
+.dk-t-mute svg {
+  width: calc(16 * var(--pt));
+  height: calc(16 * var(--pt));
+}
+.dk-t-info {
+  display: flex;
+  flex-direction: column;
+  padding: calc(16 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
+}
+.dk-t-name {
+  margin: 0;
+  font-size: calc(26 * var(--pt));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.dk-t-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(4 * var(--pt)) calc(10 * var(--pt));
+  margin: calc(8 * var(--pt)) 0 0;
+  font-size: calc(14.5 * var(--pt));
+  color: var(--text-2);
+}
+.dk-t-age {
+  padding: 0 calc(5 * var(--pt));
+  border: 1.5px solid currentColor;
+  border-radius: calc(4 * var(--pt));
+  font-size: calc(12 * var(--pt));
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+}
+.dk-t-score {
+  color: var(--text);
+  font-weight: 650;
+}
+.dk-t-scores {
+  margin-top: calc(10 * var(--pt));
+}
+.dk-t-scores .score-row {
+  margin: 0;
+  padding: 0;
+  gap: calc(8 * var(--pt)) calc(16 * var(--pt));
+}
+.dk-t-scores .score-row-item {
+  font-size: calc(13.5 * var(--pt));
+}
+.dk-t-scores .score-row-icon {
+  width: calc(17 * var(--pt));
+  height: calc(17 * var(--pt));
+}
+.dk-t-scores .score-row-value {
+  font-weight: 650;
+  color: var(--text);
+}
+/* Play/Download pills + compact utility actions share one tight horizontal bar (zero wasted vertical/right void). */
+.dk-t-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12 * var(--pt)) calc(18 * var(--pt));
+  margin-top: calc(16 * var(--pt));
+}
+.dk-t-buttons {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+}
+.dk-t-buttons .dk-t-btn {
+  width: auto;
+  min-width: calc(142 * var(--pt));
+  padding: 0 calc(22 * var(--pt));
+}
+.dk-t-meta-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: calc(12 * var(--pt)) calc(32 * var(--pt));
+  align-items: start;
+  margin-top: calc(18 * var(--pt));
+}
+.dk-t-meta-main,
+.dk-t-meta-side {
+  min-width: 0;
+}
+.dk-t-meta-main .dk-t-synopsis {
+  margin-top: 0;
+}
+.dk-t-meta-main .dk-t-resume + .dk-t-synopsis,
+.dk-t-meta-main .dk-t-ep + .dk-t-synopsis {
+  margin-top: calc(10 * var(--pt));
+}
+.dk-t-meta-main .dk-t-resume,
+.dk-t-meta-main .dk-t-ep {
+  margin-top: 0;
+}
+.dk-t-meta-side .dk-t-credits {
+  margin-top: 0;
+  color: rgb(var(--ink) / 0.88);
+  font-size: calc(13 * var(--pt));
+  line-height: 1.55;
+}
+.dk-t-credit-label {
+  color: rgb(var(--ink) / 0.48);
+}
+.dk-t-meta-side .dk-t-credits p + p {
+  margin-top: calc(7 * var(--pt));
+}
+@media (max-width: 680px) {
+  .dk-t-meta-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dk-t-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dk-t-buttons {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+  }
+}
+.dk-t-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(10 * var(--pt));
+  width: 100%;
+  height: calc(40 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  font-size: calc(16 * var(--pt));
+  font-weight: 700;
+  transition: background-color 0.15s, transform 0.12s;
+}
+.dk-t-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.dk-t-btn:disabled {
+  opacity: 0.5;
+}
+.dk-t-btn svg {
+  width: calc(21 * var(--pt));
+  height: calc(21 * var(--pt));
+}
+.dk-t-btn-white {
+  background: #fff;
+  color: #000 !important;
+}
+.dk-t-btn-white:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.85);
+}
+:root[data-scheme="light"] .dk-t-btn-white {
+  background: #000;
+  color: #fff !important;
+}
+.dk-t-btn-grey {
+  background: rgb(var(--ink) / 0.2);
+}
+.dk-t-btn-grey:hover:not(:disabled) {
+  background: rgb(var(--ink) / 0.28);
+}
+.dk-t-resume {
+  margin: calc(12 * var(--pt)) 0 0;
+}
+.dk-t-ep {
+  margin: calc(10 * var(--pt)) 0 calc(4 * var(--pt));
+  font-size: calc(14 * var(--pt));
+  font-weight: 700;
+}
+.dk-t-resume-bar {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  color: var(--text-2);
+  font-size: calc(12 * var(--pt));
+}
+.dk-t-resume-bar .dk-progress {
+  position: relative;
+  flex: 1;
+  border-radius: 2px;
+}
+.dk-t-synopsis {
+  display: -webkit-box;
+  margin: calc(13 * var(--pt)) 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  font-size: calc(13.5 * var(--pt));
+  line-height: 1.4;
+  cursor: pointer;
+}
+.dk-t-synopsis[data-open] {
+  display: block;
+  cursor: auto;
+}
+.dk-t-credits {
+  margin-top: calc(10 * var(--pt));
+  color: rgb(var(--ink) / 0.6);
+  font-size: calc(11.5 * var(--pt));
+  line-height: 1.6;
+}
+.dk-t-credits p {
+  margin: 0;
+}
+.dk-t-person,
+.dk-t-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit !important;
+}
+.dk-t-person:hover {
+  color: var(--text) !important;
+  text-decoration: underline;
+}
+.dk-t-more {
+  color: var(--text) !important;
+  font-weight: 700;
+}
+/* Compact utility actions sitting right alongside Play / Download. */
+.dk-t-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(4 * var(--pt));
+  padding: 0;
+}
+.dk-t-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(4 * var(--pt));
+  min-width: calc(62 * var(--pt));
+  padding: calc(6 * var(--pt)) calc(8 * var(--pt));
+  border: 0;
+  border-radius: calc(8 * var(--pt));
+  background: none;
+  color: var(--text) !important;
+  transition: background-color 0.15s;
+}
+.dk-t-action:hover:not(:disabled) {
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-t-action:disabled {
+  opacity: 0.4;
+}
+.dk-t-action[aria-pressed="true"] .dk-t-action-glyph {
+  color: var(--dk-accent);
+}
+.dk-t-action-glyph svg {
+  width: calc(24 * var(--pt));
+  height: calc(24 * var(--pt));
+}
+.dk-t-action-label {
+  max-width: calc(90 * var(--pt));
+  font-size: calc(10.5 * var(--pt));
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+
+/* Tabs: a 3.5 pt bar over the tab you're on, as wide as its name (Netflix's red; here the accent). */
+.dk-t-tabs {
+  margin-top: calc(16 * var(--pt));
+}
+.dk-t-tablist {
+  position: relative;
+  display: flex;
+  gap: calc(25 * var(--pt));
+  padding: calc(12 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dk-t-tab-mark {
+  position: absolute;
+  top: 0;
+  left: var(--active-tab-left);
+  width: var(--active-tab-width);
+  height: calc(3.5 * var(--pt));
+  min-height: 3px;
+  background: var(--dk-accent);
+  transition: left 0.3s cubic-bezier(0.32, 0.72, 0, 1), width 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.dk-t-tab {
+  flex: none;
+  padding: calc(10 * var(--pt)) 0 calc(12 * var(--pt));
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.5) !important;
+  font-size: calc(15.5 * var(--pt));
+  font-weight: 700;
+  transition: color 0.15s;
+}
+.dk-t-tab:hover {
+  color: rgb(var(--ink) / 0.75) !important;
+}
+.dk-t-tab[data-selected] {
+  color: var(--text) !important;
+}
+.dk-t-tab:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.dk-t-panel {
+  padding-top: calc(12 * var(--pt));
+  outline: none;
+  transition: opacity 0.2s;
+}
+.dk-t-panel[data-starting-style] {
+  opacity: 0;
+}
+.dk-t-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(130 * var(--pt)), 1fr));
+  gap: calc(10 * var(--pt));
+  padding: 0 var(--dk-pad, calc(24 * var(--pt)));
+}
+.dk-t-grid .dk-poster {
+  width: auto;
+}
+.dk-t-empty {
+  margin: calc(24 * var(--pt)) var(--dk-pad, calc(24 * var(--pt)));
+  color: var(--text-2);
+}
+.dk-t-trailers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(220 * var(--pt)), 1fr));
+  gap: calc(18 * var(--pt)) calc(12 * var(--pt));
+  padding: 0 var(--dk-pad, calc(24 * var(--pt)));
+}
+.dk-t-trailer {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--pt));
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.dk-t-trailer-still {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: calc(4 * var(--pt));
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-t-trailer-still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-t-trailer-name {
+  font-size: calc(13 * var(--pt));
+  font-weight: 600;
+}
+
+/* Episodes: the season in Netflix's grey box (36 pt, square-ish corners), the layout switch at the far end, a rule. */
+.dk-eps-bar {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  margin: 0 var(--dk-pad, calc(24 * var(--pt)));
+  padding: calc(2 * var(--pt)) 0 calc(14 * var(--pt));
+  border-bottom: 1px solid rgb(var(--ink) / 0.14);
+}
+.dk-season {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(14 * var(--pt));
+  height: calc(36 * var(--pt));
+  padding: 0 calc(16 * var(--pt));
+  border: 0;
+  border-radius: calc(2.5 * var(--pt));
+  background: rgb(var(--ink) / 0.2);
+  font-size: calc(15 * var(--pt));
+  font-weight: 500;
+}
+.dk-season:hover {
+  background: rgb(var(--ink) / 0.28);
+}
+.dk-season svg {
+  width: calc(14 * var(--pt));
+  height: calc(14 * var(--pt));
+  transition: rotate 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-season[aria-expanded="true"] .dk-season-caret,
+.dk-pl-season-pill[aria-expanded="true"] .dk-season-caret {
+  rotate: 180deg;
+}
+.dk-season-name {
+  font-size: calc(15 * var(--pt));
+  font-weight: 700;
+}
+.dk-season-inline-count {
+  font-weight: 500;
+  color: rgb(var(--ink) / 0.55);
+}
+.dk-season-pop {
+  z-index: 620;
+  min-width: 240px;
+  max-width: min(340px, calc(100vw - 24px));
+  max-height: min(360px, var(--available-height, 360px));
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 10px;
+  background: rgb(26 26 28 / 0.96);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.62), inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  color: #fff;
+  transform-origin: var(--transform-origin);
+  transition: opacity 140ms ease, scale 170ms cubic-bezier(0.22, 1, 0.36, 1);
+  scrollbar-width: none;
+}
+.dk-season-pop::-webkit-scrollbar {
+  display: none;
+}
+.dk-season-pop:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  scale: 0.96;
+}
+.dk-season-pop-player {
+  z-index: calc(var(--z-overlay, 900) + 20);
+  background: rgb(22 22 24 / 0.96);
+}
+:root[data-scheme="light"] .dk-season-pop:not(.dk-season-pop-player) {
+  background: color-mix(in srgb, var(--bg) 95%, rgb(var(--ink) / 0.05));
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.2), inset 0 0 0 1px rgb(var(--ink) / 0.1);
+  color: var(--text);
+}
+.dk-season-menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dk-season-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+.dk-season-opt:hover,
+.dk-season-opt:focus-visible {
+  background: rgb(255 255 255 / 0.1);
+  outline: none;
+}
+:root[data-scheme="light"] .dk-season-pop:not(.dk-season-pop-player) .dk-season-opt:hover,
+:root[data-scheme="light"] .dk-season-pop:not(.dk-season-pop-player) .dk-season-opt:focus-visible {
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-season-opt[aria-selected="true"] .dk-season-opt-label {
+  font-weight: 700;
+}
+.dk-season-opt-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.dk-season-opt-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-season-opt-count {
+  margin-left: auto;
+  padding-left: 12px;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.5);
+}
+:root[data-scheme="light"] .dk-season-pop:not(.dk-season-pop-player) .dk-season-opt-count {
+  color: var(--text-2);
+}
+.dk-eps-layout {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-eps-radios {
+  display: flex;
+  align-items: center;
+}
+.dk-eps-layout-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: rgb(var(--ink) / 0.14);
+}
+.dk-eps-radios button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3) !important;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.dk-eps-radios button:hover {
+  color: var(--text) !important;
+}
+.dk-eps-radios button[aria-checked="true"] {
+  background: rgb(var(--ink) / 0.16);
+  color: var(--text) !important;
+}
+.dk-eps-search {
+  display: flex;
+  align-items: center;
+  width: 34px;
+  height: 28px;
+  border-radius: 7px;
+  overflow: hidden;
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease;
+}
+.dk-eps-search[data-open] {
+  width: clamp(148px, 24vw, 210px);
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-eps-search-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3) !important;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.dk-eps-search:not([data-open]) .dk-eps-search-btn:hover {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text) !important;
+}
+.dk-eps-search[data-open] .dk-eps-search-btn {
+  width: 28px;
+  color: var(--text-2) !important;
+}
+.dk-eps-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.dk-eps-search[data-open] .dk-eps-search-input {
+  opacity: 1;
+  pointer-events: auto;
+}
+.dk-eps-search-input::placeholder {
+  color: var(--text-3);
+}
+.dk-eps-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+.dk-eps-search-clear {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3) !important;
+  cursor: pointer;
+}
+.dk-eps-search-clear:hover {
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text) !important;
+}
+/* Episode Ratings trigger pill in the episodes bar */
+.dk-eps-ratings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.1);
+  color: var(--text-2) !important;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.dk-eps-ratings-btn:hover {
+  background: rgb(var(--ink) / 0.16);
+  color: var(--text) !important;
+}
+.dk-eps-ratings-btn svg {
+  color: #f6c453;
+}
+
+/* Classic Polarity episode list & side-by-side cards: rounded 10px stills with outline, bottom-left ▶ 42m pill,
+   full-row hover card with hairline dividers, number column, and circular right-aligned actions. */
+.dk-ep-list {
+  margin: 0;
+  padding: calc(6 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
+  list-style: none;
+}
+.dk-ep {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgb(var(--ink) / 0.08);
+}
+.dk-ep:last-child {
+  border-bottom: 0;
+}
+.dk-ep-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: calc(30 * var(--pt)) calc(184 * var(--pt)) minmax(0, 1fr);
+  gap: calc(16 * var(--pt));
+  align-items: center;
+  padding: calc(12 * var(--pt)) calc(84 * var(--pt)) calc(12 * var(--pt)) calc(6 * var(--pt));
+  margin: calc(3 * var(--pt)) 0;
+  border: 0;
+  border-radius: calc(12 * var(--pt));
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+.dk-ep[data-up-next] .dk-ep-main {
+  background: rgb(var(--ink) / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-ep:not([data-unreleased]) .dk-ep-main:hover {
+    background: rgb(var(--ink) / 0.085);
+    box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+  }
+}
+.dk-ep-main:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: -2px;
+}
+.dk-ep-row-num {
+  justify-self: center;
+  font-size: calc(16 * var(--pt));
+  font-weight: 500;
+  color: var(--text-2);
+}
+.dk-ep-row-still,
+.dk-ep-still {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: calc(10 * var(--pt));
+  background: rgb(var(--ink) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+.dk-ep-row-still img,
+.dk-ep-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-ep-blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dk-ep-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.7));
+  transition: opacity 160ms ease, scale 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-ep-play-hover {
+  opacity: 0;
+  scale: 0.92;
+}
+.dk-ep-main:not(:disabled):hover .dk-ep-play-hover,
+.dk-ep-main:not(:disabled):focus-visible .dk-ep-play-hover,
+.dk-ep-still:not(:disabled):hover .dk-ep-play-hover,
+.dk-ep-still:not(:disabled):focus-visible .dk-ep-play-hover {
+  opacity: 1;
+  scale: 1;
+}
+:is(.dk-t-trailer):hover .dk-ep-play {
+  scale: 1.08;
+}
+.dk-ep-runtime {
+  position: absolute;
+  left: calc(8 * var(--pt));
+  bottom: calc(8 * var(--pt));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--pt));
+  padding: calc(2.5 * var(--pt)) calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
+}
+.dk-ep-row-still[data-progress] .dk-ep-runtime,
+.dk-ep-still[data-progress] .dk-ep-runtime {
+  bottom: calc(14 * var(--pt));
+}
+.dk-ep-row-still .dk-progress,
+.dk-ep-still .dk-progress {
+  left: calc(8 * var(--pt));
+  right: calc(8 * var(--pt));
+  bottom: calc(6 * var(--pt));
+  height: 3.5px;
+  min-height: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.28);
+  overflow: hidden;
+}
+.dk-ep-row-still .dk-progress i,
+.dk-ep-still .dk-progress i {
+  border-radius: 999px;
+  background: var(--progress, #f5f5f7);
+}
+/* Classic Netflix / Apple TV watched indicator: crisp white circular check badge at top-left of the still. */
+.dk-ep-watched {
+  position: absolute;
+  top: calc(8 * var(--pt));
+  left: calc(8 * var(--pt));
+  z-index: 2;
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--pill-light, #fff);
+  color: var(--text-on-light, #000);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+/* Smooth view swapper (AnimatedSwap in EpisodeTools.tsx) */
+.dk-swap-frame {
+  overflow: clip;
+}
+.dk-swap-inner {
+  position: relative;
+}
+.dk-swap-panel {
+  width: 100%;
+}
+.dk-ep-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4 * var(--pt));
+  min-width: 0;
+}
+.dk-ep-name {
+  display: flex;
+  flex-direction: column;
+  gap: calc(3 * var(--pt));
+}
+.dk-ep-name strong {
+  font-size: calc(15 * var(--pt));
+  font-weight: 650;
+  line-height: 1.28;
+  color: var(--text);
+}
+.dk-ep-name span,
+.dk-ep-meta {
+  color: rgb(var(--ink) / 0.55);
+  font-size: calc(12 * var(--pt));
+}
+.dk-ep-date {
+  display: block;
+  margin-top: calc(3 * var(--pt));
+  color: var(--text-3);
+  font-size: calc(12 * var(--pt));
+  font-weight: 500;
+}
+.dk-ep-text {
+  display: -webkit-box;
+  margin: calc(3 * var(--pt)) 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-2);
+  font-size: calc(12.5 * var(--pt));
+  line-height: 1.44;
+}
+.dk-ep-card .dk-ep-text {
+  -webkit-line-clamp: 3;
+}
+.dk-ep > .dk-ep-dl-slot {
+  position: absolute;
+  right: calc(10 * var(--pt));
+  top: 50%;
+  translate: 0 -50%;
+}
+.dk-ep-dl {
+  color: var(--text) !important;
+}
+.dk-ep-strip {
+  display: flex;
+  gap: calc(14 * var(--pt));
+  margin: 0;
+  padding: calc(14 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) calc(6 * var(--pt));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  list-style: none;
+  scroll-padding-inline: var(--dk-pad, calc(24 * var(--pt)));
+  scrollbar-width: none;
+}
+.dk-ep-strip::-webkit-scrollbar {
+  display: none;
+}
+.dk-ep-strip-wrap .dk-pager {
+  top: calc(84 * var(--pt));
+  opacity: 0.92;
+}
+.dk-ep-strip-wrap .dk-pager:hover {
+  opacity: 1;
+}
+.dk-ep-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: calc(264 * var(--pt));
+}
+.dk-ep-card .dk-ep-still {
+  cursor: pointer;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-ep-card:not([data-unreleased]) .dk-ep-still:hover {
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22), 0 10px 26px rgb(0 0 0 / 0.38);
+  }
+}
+.dk-ep-card[data-up-next] .dk-ep-still {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+}
+.dk-ep-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8 * var(--pt));
+  margin-top: calc(10 * var(--pt));
+  min-height: calc(26 * var(--pt));
+}
+.dk-ep-kicker {
+  font-size: calc(10.5 * var(--pt));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.dk-ep-card[data-up-next] .dk-ep-kicker {
+  color: var(--text);
+}
+.dk-ep-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: calc(2 * var(--pt));
+  font-size: calc(15 * var(--pt));
+  font-weight: 650;
+  line-height: 1.28;
+  color: var(--text);
+}
+.dk-ep-head {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(8 * var(--pt));
+  margin-top: calc(10 * var(--pt));
+}
+.dk-ep-head strong {
+  flex: 1;
+  font-size: calc(14 * var(--pt));
+  font-weight: 600;
+  line-height: 1.3;
+}
+.dk-ep-num {
+  margin-right: calc(6 * var(--pt));
+  color: var(--text-3);
+}
+.dk-ep-soon {
+  position: absolute;
+  left: calc(8 * var(--pt));
+  bottom: calc(8 * var(--pt));
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgb(10 10 14 / 0.78);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset;
+  color: rgb(255 255 255 / 0.9);
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+}
+/* Unreleased episodes: muted/desaturated artwork + subtle Upcoming pill so aired vs TBA reads at a glance. */
+.dk-ep[data-unreleased],
+.dk-ep-card[data-unreleased] {
+  opacity: 0.62;
+}
+.dk-ep[data-unreleased] .dk-ep-row-still,
+.dk-ep-card[data-unreleased] .dk-ep-still {
+  cursor: default;
+}
+.dk-ep[data-unreleased] .dk-ep-row-still img,
+.dk-ep-card[data-unreleased] .dk-ep-still img {
+  filter: grayscale(0.65) brightness(0.66);
+}
+.dk-ep[data-unreleased] .dk-ep-name strong,
+.dk-ep-card[data-unreleased] .dk-ep-head strong {
+  color: var(--text-2);
+}
+.dk-ep-upcoming-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: calc(8 * var(--pt));
+  padding: 1px calc(7 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text-2);
+  font-size: calc(10.5 * var(--pt));
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.dk-sk {
+  display: block;
+  border-radius: calc(4 * var(--pt));
+  background: rgb(var(--ink) / 0.08);
+  animation: dk-pulse 1.4s ease-in-out infinite;
+}
+.dk-sk-title {
+  width: 50%;
+  height: calc(24 * var(--pt));
+  margin: calc(4 * var(--pt)) 0 calc(12 * var(--pt));
+}
+.dk-sk-line {
+  width: 36%;
+  height: calc(14 * var(--pt));
+  margin-bottom: calc(16 * var(--pt));
+}
+.dk-sk-btn {
+  width: 100%;
+  height: calc(40 * var(--pt));
+  margin-bottom: calc(10 * var(--pt));
+  border-radius: 999px;
+}
+.dk-sk-text {
+  width: 100%;
+  height: calc(13 * var(--pt));
+  margin-top: calc(8 * var(--pt));
+}
+.dk-sk-short {
+  width: 60%;
+}
+.dk-t-subname {
+  margin: calc(4 * var(--pt)) 0 0;
+  font-size: calc(13.5 * var(--pt));
+  color: var(--text-2);
+}
+.dk-t-airing {
+  margin: calc(8 * var(--pt)) 0 0;
+  font-size: calc(13 * var(--pt));
+  color: var(--text-2);
+}
+.dk-t-airing strong {
+  color: var(--text);
+  font-weight: 650;
+}
+.dk-t-anime-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dk-season-range {
+  background: rgb(var(--ink) / 0.1);
+  font-size: calc(13 * var(--pt));
+  padding: calc(6 * var(--pt)) calc(12 * var(--pt));
+}
+.dk-season-range[aria-pressed="true"] {
+  background: rgb(var(--ink) / 0.22);
+}
+.dk-ep-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.14);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  vertical-align: middle;
+}
+.dk-t-anime-details {
+  --gutter: 0px;
+  --content-start: 0px;
+  display: flex;
+  flex-direction: column;
+  gap: calc(18 * var(--pt));
+  padding: calc(4 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) calc(16 * var(--pt));
+}
+.dk-t-anime-details .about,
+.dk-t-anime-details .details {
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  border-top: 0;
+}
+.dk-t-anime-details .anime-characters-wrap {
+  padding-bottom: 0;
+}
+.dk-t-anime-details .anime-cast-heading,
+.dk-t-anime-details .anime-section-title {
+  margin-top: 0;
+}
+
+/* Cardless full-screen frosted Episode Ratings overlay (matches ListDialog & SourcesOverlay) */
+.dk-ratings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 619;
+  background: rgb(0 0 0 / 0.78);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  transition: opacity 200ms var(--ease-out);
+}
+.dk-ratings-backdrop:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+.dk-ratings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 620;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(18 * var(--pt));
+  padding: calc(28 * var(--pt)) calc(24 * var(--pt)) calc(96 * var(--pt));
+  margin: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  background: none;
+  color: var(--text);
+  outline: none;
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.dk-ratings-overlay:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  transform: scale(0.985);
+}
+.dk-ratings-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.dk-ratings-title {
+  margin: 0;
+  font-size: calc(22 * var(--pt));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.dk-ratings-sub {
+  margin: 0;
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.56);
+}
+.dk-ratings-body {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: min(78rem, calc(100vw - 3rem));
+  min-height: 0;
+}
+.dk-ratings-overlay .ratings-views {
+  --ratings-card: transparent;
+  --body-max: min(64vh, 44rem);
+  width: 100%;
+}
+.dk-ratings-overlay .ratings-views-bar {
+  justify-content: center;
+  margin: 0 0 1.25rem;
+}
+.dk-ratings-overlay .episode-ratings[data-variant="dialog"] .episode-ratings-box {
+  --cell-bg: transparent;
+  background: transparent;
+}
+/* Non-sticky headers/averages on the transparent cardless overlay so scrolled ratings never collide behind AVG. or axis labels. */
+.dk-ratings-overlay .episode-ratings-table thead th,
+.dk-ratings-overlay .episode-ratings-table .episode-ratings-episode,
+.dk-ratings-overlay .episode-ratings-table .episode-ratings-corner,
+.dk-ratings-overlay .episode-ratings-table tfoot :is(th, td) {
+  position: static;
+  background: transparent;
+}
+.dk-ratings-overlay .episode-ratings-table tfoot :is(th, td) {
+  padding-top: 0.75rem;
+}
+/* Generous cell scaling in the full-screen overlay: bold on compact shows, comfortable on long-running shows. */
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-table {
+  border-spacing: 6px;
+}
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-table th {
+  font-size: 0.875rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-cell {
+  width: 4.35rem;
+  height: 3.05rem;
+  border-radius: 9px;
+  font-size: 1.2rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="large"] .episode-ratings-avg {
+  width: 4.35rem;
+  font-size: 1.25rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-table {
+  border-spacing: 5px;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-table th {
+  font-size: 0.8125rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-cell {
+  width: 3.65rem;
+  height: 2.6rem;
+  border-radius: 8px;
+  font-size: 1.08rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="medium"] .episode-ratings-avg {
+  width: 3.65rem;
+  font-size: 1.15rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="compact"] .episode-ratings-cell {
+  width: 3.15rem;
+  height: 2.25rem;
+  border-radius: 7px;
+  font-size: 0.98rem;
+}
+.dk-ratings-overlay .episode-ratings[data-density="compact"] .episode-ratings-avg {
+  width: 3.15rem;
+  font-size: 1.08rem;
+}
+.dk-ratings-overlay .ratings-views > .episode-ratings-legend {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
+.dk-ratings-close {
+  position: fixed;
+  left: 50%;
+  bottom: calc(28 * var(--pt));
+  translate: -50% 0;
+}
+
+/* --- Search: the field across the top where the page's name would be. */
+.dk-search-bar {
+  gap: calc(16 * var(--pt));
+  background: var(--bg);
+}
+.dk-field {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  max-width: calc(820 * var(--pt));
+  height: calc(44 * var(--pt));
+  padding: 0 calc(14 * var(--pt));
+  border-radius: calc(10 * var(--pt));
+  background: var(--dk-field);
+  color: var(--text-2);
+  transition: box-shadow 0.15s;
+}
+.dk-field:focus-within {
+  box-shadow: 0 0 0 2px rgb(var(--ink) / 0.35);
+}
+.dk-field svg:first-child {
+  flex: none;
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+}
+.dk-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font-size: calc(17 * var(--pt));
+}
+.dk-field input::placeholder {
+  color: var(--text-3);
+}
+.dk-field input::-webkit-search-cancel-button {
+  display: none;
+}
+.dk-field-clear {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--text-3) !important;
+}
+.dk-recent {
+  padding-top: calc(16 * var(--pt));
+}
+.dk-recent .dk-row-title {
+  padding-right: var(--dk-gutter);
+}
+.dk-recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8 * var(--pt));
+  padding: 0 var(--dk-gutter);
+}
+.dk-recent-list .dk-chip {
+  height: calc(36 * var(--pt));
+  font-size: calc(15 * var(--pt));
+  font-weight: 500;
+}
+.dk-suggest {
+  padding-top: calc(22 * var(--pt));
+}
+.dk-suggest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(340 * var(--pt)), 1fr));
+  gap: calc(6 * var(--pt)) calc(16 * var(--pt));
+  margin: 0;
+  padding: 0 var(--dk-gutter);
+  list-style: none;
+}
+.dk-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--pt));
+  min-width: 0;
+  border-radius: calc(6 * var(--pt));
+  transition: background-color 0.15s;
+}
+.dk-suggest-row:hover {
+  background: rgb(var(--ink) / 0.06);
+}
+.dk-suggest-open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.dk-suggest-still {
+  position: relative;
+  flex: none;
+  width: calc(146 * var(--pt));
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: calc(4 * var(--pt));
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-suggest-still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-suggest-logo {
+  position: absolute;
+  left: 8%;
+  bottom: 10%;
+  width: 60% !important;
+  height: 40% !important;
+  object-fit: contain !important;
+  object-position: left bottom;
+  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.6));
+}
+.dk-suggest-name {
+  overflow: hidden;
+  font-size: calc(15 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dk-suggest-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(48 * var(--pt));
+  height: calc(48 * var(--pt));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text) !important;
+  transition: scale 0.15s;
+}
+.dk-suggest-play:hover {
+  scale: 1.08;
+}
+.dk-grid-block {
+  padding-top: calc(16 * var(--pt));
+}
+.dk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--dk-poster-w), 1fr));
+  gap: var(--dk-poster-gap) calc(12 * var(--pt));
+  padding: 0 var(--dk-gutter);
+}
+.dk-grid .dk-poster {
+  width: auto;
+}
+.dk-section-grid {
+  padding-top: calc(24 * var(--pt));
+}
+.dk-section-grid[data-stale] {
+  opacity: 0.55;
+}
+.dk-state,
+.dk-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  margin: calc(80 * var(--pt)) var(--dk-gutter);
+  color: var(--text-2);
+  text-align: center;
+}
+.dk-state h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: calc(22 * var(--pt));
+}
+.dk-state p {
+  margin: 0;
+}
+
+/* --- My Polarity, as My Netflix (IMG_3246): the profile and a caret, Downloads as a bordered card 8 pt from the
+       edges, then each section with Netflix's grey box and white button while it's empty. */
+.dk-my-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  min-width: 0;
+  padding: calc(4 * var(--pt)) calc(8 * var(--pt)) calc(4 * var(--pt)) calc(4 * var(--pt));
+  border: 0;
+  border-radius: calc(8 * var(--pt));
+  background: none;
+}
+.dk-my-profile:hover {
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-my-profile svg {
+  width: calc(16 * var(--pt));
+  height: calc(16 * var(--pt));
+}
+.dk-my-avatar {
+  width: calc(34 * var(--pt)) !important;
+  height: calc(34 * var(--pt)) !important;
+  border-radius: calc(7 * var(--pt)) !important;
+}
+.dk-my-head {
+  padding: calc(10 * var(--pt)) calc(20 * var(--pt)) 0;
+}
+.dk-my-dl {
+  display: flex;
+  align-items: center;
+  gap: calc(16 * var(--pt));
+  width: calc(100% - 2 * var(--dk-gutter));
+  margin: calc(12 * var(--pt)) var(--dk-gutter) 0;
+  padding: calc(14 * var(--pt)) calc(18 * var(--pt));
+  border: 1px solid rgb(var(--ink) / 0.12);
+  border-radius: calc(10 * var(--pt));
+  background: rgb(var(--ink) / 0.06);
+  text-align: left;
+  transition: background-color 0.16s, border-color 0.16s;
+}
+.dk-my-dl:hover {
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-my-dl > svg {
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
+}
+.dk-my-dl-glyph {
+  display: grid;
+  place-items: center;
+  width: calc(36 * var(--pt));
+}
+.dk-my-dl-glyph svg {
+  width: calc(26 * var(--pt));
+  height: calc(26 * var(--pt));
+}
+.dk-my-dl-art {
+  flex: none;
+  width: calc(36 * var(--pt));
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: calc(3 * var(--pt));
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-my-dl-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-my-dl-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc(5 * var(--pt));
+  min-width: 0;
+}
+.dk-my-dl-text strong {
+  font-size: calc(17 * var(--pt));
+  font-weight: 600;
+}
+.dk-my-dl-text small {
+  color: var(--text-2);
+  font-size: calc(14 * var(--pt));
+}
+.dk-my-dl-bar {
+  max-width: calc(360 * var(--pt));
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(var(--ink) / 0.16);
+}
+.dk-my-dl-bar i {
+  display: block;
+  height: 100%;
+  background: var(--dk-accent);
+}
+.dk-my-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(14 * var(--pt));
+  margin: 0 var(--dk-gutter);
+  padding: calc(26 * var(--pt)) calc(20 * var(--pt));
+  background: rgb(var(--ink) / 0.07);
+  text-align: center;
+}
+.dk-my-empty p {
+  margin: 0;
+  font-size: calc(14 * var(--pt));
+}
+.dk-my-empty-btn {
+  height: calc(36 * var(--pt));
+  padding: 0 calc(20 * var(--pt));
+  border: 0;
+  border-radius: calc(4 * var(--pt));
+  background: #fff;
+  color: #000 !important;
+  font-size: calc(15 * var(--pt));
+  font-weight: 700;
+}
+.dk-my-empty-btn:hover {
+  background: rgb(255 255 255 / 0.85);
+}
+:root[data-scheme="light"] .dk-my-empty-btn {
+  background: #000;
+  color: #fff !important;
+}
+.dk-list-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(6 * var(--pt));
+  width: var(--dk-poster-w);
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.dk-list-mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--dk-poster-r);
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text-2);
+}
+.dk-list-mosaic[data-n="1"],
+.dk-list-mosaic:not([data-n]) {
+  grid-template-columns: 1fr;
+}
+.dk-list-mosaic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-list-mosaic[data-n="4"] img,
+.dk-list-mosaic[data-n="3"] img,
+.dk-list-mosaic[data-n="2"] img {
+  aspect-ratio: 2 / 3;
+}
+.dk-list-new .dk-list-mosaic {
+  border: 1.5px dashed rgb(var(--ink) / 0.25);
+  background: none;
+}
+.dk-list-name {
+  font-size: calc(14 * var(--pt));
+  font-weight: 600;
+}
+.dk-list-count {
+  color: var(--text-3);
+  font-size: calc(12 * var(--pt));
+}
+
+/* --- Profiles, a computer's menu under the profile picture: the profile you're on, the others to switch to, then
+       what used to be the classic profile menu, in rows of 36 px. */
+.dk-profile {
+  position: relative;
+  display: inline-grid;
+}
+.dk-profile-legacy {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.dk-profile-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--pt));
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.dk-profile-btn .avatar {
+  width: calc(32 * var(--pt));
+  border-radius: calc(4 * var(--pt));
+}
+.dk-profile-caret {
+  width: calc(10 * var(--pt));
+  height: calc(10 * var(--pt));
+  color: var(--text);
+  transition: rotate 0.2s;
+}
+.dk-profile-btn[aria-expanded="true"] .dk-profile-caret {
+  rotate: 180deg;
+}
+.dk-profile-btn:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.dk-profile-badge {
+  position: absolute;
+  top: -3px;
+  left: calc(26 * var(--pt));
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--dk-accent);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.dk-profiles {
+  width: 320px;
+  max-height: min(640px, var(--available-height, 640px));
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg) 88%, rgb(var(--ink) / 0.4));
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  box-shadow: 0 20px 50px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(var(--ink) / 0.1);
+  color: var(--text);
+  font-size: 14px;
+  transform-origin: var(--transform-origin);
+  transition: opacity 0.16s, scale 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-profiles:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  scale: 0.96;
+}
+.dk-profiles-me {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.07);
+}
+.dk-profiles-avatar {
+  flex: none;
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 9px !important;
+}
+.dk-profiles-who {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dk-profiles-who strong {
+  overflow: hidden;
+  font-size: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dk-profiles-who span {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dk-profiles-edit {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-2) !important;
+}
+.dk-profiles-edit:hover {
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text) !important;
+}
+.dk-profiles-group {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  border-top: 1px solid rgb(var(--ink) / 0.08);
+}
+.dk-profiles-me + .dk-profiles-group {
+  border-top: 0;
+}
+.dk-profiles-group:empty {
+  display: none;
+}
+.dk-profiles-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.dk-profiles-row:hover,
+.dk-profiles-row:focus-visible {
+  background: rgb(var(--ink) / 0.1);
+  outline: none;
+}
+.dk-profiles-row > span:not([class]) {
+  flex: 1;
+}
+.dk-profiles-pic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+}
+.dk-profiles-add {
+  background: rgb(var(--ink) / 0.1);
+}
+.dk-profiles-manage {
+  color: var(--text-2) !important;
+}
+.dk-profiles-lock {
+  color: var(--text-3);
+}
+.dk-profiles-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  color: var(--text-2);
+}
+.dk-profiles-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dk-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.dk-profiles-version {
+  margin: 4px 10px 6px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* --- Pushed pages (a person, Downloads…) and screens shown as a tab (Anime): the app's own screen under the bar. */
+.dk-pushed {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  box-shadow: -10px 0 30px rgb(0 0 0 / 0.35);
+}
+.dk-pushed-body {
+  position: absolute;
+  inset: 0;
+}
+.dk-pagebar,
+.dk-screen-tab > .dk-bar {
+  background: color-mix(in srgb, var(--bg) calc(var(--c, 1) * 100%), transparent);
+}
+.dk-pushed-body > .page,
+.dk-pushed > .page,
+.dk-screen-tab > .page {
+  z-index: 0;
+}
+.dk-screen-tab > .dk-bar .dk-bar-bg {
+  background: var(--bg);
+}
+
+/* --- On a computer (`data-desk-chrome="nav"`): Netflix's web app, measured off its page at 1437 px wide (a point is a
+       1437th of the window): the bar 78 pt tall, the featured card 50 pt in from each side and 2.18 : 1, the rows 50 pt in. */
+:root[data-desk-ui][data-desk-chrome="nav"] {
+  --pt: clamp(0.85px, calc(100vw / 1437), 1.4px);
+  --dk-nav-h: calc(78 * var(--pt));
+  --dk-gutter: calc(50 * var(--pt));
+  --tabbar-h: 24px;
+}
+:root[data-desk-chrome="nav"] .dk-scroll {
+  padding-top: var(--dk-nav-h);
+  padding-bottom: calc(48 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-billboard {
+  aspect-ratio: auto;
+  height: min(calc((100vw - 100 * var(--pt)) / 2.18), calc(100vh - var(--dk-nav-h) - 41 * var(--pt)));
+  max-height: none;
+  min-height: calc(320 * var(--pt));
+  margin: calc(9 * var(--pt)) calc(50 * var(--pt)) 0;
+  border-radius: calc(16 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-bb-body {
+  left: calc(35 * var(--pt));
+  bottom: calc(35 * var(--pt));
+  right: 45%;
+}
+:root[data-desk-chrome="nav"] .dk-bb-logo {
+  max-width: min(100%, calc(430 * var(--pt)));
+  max-height: calc(130 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-bb-name {
+  font-size: calc(56 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-bb-line {
+  margin-top: calc(28 * var(--pt));
+  font-size: calc(15 * var(--pt));
+  font-weight: 600;
+}
+:root[data-desk-chrome="nav"] .dk-bb-desc {
+  max-width: calc(560 * var(--pt));
+  margin-top: calc(14 * var(--pt));
+  -webkit-line-clamp: 2;
+  font-size: calc(16 * var(--pt));
+  line-height: 1.35;
+}
+:root[data-desk-chrome="nav"] .dk-bb-actions {
+  gap: calc(12 * var(--pt));
+  margin-top: calc(24 * var(--pt));
+}
+/* Netflix web's buttons: 48 pt pills as wide as their words. */
+:root[data-desk-chrome="nav"] .dk-bb-actions .dk-btn {
+  width: auto;
+  height: calc(48 * var(--pt));
+  padding: 0 calc(24 * var(--pt)) 0 calc(20 * var(--pt));
+  gap: calc(10 * var(--pt));
+  font-size: calc(18 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-bb-actions .dk-btn svg {
+  width: calc(26 * var(--pt));
+  height: calc(26 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-bb-actions .dk-btn-glass {
+  background: rgb(109 109 110 / 0.7);
+  box-shadow: none;
+}
+:root[data-desk-chrome="nav"] .dk-row-title {
+  font-size: calc(20 * var(--pt));
+}
+:root[data-desk-chrome="nav"] .dk-pushed-body {
+  top: var(--dk-nav-h);
+}
+:root[data-desk-chrome="nav"] .dk-screen-tab {
+  --nav-h: var(--dk-nav-h);
+}
+
+.dk-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(22 * var(--pt));
+  height: var(--dk-nav-h);
+  padding: 0 0 0 max(calc(49 * var(--pt)), var(--traffic-lights, 0px));
+}
+.dk-strip .playlist-tile {
+  flex: none;
+  width: var(--dk-poster-w);
+}
+.dk-strip .playlist-tile .card-frame {
+  border-radius: var(--dk-poster-r);
+}
+.dk-nav-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.52), transparent);
+  pointer-events: none;
+}
+.dk-nav-bg::after {
+  display: none;
+}
+/* Progressive blur sticky header (EdgeBlur / motion-primitives technique) when content scrolls underneath. */
+.edge-blur.dk-nav-blur {
+  inset: 0 0 auto 0;
+  height: calc(var(--dk-nav-h) + 32px);
+  z-index: 0;
+  --edge-shown: var(--c, 0);
+  --edge-tint: 0.58;
+  --edge-strength: 1;
+}
+.edge-blur.dk-nav-blur::before {
+  background: linear-gradient(
+    to top,
+    transparent 0%,
+    color-mix(in srgb, var(--bg) 52%, transparent) 55%,
+    color-mix(in srgb, var(--bg) 82%, transparent) 100%
+  );
+  transition: opacity 220ms var(--ease-std);
+}
+.edge-blur.dk-nav-blur i {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: opacity 220ms var(--ease-std), -webkit-backdrop-filter 0s linear 220ms, backdrop-filter 0s linear 220ms;
+}
+.dk-nav[data-scrolled="true"] .edge-blur.dk-nav-blur i {
+  -webkit-backdrop-filter: var(--edge-filter);
+  backdrop-filter: var(--edge-filter);
+  transition: opacity 220ms var(--ease-std);
+}
+:root[data-scheme="light"] .dk-nav-bg {
+  background: none;
+}
+.dk-nav-logo {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  height: calc(44 * var(--pt));
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.dk-nav-logo img {
+  display: block;
+  height: calc(36 * var(--pt));
+  width: auto;
+  margin-left: calc(-4 * var(--pt));
+  user-select: none;
+}
+:root[data-scheme="light"] :is(.dk-nav-logo img, .dk-wordmark) {
+  filter: invert(1);
+}
+.dk-nav-links {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--pt));
+  min-width: 0;
+  padding: 5px;
+  margin: -5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dk-nav-link {
+  flex: none;
+  height: calc(40 * var(--pt));
+  padding: 0 calc(16 * var(--pt));
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: rgb(var(--ink) / 0.78) !important;
+  font-size: calc(16 * var(--pt));
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.15s, background-color 0.15s;
+}
+.dk-nav-link:hover {
+  color: var(--text) !important;
+}
+.dk-nav-link[aria-current="page"] {
+  background: rgb(var(--ink) / 0.2);
+  color: var(--text) !important;
+  font-weight: 700;
+}
+.dk-nav-link:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 1px;
+}
+.dk-nav-actions {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  padding-right: calc(50 * var(--pt));
+}
+.dk-nav-actions .dk-icon-btn {
+  width: calc(40 * var(--pt));
+  height: calc(40 * var(--pt));
+}
+/* With the system's own title bar (Windows, DeskApp), the page draws no window buttons of its own. */
+:root[data-native-frame] .window-controls {
+  display: none !important;
+}
+:root[data-native-frame] .dk-nav-actions {
+  padding-right: calc(50 * var(--pt));
+}
+.dk-nav-actions .dk-icon-btn svg {
+  width: calc(24 * var(--pt));
+  height: calc(24 * var(--pt));
+}
+.dk-nav-actions .navbar-profile {
+  width: calc(38 * var(--pt));
+  height: calc(38 * var(--pt));
+  margin: 0 0 0 calc(4 * var(--pt));
+}
+.dk-nav-actions .navbar-profile .avatar {
+  width: calc(31 * var(--pt));
+  border-radius: calc(4 * var(--pt));
+}
+.dk-nav-actions .window-controls {
+  align-self: center;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 0 calc(6 * var(--pt));
+  padding-left: calc(10 * var(--pt));
+  border-left: 1px solid rgb(var(--ink) / 0.16);
+}
+.dk-nav-actions .window-controls button {
+  width: 40px;
+  height: 34px;
+  border-radius: 8px;
+}
+/* Polarity's recessed glass pill search bar (old search design). */
+.dk-nav-search {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--pt));
+  width: clamp(210px, 22vw, 310px);
+  height: calc(38 * var(--pt));
+  padding: 0 calc(13 * var(--pt));
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-3) 84%, #242428);
+  box-shadow:
+    inset 0 0.5px 1px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  color: var(--text);
+  transition: box-shadow 160ms ease, background-color 160ms ease;
+  animation: dk-search-open 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dk-nav-search:focus-within {
+  box-shadow:
+    inset 0 0.5px 1px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.24);
+}
+:root[data-scheme="light"] .dk-nav-search {
+  background: #efeff2;
+  box-shadow:
+    inset 0 0.5px 1.5px rgb(0 0 0 / 0.08),
+    inset 0 0 0 1px rgb(0 0 0 / 0.09);
+}
+@keyframes dk-search-open {
+  from {
+    width: calc(40 * var(--pt));
+    opacity: 0.4;
+  }
+}
+.dk-nav-search > svg {
+  flex: none;
+  width: calc(20 * var(--pt));
+  height: calc(20 * var(--pt));
+}
+.dk-nav-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font-size: calc(14 * var(--pt));
+}
+.dk-nav-search input::placeholder {
+  color: var(--text-3);
+}
+.dk-nav-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.dk-nav-search-clear {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--text-2) !important;
+}
+.dk-nav-search-clear:hover {
+  color: var(--text) !important;
+}
+
+/* Shows or Movies under the bar: the name large, Genres beside it, as Netflix's web app has them. */
+.dk-head {
+  display: flex;
+  align-items: center;
+  gap: calc(16 * var(--pt));
+  padding: calc(14 * var(--pt)) var(--dk-gutter) calc(6 * var(--pt));
+}
+.dk-head-name {
+  margin: 0;
+  font-size: calc(36 * var(--pt));
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.dk-head-crumb {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2) !important;
+  font-weight: inherit;
+}
+.dk-head-crumb::after {
+  content: " ›";
+}
+.dk-head-crumb:hover {
+  color: var(--text) !important;
+}
+.dk-head .dk-chip {
+  height: calc(36 * var(--pt));
+  font-size: calc(15 * var(--pt));
+}
+.dk-head .dk-chip-x {
+  width: calc(36 * var(--pt));
+}
+
+/* The tablet's bar: Polarity's wordmark where Netflix has its N and "Home"; a narrowed Home's name after a hairline. */
+.dk-wordmark {
+  flex: none;
+  height: calc(40 * var(--pt));
+  width: auto;
+  margin-left: calc(-4 * var(--pt));
+  user-select: none;
+}
+.dk-bar-sub {
+  overflow: hidden;
+  padding-left: calc(12 * var(--pt));
+  border-left: 1px solid rgb(var(--ink) / 0.28);
+  color: rgb(var(--ink) / 0.8);
+  font-size: calc(20 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A section's bar, as Netflix's (IMG_3249): a round Back at the left, the name centred. */
+.dk-center-bar {
+  padding-left: max(calc(14 * var(--pt)), var(--traffic-lights, 0px));
+}
+.dk-center-bar .dk-back {
+  position: relative;
+  width: calc(44 * var(--pt));
+  height: calc(44 * var(--pt));
+  background: rgb(var(--ink) / 0.14);
+}
+.dk-center-title {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  max-width: 60%;
+  font-size: calc(19 * var(--pt));
+  font-weight: 700;
+}
+.dk-center-bar .dk-bar-actions {
+  margin-left: auto;
+}
+.dk-round-spacer {
+  margin-left: auto;
+}
+
+/* The Sources chooser (phone/SourcesOverlay.tsx) on a computer: its column a little wider. */
+:root[data-desk-ui] :is(.ph-src-controls, .ph-src-list, .ph-src-filter-sections, .ph-src-loading) {
+  max-width: 560px;
+}
+
+/* The player draws its picture under a clear page (mpv): nothing of the app may show through while it plays. */
+.dk[data-playing] .dk-main {
+  visibility: hidden;
+}
+/* mpv's picture is under the page: while it plays, the desk app's own backgrounds go clear (player.css does html and body). */
+html[data-player="mpv"][data-desk-ui],
+html[data-player="mpv"][data-desk-ui] body,
+html[data-player="mpv"] .dk {
+  background: transparent;
+}
+html[data-player="mpv"] .app[data-player-leaving="true"] .dk-main {
+  visibility: visible;
+}
+/* --- Fixes from the app itself. */
+/* The player covers everything: a title dialog it was opened from waits, unseen, until it closes. */
+.dk[data-playing] .dk-layer {
+  visibility: hidden;
+}
+/* Close and Back stay readable over a scrolled page: a dark disc under the bare glyph. */
+.dk-dlg-buttons .dk-round {
+  background: rgb(0 0 0 / 0.45);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+/* A downloaded episode has more than one button (open, delete): kept together in the last column, side by side. */
+.dk-ep-dl-slot {
+  display: flex;
+  align-items: center;
+  gap: calc(6 * var(--pt));
+}
+.dk-ep-dl-slot > * {
+  flex: none;
+}
+.dk-ep-dl-slot :is(button, a) {
+  display: grid;
+  place-items: center;
+  width: calc(28 * var(--pt));
+  height: calc(28 * var(--pt));
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  color: rgb(var(--ink) / 0.58) !important;
+  cursor: pointer;
+  transition: color 140ms ease, transform 120ms ease;
+}
+.dk-ep-dl-slot :is(button, a):hover {
+  background: none;
+  box-shadow: none;
+  color: var(--text) !important;
+}
+.dk-ep-dl-slot :is(button, a):active {
+  transform: scale(0.92);
+}
+.dk-ep-kicker-row .dk-ep-dl-slot :is(button, a) {
+  width: calc(24 * var(--pt));
+  height: calc(24 * var(--pt));
+  background: none;
+}
+.dk-ep-head .dk-ep-dl-slot {
+  margin-left: auto;
+}
+/* --- Desk Downloads: clean, single-header Netflix-dark downloads view --- */
+.dk-dl-page .dk-scroll {
+  padding-top: calc(var(--dk-bar-h) + 12px);
+  padding-bottom: calc(var(--dk-tabs-h) + 48px);
+}
+:root[data-desk-chrome="nav"] .dk-dl-page .dk-scroll {
+  padding-bottom: 72px;
+}
+.dk-dl-body {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 6px var(--dk-gutter) 0;
+}
+.dk-dl-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgb(var(--ink) / 0.1);
+}
+.dk-dl-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 280px;
+}
+.dk-dl-summary {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dk-dl-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.dk-dl-folder-path {
+  max-width: 440px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-dl-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 140ms ease;
+}
+.dk-dl-link:hover {
+  color: var(--text);
+}
+.dk-dl-link:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dk-dl-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.dk-dl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid rgb(var(--ink) / 0.14);
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.06);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.dk-dl-pill:hover:not(:disabled) {
+  background: rgb(var(--ink) / 0.12);
+  border-color: rgb(var(--ink) / 0.22);
+}
+.dk-dl-pill[data-active] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.dk-dl-pill.dk-dl-danger[data-armed] {
+  background: var(--danger, #e53935);
+  border-color: var(--danger, #e53935);
+  color: #fff;
+}
+.dk-dl-pill:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.dk-dl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px 0 4px;
+}
+.dk-dl-filters .dk-chip[aria-selected="true"] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg) !important;
+}
+.dk-dl-section {
+  margin-top: 22px;
+}
+.dk-dl-section-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.dk-dl-section-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.dk-dl-overall {
+  flex: 1;
+  max-width: 220px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.14);
+}
+.dk-dl-overall i {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  background: var(--dk-accent);
+}
+.dk-dl-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+.dk-dl-group {
+  border-bottom: 1px solid rgb(var(--ink) / 0.08);
+  transition: opacity 200ms ease;
+}
+.dk-dl-group:last-child {
+  border-bottom: 0;
+}
+.dk-dl-group[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+}
+.dk-dl-show-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+.dk-dl-show-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 8px 4px 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+}
+.dk-dl-show-toggle:hover .dk-dl-show-name {
+  color: var(--text);
+}
+.dk-dl-poster {
+  flex: none;
+  width: 44px;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-dl-poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-dl-show-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dk-dl-show-name {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-dl-show-sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.dk-dl-chevron {
+  flex: none;
+  color: var(--text-3);
+  transition: rotate 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-dl-show[data-open] .dk-dl-chevron {
+  rotate: 180deg;
+}
+.dk-dl-show-body {
+  padding: 0 0 12px 16px;
+}
+.dk-dl-season {
+  margin-top: 8px;
+}
+.dk-dl-season-label {
+  margin: 8px 0 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.dk-dl-season-label span {
+  font-weight: 500;
+  color: var(--text-3);
+}
+.dk-dl-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.dk-dl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  margin: 0 -6px;
+  border-radius: 8px;
+  transition: background-color 140ms ease, opacity 200ms ease;
+}
+.dk-dl-row:hover {
+  background: rgb(var(--ink) / 0.05);
+}
+.dk-dl-row[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
+}
+.dk-dl-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.dk-dl-row-main:disabled {
+  cursor: default;
+}
+.dk-dl-still {
+  position: relative;
+  flex: none;
+  width: 124px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgb(var(--ink) / 0.08);
+}
+.dk-dl-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-dl-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.34);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.dk-dl-row:hover .dk-dl-play,
+.dk-dl-row-main:focus-visible .dk-dl-play {
+  opacity: 1;
+}
+.dk-dl-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgb(0 0 0 / 0.65);
+}
+.dk-dl-bar i {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  background: var(--dk-accent);
+}
+.dk-dl-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dk-dl-row-kicker {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.dk-dl-row-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-dl-row-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.dk-dl-watched {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+.dk-dl-error {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--danger, #e53935);
+}
+.dk-dl-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.dk-dl-action:hover {
+  background: rgb(var(--ink) / 0.1);
+  color: var(--text);
+}
+.dk-dl-trash[data-armed] {
+  background: rgb(229 57 53 / 0.18);
+  color: var(--danger, #ff5f57);
+}
+.dk-dl-check {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  accent-color: var(--dk-accent);
+  cursor: pointer;
+}
+.dk-dl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 84px auto 0;
+  max-width: 340px;
+  text-align: center;
+  color: var(--text-3);
+}
+.dk-dl-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text-2);
+}
+.dk-dl-empty h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--text);
+}
+.dk-dl-empty p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.dk-dl-selectbar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 40;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgb(24 24 26 / 0.94);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.55), inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.dk-dl-selectbar[data-leaving] {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
+  pointer-events: none;
+}
+.dk-dl-selectbar-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 0 4px;
+}
+
+/* --- Desk-scaled Settings overlay, Watch Party popover, and Profile Switch veil --- */
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-backdrop {
+  background: rgb(0 0 0 / 0.5);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s {
+  --t3-pt: clamp(1px, calc(100vw / 1280), 1.28px);
+  width: min(calc(980 * var(--t3-pt)), calc(100vw - 56px));
+  height: min(calc(700 * var(--t3-pt)), calc(100dvh - 56px));
+  grid-template-columns: calc(236 * var(--t3-pt)) minmax(0, 1fr);
+  font-size: calc(14 * var(--t3-pt));
+  border-radius: calc(20 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-sidebar {
+  padding: calc(12 * var(--t3-pt)) calc(10 * var(--t3-pt));
+  gap: calc(10 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-search {
+  height: calc(34 * var(--t3-pt));
+  padding: 0 calc(11 * var(--t3-pt));
+  font-size: calc(13.5 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-search input {
+  font-size: calc(13.5 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-group-heading {
+  font-size: calc(12 * var(--t3-pt));
+  padding: 0 calc(12 * var(--t3-pt)) calc(4 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-nav-item {
+  height: calc(34 * var(--t3-pt));
+  padding: 0 calc(11 * var(--t3-pt));
+  gap: calc(10 * var(--t3-pt));
+  font-size: calc(13.5 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-nav-item > svg {
+  width: calc(16 * var(--t3-pt));
+  height: calc(16 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-header {
+  height: calc(54 * var(--t3-pt));
+  padding: 0 calc(16 * var(--t3-pt)) 0 calc(24 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-crumbs {
+  font-size: calc(15.5 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-ghost {
+  height: calc(32 * var(--t3-pt));
+  font-size: calc(13 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-icon-btn {
+  width: calc(32 * var(--t3-pt));
+  height: calc(32 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s-page {
+  max-width: calc(760 * var(--t3-pt));
+  padding: calc(22 * var(--t3-pt)) calc(28 * var(--t3-pt)) calc(38 * var(--t3-pt));
+  gap: calc(22 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s .settings-group-title {
+  font-size: calc(13.5 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s .settings-row {
+  padding: calc(13 * var(--t3-pt)) calc(18 * var(--t3-pt));
+  gap: calc(16 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s .settings-row-title {
+  font-size: calc(14.5 * var(--t3-pt));
+  line-height: 1.35;
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s .settings-row-caption {
+  font-size: calc(12.5 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .t3s .settings-row-icon {
+  width: calc(19 * var(--t3-pt));
+  height: calc(19 * var(--t3-pt));
+}
+:root[data-desk-ui]:not([data-form="phone"]) .profile-pop {
+  width: min(24.5rem, calc(100vw - 1.5rem));
+}
+
+/* Profile menu switch animation veil (src/desk/ProfileSwitch.tsx) */
+.dk-pswitch {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: grid;
+  place-items: center;
+  background: rgb(10 10 12 / 0.88);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+  pointer-events: all;
+  animation: dk-pswitch-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: opacity 380ms cubic-bezier(0.22, 1, 0.36, 1), background-color 380ms ease;
+}
+.dk-pswitch[data-fading] {
+  opacity: 0;
+  pointer-events: none;
+}
+.dk-pswitch-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: dk-pswitch-card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dk-pswitch-avatar {
+  width: 112px;
+  border-radius: 14px;
+  box-shadow: 0 20px 56px rgb(0 0 0 / 0.55);
+}
+.dk-pswitch-name {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #fff;
+  transition: opacity 220ms ease;
+}
+.dk-pswitch[data-fading] .dk-pswitch-name {
+  opacity: 0;
+}
+@keyframes dk-pswitch-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dk-pswitch-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(8px);
+  }
+}
+
+/* --- Landscape 16:9 shelf cards (Home, Anime, Search Spotlight) + Original Search discovery --- */
+.dk-strip-wide {
+  gap: calc(14 * var(--pt));
+}
+.dk-lc {
+  position: relative;
+  flex: none;
+  display: block;
+  width: clamp(248px, 21vw, 326px);
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: calc(10 * var(--pt));
+  background: rgb(var(--ink) / 0.08);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08) inset;
+  text-align: left;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
+}
+.dk-lc:hover {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.2) inset, 0 12px 28px rgb(0 0 0 / 0.42);
+}
+.dk-lc:active {
+  transform: scale(0.975);
+}
+.dk-lc:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-lc-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-lc:hover .dk-lc-img {
+  transform: scale(1.035);
+}
+.dk-lc-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.84) 0%,
+    rgb(0 0 0 / 0.44) 38%,
+    rgb(0 0 0 / 0.1) 64%,
+    transparent 82%
+  );
+  pointer-events: none;
+}
+.dk-lc-body {
+  position: absolute;
+  left: calc(14 * var(--pt));
+  right: calc(14 * var(--pt));
+  bottom: calc(11 * var(--pt));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(5 * var(--pt));
+  pointer-events: none;
+}
+.dk-lc-brand {
+  display: block;
+  max-width: 78%;
+}
+.dk-lc-brand .card-art-scrim {
+  display: none;
+}
+.dk-lc-brand .card-logo {
+  position: static;
+  display: block;
+  max-width: 100%;
+  max-height: calc(48 * var(--pt));
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.72));
+}
+.dk-lc-brand .card-art-title {
+  position: static;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  padding: 0;
+  font-size: calc(16.5 * var(--pt));
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  line-height: 1.18;
+  color: #fff;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 0.75);
+  overflow: hidden;
+}
+.dk-lc-sub {
+  font-size: calc(12 * var(--pt));
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.72);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-anime-chips {
+  padding: calc(18 * var(--pt)) var(--dk-gutter) 0;
+}
+.dk-anime-chips .dk-chip {
+  height: calc(36 * var(--pt));
+  padding: 0 calc(14 * var(--pt));
+  border-radius: 999px;
+  font-size: calc(13.5 * var(--pt));
+}
+.dk-anime-chips .dk-chip-primary {
+  background: rgb(var(--ink) / 0.16);
+  border-color: rgb(var(--ink) / 0.24);
+}
+
+/* --- Desk Anime discovery cards: below-poster captions, badges, Airing Today tiles, hover quick-peek --- */
+.dk-row-acards .dk-pager {
+  top: calc(var(--dk-poster-w) * 0.75 + 5px);
+}
+.dk-acard {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--dk-poster-w);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dk-acard:focus-visible {
+  outline: none;
+}
+.dk-acard:focus-visible .dk-acard-art {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-acard-art {
+  width: 100%;
+  border-radius: calc(8 * var(--pt));
+  background: var(--cover, rgb(var(--ink) / 0.08));
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07) inset;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease, filter 200ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-acard:hover .dk-acard-art {
+    filter: brightness(1.08);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.22) inset, 0 10px 24px rgb(0 0 0 / 0.42);
+  }
+}
+.dk-acard:active .dk-acard-art {
+  transform: scale(0.97);
+}
+.dk-acard-rank {
+  position: absolute;
+  top: calc(7 * var(--pt));
+  left: calc(7 * var(--pt));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(26 * var(--pt));
+  height: calc(22 * var(--pt));
+  padding: 0 calc(6 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.76);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset, 0 2px 8px rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+}
+.dk-acard-score {
+  position: absolute;
+  top: calc(7 * var(--pt));
+  right: calc(7 * var(--pt));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  height: calc(22 * var(--pt));
+  padding: 0 calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.74);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset, 0 2px 8px rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: calc(11 * var(--pt));
+  font-weight: 650;
+  pointer-events: none;
+}
+.dk-acard-score svg {
+  color: #f6c453;
+}
+.dk-acard-pill {
+  position: absolute;
+  left: calc(7 * var(--pt));
+  right: calc(7 * var(--pt));
+  bottom: calc(7 * var(--pt));
+  z-index: 2;
+  display: inline-block;
+  width: fit-content;
+  max-width: calc(100% - calc(14 * var(--pt)));
+  padding: calc(3 * var(--pt)) calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(10 10 14 / 0.78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14) inset;
+  color: rgb(255 255 255 / 0.94);
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.dk-acard-cap {
+  display: flex;
+  flex-direction: column;
+  gap: calc(3 * var(--pt));
+  padding: calc(8 * var(--pt)) calc(2 * var(--pt)) 0;
+  min-width: 0;
+}
+.dk-acard-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: -0.01em;
+}
+.dk-acard-meta {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--pt));
+  color: var(--text-2);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 500;
+  line-height: 1.25;
+  min-width: 0;
+}
+.dk-acard-meta-score {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  color: var(--text);
+  font-weight: 600;
+}
+.dk-acard-meta-score svg {
+  color: #f6c453;
+}
+.dk-acard-meta-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-acard-sk {
+  cursor: default;
+  pointer-events: none;
+}
+.dk-acard-sk-line {
+  display: block;
+  height: calc(12 * var(--pt));
+  border-radius: calc(4 * var(--pt));
+  width: 86%;
+}
+.dk-acard-sk-short {
+  width: 58%;
+  height: calc(10 * var(--pt));
+  margin-top: calc(2 * var(--pt));
+}
+
+/* Compact broadcast schedule tiles for Airing Today */
+.dk-row-air .dk-strip {
+  gap: calc(12 * var(--pt));
+}
+.dk-air {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--pt));
+  width: clamp(272px, 22vw, 336px);
+  padding: calc(9 * var(--pt));
+  border: 1px solid rgb(var(--ink) / 0.1);
+  border-radius: calc(12 * var(--pt));
+  background: rgb(var(--ink) / 0.055);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease, border-color 180ms ease, box-shadow 200ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-air:hover {
+    background: rgb(var(--ink) / 0.1);
+    border-color: rgb(var(--ink) / 0.2);
+    box-shadow: 0 10px 24px rgb(0 0 0 / 0.28);
+  }
+}
+.dk-air:active {
+  transform: scale(0.98);
+}
+.dk-air:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-air-thumb {
+  position: relative;
+  flex: none;
+  display: block;
+  width: calc(60 * var(--pt));
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: calc(7 * var(--pt));
+  background: var(--cover, rgb(var(--ink) / 0.1));
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08) inset;
+}
+.dk-air-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dk-air-thumb-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: calc(14 * var(--pt));
+  font-weight: 700;
+  color: rgb(255 255 255 / 0.7);
+}
+.dk-air-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4 * var(--pt));
+  min-width: 0;
+  flex: 1;
+}
+.dk-air-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(6 * var(--pt));
+}
+.dk-air-time {
+  color: var(--text-2);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dk-air-time[data-soon] {
+  color: var(--accent);
+}
+.dk-air-score {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  color: var(--text-2);
+  font-size: calc(11 * var(--pt));
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dk-air-score svg {
+  color: #f6c453;
+}
+.dk-air-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-size: calc(14 * var(--pt));
+  font-weight: 650;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
+}
+.dk-air-sub {
+  color: var(--text-2);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-air-sk {
+  height: calc(108 * var(--pt));
+  border-color: transparent;
+  pointer-events: none;
+}
+
+/* Floating hover quick-peek card */
+.dk-apeek {
+  position: fixed;
+  z-index: 620;
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--pt));
+  padding: calc(14 * var(--pt));
+  border-radius: calc(13 * var(--pt));
+  background: color-mix(in srgb, var(--surface, #141418) 88%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 0 0 1px rgb(var(--ink) / 0.14) inset, 0 18px 48px rgb(0 0 0 / 0.56);
+  color: var(--text);
+  pointer-events: none;
+  animation: dk-apeek-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+:root[data-scheme="light"] .dk-apeek {
+  background: rgb(255 255 255 / 0.92);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.1) inset, 0 16px 40px rgb(0 0 0 / 0.16);
+}
+@keyframes dk-apeek-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.975);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dk-apeek {
+    animation: none;
+  }
+}
+.dk-apeek-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(8 * var(--pt));
+}
+.dk-apeek-title {
+  margin: 0;
+  font-size: calc(15 * var(--pt));
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dk-apeek-score {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--pt));
+  padding: calc(2 * var(--pt)) calc(7 * var(--pt));
+  border-radius: calc(6 * var(--pt));
+  background: rgb(var(--ink) / 0.09);
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 700;
+}
+.dk-apeek-score svg {
+  color: #f6c453;
+}
+.dk-apeek-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(6 * var(--pt));
+  font-size: calc(11.5 * var(--pt));
+  color: var(--text-2);
+}
+.dk-apeek-status {
+  display: inline-flex;
+  align-items: center;
+  height: calc(19 * var(--pt));
+  padding: 0 calc(7 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.1);
+  color: var(--text);
+  font-weight: 600;
+}
+.dk-apeek-status[data-airing] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.dk-apeek-facts {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.dk-apeek-desc {
+  margin: 0;
+  font-size: calc(12.5 * var(--pt));
+  line-height: 1.42;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dk-apeek-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(5 * var(--pt));
+}
+.dk-apeek-genre {
+  padding: calc(2 * var(--pt)) calc(8 * var(--pt));
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text-2);
+  font-size: calc(11 * var(--pt));
+  font-weight: 550;
+}
+.dk-search-discover {
+  display: flex;
+  flex-direction: column;
+  gap: calc(24 * var(--pt));
+  padding-top: calc(14 * var(--pt));
+}
+.dk-search-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(7 * var(--pt));
+  height: calc(36 * var(--pt));
+  padding: 0 calc(14 * var(--pt));
+  border: 1px solid rgb(var(--ink) / 0.12);
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.06);
+  color: var(--text);
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 500;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.dk-search-pill:hover {
+  background: rgb(var(--ink) / 0.13);
+  border-color: rgb(var(--ink) / 0.22);
+}
+.dk-search-pill svg {
+  color: var(--text-3);
+}
+.dk-search-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8 * var(--pt));
+  padding: calc(14 * var(--pt)) var(--dk-gutter) 0;
+}
+.dk-search-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--pt));
+  height: calc(34 * var(--pt));
+  padding: 0 calc(14 * var(--pt));
+  border: 1px solid rgb(var(--ink) / 0.14);
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.06);
+  color: var(--text-2);
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 600;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.dk-search-scope:hover {
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text);
+}
+.dk-search-scope[aria-selected="true"] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.dk-search-scope-n {
+  font-size: 0.85em;
+  opacity: 0.72;
+}
+
+/* A computer shows play glyphs on art only under the pointer. */
+@media (hover: hover) and (pointer: fine) {
+  :is(.dk-ep-play, .dk-cw-play) {
+    opacity: 0;
+    transition: opacity 0.18s, scale 0.2s;
+  }
+  :is(.dk-ep-row-still, .dk-ep-still, .dk-t-trailer, .dk-cw-art):is(:hover, :focus-visible) :is(.dk-ep-play, .dk-cw-play) {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dk-bb-art[data-entering][data-loaded="true"],
+  .dk-bb-body {
+    animation: none;
+    opacity: 1;
+  }
+  .dk-tabs-lens,
+  .dk-tabs,
+  .dk-t-tab-mark {
+    transition: none;
+  }
+}

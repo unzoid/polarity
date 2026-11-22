@@ -1,4 +1,8 @@
+import AVFoundation
+import AVKit
+import CoreMedia
 import SwiftUI
+import UIKit
 
 /// Full-screen playback of one source with libmpv (`MpvPlayer`). The Siri Remote: Play/Pause or a
 /// click pauses, left and right move 10 seconds, down opens audio and subtitles, up shows the bar,
@@ -80,6 +84,9 @@ private struct PlayerStage: View {
         .onChange(of: player.ended) { _, ended in
             if ended { close() }
         }
+        .onChange(of: player.frameRate) { _, fps in
+            applyDisplayFrameRate(fps)
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase != .active else { return }
             player.pause()
@@ -87,6 +94,7 @@ private struct PlayerStage: View {
         }
         .task { await saveEveryTenSeconds() }
         .onDisappear {
+            applyDisplayFrameRate(0)
             hideBar?.cancel()
             save()
             player.close()
@@ -127,8 +135,38 @@ private struct PlayerStage: View {
     }
 
     private func close() {
+        applyDisplayFrameRate(0)
         save()
         dismiss()
+    }
+
+    /// Matches Apple TV display refresh rate strictly during full-screen playback (#515),
+    /// and clears `preferredDisplayCriteria` on exit so browsing never triggers HDMI mode switches.
+    private func applyDisplayFrameRate(_ fps: Double) {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+        guard let displayManager = window?.avDisplayManager else { return }
+        if fps.isFinite && fps >= 12 && fps <= 120 {
+            var formatDescription: CMFormatDescription?
+            let status = CMVideoFormatDescriptionCreate(
+                allocator: kCFAllocatorDefault,
+                codecType: kCMVideoCodecType_H264,
+                width: 1920,
+                height: 1080,
+                extensions: nil,
+                formatDescriptionOut: &formatDescription
+            )
+            if status == noErr, let formatDescription {
+                displayManager.preferredDisplayCriteria = AVDisplayCriteria(
+                    refreshRate: Float(fps),
+                    formatDescription: formatDescription
+                )
+            }
+        } else {
+            displayManager.preferredDisplayCriteria = nil
+        }
     }
 
     private func saveEveryTenSeconds() async {

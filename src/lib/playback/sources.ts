@@ -7,7 +7,8 @@ import { usePrefs } from "../settings/prefs";
 import { languageName, langMatches } from "./languages";
 import { formatBytes } from "../format";
 import { NEUTRAL, scoreSources, type Match, type MatchContext } from "./bestMatch";
-import { useDeviceCaps } from "./device";
+import { detectDeviceForm, useDeviceCaps } from "./device";
+import { knownReadiness } from "./readiness";
 import { connectionMbps, sourceRecord } from "./sourceHistory";
 import type { RankedStream, Settings, SourceSort } from "../types";
 
@@ -72,6 +73,7 @@ export const TAG_LABELS: Record<string, string> = {
   "10-bit": "10-bit",
   hevc: "HEVC",
   av1: "AV1",
+  av2: "AV2",
   "h.264": "H.264",
   imax: "IMAX",
   "3d": "3D",
@@ -86,6 +88,10 @@ export function tagsOf(r: RankedStream): string[] {
   const q = r.quality;
   const out = new Set<string>();
   if (q.dolbyVision) out.add("dv");
+  if (q.hdr10Plus) {
+    out.add("hdr10+");
+    out.add("hdr");
+  }
   if (q.hdr) out.add("hdr");
   const addRaw = (raw?: string) => {
     const low = raw?.trim().toLowerCase();
@@ -102,6 +108,7 @@ export function tagsOf(r: RankedStream): string[] {
     if (/(?:^|\b)5\.1(?:\b|$)/.test(low)) out.add("5.1");
     if (low.includes("hevc") || low === "x265" || low === "h.265" || low === "h265") out.add("hevc");
     if (low === "av1") out.add("av1");
+    if (low === "av2") out.add("av2");
     if (low === "h.264" || low === "h264" || low === "x264" || low === "avc") out.add("h.264");
     if (low.includes("10-bit") || low.includes("10bit")) out.add("10-bit");
     if (low.includes("remux")) out.add("remux");
@@ -177,6 +184,7 @@ export function featuredMatchSummary(match: Match | undefined): string | null {
   const concise = (reason: string): string => {
     if (/on a \S+ screen$/.test(reason)) return "Fits this display";
     if (reason === "Dolby Vision on an HDR screen") return "Dolby Vision";
+    if (reason === "HDR10+ on an HDR screen") return "HDR10+";
     if (reason === "HDR on an HDR screen") return "HDR display";
     if (reason.endsWith(", decoded by this device's hardware")) {
       return `${reason.split(",")[0]} hardware decode`;
@@ -262,6 +270,7 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
   const engine = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   const caps = useDeviceCaps(engine.isFetched ? (engine.data ? "mpv" : "html") : null, hwdec);
   const screen = useMemo(screenResolution, []);
+  const form = useMemo(detectDeviceForm, []);
   const preferScreen = settings?.preferScreenResolution ?? true;
   const groups = useMemo(() => preferredGroups(animePreferredGroups), [animePreferredGroups]);
   const tags = settings?.sourceAutoTags;
@@ -273,7 +282,7 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
   }, [original]);
   return useMemo(
     () => ({
-      device: { screen, preferScreen, ...caps },
+      device: { screen, preferScreen, form, ...caps },
       connectionMbps: connectionMbps(),
       runtimeSec: runtimeSec || null,
       audioLanguage: audio,
@@ -286,7 +295,7 @@ export function useMatchContext(settings: Settings | undefined, runtimeSec?: num
     }),
     // The capabilities are a new object each render; their values are what count.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [screen, preferScreen, caps.hdr, caps.dolbyVision, caps.hevc, caps.av1, runtimeSec, audio, own, tags, groups, aired],
+    [screen, preferScreen, form, caps.hdr, caps.dolbyVision, caps.hevc, caps.av1, caps.hevc4k, caps.av14k, runtimeSec, audio, own, tags, groups, aired],
   );
 }
 
@@ -377,7 +386,8 @@ export function defaultFilter(streams: RankedStream[], settings?: Settings): Sou
  * The order the player tries sources in on its own (auto-pick): CAM rips and other episodes' files out,
  * the filters you set in the player for this show if they leave something
  * (so the next episode is the same kind of file), else the list's default
- * filters if they do, best match (or your sort) first.
+ * filters if they do, best match (or your sort) first — demoting links already
+ * known not ready, and preferring the binge group already playing for this show.
  */
 export function autoPickOrder(streams: RankedStream[], settings?: Settings, show?: string, ctx: MatchContext = NEUTRAL) {
   const playable = streams.filter((s) => !s.quality.lowQualitySource && !s.otherEpisode);
@@ -387,7 +397,13 @@ export function autoPickOrder(streams: RankedStream[], settings?: Settings, show
   const preferred = yours.length ? yours : playable.filter((r) => matches(r, f));
   const pool = preferred.length ? preferred : playable;
   const cmp = compareBy(kept?.sort ?? "best", scoreSources(playable, ctx));
-  return pool.map((r, i) => ({ r, i })).sort((a, b) => cmp(a.r, b.r) || a.i - b.i).map(({ r }) => r);
+  const group = show ? bingeGroups.get(show) : undefined;
+  const isDead = (r: RankedStream) => (r.stream.url ? knownReadiness(r.stream.url)?.state === "notReady" : false);
+  const sameBinge = (r: RankedStream) => !!group && r.stream.behaviorHints?.bingeGroup === group;
+  return pool
+    .map((r, i) => ({ r, i, dead: isDead(r), binge: sameBinge(r) }))
+    .sort((a, b) => Number(a.dead) - Number(b.dead) || Number(b.binge) - Number(a.binge) || cmp(a.r, b.r) || a.i - b.i)
+    .map(({ r }) => r);
 }
 
 /**
@@ -398,9 +414,20 @@ export function autoPickOrder(streams: RankedStream[], settings?: Settings, show
  * page's source lists aren't affected.
  */
 const playerChoices = new Map<string, { filter: SourceFilter; sort: SourceSort }>();
+/** The release bingeGroup last played for a show while the player stays open, for consistent next episodes. */
+const bingeGroups = new Map<string, string>();
+
+export function rememberBingeGroup(show: string, group?: unknown) {
+  if (typeof group === "string" && group.trim()) bingeGroups.set(show, group);
+}
+
+export const bingeGroupOf = (show: string) => bingeGroups.get(show);
 
 /** The player closed: its next visit starts from the defaults again. */
-export const forgetPlayerSourceChoices = () => playerChoices.clear();
+export const forgetPlayerSourceChoices = () => {
+  playerChoices.clear();
+  bingeGroups.clear();
+};
 
 export interface Facet<K extends string = string> {
   key: K;
@@ -537,6 +564,8 @@ export function useSourceFilters(
     total: all.length,
     /** Best Match's score and reasons for a source of this list. */
     match: (r: RankedStream) => scores.get(r),
+    /** The #1 ranked Match in this list (for differential "Why #1 beat this" inspection). */
+    bestMatch: [...scores.values()].find((m) => m.rank?.position === 1),
     facets,
     screenRes,
   };

@@ -33,7 +33,7 @@ export type Route =
   /** A person's page, by TMDB id; `title`: their name, shown until the page loads. */
   | { name: "person"; id: number; title?: string }
   /** `shuffle`: the show's episodes in random order (lib/playback/shuffle.ts), progress left as it was. */
-  | { name: "player"; type: ContentType; metaId: string; videoId: string; stream?: Stream; shuffle?: boolean };
+  | { name: "player"; type: ContentType; metaId: string; videoId: string; stream?: Stream; shuffle?: boolean; startParty?: boolean };
 
 export interface Entry {
   key: number;
@@ -53,10 +53,12 @@ interface Router {
   tab: (route: TabRoute) => void;
   replace: (route: Route) => void;
   back: () => void;
+  /** Back to the page `key`, every page over it gone at once (a phone's title sheet closing its stacked titles). */
+  backTo: (key: number) => void;
 }
 
 /** What changes the stack, without the stack: these never change, so what only navigates never renders again. */
-type RouterActions = Pick<Router, "navigate" | "tab" | "replace" | "back">;
+type RouterActions = Pick<Router, "navigate" | "tab" | "replace" | "back" | "backTo">;
 
 const RouterContext = createContext<Router | null>(null);
 const ActionsContext = createContext<RouterActions | null>(null);
@@ -95,6 +97,15 @@ export function RouterProvider({ children, initial, keepSections = false }: { ch
   const back = useCallback(() => {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
   }, [setStack]);
+  const backTo = useCallback(
+    (key: number) => {
+      setStack((s) => {
+        const at = s.findIndex((e) => e.key === key);
+        return at >= 0 && at < s.length - 1 ? s.slice(0, at + 1) : s;
+      });
+    },
+    [setStack],
+  );
 
   // Mouse "back" button, like every native app.
   useEffect(() => {
@@ -108,7 +119,7 @@ export function RouterProvider({ children, initial, keepSections = false }: { ch
     return () => window.removeEventListener("mouseup", onMouse);
   }, [back]);
 
-  const actions = useMemo(() => ({ navigate, tab, replace, back }), [navigate, tab, replace, back]);
+  const actions = useMemo(() => ({ navigate, tab, replace, back, backTo }), [navigate, tab, replace, back, backTo]);
   const value = useMemo(
     () => ({ stack, kept, current: stack[stack.length - 1].route, ...actions }),
     [stack, kept, actions],

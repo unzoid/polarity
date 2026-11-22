@@ -4,10 +4,21 @@ import { TV_OSK_EVENT, useGamepadConnected, type TvOskKey } from "./gamepad";
 import { playSound } from "./sounds";
 import { PadGlyph } from "./TvChrome";
 
-const KEYS = [..."abcdefghijklmnopqrstuvwxyz1234567890'-"];
+const ABC_KEYS = [..."abcdefghijklmnopqrstuvwxyz1234567890'-"];
+const QWERTY_KEYS = [..."1234567890qwertyuiopasdfghjkl'zxcvbnm-"];
+const URL_EXTRA = [":", "/", "."];
+const LAYOUT_STORAGE = "polar.tvKeyboardLayout";
+
+function readLayout(): "qwerty" | "abc" {
+  try {
+    return localStorage.getItem(LAYOUT_STORAGE) === "abc" ? "abc" : "qwerty";
+  } catch {
+    return "qwerty";
+  }
+}
 
 /**
- * The on-screen keyboard: a text line with a caret, Space / Delete / Clear,
+ * The on-screen keyboard: a text line with a caret, Space / Delete / Clear / Layout (QWERTY or ABC),
  * then letters and digits. A real keyboard types straight in too.
  *
  * `caps` is for names rather than searches: each word starts with a capital
@@ -22,6 +33,7 @@ export function TvKeyboard({
   active,
   max = 60,
   caps = false,
+  url = false,
 }: {
   text: string;
   onChange: (text: string) => void;
@@ -32,12 +44,25 @@ export function TvKeyboard({
   active: boolean;
   max?: number;
   caps?: boolean;
+  /** Allow URL characters (:, /, ., ?, &, =, _) for entering add-on manifest URLs on TV. */
+  url?: boolean;
 }) {
   const field = useRef<HTMLDivElement>(null);
   const keys = useRef<HTMLDivElement>(null);
   const submitRef = useRef(onSubmit);
   submitRef.current = onSubmit;
   const [shift, setShift] = useState(false);
+  const [layout, setLayout] = useState<"qwerty" | "abc">(readLayout);
+  const toggleLayout = () => {
+    setLayout((prev) => {
+      const next = prev === "qwerty" ? "abc" : "qwerty";
+      try {
+        localStorage.setItem(LAYOUT_STORAGE, next);
+      } catch {}
+      return next;
+    });
+  };
+  const keyList = [...(layout === "qwerty" ? QWERTY_KEYS : ABC_KEYS), ...(url ? URL_EXTRA : [])];
   const autoCap = caps && (text === "" || text.endsWith(" "));
   const upper = caps && autoCap !== shift;
 
@@ -91,9 +116,10 @@ export function TvKeyboard({
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key.length === 1 && /[\p{L}\p{N} '&:-]/u.test(e.key)) {
+      const allowed = url ? /^[\p{L}\p{N} '&:./?=_~%+,-]$/u : /^[\p{L}\p{N} '&:-]$/u;
+      if (e.key.length === 1 && allowed.test(e.key)) {
         e.preventDefault();
-        type(caps ? e.key : e.key.toLowerCase());
+        type(caps || url ? e.key : e.key.toLowerCase());
         toField();
       } else if (e.key === "Backspace" && textRef.current) {
         e.preventDefault();
@@ -140,10 +166,22 @@ export function TvKeyboard({
         <button className="tv-key tv-key-wide" onClick={() => set("")}>
           Clear
         </button>
+        <button
+          className="tv-key tv-key-wide"
+          onClick={toggleLayout}
+          aria-label={layout === "qwerty" ? "Switch to A-Z keyboard" : "Switch to QWERTY keyboard"}
+        >
+          {layout === "qwerty" ? "ABC" : "QWERTY"}
+        </button>
       </div>
-      <div className="tv-osk-keys" data-nav-memory>
-        {KEYS.map((k) => (
-          <button key={k} className="tv-key" data-nav-default={k === "a" || undefined} onClick={() => type(upper ? k.toUpperCase() : k)}>
+      <div className="tv-osk-keys" data-layout={layout} data-nav-memory>
+        {keyList.map((k) => (
+          <button
+            key={k}
+            className="tv-key"
+            data-nav-default={k === (layout === "qwerty" ? "q" : "a") || undefined}
+            onClick={() => type(upper ? k.toUpperCase() : k)}
+          >
             {upper ? k.toUpperCase() : k}
           </button>
         ))}

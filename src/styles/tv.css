@@ -659,6 +659,7 @@
   padding: 0.2rem 0.6rem;
   border-radius: var(--r-pill);
   background: rgb(0 0 0 / 0.6);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   font-size: 0.85rem;
   font-weight: 600;
@@ -950,6 +951,13 @@
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 0.35rem;
+}
+.tv-osk-keys[data-layout="qwerty"] {
+  grid-template-columns: repeat(10, 1fr);
+}
+.tv-osk-keys[data-layout="qwerty"] .tv-key {
+  font-size: 1rem;
+  height: 2.35rem;
 }
 .tv-key {
   display: grid;
@@ -1306,6 +1314,51 @@
 .tv-settings-row:focus .tv-settings-value svg[data-dim="true"] {
   opacity: 0.2;
 }
+.tv-settings-help {
+  position: fixed;
+  left: max(4rem, calc((100% - 56rem) / 2));
+  right: max(4rem, calc((100% - 56rem) / 2));
+  bottom: 2.25rem;
+  margin: 0;
+  padding: 0.7rem 1.25rem;
+  border-radius: 0.85rem;
+  background: rgb(20 20 24 / 0.82);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 0.98rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.tv-addons-install {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+  border-radius: 1rem;
+  background: var(--fill-1);
+  border: 1px solid var(--hairline);
+}
+.tv-addon-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.tv-settings-row-sub {
+  min-height: 2.75rem;
+  font-size: 0.98rem;
+  color: var(--text-3);
+  padding-left: 2.25rem;
+}
+.tv-settings-error {
+  margin: 0.25rem 1.25rem;
+  color: var(--danger);
+  font-size: 0.95rem;
+}
+.tv-settings-empty {
+  margin: 0.75rem 1.25rem;
+  color: var(--text-2);
+  font-size: 1rem;
+}
 .tv-pill-skeleton {
   display: block;
   width: 18rem;
@@ -1320,6 +1373,7 @@
   inset: 0;
   z-index: 5;
   background: color-mix(in srgb, var(--tone-sunk) 86%, transparent);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
   backdrop-filter: blur(32px) saturate(140%);
   animation: tv-panel-in 280ms var(--ease-out);
 }
@@ -2194,6 +2248,7 @@
   gap: 2rem;
   padding: 4rem 2rem;
   background: color-mix(in srgb, var(--tone-2) 94%, transparent);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
   backdrop-filter: blur(32px) saturate(140%);
   box-shadow: 1px 0 0 var(--hairline);
   animation: tv-menu-in 240ms var(--ease-drawer);
@@ -2507,6 +2562,7 @@
   padding: 0.45rem 1rem;
   border-radius: var(--r-pill);
   background: var(--scrim-2);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   font-size: 0.8rem;
   font-weight: 600;
@@ -2551,6 +2607,7 @@
   padding: 0 1rem;
   border-radius: var(--r-pill);
   background: rgb(0 0 0 / 0.55);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   box-shadow: 0 0 0 1px var(--glass-edge);
   font-size: 0.9rem;
@@ -2971,6 +3028,7 @@
   padding: 1.5rem 1.5rem 1.75rem;
   border-radius: var(--r-panel);
   background: var(--surface-popover);
+  -webkit-backdrop-filter: var(--blur-popover);
   backdrop-filter: var(--blur-popover);
   box-shadow: 0 2rem 4rem -1rem rgb(0 0 0 / 0.6);
   animation: tv-week-in var(--dur-base) var(--ease-out);

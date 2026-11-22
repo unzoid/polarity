@@ -73,18 +73,14 @@ pub struct RatingsClient {
 
 impl Default for RatingsClient {
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .timeout(Duration::from_secs(10))
-                .build()
-                .expect("http client"),
-            cache: Mutex::new(HashMap::new()),
-        }
+        Self::with_client(polar_addon::shared_http_client())
     }
 }
 
 impl RatingsClient {
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http, cache: Mutex::new(HashMap::new()) }
+    }
     pub async fn get(&self, imdb_id: &str, ty: &str, mdblist: Option<&str>, omdb: Option<&str>) -> Ratings {
         if !imdb_id.starts_with("tt") || (mdblist.is_none() && omdb.is_none()) {
             return Ratings::default();
@@ -122,7 +118,17 @@ impl RatingsClient {
 
     /// The answer as JSON, or `None` (logged by host: the query holds the key).
     async fn json(&self, url: &str, query: &[(&str, &str)]) -> Option<Value> {
-        let answer = async { self.http.get(url).query(query).send().await?.error_for_status()?.json().await };
+        let answer = async {
+            self.http
+                .get(url)
+                .timeout(Duration::from_secs(10))
+                .query(query)
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await
+        };
         answer
             .await
             .map_err(|e| {

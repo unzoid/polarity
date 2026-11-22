@@ -32,6 +32,13 @@ function stepBackFrames(from: number, to: number): Keyframe[] {
   });
 }
 
+/** Estimate initial iOS detent sheet height to avoid a double-render layout pass on frame 0. */
+function estimateStops() {
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const height = Math.max(240, vh - 56);
+  return { height, medium: mediumOffset(height, vh) };
+}
+
 export function Sheet({
   open,
   onClose,
@@ -41,7 +48,10 @@ export function Sheet({
   modal = true,
   forgiveMisses = false,
   full = false,
+  closeButton = false,
 }: {
+  /** A round close at the header's end (the phone shell's sheets, as Netflix's have). */
+  closeButton?: boolean;
   open: boolean;
   onClose: () => void;
   title: ReactNode;
@@ -68,8 +78,8 @@ export function Sheet({
   const y = useMotionValue(detents ? window.innerHeight : 0);
   const [detent, setDetent] = useState<Detent>("medium");
   const touchY = useRef(0);
-  /** The sheet's large height and its medium offset, measured when it opens and when the window resizes. */
-  const [stops, setStops] = useState({ height: window.innerHeight, medium: 0, measured: false });
+  /** The sheet's large height and its medium offset, pre-estimated and refined on mount/resize only if needed. */
+  const [stops, setStops] = useState(estimateStops);
   // With less motion Motion drops the slide; a fade keeps it from popping in and out.
   const fade = prefersReducedMotion() ? 0 : 1;
 
@@ -79,7 +89,8 @@ export function Sheet({
   // as Netflix's does, on the sheet's own spring. They're left as they were once back: a scale left on them would
   // hold anything fixed inside them in their box.
   useLayoutEffect(() => {
-    const main = back && open && !prefersReducedMotion() ? document.querySelector<HTMLElement>(".main") : null;
+    // `.ph-stage`: the phone shell's tabs (src/phone), which step back the same way.
+    const main = back && open && !prefersReducedMotion() ? document.querySelector<HTMLElement>(".main, .ph-stage") : null;
     if (!main) return;
     const step = ++stepsBack;
     // On the compositor (the Web Animations API, the spring sampled), the corners set once rather than animated:
@@ -125,7 +136,8 @@ export function Sheet({
     if (!open || !detents) return;
     const measure = () => {
       const height = panel.current?.offsetHeight ?? window.innerHeight;
-      setStops({ height, medium: mediumOffset(height, window.innerHeight), measured: true });
+      const medium = mediumOffset(height, window.innerHeight);
+      setStops((prev) => (Math.abs(prev.height - height) <= 2 && Math.abs(prev.medium - medium) <= 2 ? prev : { height, medium }));
     };
     measure();
     setDetent("medium");
@@ -177,9 +189,9 @@ export function Sheet({
             data-detent={detents ? detent : undefined}
             data-full={bottom && full ? "" : undefined}
             style={bottom ? { y } : { x }}
-            // With detents the sheet starts below the screen (`y`) and rises to its detent once measured.
-            initial={detents ? { opacity: fade } : away}
-            animate={{ ...(detents ? (stops.measured ? { y: detent === "large" ? 0 : stops.medium } : {}) : bottom ? { y: 0 } : { x: 0 }), opacity: 1, transition: spring }}
+            // With detents the sheet starts below the screen (`y`) and rises immediately to its medium detent.
+            initial={detents ? { y: stops.height, opacity: fade } : away}
+            animate={{ ...(detents ? { y: detent === "large" ? 0 : stops.medium } : bottom ? { y: 0 } : { x: 0 }), opacity: 1, transition: spring }}
             exit={{ ...away, transition: spring }} // velocity carries over from a flick; no bounce needed off-screen
             drag={bottom ? "y" : "x"}
             // A bottom sheet is pulled by its header only: the list below scrolls up and down.
@@ -207,6 +219,14 @@ export function Sheet({
                 <h2 className="t-title2">{title}</h2>
                 {subtitle && <p className="t-caption muted">{subtitle}</p>}
               </div>
+              {/* The phone shell's sheets all have one, the shared ones (Sources, Download) too. */}
+              {(closeButton || (bottom && document.documentElement.dataset.phoneUi !== undefined)) && (
+                <button type="button" className="sheet-close" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </svg>
+                </button>
+              )}
             </header>
             <div
               className="sheet-body"

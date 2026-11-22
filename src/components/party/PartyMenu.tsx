@@ -1,10 +1,28 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { endParty, expectedPosition, leaveParty, partyLog, partyRoute, setQuiet, setRules, syncNow, type PartyState, type RoomRules } from "../../lib/party";
+import {
+  endParty,
+  expectedPosition,
+  leaveParty,
+  PARTY_REACTIONS,
+  partyLog,
+  partyRoute,
+  sendChat,
+  sendReaction,
+  setQuiet,
+  setRules,
+  syncEveryone,
+  syncNow,
+  type PartyState,
+  type RoomRules,
+} from "../../lib/party";
+import { friends, useFriends } from "../../lib/friends";
+import { errorMessage } from "../../lib/errors";
 import { formatTime } from "../../lib/format";
 import { useMeta } from "../../lib/net";
 import { osName } from "../../lib/platform";
 import { useRouter } from "../../lib/router";
 import { appVersion } from "../../lib/updater";
+import { Avatar } from "../Avatar";
 import { ChevronLeft, ChevronRight, Lock, LogIcon, Pause, Play, Power, Settings, SignOut } from "../icons";
 import { Button } from "../ui/Button";
 import { Switch } from "../ui/Switch";
@@ -64,6 +82,10 @@ function PartyMenuRoom({ party, onClose, settings }: { party: PartyState; onClos
       </section>
       <section className="party-menu-section" aria-label="Invite">
         <PartyCodeChip party={party} />
+        <PartyInviteFriends party={party} />
+      </section>
+      <section className="party-menu-section" aria-label="Reactions and chat">
+        <PartySocial party={party} />
       </section>
       <section className="party-menu-section party-menu-rows">
         <button className="party-menu-row party-menu-settings" onClick={settings}>
@@ -114,6 +136,7 @@ function PartyMenuSettings({ party, back }: { party: PartyState; back: () => voi
  * Sections stacked, a hairline between.
  */
 export function PartyRoomPane({ party, onGo, now, autoFocus }: { party: PartyState; onGo?: () => void; now?: boolean; autoFocus?: boolean }) {
+  const host = party.hostId === party.me;
   return (
     <div className="party-column">
       {now && party.playback?.media && (
@@ -123,19 +146,153 @@ export function PartyRoomPane({ party, onGo, now, autoFocus }: { party: PartySta
       )}
       <section>
         <PartyInvite party={party} leave={false} autoFocus={autoFocus} />
+        <PartyInviteFriends party={party} />
       </section>
       <section aria-label="Members">
         <h3 className="party-kicker">Watching · {party.members.length}</h3>
         <PartyMembers party={party} />
       </section>
+      <section aria-label="Reactions and chat">
+        <PartySocial party={party} />
+      </section>
       <section>
         <div className="party-buttons">
           <PartyStreamButtons party={party} onGo={onGo} />
+          {host && party.playback && (
+            <Button variant="glass" onClick={() => syncEveryone()}>
+              Sync everyone
+            </Button>
+          )}
           <Button variant="glass" onClick={leaveParty}>
             Leave Party
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+/** One-click in-player friend invite picker: shows online friends not already in this room. */
+function PartyInviteFriends({ party }: { party: PartyState }) {
+  const { entries, presence } = useFriends();
+  const [sent, setSent] = useState<Record<string, "busy" | "sent">>({});
+  const [error, setError] = useState<string | null>(null);
+  if (party.knocking) return null;
+  const invitees = entries.filter((e) => e.state === "accepted" && !!presence[e.id] && presence[e.id]?.party !== party.code);
+  if (!invitees.length) return null;
+
+  const inviteOne = (id: string) => {
+    setError(null);
+    setSent((s) => ({ ...s, [id]: "busy" }));
+    friends.invite(id).then(
+      () => {
+        setSent((s) => ({ ...s, [id]: "sent" }));
+        window.setTimeout(() => setSent((s) => {
+          const next = { ...s };
+          delete next[id];
+          return next;
+        }), 4000);
+      },
+      (e) => {
+        setError(errorMessage(e));
+        setSent((s) => {
+          const next = { ...s };
+          delete next[id];
+          return next;
+        });
+      },
+    );
+  };
+
+  return (
+    <div className="party-invite-friends">
+      <h4 className="party-kicker">Invite online friends</h4>
+      <ul className="party-invite-list">
+        {invitees.map((f) => {
+          const st = sent[f.id];
+          return (
+            <li key={f.id} className="party-invite-row">
+              <Avatar id={f.avatar} className="party-invite-avatar" />
+              <span className="party-invite-name">{f.name}</span>
+              <Button
+                variant="glass"
+                size="sm"
+                busy={st === "busy"}
+                disabled={st === "sent"}
+                onClick={() => inviteOne(f.id)}
+              >
+                {st === "sent" ? "Invited" : "Invite"}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+      {error && (
+        <p className="party-join-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Quick floating emoji reactions and ephemeral in-room chat for the active watch party. */
+function PartySocial({ party }: { party: PartyState }) {
+  const [draft, setDraft] = useState("");
+  const listRef = useRef<HTMLUListElement>(null);
+  const chat = party.chat ?? [];
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat.length]);
+
+  if (party.knocking) return null;
+
+  return (
+    <div className="party-social">
+      <div className="party-react-bar" role="group" aria-label="Send reaction">
+        {PARTY_REACTIONS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            className="party-react-btn pressable"
+            aria-label={`React with ${emoji}`}
+            onClick={() => sendReaction(emoji)}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+      {chat.length > 0 && (
+        <ul className="party-chat-log" ref={listRef} aria-label="Party chat">
+          {chat.slice(-20).map((m) => (
+            <li key={m.id} className="party-chat-line">
+              <strong className="party-chat-who">{m.who?.name ?? "Guest"}</strong>
+              <span className="party-chat-text">{m.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="party-chat-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (sendChat(draft)) setDraft("");
+        }}
+      >
+        <input
+          type="text"
+          className="party-chat-input"
+          aria-label="Send a message to the party"
+          placeholder="Say something…"
+          maxLength={240}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <Button variant="glass" size="sm" type="submit" disabled={!draft.trim()}>
+          Send
+        </Button>
+      </form>
     </div>
   );
 }

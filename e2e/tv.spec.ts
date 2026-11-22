@@ -325,7 +325,7 @@ test("when Settings' source filters leave out every source, the error screen ope
   await expect(app.locator(".tv-settings")).toContainText("Filters Hide Other Sources");
 });
 
-test("when no add-on was asked, the error screen opens Add-ons in desktop mode, which TV mode has no page for (#435)", async ({ app }) => {
+test("when no add-on was asked, the error screen opens TV mode's own Add-ons page, staying in TV mode (#435)", async ({ app }) => {
   await app.goto("/fake.html?sources=none");
   await openQuietMachines(app);
   await expect(focused(app)).toHaveAccessibleName("Play First Episode");
@@ -333,8 +333,10 @@ test("when no add-on was asked, the error screen opens Add-ons in desktop mode, 
   const status = app.locator(".player-status");
   await status.getByRole("button", { name: "Open Add-ons" }).focus();
   await press(app, "Enter");
-  await expect(app.locator(".tv-main")).toHaveCount(0);
-  await expect(app.getByRole("dialog", { name: /^Settings/ }).getByRole("heading", { name: "Add-ons" }).first()).toBeVisible();
+  // A remote never lands in the pointer-only desktop UI: TV's Settings has an Add-ons page of its own.
+  await expect(app.locator(".tv-main")).toHaveCount(1);
+  await expect(app.getByRole("heading", { level: 1, name: "Add-ons" })).toBeVisible();
+  await expect(app.getByText("Install Add-on by URL")).toBeVisible();
 });
 
 test("Continue Watching cards show the title's logo where it has one, as desktop's do (#437)", async ({ app }) => {

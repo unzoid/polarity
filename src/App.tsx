@@ -1,14 +1,10 @@
-import { memo, startTransition, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { memo, startTransition, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MotionConfig } from "motion/react";
-import { actionFor, getPrefs, isSettingsOpen, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
+import { actionFor, getPrefs, openSettings, uiFontOf, usePrefs, useSettingsOverlay } from "./lib/settings";
 import type { Settings as SettingsT } from "./lib/types";
-import { NavBar } from "./components/NavBar";
-import { useNativeSwipe } from "./components/NativeBack";
-import { PlayerLayer, preloadPlayer, usePlayerLayer } from "./components/PlayerLayer";
-import { useSettings } from "./lib/net";
-import { rootTab, RouterProvider, useRouter, type Entry, type Route } from "./lib/router";
-import { focusSearch } from "./lib/catalog";
-import { Home } from "./screens/Home";
+import { preloadPlayer } from "./components/PlayerLayer";
+import { preloadImage, useSettings } from "./lib/net";
+import { rootTab, RouterProvider, useRouter, type Route } from "./lib/router";
 import {
   LazyAnime,
   LazyAnimeBrowse,
@@ -26,69 +22,61 @@ import {
 } from "./screens/lazyScreens";
 import { useAccount } from "./lib/account";
 import { useNotifications } from "./lib/notifications";
-import { ControllerToast } from "./tv/TvChrome";
 import { isTvMode, setTvMode, useTvMode } from "./tv/tvMode";
 import {
-  dismissDepth,
+  detailBackdropUrl,
+  canPreloadChunks,
   lazyNamed,
-  onDismissDepth,
-  pageDrag,
-  pressEscape,
-  systemBackAction,
   useFormFactor,
-  usePageFocus,
-  usePageMotion,
   usePresence,
-  cardGhostParts,
-  cardMotionVars,
-  playCardMotion,
-  liveCard,
-  cardOrigin,
-  watchCardTaps,
-  useSystemBack,
-  watchInputModality,
-  warmUpBlurShaders,
-  whenIdle,
 } from "./lib/ui";
 import { PROFILES_EXIT_MS } from "./screens/account/profileHandoff";
-import { CardMenuHost } from "./components/CardMenu";
-import { TrailerHost } from "./components/Trailer";
-import { OpenFilesHost } from "./components/OpenFiles";
-import { UpdateToast, WhatsNewSheet } from "./components/Updates";
 import { startUpdateChecks } from "./lib/updater";
-import { appWindow, guardTaps, isDesktop, leaveApp, longPressMenus, onLongPress, openContextMenu, systemBack } from "./lib/platform";
+import { appWindow, formFactor, guardTaps, isDesktop, longPressMenus, onLongPress, openContextMenu, os } from "./lib/platform";
 import { PartyHost } from "./components/party/PartyHost";
 import { DeepLinks } from "./components/DeepLinks";
 import { FriendsHost } from "./components/friends/FriendsHost";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { SignOutDialog } from "./components/SignOutDialog";
 import { PinHost } from "./components/profileLock/PinHost";
-import { StoreProblemToast } from "./components/StoreProblemToast";
-import { AccountFullToast } from "./components/AccountFullToast";
-import { SecretsSyncToast } from "./components/SecretsSyncToast";
-import { LockedKeysToast } from "./components/LockedKeysToast";
-import { SeriesPickToast } from "./components/anime/SeriesPickToast";
-import { HiddenTitleToast } from "./components/HiddenTitleToast";
 import { DetailPending } from "./components/title/HeroSkeleton";
+import { ProfileSwitchHost } from "./desk/ProfileSwitch";
+import { useDeskUi } from "./desk/mode";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
 import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "./lib/theme";
 
-// Chunks of their own, loaded the first time they're drawn: most sessions never
-// see the sign-in screens, TV mode, Settings or an anime page (the player is in
-// PlayerLayer, preloaded once the app is idle).
+// Each platform shell and off-boot screen lives in its own chunk so Desk, Phone, Classic Desktop
+// and TV never download each other's JS or CSS on cold start.
 const AuthScreen = lazyNamed(() => import("./screens/account/AuthScreen"), "AuthScreen");
 const OnboardingScreen = lazyNamed(() => import("./screens/account/OnboardingScreen"), "OnboardingScreen");
 const ProfilesScreen = lazyNamed(() => import("./screens/account/ProfilesScreen"), "ProfilesScreen");
 const TvApp = lazyNamed(() => import("./tv/TvApp"), "TvApp");
+const LazyDeskApp = lazyNamed(() => import("./desk/DeskApp"), "DeskApp");
+const LazyPhoneApp = lazyNamed(() => import("./phone/PhoneApp"), "PhoneApp");
+const LazyDesktopApp = lazyNamed(() => import("./DesktopApp"), "DesktopApp");
+const LazyHome = lazyNamed(() => import("./screens/Home"), "Home");
 const SettingsOverlay = lazyNamed(() => import("./components/SettingsOverlay"), "SettingsOverlay");
+
+/** Starts loading only the active shell chunk in parallel with boot settings/account init (no waterfall). */
+export function preloadActiveShell() {
+  // TV mode stays behind its own Suspense boundary (as before) so initial focus lands on Continue Watching cleanly.
+  if (isTvMode()) return;
+  if (formFactor().form === "phone") return LazyPhoneApp.preload().catch(() => {});
+  if (!getPrefs().classicDesktop) return LazyDeskApp.preload().catch(() => {});
+  return Promise.all([LazyDesktopApp.preload(), LazyHome.preload()]).catch(() => {});
+}
 
 /** A page. Its route never changes for its entry, so a change of motion or player around it doesn't render it again. */
 const Screen = memo(function Screen({ route }: { route: Route }) {
   switch (route.name) {
     case "home":
-      return <Home />;
+      return (
+        <Suspense fallback={null}>
+          <LazyHome />
+        </Suspense>
+      );
     case "discover":
       return (
         <Suspense fallback={null}>
@@ -171,11 +159,13 @@ const Screen = memo(function Screen({ route }: { route: Route }) {
  */
 function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
   const { data: page } = useQuery(titlePageQuery(type, id, preview));
-  // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it for its first 300ms:
-  // the tap renders only the skeleton, so the motion starts in the next frame, and the page itself renders after,
-  // in a transition that gives way to every frame.
+  // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it briefly:
+  // start preloading the detail backdrop on frame 0 and mount the full Detail tree in a non-blocking transition.
   const phone = useFormFactor().form === "phone";
   const [ready, setReady] = useState(!phone);
+  useEffect(() => {
+    if (phone && preview?.background) preloadImage(detailBackdropUrl(preview.background, true));
+  }, [phone, preview?.background]);
   useEffect(() => {
     if (ready) return;
     const frame = requestAnimationFrame(() => startTransition(() => setReady(true)));
@@ -186,7 +176,7 @@ function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: str
   if (page.kind === "anime")
     return (
       <Suspense fallback={loading}>
-        <LazyAnimeDetail id={page.anilist} />
+        <LazyAnimeDetail id={page.anilist} episode={episode} />
       </Suspense>
     );
   return (
@@ -221,9 +211,25 @@ function SettingsRoute({ page }: { page?: string }) {
  */
 export function App() {
   const tv = useTvMode();
+  const desk = useDeskUi();
   const { data: settings } = useSettings();
   const prefersLight = useSystemPrefersLight();
   const scheme = tv ? "dark" : resolveScheme(settings?.colorScheme, prefersLight);
+
+  // On Windows, the desk layout keeps the system's native title bar across the entire app
+  // (Sign In, Who's watching? / Manage Profiles, and DeskApp) so in-app window buttons never
+  // reappear when switching profiles. Classic desktop and TV mode keep a frameless window.
+  const nativeFrame = isDesktop && os === "windows" && desk;
+  useLayoutEffect(() => {
+    if (!nativeFrame) return;
+    const html = document.documentElement;
+    html.dataset.nativeFrame = "";
+    void appWindow.setDecorations(true).catch(() => delete html.dataset.nativeFrame);
+    return () => {
+      delete html.dataset.nativeFrame;
+      void appWindow.setDecorations(false).catch(() => {});
+    };
+  }, [nativeFrame]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.font = uiFontOf(settings?.uiFont);
@@ -243,6 +249,7 @@ export function App() {
   return (
     <MotionConfig reducedMotion={reduce === "on" ? "always" : reduce === "off" ? "never" : "user"}>
       <Gate />
+      <ProfileSwitchHost />
       <SignOutDialog />
       <PinHost />
     </MotionConfig>
@@ -273,6 +280,7 @@ function GateScreen() {
   const { data: settings, isFetched } = useSettings();
   // A phone's sections keep their pages, as a phone app's tabs do (router `kept`); elsewhere each opens afresh.
   const phone = useFormFactor().form === "phone";
+  const desk = useDeskUi();
   const shell = <div className="account-shell" />;
   switch (status) {
     case "loading":
@@ -299,7 +307,7 @@ function GateScreen() {
       const initial = startRoute(settings?.startPage);
       preloadRoute(initial);
       return (
-        <RouterProvider key={profile?.id ?? "guest"} initial={[initial]} keepSections={phone}>
+        <RouterProvider key={profile?.id ?? "guest"} initial={[initial]} keepSections={phone || desk}>
           <MainApp />
         </RouterProvider>
       );
@@ -310,6 +318,10 @@ function GateScreen() {
 /** The desktop app or, in TV mode, the 10-foot one — over the same navigation stack. */
 function MainApp() {
   const tv = useTvMode();
+  // A phone has its own app (src/phone): Netflix's layout and motion over the same pages and navigation.
+  const phone = useFormFactor().form === "phone";
+  // A computer or tablet gets the same app in its large-screen form (src/desk), unless Settings asks for the classic one.
+  const desk = useDeskUi();
 
   // Interface size is this screen's, so it's a device pref.
   const { uiScale, animeEnabled } = usePrefs();
@@ -385,13 +397,17 @@ function MainApp() {
 
   return (
     <>
-      {tv ? (
-        <Suspense fallback={null}>
+      <Suspense fallback={null}>
+        {tv ? (
           <TvApp />
-        </Suspense>
-      ) : (
-        <DesktopApp />
-      )}
+        ) : phone ? (
+          <LazyPhoneApp Screen={Screen} />
+        ) : desk ? (
+          <LazyDeskApp Screen={Screen} Settings={LazySettingsOverlay} />
+        ) : (
+          <LazyDesktopApp Screen={Screen} Settings={LazySettingsOverlay} />
+        )}
+      </Suspense>
       <ErrorBoundary where="party host" quiet>
         <PartyHost />
       </ErrorBoundary>
@@ -421,234 +437,6 @@ function startRoute(page: SettingsT["startPage"] | undefined): Route {
   }
 }
 
-function DesktopApp() {
-  const { stack, kept, current, back, tab } = useRouter();
-  const { playing, player, leaving } = usePlayerLayer(current);
-  // The page under the player stays mounted so leaving playback is instant.
-  const pages = stack.filter((e) => e.route.name !== "player");
-  const topPage = pages[pages.length - 1];
-  const { data: settings } = useSettings();
-  usePageFocus(playing || !topPage ? undefined : String(topPage.key));
-  const phone = useFormFactor().form === "phone";
-  // Pages change as a coordinated pair across desktop, tablet and phone (lib/ui/pageMotion.ts).
-  const motion = usePageMotion(pages, !playing, phone);
-  // On a phone each section's page stays mounted when another is opened (router `kept`), as a phone app's tabs do:
-  // switching back is that page as it was, drawn already, so the switch is only the crossfade. In key order, so a
-  // page never moves among the others (moving it would reset its scroll); which is drawn over which is shell.css's.
-  const all = new Map<number, Entry>();
-  for (const e of [...(phone ? kept : []), ...pages, ...(motion?.leaving ? [motion.leaving] : [])]) all.set(e.key, e);
-  const shown = [...all.values()].sort((a, b) => a.key - b.key);
-  // A title's page out of its card plays from the commit itself (lib/ui/cardMotion.ts): the tap is answered in the
-  // next frame, whatever the new page still has to render or load. Back waits for the pair's first frame (`go`): the
-  // page coming back is drawn then, under the title's, so painting it doesn't eat the motion's first frames.
-  const main = useRef<HTMLElement>(null);
-  const card = motion?.card && (motion.dir === 1 || motion.go) ? motion.card : undefined;
-  const cardKey = card && motion ? (motion.dir === 1 ? motion.enter : motion.leave) : undefined;
-  useLayoutEffect(() => {
-    if (cardKey === undefined || !card) return;
-    const page = main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${cardKey}"]`);
-    if (!page) return;
-    const scrim = main.current?.querySelector<HTMLElement>(":scope > .card-scrim") ?? null;
-    const open = page.dataset.card === "open";
-    // Back lands where the card is now, not where it was tapped (pageMotion.ts liveCard).
-    return playCardMotion({ page, scrim, card: open ? card : liveCard(card), open, width: window.innerWidth, height: window.innerHeight });
-  }, [cardKey, card]);
-  // On a phone, a section's turn takes the top bar with the pages (shell.css): the real bar comes in with the new page,
-  // and a copy of it as it was rides out on the old one. Strictly gated to phone so desktop Back geometry never shifts.
-  const turn = phone && motion?.tab ? motion : undefined;
-  const barCopy = useRef<{ key: number; node: HTMLElement } | null>(null);
-  if (turn && barCopy.current?.key !== turn.leave) {
-    const node = main.current?.querySelector(":scope > .navbar")?.cloneNode(true);
-    barCopy.current = node instanceof HTMLElement ? { key: turn.leave, node } : null;
-  }
-  useLayoutEffect(() => {
-    const copy = barCopy.current;
-    const page = turn && copy?.key === turn.leave ? main.current?.querySelector(`:scope > .page[data-page-key="${turn.leave}"]`) : null;
-    if (!copy || !page) return;
-    copy.node.classList.add("navbar-copy");
-    copy.node.setAttribute("aria-hidden", "true");
-    copy.node.inert = true;
-    copy.node.querySelectorAll("[id]").forEach((e) => e.removeAttribute("id"));
-    page.append(copy.node);
-    return () => {
-      copy.node.remove();
-      barCopy.current = null;
-    };
-  }, [turn?.leave, turn?.enter]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Keyboard or mouse, for the menus' highlight (lib/ui/inputModality.ts).
-  useEffect(watchInputModality, []);
-  useEffect(() => (phone ? watchCardTaps() : undefined), [phone]);
-  useEffect(() => whenIdle(() => void LazyDetail.preload().catch(() => {}), 2500), []);
-  // Once Home has come in, the blur shaders a title page's entrance needs (lib/ui/shaderWarmup.ts).
-  useEffect(() => {
-    let cancelIdle = () => {};
-    const wait = window.setTimeout(() => (cancelIdle = whenIdle(warmUpBlurShaders, 2000)), 2500);
-    return () => {
-      window.clearTimeout(wait);
-      cancelIdle();
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (playing || isSettingsOpen()) return; // the player / settings overlay owns the keyboard
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-      if (e.key === "Escape" && !typing && !e.defaultPrevented) back();
-      // Modified shortcuts (Ctrl+K) work while typing too; plain keys ("/") would just type.
-      if (actionFor(e, "app") === "search" && (!typing || e.ctrlKey || e.metaKey || e.altKey)) {
-        e.preventDefault();
-        focusSearch();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [playing, back]);
-
-  // Android's back button and gesture: Escape's Back, then Home, then the app goes to the background.
-  // iOS's swipe in from the left edge: Escape's Back only.
-  // iOS's swipe (#451) and Android 14's back gesture (#483), on a pushed page with nothing over it, move the page with the finger.
-  const now = useRef({ pages, back });
-  now.current = { pages, back };
-  const drag = useMemo(
-    () =>
-      pageDrag(
-        () => {
-          const { pages } = now.current;
-          const at = (e: Entry | undefined) => e && main.current?.querySelector<HTMLElement>(`:scope > .page[data-page-key="${e.key}"]`);
-          const top = at(pages[pages.length - 1]);
-          const under = pages.length > 1 && at(pages[pages.length - 2]);
-          // A title page that grew out of a card goes back into it with the finger (pageDrag.ts).
-          return top && under ? { top, under, card: cardOrigin(pages[pages.length - 1].key) } : null;
-        },
-        () => now.current.back(),
-      ),
-    [],
-  );
-  const open = () => !!playing || isSettingsOpen() || dismissDepth() > 0;
-  useSystemBack(
-    () => {
-      const action = systemBackAction({ open: open(), pushed: stack.length - 1, atHome: rootTab(stack).name === "home", swipe: systemBack === "swipe" });
-      if (action === "escape") pressEscape();
-      else if (action === "home") tab({ name: "home" });
-      else if (action === "leave") void leaveApp();
-    },
-    () => (open() ? undefined : drag),
-  );
-  // The swipe is Back wherever something can be left; at a tab's own page iOS leaves the edge to the page.
-  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  const settingsOpen = useSettingsOverlay().open;
-  useNativeSwipe(!!playing || settingsOpen || layers > 0 || stack.length > 1);
-
-  return (
-    <div
-      className="app"
-      data-card-titles={settings?.showCardTitles ?? false}
-      data-card-details={settings?.showCardDetails ?? false}
-      data-card-ratings={settings?.showCardRatings ?? false}
-      data-rating-position={settings?.cardRatingPosition ?? "poster"}
-      data-rating-colors={settings?.ratingColors ?? false}
-      data-player-leaving={leaving}
-    >
-      <main
-        className="main"
-        ref={main}
-        // A section's turn: the top bar comes in with the new page, from its side (shell.css).
-        data-turn={(turn?.go && turn.dir) || undefined}
-        style={turn ? ({ "--turn-dir": turn.dir } as CSSProperties) : undefined}
-      >
-        <ErrorBoundary where="top bar">
-          <NavBar />
-        </ErrorBoundary>
-        {shown.map((entry) => (
-          <section
-            key={entry.key}
-            className={entry.route.name === "detail" || entry.route.name === "anime-detail" ? "page page-pushed" : "page"}
-            data-active={entry === topPage && !playing}
-            data-motion={motion?.enter === entry.key ? "enter" : motion?.leave === entry.key ? "leave" : undefined}
-            // A page on its way out is still drawn for a moment, but no longer read out.
-            aria-hidden={(motion?.leave === entry.key && entry !== topPage) || undefined}
-            // A title's page out of its card, and back into it (shell.css).
-            data-card={motion?.card ? (motion.dir === 1 ? "open" : "close") : undefined}
-            // The pair moves once the new page is laid out (pageMotion.ts `go`).
-            data-go={motion?.go || undefined}
-            // Of the pair, the one drawn on top: the page pushed, or the one going (it comes last). It moves; the
-            // other holds still under it (shell.css).
-            data-over={(motion && entry.key === (motion.leaving ? motion.leave : motion.enter)) || undefined}
-            // Another section: the pair slides across as a pager's pages do. A page replaced: a crossfade in place.
-            data-tab={motion?.tab || undefined}
-            data-fade={(motion && !motion.card && !motion.tab && motion.dir === 0) || undefined}
-            style={
-              motion
-                ? ({ "--page-dir": motion.dir, ...(motion.card && cardMotionVars(motion.card, window.innerWidth, window.innerHeight)) } as CSSProperties)
-                : undefined
-            }
-            data-under-player={(entry === topPage && !!player) || undefined}
-            data-page-key={entry.key}
-            inert={entry !== topPage || !!playing}
-          >
-            <ErrorBoundary where={`page ${entry.route.name}`}>
-              <Screen route={entry.route} />
-            </ErrorBoundary>
-            {/* The card's own picture, on the title's page while it grows out of the card or goes back into it:
-                the same box, so they move as one piece (shell.css). */}
-            {motion?.card?.src && entry.key === (motion.dir === 1 ? motion.enter : motion.leave) && (
-              <CardGhost src={motion.card.src} />
-            )}
-          </section>
-        ))}
-        {/* Between the title's page and the one behind it: dims and softens what's behind as the card opens. */}
-        {motion?.card && <div className="card-scrim" aria-hidden data-card={motion.dir === 1 ? "open" : "close"} data-go={motion.go || undefined} />}
-        <ErrorBoundary where="toasts" quiet>
-          <div className="toast-stack">
-            <ControllerToast tv={false} />
-            <SeriesPickToast />
-            <HiddenTitleToast tv={false} />
-            <UpdateToast hidden={!!playing} />
-          </div>
-        </ErrorBoundary>
-      </main>
-      {/* The profile sheet's place (ProfileMenu.tsx): beside the pages and the top bar, not in them, so they can step
-          back under it (Sheet.tsx) without taking it with them; in the top bar's layer, under the notices. */}
-      <div className="sheet-host" />
-      <ErrorBoundary where="what's new" quiet>
-        <WhatsNewSheet />
-      </ErrorBoundary>
-      <PlayerLayer player={player} leaving={leaving} />
-      <LazySettingsOverlay />
-      {/* After Settings: it reports changes made there too, so it must never be under it or inert with the page. */}
-      <ErrorBoundary where="notices" quiet>
-        <div className="toast-stack toast-stack-notice">
-          <StoreProblemToast tv={false} />
-          <AccountFullToast tv={false} />
-          <SecretsSyncToast tv={false} />
-          <LockedKeysToast tv={false} />
-        </div>
-      </ErrorBoundary>
-      <ErrorBoundary where="card menu" quiet>
-        {!playing && <CardMenuHost />}
-      </ErrorBoundary>
-      <ErrorBoundary where="trailer" quiet>
-        <TrailerHost />
-      </ErrorBoundary>
-      <ErrorBoundary where="open files" quiet>
-        <OpenFilesHost />
-      </ErrorBoundary>
-    </div>
-  );
-}
-
-/** The card's picture on a title's page while it grows out of the card or goes back into it (lib/ui/cardGhost.ts). */
-function CardGhost({ src }: { src: string }) {
-  const box = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const { panel, soft, medium, sharp } = cardGhostParts(src);
-    el.replaceChildren(panel, soft, medium, sharp);
-  }, [src]);
-  return <div ref={box} className="card-ghost" aria-hidden />;
-}
-
 /** The Settings window, loaded the first time it opens, then kept (it animates its own closing). */
 function LazySettingsOverlay() {
   const { open } = useSettingsOverlay();
@@ -656,19 +444,18 @@ function LazySettingsOverlay() {
   if (open && !opened) setOpened(true);
   // A phone's Settings is a view of the profile sheet (ProfileMenu.tsx), not a window of its own.
   const phone = useFormFactor().form === "phone";
-  // Fetched once the app has genuinely settled (skipping phones and metered/slow connections), so initial load never competes with it.
+  // Fetched right after the first painted frame so the first click on Settings never suspends.
   useEffect(() => {
-    if (phone) return;
-    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
-    const c = nav.connection;
-    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
-    let cancelIdle: (() => void) | undefined;
-    const later = window.setTimeout(() => {
-      cancelIdle = whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 5000);
-    }, 5000);
+    if (phone || !canPreloadChunks()) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        void SettingsOverlay.preload().catch(() => {});
+      });
+    });
     return () => {
-      window.clearTimeout(later);
-      cancelIdle?.();
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
     };
   }, [phone]);
   if (!opened || phone) return null;

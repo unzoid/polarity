@@ -20,8 +20,8 @@ pub struct Cinemeta {
 }
 
 impl Cinemeta {
-    pub fn new() -> Self {
-        Self { client: AddonClient::new() }
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { client: AddonClient::with_client(http) }
     }
 
     /// The raw popularity list ("trending"), paged.

@@ -429,11 +429,15 @@ export const addons: InstalledAddon[] = WORST === "empty" ? [] : WORST ? W_ADDON
  * Example Lists' answers (`addon_catalog`): Staff Picks pages by 4 and filters by genre, Late Night fails
  * the way a timed-out add-on does, Search matches names.
  */
+/** A film only Example Lists' search knows. */
+const ADDON_ONLY: MetaPreview = { id: "tt9400001", type: "movie", name: "The Orchard Recordings", releaseInfo: "2019" };
+
 export function addonCatalog(addon: string, type: string, id: string, extra: [string, string][]): MetaPreview[] | Promise<never> {
   const arg = Object.fromEntries(extra);
   const list = type === "series" ? series : movies;
   if (addon !== "example.lists" || id === "late") return Promise.reject({ code: "upstream", message: "Example Lists took too long to answer" });
-  if (id === "find") return list.filter((m) => m.name.toLowerCase().includes(String(arg.search).toLowerCase())).slice(0, 6);
+  // Search finds one title of its own besides Polarity's (which a search shows once, as Polarity's).
+  if (id === "find") return [...list, ...(type === "movie" ? [ADDON_ONLY] : [])].filter((m) => m.name.toLowerCase().includes(String(arg.search).toLowerCase())).slice(0, 6);
   if (id === "weekend") return list.slice(2, 10);
   const genre = arg.genre === "Comedy" ? list.slice(6) : list;
   const skip = Number(arg.skip ?? 0);

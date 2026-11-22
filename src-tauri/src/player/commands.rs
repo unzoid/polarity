@@ -278,6 +278,10 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
     if was.audio_filters() != tune.audio_filters() {
         mpv.request(json!(["set_property", "af", tune.audio_filters()])).await?;
     }
+    if was.drc_scale() != tune.drc_scale() {
+        // Native AC-3/E-AC-3 decoder DRC: best-effort so older mpv builds still succeed.
+        let _ = mpv.request(json!(["set_property", "ad-lavc-o", tune.drc_scale()])).await;
+    }
     if was.hwdec_mode() != tune.hwdec_mode() {
         #[cfg(target_os = "android")]
         let mode = tune.android_hwdec();
@@ -306,7 +310,7 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
         mpv.request(json!(["set_property", "sub-ass-scale-with-window", tune.autocrop])).await?;
     }
     if was.deband != tune.deband {
-        mpv.request(json!(["set_property", "deband", tune.deband])).await?;
+        mpv.request(json!(["set_property", "deband", tune.deband.mpv_deband()])).await?;
     }
     if was.spdif() != tune.spdif() {
         mpv.request(json!(["set_property", "audio-spdif", tune.spdif()])).await?;
@@ -317,10 +321,35 @@ pub async fn mpv_tune(app: AppHandle, state: State<'_, AppState>, tune: Tune) ->
         if mpv.request(json!(["set_property", "target-colorspace-hint", hint])).await.is_err() && hint == "auto" {
             mpv.request(json!(["set_property", "target-colorspace-hint", "no"])).await?;
         }
+        // Dynamic HDR→SDR peak tracking when tone-mapping to SDR; best-effort for older mpv.
+        for &(prop, val) in tune.hdr.tone_mapping_props() {
+            let _ = mpv.request(json!(["set_property", prop, val])).await;
+        }
     }
     if was.sub_hdr != tune.sub_hdr {
         // An older mpv (one found on PATH) may not have it: it keeps its own.
         let _ = mpv.request(json!(["set_property", "sub-hdr-peak", tune.sub_hdr.peak()])).await;
+    }
+    if was.frame_rate_props() != tune.frame_rate_props() {
+        for &(prop, val) in tune.frame_rate_props() {
+            let _ = mpv.request(json!(["set_property", prop, val])).await;
+        }
+    }
+    #[cfg(target_os = "android")]
+    if was.frame_rate_match != tune.frame_rate_match || was.fullscreen != tune.fullscreen {
+        if tune.fullscreen && tune.frame_rate_match != polar_player::tune::FrameRateMatch::Off {
+            let fps = mpv
+                .request(json!(["get_property", "container-fps"]))
+                .await
+                .ok()
+                .and_then(|v| v.as_f64())
+                .filter(|f| f.is_finite() && (12.0..=120.0).contains(f))
+                .unwrap_or(0.0) as f32;
+            let seamless = tune.frame_rate_match == polar_player::tune::FrameRateMatch::Seamless;
+            super::android::set_surface_frame_rate(fps, seamless);
+        } else {
+            super::android::set_surface_frame_rate(0.0, true);
+        }
     }
     if was.buffer != tune.buffer {
         let (secs, bytes) = tune.cache();
@@ -346,6 +375,11 @@ pub async fn mpv_stop(app: AppHandle, state: State<'_, AppState>, owner: Option<
     if state.mpv.conn.lock().await.is_none() {
         return Ok(());
     }
+    #[cfg(target_os = "android")]
+    super::android::set_surface_frame_rate(0.0, true);
+    // Reset display-resample / interpolation when stopping playback so browsing stays clean.
+    let _ = state.mpv.request(json!(["set_property", "video-sync", "audio"])).await;
+    let _ = state.mpv.request(json!(["set_property", "interpolation", "no"])).await;
     state.mpv.schedule_idle_shutdown(&app);
     state.mpv.set_visible(false).await;
     state.mpv.request(json!(["stop"])).await.map(|_| ())

@@ -34,6 +34,16 @@ export const useRecommend = (type: ContentType, id: string, enabled = true) =>
     select: useWithinLimit((list: MetaPreview[], keep) => keep(list)),
   });
 
+/** Films in a TMDB collection / franchise (`/collection/{id}`), kept within the profile's viewing limit. */
+export const useCollection = (id: number | undefined, enabled = true) =>
+  useQuery({
+    queryKey: keys.collection(id ?? 0),
+    queryFn: () => api.collection(id!),
+    enabled: enabled && id != null,
+    staleTime: 6 * 60 * 60_000,
+    select: useWithinLimit((list: MetaPreview[], keep) => keep(list)),
+  });
+
 /**
  * A query's `select` leaving out titles over the profile's viewing limit (lib/catalog/viewingLimit.ts); what's
  * cached stays whole, so paging and other readers are unaffected.
@@ -45,9 +55,20 @@ function useWithinLimit<T>(pick: (data: T, keep: <M extends MetaPreview>(list: M
   return useCallback((data: T) => (viewing.limit === null ? data : pick(data, (list) => keepWithinLimit(list, viewing))), [viewing]);
 }
 
-/** A person's page (TMDB): who they are and their titles. */
+/** A person's page (TMDB): who they are and their titles (kept within the profile's viewing limit). */
 export const usePerson = (id: number) =>
-  useQuery({ queryKey: keys.person(id), queryFn: () => api.person(id), staleTime: 6 * 60 * 60_000, retry: 1 });
+  useQuery({
+    queryKey: keys.person(id),
+    queryFn: () => api.person(id),
+    staleTime: 6 * 60 * 60_000,
+    retry: 1,
+    select: useWithinLimit((p, keep) => ({
+      ...p,
+      acting: p.acting ? keep(p.acting) : p.acting,
+      directing: p.directing ? keep(p.directing) : p.directing,
+      writing: p.writing ? keep(p.writing) : p.writing,
+    })),
+  });
 
 export const useMeta = (type: ContentType, id: string, enabled = true) => useQuery({ ...metaQuery(type, id), enabled });
 
@@ -137,6 +158,7 @@ export function useIsAnime(videoId: string | undefined) {
     select: (zip) => !!zip,
     enabled: !!imdb,
     staleTime: 24 * 60 * 60_000,
+    retry: false,
   });
   return !!videoId && (isKitsuId(videoId) || !!anime);
 }

@@ -33,6 +33,7 @@ export function AdvancedPage() {
         {/* Converted to SDR, subtitles are as bright as SDR anyway. */}
         {(os === "windows" || os === "macos") && hdrOutput !== "sdr" && <SettingRow id="subtitleHdrPeak" disabled={hasMpv === false} />}
         <SettingRow id="deband" disabled={hasMpv === false} />
+        <SettingRow id="frameRateMatch" disabled={hasMpv === false} />
         {/* Without mpv there's no autocrop: Fit or Fill window. */}
         <SettingRow id="cropMode" omit={hasMpv === false ? ["bars"] : undefined} />
         <LookaheadRow hasMpv={hasMpv} />

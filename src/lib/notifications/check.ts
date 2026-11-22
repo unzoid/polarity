@@ -2,6 +2,7 @@ import { concurrency } from "../net/limiter";
 import type { NativeNote, PlannedNote } from "../platform/notifications";
 import type { ContentType, LibraryItem, Meta, Progress } from "../types";
 import { newsNotes, type Note } from "./messages";
+import { paceNewsNotes, rankNewsByEngagement, type NotifyPacing } from "./pacing";
 import { loadMemory, routePayload, saveMemory, type Memory, type PlannedMemory } from "./store";
 import { upcoming, whatsNew, type News, type Planned, type Wanted } from "./whatsNew";
 
@@ -16,6 +17,8 @@ export type Scope = "library" | "started";
 
 export interface CheckOptions extends Wanted {
   scope: Scope;
+  /** Pacing policy (#642): "all" (default when omitted), "balanced" (<=1/day, <=5/wk), or "quiet" (<=1/day, <=3/wk). */
+  pacing?: NotifyPacing;
 }
 
 export interface CheckDeps {
@@ -88,7 +91,23 @@ export async function runCheck(profile: string, options: CheckOptions, deps: Che
       if (before) next.shows[id] = before;
       return;
     }
+    // Data Canary LKG guard (#620): never let an HTTP-200-empty episode list overwrite known episodes.
+    if (before && before.known.length > 0 && meta.videos.length === 0) {
+      next.shows[id] = before;
+      return;
+    }
     const show = { id, type: meta.type, name: meta.name, videos: meta.videos };
+    // Data Canary ID-churn guard (#620): if an upstream renumbering replaced >50% of known episode IDs
+    // at once, absorb the renumbered IDs quietly into memory instead of firing an alert storm.
+    if (before && before.known.length >= 4) {
+      const currentIds = new Set(meta.videos.map((v) => v.id));
+      const missing = before.known.filter((k) => !currentIds.has(k)).length;
+      if (missing * 2 > before.known.length) {
+        const silent = whatsNew(show, before, now, { episodes: false, seasons: false });
+        next.shows[id] = silent.memory;
+        return;
+      }
+    }
     const r = whatsNew(show, before, now, options);
     if (r.news) news.push(r.news);
     next.shows[id] = r.memory;
@@ -97,9 +116,21 @@ export async function runCheck(profile: string, options: CheckOptions, deps: Che
     if (deps.plan && ahead.length) next.planned[id] = ahead.map((p): PlannedMemory => ({ at: p.at, memory: p.memory }));
   });
 
+  // "Thinking Fast & Slow" (#642): rank alerts by engagement and apply pacing budget with digest overflow.
+  const ranked = rankNewsByEngagement(news, started, library, now);
+  const { notes, nextSentAt } = paceNewsNotes(
+    ranked,
+    options.pacing ?? "all",
+    memory.sentAt ?? [],
+    now,
+    memory.lastActiveAt,
+  );
+  if (nextSentAt.length) next.sentAt = nextSentAt;
+  next.lastActiveAt = now;
+
   // Remember first: a note that fails to show isn't worth announcing twice.
   saveMemory(profile, next);
-  for (const note of newsNotes(news)) await deps.show(toNative(note)).catch(() => undefined);
+  for (const note of notes) await deps.show(toNative(note)).catch(() => undefined);
   await deps.plan?.(plannedNotes(plans)).catch(() => undefined);
   const soonest = plans.reduce<number | undefined>((t, p) => (t == null || p.plan.at < t ? p.plan.at : t), undefined);
   return soonest;

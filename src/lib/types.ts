@@ -85,6 +85,14 @@ export interface Extra {
   key: string;
 }
 
+/** One person returned by search (`/search/person`), opening their {@link PersonPage}. */
+export interface PersonHit {
+  id: number;
+  name: string;
+  photo?: string;
+  knownFor?: string;
+}
+
 /** A person's page (`person`): who they are and their titles, most notable first. */
 export interface PersonPage {
   id: number;
@@ -99,6 +107,12 @@ export interface PersonPage {
   knownFor?: string;
   acting?: MetaPreview[];
   directing?: MetaPreview[];
+  writing?: MetaPreview[];
+}
+
+export interface CollectionInfo {
+  id: number;
+  name: string;
 }
 
 export interface MetaDetails {
@@ -120,6 +134,7 @@ export interface MetaDetails {
   episodes?: number;
   votes?: number;
   tmdbId?: number;
+  collection?: CollectionInfo;
 }
 
 /** Scores from ratings services (Settings → Services). */
@@ -161,6 +176,8 @@ export interface Stream {
 export interface StreamQuality {
   resolution?: number;
   hdr: boolean;
+  /** Dynamic HDR10+ metadata. */
+  hdr10Plus?: boolean;
   dolbyVision: boolean;
   codec?: string;
   sizeBytes?: number;
@@ -224,6 +241,7 @@ export interface StreamsResult {
 export interface SearchResults {
   movies: MetaPreview[];
   series: MetaPreview[];
+  people?: PersonHit[];
 }
 
 /** The anime cache folder (fillers.json, anime-list-mini.json) and the size of its files. */

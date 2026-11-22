@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { glowColor, type Rgb } from "../lib/ui";
+import { glowColor, glowScrim, glowSpotlight, type Rgb } from "../lib/ui";
 import { usePageOnTop } from "./BackdropTrailer";
 import { loadReadable, pixelsOf } from "./TitleLogo";
 
@@ -42,10 +42,12 @@ function measure(src: string, area: GlowArea): Promise<Rgb | null> {
  * changes with the title, eased (cards.css); the next title's is measured ahead, so it's ready when the card turns.
  * Until a colour is known, nothing shows.
  */
-export function HeroGlow({ src, next, area = "whole" }: { src?: string; next?: string; area?: GlowArea }) {
+export function HeroGlow({ src, next, area = "whole", onColor }: { src?: string; next?: string; area?: GlowArea; onColor?: (scrim: Rgb) => void }) {
   const [colour, setColour] = useState<Rgb | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const onTop = usePageOnTop(ref);
+  const onColorRef = useRef(onColor);
+  onColorRef.current = onColor;
   // While it shows on the page on top, the top bar leaves its dark shade off (shell.css): it would dim the glow.
   const lit = !!colour && onTop;
   useEffect(() => {
@@ -59,11 +61,28 @@ export function HeroGlow({ src, next, area = "whole" }: { src?: string; next?: s
   useEffect(() => {
     if (!src) return;
     let live = true;
-    void measure(src, area).then((c) => live && c && setColour(c));
+    void measure(src, area).then((c) => {
+      if (!live || !c) return;
+      setColour(c);
+      onColorRef.current?.(glowScrim(c));
+    });
     if (next) void measure(next, area);
     return () => {
       live = false;
     };
   }, [src, next, area]);
-  return <div ref={ref} className="hero-glow" aria-hidden data-shown={!!colour} style={colour ? ({ "--glow": `rgb(${colour.join(" ")})` } as CSSProperties) : undefined} />;
+  const hi = colour ? glowSpotlight(colour) : null;
+  return (
+    <div
+      ref={ref}
+      className="hero-glow"
+      aria-hidden
+      data-shown={!!colour}
+      style={
+        colour && hi
+          ? ({ "--glow": `rgb(${colour.join(" ")})`, "--glow-hi": `rgb(${hi.join(" ")})` } as CSSProperties)
+          : undefined
+      }
+    />
+  );
 }

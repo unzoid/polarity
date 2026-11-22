@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { glowColor, type Rgb } from "../src/lib/ui/heroGlow";
+import { glowColor, glowScrim, glowSpotlight, type Rgb } from "../src/lib/ui/heroGlow";
 
 /** RGBA pixels: `n` of each colour (a grey level or [r, g, b]), opaque. */
 function pixels(...runs: [n: number, colour: number | Rgb][]) {
@@ -60,5 +60,24 @@ describe("glowColor", () => {
     const [r, g, b] = glowColor(pixels([400, 90], [400, 160]))!;
     expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(8);
     expect(glowColor([])).toBeNull();
+  });
+});
+
+describe("glowSpotlight and glowScrim", () => {
+  test("glowSpotlight lifts lightness while preserving dominant hue without white washout", () => {
+    const base: Rgb = [19, 25, 42]; // Netflix deep indigo
+    const hi = glowSpotlight(base);
+    expect(lightness(hi)).toBeGreaterThan(lightness(base) * 1.8);
+    expect(lightness(hi)).toBeLessThanOrEqual(0.4);
+    expect(dominant(hi)).toBe("blue");
+    // Saturation stays rich (not washed toward white)
+    expect(hi[2] - hi[0]).toBeGreaterThan(base[2] - base[0]);
+  });
+
+  test("glowScrim stays deep and hue-matched for legible card text", () => {
+    const base: Rgb = [42, 31, 14]; // warm amber
+    const scrim = glowScrim(base);
+    expect(lightness(scrim)).toBeLessThan(0.14);
+    expect(dominant(scrim)).toBe("red");
   });
 });

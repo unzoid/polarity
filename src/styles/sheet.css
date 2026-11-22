@@ -4,10 +4,10 @@
   inset: 0;
   z-index: var(--z-sheet);
   background: rgb(0 0 0 / 0.45);
+  will-change: opacity;
 }
 /* A phone's sheet rises over the page dimmed, not blurred: a blur of the whole screen behind a sheet still moving
-   is taken again every frame, which is what made it lag. The profile sheet's goes nearly black, as Netflix's does,
-   over the pages stepping back under it (Sheet.tsx). */
+   is taken again every frame, which is what made it lag. */
 .sheet-scrim[data-edge="bottom"] {
   background: rgb(0 0 0 / 0.6);
 }
@@ -25,11 +25,11 @@
   flex-direction: column;
   border: 0;
   border-radius: 22px;
-  corner-shape: superellipse(1.45);
   background: var(--surface-menu);
   box-shadow: var(--shadow-menu);
   touch-action: pan-y;
   overflow: hidden;
+  will-change: transform;
 }
 .sheet-header {
   display: flex;
@@ -109,15 +109,27 @@
   background: var(--surface-1);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  /* Pulled up past its height, its bottom edge would lift off the screen's: a copy of its fill
-     100px lower reaches past the edge, so the sheet looks taller rather than detached. */
-  box-shadow:
-    0 0 0 1px var(--hairline),
-    0 100px 0 0 var(--surface-1);
+  box-shadow: 0 0 0 1px var(--hairline);
+  contain: layout style;
+  overflow: visible;
+}
+/* Pulled up past its height, its bottom edge would lift off the screen's: a cheap skirt fills below the bottom
+   edge without inflating the sheet's box-shadow raster bounds on WKWebView. */
+.sheet[data-edge="bottom"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 100px;
+  background: var(--surface-1);
+  pointer-events: none;
 }
 /* No fade under the header: at rest it shaded the first card's top edge. */
 .sheet[data-edge="bottom"] .sheet-body {
   mask-image: none;
+  contain: layout style;
+  -webkit-overflow-scrolling: touch;
 }
 .sheet[data-edge="bottom"] .sheet-header {
   position: relative;
@@ -193,9 +205,18 @@
   padding-top: 0.75rem;
   padding-bottom: 0.75rem;
   border-radius: 14px;
-  corner-shape: superellipse(1.45);
   background: rgb(var(--ink) / 0.055);
   box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.09);
+}
+/* Skip layout and paint for off-screen source rows inside the Sources drawer on mobile. */
+.stream-row-wrap {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 66px;
+}
+.stream-more {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0 0.25rem;
 }
 :root[data-scheme="light"] .stream-row[data-featured="true"] {
   background: #ffffff;

@@ -320,6 +320,7 @@ function measureBackdrop(src: string, spot: LogoSpot, scheme: LogoScheme = curre
 export function toneUrl(src: string): string {
   try {
     const u = new URL(src);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return src;
     if (u.hostname === "images.metahub.space") u.hostname = "live.metahub.space";
     if (u.hostname === "image.tmdb.org") u.pathname = u.pathname.replace(/^\/t\/p\/[^/]+\//, "/t/p/w185/");
     u.searchParams.set("tone", "1");

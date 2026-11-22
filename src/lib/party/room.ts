@@ -43,7 +43,21 @@
 import type { PartyLink, PartyPresence } from "../account/backend";
 import type { AccountBackend } from "../account/backend";
 import { createPartyLog, tag } from "./log";
-import { DEFAULT_RULES, OUT_MAX, parseMessage, roundTrip, takesOver, V_JUMP_MAX, type PartyMedia, type PartyMessage, type Refusal, type RoomRules, type Timeline } from "./messages";
+import {
+  DEFAULT_RULES,
+  OUT_MAX,
+  PARTY_REACTIONS,
+  parseMessage,
+  roundTrip,
+  takesOver,
+  V_JUMP_MAX,
+  type PartyMedia,
+  type PartyMessage,
+  type PartyReactionEmoji,
+  type Refusal,
+  type RoomRules,
+  type Timeline,
+} from "./messages";
 
 export interface Playback extends Timeline {
   /** clock.now() at which `position` was current here. */
@@ -77,6 +91,21 @@ export interface MemberPosition {
   at: number;
 }
 
+export interface PartyReaction {
+  id: number;
+  from: string;
+  who: Member | null;
+  emoji: PartyReactionEmoji;
+}
+
+export interface PartyChatMessage {
+  id: string;
+  from: string;
+  who: Member | null;
+  text: string;
+  at: number;
+}
+
 export interface PartyState {
   code: string;
   status: "connecting" | "live" | "error";
@@ -87,6 +116,10 @@ export interface PartyState {
   members: Member[];
   playback: Playback | null;
   notes: PartyNote[];
+  /** Ephemeral floating emoji reactions from members in this room. */
+  reactions: PartyReaction[];
+  /** Ephemeral in-room chat lines (session only, capped to the latest 60). */
+  chat: PartyChatMessage[];
   rules: RoomRules;
   /** Joined, and waiting for the host to let me in. */
   knocking: boolean;
@@ -157,6 +190,10 @@ const JOIN_GIVE_UP_MS = 30_000;
 const DUTY_MS = 2000;
 const JOIN_TIMEOUT_MS = 8000;
 const NOTE_MS = 3500;
+const REACTION_MS = 2800;
+const REACTION_COOLDOWN_MS = 250;
+const REACTION_MAX = 16;
+const CHAT_MAX = 60;
 /** At most one answer to an out-of-date timeline this often. */
 const ANSWER_MS = 1000;
 /** The room's copy of my entry may lag this long before I send it again. */
@@ -351,6 +388,8 @@ export function createPartyRoom(deps: PartyDeps) {
       members: [me],
       playback: null,
       notes: [],
+      reactions: [],
+      chat: [],
       rules: DEFAULT_RULES,
       knocking: false,
       knockers: [],
@@ -521,9 +560,60 @@ export function createPartyRoom(deps: PartyDeps) {
     return gap > BEHIND_SHOWN ? gap : undefined;
   }
 
+  let reactionId = 0;
+  let lastReactionAt = -Infinity;
+
+  function pushReaction(from: string, emoji: PartyReactionEmoji) {
+    if (!state) return;
+    const who = state.members.find((m) => m.id === from) ?? (self?.id === from ? self : null);
+    const id = ++reactionId;
+    update({ reactions: [...state.reactions.slice(-(REACTION_MAX - 1)), { id, from, who, emoji }] });
+    later(() => {
+      if (state) update({ reactions: state.reactions.filter((r) => r.id !== id) });
+    }, REACTION_MS);
+  }
+
+  function pushChat(id: string, from: string, text: string) {
+    if (!state) return;
+    if (state.chat.some((c) => c.id === id)) return;
+    const who = state.members.find((m) => m.id === from) ?? (self?.id === from ? self : null);
+    update({ chat: [...state.chat.slice(-(CHAT_MAX - 1)), { id, from, who, text, at: clock.wall() }] });
+  }
+
+  /** Send a quick floating emoji reaction to everyone in the room. */
+  function sendReaction(emoji: PartyReactionEmoji) {
+    if (!state || !self || state.knocking) return false;
+    if (!(PARTY_REACTIONS as readonly string[]).includes(emoji)) return false;
+    const now = clock.now();
+    if (now - lastReactionAt < REACTION_COOLDOWN_MS) return false;
+    lastReactionAt = now;
+    pushReaction(self.id, emoji);
+    link?.send({ t: "react", from: self.id, emoji });
+    return true;
+  }
+
+  /** Send an ephemeral chat message to everyone in the room. */
+  function sendChat(raw: string) {
+    if (!state || !self || state.knocking) return false;
+    const text = raw.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 240);
+    if (!text) return false;
+    const id = deps.newId();
+    pushChat(id, self.id, text);
+    link?.send({ t: "chat", from: self.id, id, text });
+    return true;
+  }
+
   /** Sync now: the player here re-seeks to where the room is. */
   function syncNow() {
     if (state) update({ resync: state.resync + 1 });
+  }
+
+  /** Host: broadcast the host's current timeline immediately so any drifted viewers snap back in step. */
+  function syncEveryone(position?: number) {
+    if (!state || !self || !state.playback || !isHost()) return false;
+    const ok = partyAct(position !== undefined && Number.isFinite(position) ? { position } : {});
+    if (ok) note(self, "synced everyone");
+    return ok;
   }
 
   function setQuiet(on: boolean) {
@@ -822,6 +912,16 @@ export function createPartyRoom(deps: PartyDeps) {
         const was = state.positions[from]?.stalled;
         update({ positions: { ...state.positions, [from]: { videoId: msg.videoId, position: msg.position, paused: msg.paused, stalled: msg.stalled, at } } });
         if (msg.stalled !== was) hostDuty();
+        return;
+      }
+      case "react": {
+        if (from === self.id || !inRoom(from)) return;
+        pushReaction(from, msg.emoji);
+        return;
+      }
+      case "chat": {
+        if (from === self.id || !inRoom(from)) return;
+        pushChat(msg.id, from, msg.text);
         return;
       }
       case "state": {
@@ -1237,6 +1337,9 @@ export function createPartyRoom(deps: PartyDeps) {
     reportPosition,
     behind,
     syncNow,
+    syncEveryone,
+    sendReaction,
+    sendChat,
     setQuiet,
     setRules,
     makeHost,

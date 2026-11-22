@@ -193,3 +193,11 @@ test("torrent sources show their hash and file", () => {
   expect(m.get("Info hash")).toBe("0123456789abcdef0123456789abcdef01234567");
   expect(m.get("File index")).toBe("2");
 });
+
+test("non-#1 sources explain why #1 beat them when best match is provided", () => {
+  const top = stream();
+  const lower = stream({ quality: { ...stream().quality, resolution: 720, hdr: false } });
+  const scores = scoreSources([top, lower], NEUTRAL);
+  const m = rows(lower, { match: scores.get(lower), best: scores.get(top) });
+  expect(m.get("Why #1 beat this")).toContain("Resolution (−18)");
+});

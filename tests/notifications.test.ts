@@ -299,3 +299,33 @@ test("a stored memory that's damaged reads as empty or partial, never throws", (
     a: { known: ["1"], seasons: [1], since: 5 },
   });
 });
+
+test("check: Data Canary LKG guards ignore HTTP-200-empty feeds and absorb >50% episode ID churn silently", async () => {
+  forget();
+  let videos: Video[] = [
+    ep(1, 1, "2026-11-01"),
+    ep(1, 2, "2026-11-02"),
+    ep(1, 3, "2026-11-03"),
+    ep(1, 4, "2026-11-04"),
+  ];
+  const h = harness(() => videos);
+  await runCheck("p1", ON, h.deps, local(2026, 11, 5));
+  expect(h.shown).toEqual([]);
+
+  // HTTP 200 with empty episode list preserves LKG memory and emits no notifications.
+  videos = [];
+  await runCheck("p1", ON, h.deps, local(2026, 11, 6));
+  expect(loadMemory("p1").shows.tt0000001?.known).toHaveLength(4);
+  expect(h.shown).toEqual([]);
+
+  // Upstream renumbering replaces >50% of IDs at once with recent dates: absorbed silently without an alert storm.
+  videos = [
+    { ...ep(1, 1, "2026-11-06"), id: "tt0000001:alt:1" },
+    { ...ep(1, 2, "2026-11-06"), id: "tt0000001:alt:2" },
+    { ...ep(1, 3, "2026-11-06"), id: "tt0000001:alt:3" },
+    { ...ep(1, 4, "2026-11-06"), id: "tt0000001:alt:4" },
+  ];
+  await runCheck("p1", ON, h.deps, local(2026, 11, 7));
+  expect(h.shown).toEqual([]);
+  expect(loadMemory("p1").shows.tt0000001?.known).toContain("tt0000001:alt:4");
+});

@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
  * IntersectionObserver instances instead of allocating dozens.
  */
 
-const scrollRoot = (el: Element) => el.closest(".scroll");
+const scrollRoot = (el: Element) => el.closest(".scroll, .dk-scroll, .ph-scroll, .dk-dlg-content, .ps-content");
 
 type EntryCallback = (entry: IntersectionObserverEntry) => void;
 interface PoolEntry {

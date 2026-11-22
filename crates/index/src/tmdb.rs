@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::stream::{self, StreamExt, TryStreamExt};
-use polar_addon::{Meta, MetaDetails, MetaPreview, Person, Video};
+use polar_addon::{CollectionInfo, Meta, MetaDetails, MetaPreview, Person, Video};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{Mutex, Semaphore};
@@ -22,6 +22,7 @@ use crate::{curate, IndexError, Result, PAGE_SIZE};
 
 pub(crate) mod orders;
 mod people;
+mod recs;
 
 const API: &str = "https://api.themoviedb.org/3";
 const IMG: &str = "https://image.tmdb.org/t/p";
@@ -50,6 +51,14 @@ pub struct Tmdb {
     /// One growing list per catalog (type, id, genre), so a page asked for by
     /// `skip` is a slice of the same sequence whatever the earlier pages held.
     runs: TtlCache<String, Arc<Mutex<Run>>>,
+    /// Per TMDB id: details with keywords and credits, for "more like this" (`recs.rs`).
+    details: TtlCache<(char, u64), Arc<recs::Detail>>,
+    /// Per keyword id: how many titles carry it and the most voted on of them.
+    keyword_lists: TtlCache<(char, u64), Arc<recs::KeywordList>>,
+    /// Per person id: what they created, directed or produced.
+    work: TtlCache<(char, u64), Arc<recs::Work>>,
+    /// Per kind and set of genres: the most voted-on titles with all of them.
+    genre_lists: TtlCache<String, Arc<Vec<Item>>>,
 }
 
 type Query = Vec<(String, String)>;
@@ -66,13 +75,14 @@ struct Run {
 }
 
 impl Tmdb {
+    #[cfg(test)]
     pub fn new(key: String, language: Option<String>) -> Self {
+        Self::with_client(key, language, polar_addon::shared_http_client())
+    }
+
+    pub fn with_client(key: String, language: Option<String>, http: reqwest::Client) -> Self {
         Self {
-            http: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .timeout(Duration::from_secs(15))
-                .build()
-                .expect("http client"),
+            http,
             api: API.to_owned(),
             key: key.trim().to_owned(),
             language: language.unwrap_or_else(|| "en-US".into()),
@@ -80,6 +90,10 @@ impl Tmdb {
             lookups: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
             imdb_ids: TtlCache::new(Duration::from_secs(24 * 60 * 60), 20_000),
             runs: TtlCache::new(Duration::from_secs(60 * 60), 256),
+            details: TtlCache::new(Duration::from_secs(24 * 60 * 60), 4_000),
+            keyword_lists: TtlCache::new(Duration::from_secs(24 * 60 * 60), 2_000),
+            work: TtlCache::new(Duration::from_secs(24 * 60 * 60), 500),
+            genre_lists: TtlCache::new(Duration::from_secs(24 * 60 * 60), 200),
         }
     }
 
@@ -186,16 +200,20 @@ impl Tmdb {
         Ok(run.items.iter().skip(skip as usize).take(PAGE_SIZE as usize).cloned().collect())
     }
 
-    /// TMDB's own "if you liked this" list, falling back to plain similarity.
-    pub async fn recommendations(&self, ty: &str, imdb_id: &str) -> Result<Vec<MetaPreview>> {
-        let tmdb_id = self.find(ty, imdb_id).await?;
-        let kind = tmdb_kind(ty);
-        let mut list: Paged = self.get(&format!("/{kind}/{tmdb_id}/recommendations"), &[]).await?;
-        if list.results.len() < 6 {
-            let similar: Paged = self.get(&format!("/{kind}/{tmdb_id}/similar"), &[]).await?;
-            list.results.extend(similar.results);
+    /// Films in a TMDB collection / franchise (`/collection/{id}`), in release order.
+    pub async fn collection(&self, id: u64) -> Result<Vec<MetaPreview>> {
+        #[derive(Deserialize)]
+        struct Collection {
+            #[serde(default)]
+            parts: Vec<Item>,
         }
-        Ok(curate::dedupe(self.previews(ty, list.results).await?))
+        let mut col: Collection = self.get(&format!("/collection/{id}"), &[]).await?;
+        col.parts.sort_by(|a, b| {
+            let da = a.release_date.as_deref().filter(|s| !s.is_empty()).unwrap_or("9999-99-99");
+            let db = b.release_date.as_deref().filter(|s| !s.is_empty()).unwrap_or("9999-99-99");
+            da.cmp(db)
+        });
+        Ok(curate::dedupe(self.previews("movie", col.parts).await?))
     }
 
     async fn find(&self, ty: &str, imdb_id: &str) -> Result<u64> {
@@ -293,6 +311,29 @@ impl Tmdb {
         };
         let mut meta = detail_to_meta(ty, imdb_id, &d, videos, logos);
         meta.preview.certification = pick_certification(ty, &d, &self.region());
+        Ok(meta)
+    }
+
+    /// Lightweight metadata projection (`MetaMask::Display` / `Overview`): skips per-season
+    /// episode fan-out (and for `Display`, skips credits/videos/release_dates) so synced library
+    /// hydration (`fillUntitled`) uses a single TMDB call instead of N+2 calls.
+    pub async fn meta_projection(&self, ty: &str, imdb_id: &str, include_overview: bool) -> Result<Meta> {
+        let tmdb_id = self.find(ty, imdb_id).await?;
+        let kind = tmdb_kind(ty);
+        let d: Value = if include_overview {
+            self.get(
+                &format!("/{kind}/{tmdb_id}"),
+                &[("append_to_response", meta_append(ty)), ("include_image_language", "en,null")],
+            )
+            .await?
+        } else {
+            self.get(&format!("/{kind}/{tmdb_id}"), &[]).await?
+        };
+        let logos = if include_overview { self.logos(kind, tmdb_id, &d).await } else { Vec::new() };
+        let mut meta = detail_to_meta(ty, imdb_id, &d, Vec::new(), logos);
+        if include_overview {
+            meta.preview.certification = pick_certification(ty, &d, &self.region());
+        }
         Ok(meta)
     }
 
@@ -671,6 +712,14 @@ fn detail_to_meta(ty: &str, imdb_id: &str, d: &Value, videos: Vec<Video>, logos:
         episodes: positive(&d["number_of_episodes"]).map(|n| n as u32),
         votes: positive(&d["vote_count"]),
         tmdb_id: d["id"].as_u64(),
+        collection: if is_series {
+            None
+        } else {
+            d["belongs_to_collection"]["id"]
+                .as_u64()
+                .zip(str_of(&d["belongs_to_collection"]["name"]))
+                .map(|(id, name)| CollectionInfo { id, name })
+        },
     };
 
     Meta {
@@ -707,13 +756,15 @@ struct Paged {
     results: Vec<Item>,
     #[serde(default = "one")]
     total_pages: u32,
+    #[serde(default)]
+    total_results: u32,
 }
 
 fn one() -> u32 {
     1
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Item {
     id: u64,
     title: Option<String>,
@@ -724,6 +775,8 @@ struct Item {
     release_date: Option<String>,
     first_air_date: Option<String>,
     vote_average: Option<f64>,
+    vote_count: Option<u64>,
+    original_language: Option<String>,
     /// Lists and searches name genres only by id.
     #[serde(default)]
     genre_ids: Vec<u32>,

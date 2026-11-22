@@ -1,0 +1,2840 @@
+/* The phone app (src/phone): laid out on Netflix's iPhone app's grid and motion (measured off 60 fps screen
+   recordings, 1 CSS px = 1 iOS point), dressed as Polarity: its wordmark and four-point star, the theme's accent
+   for what's yours and what's on, art-coloured light behind the featured cards, softer corners. */
+
+/* The art's colours ease from one featured title to the next (registered, so they can transition). */
+@property --tint {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: #141414;
+}
+
+:root[data-phone-ui] {
+  /* The theme's accent (Settings → Appearance), Polarity's own colour where Netflix puts its red. */
+  --ph-accent: var(--accent, #5e5ce6);
+  --ph-poster-r: 6px;
+  --ph-card-r: 16px;
+  --ph-text-2: var(--text-2);
+  --ph-text-3: var(--text-3);
+  --ph-fg: var(--text);
+  --ph-sheet: color-mix(in srgb, var(--bg) 93%, var(--step, #fff));
+  --ph-fill: rgb(var(--ink) / 0.12);
+  --ph-head-h: 52px;
+  /* The floating bar's foot: 2 pt above the home indicator's zone (36 pt off the screen's bottom on an iPhone). */
+  --ph-bar-bottom: calc(max(var(--safe-bottom), 12px) + 2px);
+  --ph-bar-h: 62px;
+  /* What the app's own screens pad their foot by, so their ends clear the floating bar. */
+  --tabbar-h: calc(var(--ph-bar-h) + var(--ph-bar-bottom) + 12px);
+  --nav-h: calc(56px + var(--safe-top));
+  background: var(--bg);
+}
+/* Drawn on artwork (`scheme-dark` in the markup: the featured card, posters, stills, a title's picture): the phone's
+   own colours as dark mode has them, whatever the scheme. */
+:root[data-phone-ui] .scheme-dark {
+  --ph-text-2: var(--text-2);
+  --ph-text-3: var(--text-3);
+  --ph-fg: var(--text);
+  --ph-fill: rgb(var(--ink) / 0.12);
+}
+
+.ph {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+/* A phone draws no scrollbars: lists show they scroll by moving. */
+:root[data-phone-ui] :is(.ph-main, .sheet, .ph-sources-overlay) *,
+:root[data-phone-ui] :is(.ph-main, .sheet, .ph-sources-overlay) *::before {
+  scrollbar-width: none;
+}
+:root[data-phone-ui] :is(.ph-main, .sheet, .ph-sources-overlay) ::-webkit-scrollbar {
+  display: none;
+}
+.ph-main button {
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.ph-main {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--bg);
+}
+.ph-stage {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  background: var(--bg);
+}
+/* Stepped back under a sheet (the title sheet, Profiles, Notifications): the page gets the corners of a card. */
+.ph-stage {
+  overflow: hidden;
+  transition: border-radius 0.32s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.ph-stage[data-recede],
+.ph-stage[data-step-back] {
+  border-radius: 22px;
+}
+.ph-tab {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+.ph-tab[data-active="true"] {
+  z-index: 1;
+}
+.ph-tab:not([data-active="true"]):not([data-fading]) {
+  visibility: hidden;
+  content-visibility: hidden;
+}
+.ph-tab-page {
+  position: absolute;
+  inset: 0;
+}
+.ph-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-top: calc(var(--safe-top) + var(--ph-head-h));
+  padding-bottom: calc(var(--ph-bar-h) + var(--ph-bar-bottom) + 28px);
+  scrollbar-width: none;
+}
+.ph-scroll::-webkit-scrollbar,
+.ph-strip::-webkit-scrollbar,
+.ps-scroll::-webkit-scrollbar,
+.ps-tabs::-webkit-scrollbar,
+.ph-chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- A tab's bar: name left, Downloads and the bell right; its backing comes with the scroll (`--c`). */
+.ph-head {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--safe-top) + var(--ph-head-h));
+  padding-top: var(--safe-top);
+  pointer-events: none;
+}
+/* Scrolled, the bar is solid: the page's top colour (Netflix's measured #2e2d2f–#313032 over a grey page), the rows
+   cut cleanly at its foot. */
+.ph-head-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--tint, rgb(var(--ink) / 0.07)), color-mix(in srgb, var(--tint, rgb(var(--ink) / 0.07)) 92%, #fff));
+  opacity: var(--c, 0);
+}
+.ph-head-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--ph-head-h);
+  /* Netflix's name sits 14 pt under the status bar (its cap top): 3 pt above the row's middle. */
+  padding: 0 13px 6px 13px;
+  pointer-events: auto;
+}
+.ph-head-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform-origin: 0 50%;
+  transform: scale(calc(1 - 0.08 * var(--c, 0)));
+}
+.ph-brand {
+  flex: none;
+  color: var(--text);
+}
+/* Polarity's wordmark where Netflix puts its N and the page's name. */
+.ph-wordmark {
+  flex: none;
+  height: 41px;
+  width: auto;
+  margin-left: -5px;
+  user-select: none;
+}
+/* The wordmark is drawn white: dark on a light page. */
+:root[data-scheme="light"] .ph-wordmark {
+  filter: invert(1);
+}
+/* What Home is narrowed to (Shows, a genre), set off from the wordmark by a hairline. */
+.ph-head-sub {
+  overflow: hidden;
+  padding-left: 11px;
+  border-left: 1px solid rgb(var(--ink) / 0.28);
+  color: rgb(var(--ink) / 0.78);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-head-name {
+  margin: 0;
+  overflow: hidden;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-head-actions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  /* Settles with the name as the page scrolls under the bar. */
+  transform-origin: 100% 50%;
+  transform: scale(calc(1 - 0.08 * var(--c, 0)));
+}
+.ph-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text);
+}
+.ph-icon-btn:active,
+.ps-round:active,
+.ph-bar-item:active .ph-bar-glyph {
+  opacity: 0.6;
+}
+
+/* --- Home and sections: the page takes the featured art's dominant colour (tint.ts) and fades it into the
+       page's own background down one screen, as Netflix's does (measured: full at the top, 88% at 30% down, 60% at
+       half way, 35% at 70%, gone by 90%). It eases from one title's to the next as the card turns. Applied only to the
+       zero-children leaf layers (.ph-tint, .ph-head-bg) with inherits:false so animating --tint never recalculates
+       descendant styles. */
+:is(.ph-home, .ph-section) :is(.ph-tint, .ph-head-bg) {
+  --tint: var(--tint-dark, var(--bg));
+  transition: --tint 0.9s ease;
+}
+:root[data-scheme="light"] :is(.ph-home, .ph-section) :is(.ph-tint, .ph-head-bg) {
+  --tint: var(--tint-light, var(--bg));
+}
+.ph-tint {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100dvh;
+  background: linear-gradient(
+    to bottom,
+    var(--tint) 0,
+    var(--tint) 12%,
+    color-mix(in srgb, var(--tint) 88%, var(--bg)) 30%,
+    color-mix(in srgb, var(--tint) 60%, var(--bg)) 50%,
+    color-mix(in srgb, var(--tint) 35%, var(--bg)) 70%,
+    color-mix(in srgb, var(--tint) 18%, var(--bg)) 82%,
+    var(--bg) 92%
+  );
+  pointer-events: none;
+}
+.ph-home .ph-scroll {
+  isolation: isolate;
+}
+
+/* Chips: 44 pt glass, 10 pt corners, 8 pt apart, 12 pt in; they fade as they go under the bar. */
+.ph-chips {
+  display: flex;
+  gap: 8px;
+  padding: 2px 12px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  opacity: clamp(0, calc(1 - var(--c, 0) * 1.6), 1);
+}
+.ph-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 15px;
+  border: 1px solid rgb(var(--ink) / 0.13);
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.15);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.16);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+.ph-chip:active {
+  background: rgb(var(--ink) / 0.26);
+}
+.ph-chip[aria-pressed="true"] {
+  border-color: rgb(var(--ink) / 0.6);
+  background: rgb(var(--ink) / 0.24);
+}
+.ph-chip-x {
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* The featured card, inset 24 pt (345 × 498 on a 393 pt screen), its titles turning inside it (Carousel). */
+.ph-carousel {
+  padding: 20px 24px 0;
+}
+.ph-hero {
+  position: relative;
+  aspect-ratio: 345 / 498;
+  overflow: hidden;
+  border-radius: var(--ph-card-r);
+  background: rgb(var(--ink) / 0.07);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.4);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: pan-y;
+}
+/* The pictures: the one coming in eases over the one it replaces, drifting in from the side it was swiped from;
+   under a finger they follow it (`--drag`) and spring back when let go. */
+.ph-hero-window {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  /* Its own stack: the pictures' order inside it never lifts them over the shade and the title. */
+  isolation: isolate;
+}
+.ph-hero-window .ph-hero-art {
+  inset: 0 -6%;
+  width: 112%;
+  max-width: none;
+  translate: var(--drag, 0px) 0;
+  transition: translate 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ph-hero[data-dragging] .ph-hero-art {
+  transition: none;
+}
+.ph-hero-art[data-under] {
+  z-index: 0;
+}
+.ph-hero-art[data-entering] {
+  z-index: 1;
+  opacity: 0;
+}
+.ph-hero-art[data-entering][data-loaded="true"] {
+  animation: ph-art-in 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ph-art-in {
+  from {
+    opacity: 0;
+    scale: 1.06;
+    translate: calc(var(--dir, 1) * 5%) 0;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: var(--drag, 0px) 0;
+  }
+}
+/* The title's logo, genres and buttons come up after its picture. */
+.ph-hero-body {
+  animation: ph-body-in 0.6s 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ph-body-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+.ph-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgb(var(--ink) / 0.22);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.ph-hero.ph-skeleton {
+  box-shadow: none;
+}
+.ph-hero-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--art-x, 50%) 50%;
+}
+.ph-hero-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 42%, rgb(0 0 0 / 0.28) 64%, rgb(0 0 0 / 0.8) 100%);
+}
+.ph-hero-body {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ph-hero-logo {
+  max-width: 84%;
+  max-height: 104px;
+  margin-bottom: 14px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.45));
+}
+.ph-hero-name {
+  margin: 0 0 14px;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.5);
+}
+.ph-hero-tags {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 0 0 14px;
+  overflow: hidden;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.ph-hero-tags b {
+  font-weight: 700;
+}
+/* Polarity's star between the genres, where Netflix has a dot. */
+.ph-hero-tags i {
+  padding: 0 7px;
+  color: var(--text);
+  font-size: 9px;
+  font-style: normal;
+  vertical-align: 1px;
+}
+.ph-hero-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+.ph-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 20px;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform 0.12s, opacity 0.12s;
+}
+.ph-btn:active,
+.ps-btn:active {
+  transform: scale(0.97);
+}
+.ph-btn:disabled,
+.ps-btn:disabled {
+  opacity: 0.55;
+}
+.ph-btn-white {
+  background: var(--text);
+  color: var(--bg) !important;
+}
+.ph-btn-glass {
+  background: rgb(var(--ink) / 0.2);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.18);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: var(--text);
+}
+
+/* --- Rows: a 20 pt name 10 pt over a strip of 110 × 154 posters, 8 pt apart, 10 pt in. */
+.ph-rows {
+  padding-top: 2px;
+}
+.ph-row-slot {
+  min-height: 204px;
+}
+:root[data-engine="chromium"] .ph-row-slot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 204px;
+}
+.ph-row-slot:empty {
+  min-height: 0;
+  content-visibility: visible;
+}
+.ph-row {
+  margin-top: 16px;
+}
+.ph-row-title {
+  margin: 0 0 10px;
+  padding: 0 10px;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: -0.008em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-row-title,
+.ph-row-more {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ph-row-more {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: inherit;
+  text-align: left;
+}
+.ph-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ph-row-count {
+  flex: none;
+  color: rgb(var(--ink) / 0.45);
+  font-size: 17px;
+  font-weight: 600;
+}
+.ph-row-chev {
+  flex: none;
+  margin-left: -1px;
+  color: rgb(var(--ink) / 0.5);
+  translate: 0 1px;
+  transition: translate 0.2s;
+}
+.ph-row-more:active .ph-row-chev {
+  translate: 3px 1px;
+}
+.ph-strip {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding: 0 10px;
+  scrollbar-width: none;
+}
+.ph-poster {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 110px;
+  height: 154px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--ph-poster-r);
+  background: rgb(var(--ink) / 0.07);
+  transition: opacity 0.12s;
+}
+.ph-poster:active {
+  opacity: 0.75;
+}
+/* A hairline inside each poster's edge, as Polarity's cards have: dark art doesn't melt into the black page. */
+.ph-poster::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07);
+  pointer-events: none;
+}
+.ph-poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-poster-name {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  background: linear-gradient(#2b2b2b, #161616);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.ph-skeleton {
+  background: rgb(var(--ink) / 0.08) !important;
+  animation: ph-pulse 1.4s ease-in-out infinite;
+}
+[data-offscreen] .ph-skeleton {
+  animation: none;
+}
+.ph-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgb(128 128 128 / 0.75);
+}
+.ph-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 0 2px 2px 0;
+  background: var(--ph-accent);
+}
+
+/* Continue Watching: the poster, a play ring over it, the time watched along its foot, ⓘ and ⋯ under it. */
+.ph-continue {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 110px;
+  overflow: hidden;
+  border-radius: var(--ph-poster-r);
+  background: rgb(var(--ink) / 0.07);
+}
+.ph-continue-art {
+  border-radius: var(--ph-poster-r) var(--ph-poster-r) 0 0;
+}
+.ph-continue-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.14);
+  color: var(--text);
+  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.55));
+}
+.ph-continue-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 34px;
+  padding: 0 4px;
+}
+.ph-continue-bar button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b3b3b3 !important;
+}
+.ph-continue-info circle:last-of-type,
+.ph-continue-info rect {
+  fill: rgb(var(--ink) / 0.07);
+}
+
+/* --- The floating bar: a glass pill, 62 pt tall, a lens lit in the accent under the current place that slides
+       (springy, as Polarity's segmented controls move). */
+.ph-bar {
+  position: absolute;
+  left: 50%;
+  bottom: var(--ph-bar-bottom);
+  display: flex;
+  width: calc(var(--n) * 80px + 12px);
+  height: var(--ph-bar-h);
+  padding: 5px 6px;
+  border-radius: 31px;
+  /* The page's own colour, frosted: dark glass in dark mode, light glass in light. */
+  background: color-mix(in srgb, var(--bg) 66%, transparent);
+  box-shadow:
+    0 10px 30px rgb(0 0 0 / 0.45),
+    inset 0 0 0 1px rgb(var(--ink) / 0.1),
+    inset 0 1px 0 rgb(var(--ink) / 0.12);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  transform: translateX(-50%);
+}
+:root[data-scheme="light"] .ph-bar {
+  box-shadow:
+    0 8px 28px rgb(0 0 0 / 0.14),
+    inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+.ph-bar-lens {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  width: 80px;
+  height: 52px;
+  border-radius: 26px;
+  background: rgb(var(--ink) / 0.13);
+  box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.1);
+  transform: translateX(calc(var(--at) * 80px));
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s;
+}
+.ph-bar-lens[data-hidden] {
+  opacity: 0;
+}
+.ph-bar-item {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.6) !important;
+  transition: color 0.2s;
+}
+.ph-bar-item[aria-current="page"] {
+  color: var(--text) !important;
+}
+.ph-bar-glyph {
+  display: grid;
+  place-items: center;
+  height: 26px;
+}
+.ph-bar-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ph-bar .avatar.ph-bar-avatar {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  opacity: 0.75;
+}
+.ph-bar-item[aria-current="page"] .ph-bar-avatar {
+  opacity: 1;
+}
+
+/* --- Search. */
+.ph-search .ph-scroll {
+  padding-top: var(--safe-top);
+}
+/* The large title scrolls away under a black status bar, as Netflix's does, never through it. */
+.ph-search::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-top);
+  background: var(--bg);
+}
+.ph-search-head {
+  display: flex;
+  align-items: center;
+  height: var(--ph-head-h);
+  padding: 0 13px 0 16px;
+}
+.ph-search-head h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 31px;
+  font-weight: 800;
+  letter-spacing: -0.022em;
+}
+.ph-search-bar {
+  position: sticky;
+  z-index: 2;
+  top: var(--safe-top);
+  display: flex;
+  align-items: center;
+  padding: 8px 13px;
+  background: var(--bg);
+}
+.ph-search-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 48px;
+  padding: 0 10px 0 14px;
+  border-radius: 10px;
+  background: var(--ph-fill);
+  color: var(--ph-text-2);
+}
+.ph-search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 17px;
+}
+.ph-search-field input::placeholder {
+  color: var(--ph-text-3);
+}
+.ph-search-field input::-webkit-search-cancel-button {
+  display: none;
+}
+.ph-search-clear {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #a3a3a3 !important;
+}
+.ph-search-cancel {
+  max-width: 0;
+  margin-left: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  font-size: 17px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 0.28s cubic-bezier(0.32, 0.72, 0, 1), margin-left 0.28s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s;
+}
+.ph-search-cancel[data-shown] {
+  max-width: 80px;
+  margin-left: 14px;
+  opacity: 1;
+}
+.ph-suggest .ph-row-title {
+  margin: 14px 0 14px;
+  padding: 0 16px;
+}
+.ph-suggest ul {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0 16px;
+  list-style: none;
+}
+.ph-suggest-row {
+  display: flex;
+  align-items: center;
+  min-height: 74px;
+}
+.ph-suggest-open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.ph-suggest-open:active {
+  opacity: 0.7;
+}
+.ph-suggest-still {
+  position: relative;
+  flex: none;
+  width: 132px;
+  height: 74px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.07);
+}
+.ph-suggest-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-suggest-still img.ph-suggest-logo {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 8px;
+  width: 80%;
+  height: 42%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  filter: drop-shadow(0 1px 4px rgb(0 0 0 / 0.6));
+}
+.ph-suggest-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.ph-suggest-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-right: -10px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.ph-search-state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 48vh;
+  padding: 40px 32px;
+  color: var(--ph-text-2);
+  text-align: center;
+}
+.ph-search-state h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 20px;
+}
+.ph-search-state p {
+  margin: 0;
+  font-size: 15px;
+}
+.ph-results {
+  padding-top: 0;
+}
+.ph-results > .ph-row:first-child {
+  margin-top: 10px;
+}
+.ph-spinner {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgb(var(--ink) / 0.1);
+  border-top-color: rgb(var(--ink) / 0.8);
+  border-radius: 50%;
+  animation: ph-spin 0.8s linear infinite;
+}
+
+/* --- My Polarity: a black page, its bar black once scrolled. */
+.ph-my .ph-head-bg {
+  --tint: var(--bg);
+}
+.ph-my-profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.ph-my-profile .avatar.ph-my-avatar {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+}
+/* The accent's light at the top of the page: this one is yours. */
+.ph-my .ph-scroll::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 420px;
+  background: none;
+  pointer-events: none;
+}
+.ph-my .ph-scroll {
+  isolation: isolate;
+}
+/* Something downloading: one card with its progress, into Downloads. */
+.ph-my-dl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 24px);
+  margin: 8px 12px 4px;
+  padding: 10px 12px 10px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: rgb(var(--ink) / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07);
+  text-align: left;
+}
+.ph-my-dl:active {
+  background: rgb(var(--ink) / 0.1);
+}
+.ph-my-dl > svg {
+  flex: none;
+  color: rgb(var(--ink) / 0.5);
+}
+.ph-my-dl-art {
+  flex: none;
+  width: 40px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgb(var(--ink) / 0.08);
+}
+.ph-my-dl-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-my-dl-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ph-my-dl-text strong {
+  overflow: hidden;
+  font-size: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-my-dl-text small {
+  color: var(--ph-text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ph-my-dl-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(var(--ink) / 0.12);
+}
+.ph-my-dl-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text);
+  transition: width 0.4s ease;
+}
+/* Nothing yet: the star in the accent's light, a line, and a way to Home. */
+.ph-my-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 72px 36px 0;
+  text-align: center;
+}
+.ph-my-empty h2 {
+  margin: 14px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+.ph-my-empty p {
+  max-width: 290px;
+  margin: 0 0 14px;
+  color: var(--ph-text-2);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.ph-my-art {
+  color: var(--text);
+}
+/* Playlists: a poster-sized mosaic of each one's titles, its name and size under it. */
+.ph-list-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 110px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.ph-list-card:active .ph-list-mosaic {
+  opacity: 0.75;
+}
+.ph-list-mosaic {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: 110px;
+  height: 154px;
+  margin-bottom: 5px;
+  overflow: hidden;
+  border-radius: var(--ph-poster-r);
+  background: #1c1c1f;
+  place-items: center;
+  color: rgb(var(--ink) / 0.4);
+}
+.ph-list-mosaic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-list-mosaic[data-n="1"] {
+  grid-template-columns: 1fr;
+}
+.ph-list-mosaic[data-n="1"] img,
+.ph-list-mosaic[data-n="0"] > svg {
+  grid-column: 1 / -1;
+}
+.ph-list-mosaic[data-n="2"] img {
+  grid-row: 1 / span 2;
+}
+.ph-list-mosaic[data-n="3"] img:first-child {
+  grid-row: 1 / span 2;
+}
+.ph-list-mosaic[data-n="0"] {
+  grid-template-columns: 1fr;
+}
+.ph-list-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-list-count {
+  color: var(--ph-text-3);
+  font-size: 12px;
+}
+.ph-list-new .ph-list-mosaic {
+  grid-template-columns: 1fr;
+  background: rgb(var(--ink) / 0.04);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.1);
+}
+.ph-list-plus {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.14);
+  color: var(--text);
+}
+
+/* --- A section (PhoneSection.tsx): Back in a round button and the name centred over the page, as Netflix's
+       section pages are; the list and genre as centred pills (white once narrowed); a wide card; the titles. */
+.ph-section {
+  position: absolute;
+  inset: 0;
+}
+.ph-sect-head {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(var(--safe-top) + var(--ph-head-h));
+  padding: var(--safe-top) 12px 0;
+}
+.ph-sect-head > :not(.ph-head-bg) {
+  position: relative;
+}
+.ph-sect-head h1 {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-round,
+.ph-round-spacer {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+.ph-round {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.ph-round:active {
+  opacity: 0.6;
+}
+.ph-sect-pills {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 16px 0;
+}
+.ph-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgb(var(--ink) / 0.13);
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.13);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ph-pill[data-set] {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg) !important;
+}
+/* The titles under the card: the card's own gap from it (the sheet's `.ps-grid` rules come later, hence the pair). */
+.ps-grid.ph-sect-grid {
+  padding-top: 22px;
+  transition: opacity 0.2s;
+}
+
+/* A menu taller than the room around its finger (a title's long menu near the top or bottom) scrolls inside the
+   screen instead of running off it. */
+:root[data-phone-ui] .menu {
+  max-height: calc(var(--available-height, 80vh) - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ph-sect-grid[data-stale] {
+  opacity: 0.5;
+}
+.ph-sect-note {
+  margin: 24px 16px;
+  color: var(--ph-text-2);
+  text-align: center;
+}
+
+/* The wide card (a section's): across the screen at 16:10, its words at the left over a shade from that side. */
+.ph-carousel[data-wide] {
+  padding: 18px 12px 0;
+}
+.ph-carousel[data-wide] .ph-hero {
+  aspect-ratio: 16 / 10;
+  border-radius: 14px;
+}
+.ph-carousel[data-wide] .ph-hero-shade {
+  background:
+    linear-gradient(to right, rgb(0 0 0 / 0.78) 0, rgb(0 0 0 / 0.45) 50%, transparent 85%),
+    linear-gradient(to top, rgb(0 0 0 / 0.5), transparent 55%);
+}
+.ph-carousel[data-wide] .ph-hero-body {
+  right: 34%;
+  left: 16px;
+  bottom: 14px;
+  align-items: flex-start;
+}
+.ph-carousel[data-wide] .ph-hero-logo {
+  max-width: 100%;
+  max-height: 54px;
+  margin-bottom: 8px;
+  object-position: left bottom;
+}
+.ph-carousel[data-wide] .ph-hero-name {
+  margin-bottom: 6px;
+  font-size: 22px;
+  text-align: left;
+}
+.ph-carousel[data-wide] .ph-hero-tags {
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.ph-carousel[data-wide] .ph-hero-tags i {
+  padding: 0 5px;
+}
+.ph-carousel[data-wide] .ph-hero-actions {
+  display: flex;
+  width: auto;
+}
+.ph-carousel[data-wide] .ph-btn {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.ph-carousel[data-wide] .ph-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.ph-hero-kicker {
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.16);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.ph-hero-desc {
+  display: -webkit-box;
+  margin: 0 0 10px;
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.82);
+  font-size: 12.5px;
+  line-height: 16px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* --- Pages pushed over the tabs, and a section opened as a tab: Back and the name over the app's own screen. */
+.ph-pushed {
+  background: var(--bg);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 0.5);
+}
+.ph-other > .page {
+  position: absolute;
+  inset: 0;
+}
+.ph-pagebar {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--nav-h);
+  padding: var(--safe-top) 16px 0 4px;
+  background: rgb(0 0 0 / 0.74);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+.ph-pagebar h1 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ph-pushed .ph-pagebar {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: background-color 0.2s;
+}
+.ph-pushed .ph-pagebar h1 {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.ph-pushed[data-scrolled] .ph-pagebar {
+  background: rgb(0 0 0 / 0.74);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+.ph-pushed[data-scrolled] .ph-pagebar h1 {
+  opacity: 1;
+}
+.ph-other .ph-pagebar {
+  padding-left: 16px;
+}
+.ph-pagebar-back {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* --- The title sheet (TitleSheet.tsx): full width under the status bar, 12 pt top corners, black. */
+.ps-layer {
+  position: absolute;
+  inset: 0;
+}
+.ps-scrim {
+  position: absolute;
+  inset: 0;
+  /* A dim is black in both schemes, as a phone's are. */
+  background: #000;
+  /* TitleSheet.tsx DIM: the page stays seen, stepped back, around the sheet. */
+  opacity: 0.8;
+}
+.ps-sheet {
+  position: absolute;
+  top: var(--safe-top);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  border-radius: 12px 12px 0 0;
+  background: var(--bg);
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.ps-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #1b1b1b;
+  opacity: 0;
+  pointer-events: none;
+}
+.ps-content {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transform-origin: 0 0;
+}
+.ps-ghost {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.ps-ghost img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ps-page {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+.ps-page:not([data-top]) {
+  visibility: hidden;
+}
+.ps-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ps-media {
+  position: relative;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #111;
+}
+.ps-media-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ps-media-buttons {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  left: 10px;
+  right: 17px;
+  display: flex;
+  gap: 13px;
+}
+.ps-anime .ps-media-buttons {
+  top: calc(10px + var(--safe-top) * 0);
+}
+.ps-flex {
+  flex: 1;
+}
+.ps-round {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(32 36 40 / 0.66);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+.ps-mute {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgb(var(--ink) / 0.4);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+}
+.ps-scroll {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: calc(var(--safe-bottom) + 40px);
+  background: var(--bg);
+  scrollbar-width: none;
+}
+.ps-info {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px 0;
+}
+.ps-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+}
+.ps-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 9px;
+  margin: 0 0 12px;
+  color: rgb(var(--ink) / 0.86);
+  font-size: 16px;
+}
+.ps-facts .age-rating,
+.ps-fact-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid rgb(var(--ink) / 0.55);
+  border-radius: 4px;
+  background: none;
+  color: rgb(var(--ink) / 0.9);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ps-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 42px;
+  margin-bottom: 8px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 21px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  transition: transform 0.12s, opacity 0.12s;
+}
+.ps-btn-white {
+  background: var(--text);
+  color: var(--bg) !important;
+}
+.ps-btn-grey,
+.ps-info > .btn,
+.ps-info > button[data-download] {
+  background: var(--ph-fill);
+  color: var(--text);
+}
+.ps-btn-grey .btn-glyph,
+.ps-btn-grey .btn-glyph-static {
+  display: grid;
+}
+.ps-resume {
+  margin-top: 6px;
+}
+.ps-resume-title {
+  margin: 6px 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.ps-up-next {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+.ps-resume-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ph-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ps-resume-bar .ps-progress {
+  position: relative;
+  flex: 1;
+  height: 3px;
+}
+.ps-synopsis {
+  display: -webkit-box;
+  margin: 12px 0 6px;
+  overflow: hidden;
+  font-size: 15.5px;
+  line-height: 19px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.ps-synopsis[data-open] {
+  -webkit-line-clamp: unset;
+}
+/* Who's in it: two quiet lines under the synopsis; a name with a page is a link, the same colour, underlined on press. */
+.ps-credits p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ph-text-3);
+  font-size: 13.5px;
+  line-height: 20px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+.ps-credits p[data-open] {
+  -webkit-line-clamp: unset;
+}
+.ps-credits button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit !important;
+  font: inherit;
+}
+.ps-credit-name:active {
+  text-decoration: underline;
+}
+.ps-credits .ps-credit-more {
+  padding-left: 4px;
+  color: var(--ph-fg) !important;
+  font-weight: 600;
+}
+
+/* What else to do with it: labelled glyphs in columns, a quarter of the width each. */
+.ps-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 22px 6px 0;
+}
+.ps-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-height: 74px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+}
+.ps-action:active .ps-action-glyph {
+  opacity: 0.55;
+  transform: scale(0.92);
+}
+.ps-action:disabled {
+  opacity: 0.4;
+}
+.ps-action-glyph {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.ps-action-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* The tabs: their names, the one you're on in full white with a thin line under it that grows in from its middle. */
+.ps-tabs {
+  display: flex;
+  gap: 24px;
+  margin-top: 16px;
+  padding: 0 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgb(var(--ink) / 0.1);
+}
+.ps-tabs button {
+  position: relative;
+  flex: none;
+  padding: 12px 0 13px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.5) !important;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+.ps-tabs button[aria-selected="true"] {
+  color: var(--ph-fg) !important;
+}
+.ps-tabs button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ph-fg);
+  scale: 0 1;
+  transition: scale 0.28s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.ps-tabs button[aria-selected="true"]::after {
+  scale: 1 1;
+}
+.ps-tab-body {
+  min-height: 60vh;
+  padding-top: 16px;
+}
+
+
+/* A show's seasons: pills side by side (a scrolling row when there are many), and the episode layout switch. */
+.ps-season-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 12px 14px;
+}
+.ps-seasons {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: -4px 0;
+  padding: 4px 18px 4px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* More seasons past the edge fade out there rather than being cut. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+}
+.ps-seasons::-webkit-scrollbar {
+  display: none;
+}
+.ps-seasons button {
+  flex: none;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.07);
+  color: rgb(var(--ink) / 0.72) !important;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.2s, color 0.2s;
+}
+.ps-seasons button[aria-selected="true"] {
+  background: var(--text);
+  color: var(--bg) !important;
+}
+.ps-season-name {
+  overflow: hidden;
+  color: rgb(var(--ink) / 0.86);
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ps-season-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.08);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-layout {
+  flex: none;
+  display: flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgb(var(--ink) / 0.06);
+}
+.ps-layout button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: rgb(var(--ink) / 0.45) !important;
+}
+.ps-layout button[aria-checked="true"] {
+  background: rgb(var(--ink) / 0.14);
+  color: var(--text) !important;
+}
+
+/* Episodes side by side: a wide still each (where you are along its foot), its number and name, its length and
+   the start of its story; the one you're up to marked. */
+.ps-ep-strip {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 0 12px 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0 12px;
+  list-style: none;
+  scrollbar-width: none;
+}
+.ps-ep-strip::-webkit-scrollbar {
+  display: none;
+}
+.ps-ep-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 248px;
+  scroll-snap-align: start;
+}
+.ps-ep-still {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 10px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: #1c1c1f;
+}
+.ps-ep-still::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07);
+}
+.ps-ep-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ps-ep-still:active {
+  opacity: 0.8;
+}
+.ps-ep-play {
+  position: absolute;
+  left: 10px;
+  bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding-left: 2px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.45);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.25);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.ps-ep-next,
+.ps-ep-soon {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: #fff;
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ps-ep-soon {
+  background: rgb(0 0 0 / 0.6);
+}
+.ps-ep-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.ps-ep-head strong {
+  flex: 1;
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 19px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.ps-ep-num {
+  margin-right: 6px;
+  color: rgb(var(--ink) / 0.5);
+  font-variant-numeric: tabular-nums;
+}
+.ps-ep-head .ps-episode-dl {
+  width: 34px;
+  height: 34px;
+  margin: -8px -6px 0 0;
+}
+.ps-ep-meta {
+  margin-top: 2px;
+  color: var(--ph-text-3);
+  font-size: 12.5px;
+}
+.ps-ep-text {
+  display: -webkit-box;
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: var(--ph-text-2);
+  font-size: 13px;
+  line-height: 17px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.ps-episode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+.ps-episode-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ps-episode-still {
+  position: relative;
+  flex: none;
+  width: 130px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.07);
+}
+.ps-episode-still img,
+.ps-episode-blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ps-episode-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.2);
+  filter: drop-shadow(0 1px 5px rgb(0 0 0 / 0.5));
+}
+.ps-episode-name {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ps-episode-name strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.ps-episode-name span {
+  color: var(--ph-text-2);
+  font-size: 13px;
+}
+.ps-episode-dl,
+.ps-episode-head > .btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text);
+}
+.ps-episode-text {
+  display: -webkit-box;
+  margin: 10px 0 0;
+  overflow: hidden;
+  color: var(--ph-text-2);
+  font-size: 13.5px;
+  line-height: 18px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.ps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 2px 12px 24px;
+}
+.ps-grid .ph-poster {
+  width: auto;
+  height: auto;
+  aspect-ratio: 110 / 154;
+}
+.ps-trailers {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 0 12px;
+}
+.ps-trailer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.ps-trailer-still {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.07);
+}
+.ps-trailer-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ps-trailer-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.18);
+}
+.ps-trailer-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.ps-empty {
+  margin: 0;
+  padding: 24px 12px;
+  color: var(--ph-text-2);
+  font-size: 15px;
+}
+.ps-sk {
+  display: block;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.08);
+  animation: ph-pulse 1.4s ease-in-out infinite;
+}
+.ps-sk-title {
+  width: 62%;
+  height: 26px;
+  margin-bottom: 10px;
+}
+.ps-sk-line {
+  width: 46%;
+  height: 16px;
+  margin-bottom: 14px;
+}
+.ps-sk-btn {
+  height: 42px;
+  margin-bottom: 8px;
+  border-radius: 21px;
+}
+.ps-sk-text {
+  height: 14px;
+  margin-top: 9px;
+}
+.ps-sk-short {
+  width: 70%;
+}
+.ps-anime {
+  overflow: hidden;
+}
+.ps-anime > .ps-media-buttons {
+  position: absolute;
+}
+
+/* --- Netflix's full-screen chooser (Categories, seasons). */
+.ph-list-overlay {
+  position: fixed;
+  z-index: 45;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgb(0 0 0 / 0.74);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  animation: ph-fade-in 0.18s ease-out both;
+}
+.ph-list-overlay[data-leaving] {
+  animation: ph-fade-out 0.18s ease-in both;
+}
+.ph-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(var(--safe-top) + 64px) 0 150px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 78%, transparent);
+  mask-image: linear-gradient(transparent, #000 10%, #000 78%, transparent);
+}
+.ph-list-overlay ul {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ph-list-overlay li button {
+  padding: 12px 24px;
+  border: 0;
+  background: none;
+  color: rgb(var(--ink) / 0.62) !important;
+  font-size: 18px;
+  font-weight: 500;
+}
+.ph-list-overlay li button[aria-current="true"] {
+  color: var(--text) !important;
+  font-size: 22px;
+  font-weight: 700;
+}
+.ph-list-close {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 34px);
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg) !important;
+  transform: translateX(-50%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out);
+}
+.ph-list-close:active {
+  transform: translateX(-50%) scale(0.93);
+  opacity: 0.88;
+}
+
+
+/* --- The bottom sheets (Profiles with Settings inside, Notifications, Sources, Download): near-black glass lit
+       by the accent at its top, a grabber, a centred title between round Back and Close. The page behind steps
+       back (Sheet.tsx). */
+:root[data-phone-ui] .sheet-scrim[data-edge="bottom"] {
+  background: rgb(0 0 0 / 0.55);
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] {
+  border-radius: 26px 26px 0 0;
+  background: var(--ph-sheet);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ink) / 0.1),
+    0 -12px 40px rgb(0 0 0 / 0.5);
+  color: var(--text);
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"]::after {
+  background: var(--ph-sheet);
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"][data-full] {
+  height: calc(100dvh - var(--safe-top) - 8px);
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-header {
+  justify-content: center;
+  min-height: 66px;
+  /* Title and its subtitle (the episode) centred between the round buttons, clear of what's under them. */
+  padding: 20px 64px 16px;
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-header > div {
+  text-align: center;
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-header p {
+  margin-top: 2px;
+  color: var(--ph-text-2);
+  font-size: 13px;
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-grabber {
+  display: block;
+  width: 38px;
+  height: 5px;
+  top: 7px;
+  background: rgb(var(--ink) / 0.22);
+}
+.sheet-close,
+:root[data-phone-ui] .profile-sheet-back {
+  position: absolute;
+  top: 14px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+  color: var(--text);
+}
+.sheet-close {
+  right: 14px;
+}
+.sheet-close svg {
+  width: 18px;
+  height: 18px;
+}
+.sheet-close:active,
+:root[data-phone-ui] .profile-sheet-back:active {
+  background: rgb(var(--ink) / 0.18);
+}
+/* A view inside the profile sheet (Settings, a profile): Back as the round button on the left, the name centred. */
+:root[data-phone-ui] .profile-sheet-title {
+  display: block;
+  margin: 0;
+}
+:root[data-phone-ui] .profile-sheet-back {
+  left: 14px;
+}
+
+/* The profile list (ProfileMenu.tsx). Who's watching: the picture in the accent's light, the name; the others side
+   by side; then one grouped card of rows, each with its glyph on a coloured tile. */
+.nfp {
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px calc(var(--safe-bottom) + 28px);
+  color: var(--text);
+}
+.nfp button {
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+  color: inherit;
+}
+.nfp-me {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 4px;
+  transition: opacity 0.22s;
+}
+.nfp-me .nfp-face {
+  border-radius: 26px;
+  box-shadow:
+    0 0 0 4px rgb(var(--ink) / 0.06),
+    0 14px 40px rgb(0 0 0 / 0.35);
+}
+.nfp-me .avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 26px;
+}
+.nfp-me strong {
+  margin-top: 6px;
+  font-size: 25px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+.nfp-status {
+  margin-top: -6px;
+  color: var(--ph-text-2);
+  font-size: 14px;
+}
+/* Editing who you are: a small round pencil on the picture's corner. */
+.nfp-me-edit {
+  position: absolute;
+  top: 82px;
+  left: calc(50% + 30px);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 3px var(--ph-sheet);
+  color: var(--bg) !important;
+}
+.nfp-me-edit svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2;
+}
+.nfp-face {
+  position: relative;
+  display: block;
+}
+.nfp-lock {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #26262b;
+  box-shadow: 0 0 0 2px var(--ph-sheet);
+}
+.nfp-others {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 26px;
+}
+.nfp-other {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 60px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.nfp-other:active .avatar {
+  opacity: 0.7;
+}
+.nfp-other .avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+}
+.nfp-other-name {
+  max-width: 80px;
+  overflow: hidden;
+  color: rgb(var(--ink) / 0.8);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nfp-pencil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 17px;
+  background: rgb(0 0 0 / 0.55);
+  opacity: 0;
+  transition: opacity 0.22s;
+}
+.nfp[data-managing] .nfp-pencil {
+  opacity: 1;
+}
+.nfp[data-managing] .nfp-me,
+.nfp[data-managing] .nfp-rows,
+.nfp[data-managing] .nfp-version {
+  opacity: 0.35;
+}
+.nfp-manage {
+  align-self: center;
+  height: 36px;
+  margin-top: 22px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 18px;
+  background: rgb(var(--ink) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
+  font-size: 14px !important;
+  font-weight: 600;
+  transition: background-color 0.22s, color 0.22s;
+}
+.nfp[data-managing] .nfp-manage {
+  background: var(--text);
+  color: var(--bg) !important;
+}
+.nfp-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 28px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgb(var(--ink) / 0.055);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.06);
+  transition: opacity 0.22s;
+}
+.nfp-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  font-size: 16px !important;
+  font-weight: 550;
+  text-align: left;
+}
+.nfp-row + .nfp-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 58px;
+  right: 0;
+  height: 1px;
+  background: rgb(var(--ink) / 0.07);
+}
+.nfp-row > span:nth-child(2) {
+  flex: 1;
+}
+.nfp-row > svg {
+  color: rgb(var(--ink) / 0.32);
+}
+.nfp-row:active {
+  background: rgb(var(--ink) / 0.06);
+}
+/* Each row's glyph, plain, in the text's colour. */
+.nfp-row-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  color: inherit;
+}
+.nfp-row-glyph svg {
+  width: 23px;
+  height: 23px;
+}
+.nfp-row[data-id="sign-out"] {
+  color: #ff6961;
+}
+
+.nfp-version {
+  margin: 18px 0 0;
+  color: rgb(var(--ink) / 0.3);
+  font-size: 12px;
+  text-align: center;
+  transition: opacity 0.22s;
+}
+
+/* --- Settings inside the profile sheet (SettingsOverlay.tsx, embedded): its own phone layout (settings-overlay.css),
+       fitted under this sheet's header so the sheet is the one thing that scrolls, its cards on the sheet's glass. */
+:root[data-phone-ui] .t3s[data-embedded] {
+  --t3-card: rgb(var(--ink) / 0.06);
+  --t3-border: rgb(var(--ink) / 0.07);
+  /* The sheet's height less its header (66 pt) and grabber. */
+  height: calc(100dvh - var(--safe-top) - 8px - 74px);
+}
+/* Going into a section, and back: quicker, and quick off the mark, as a phone's own navigation is. */
+:root[data-phone-ui] .t3s,
+:root[data-phone-ui] .profile-sheet[data-slide] {
+  --view-shift: 40px;
+  --view-dur: 280ms;
+  --ease-reveal: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --view-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+
+/* --- Sources (StreamList.tsx in its sheet): the qualities as pills, the best match lit in the accent, the rest as
+       one quiet list with hairlines. */
+:root[data-phone-ui] .sheet .srcf {
+  padding: 0 16px;
+}
+:root[data-phone-ui] .sheet .stream-list {
+  padding: 0 12px calc(var(--safe-bottom) + 20px);
+}
+:root[data-phone-ui] .sheet .stream-group-label {
+  margin: 18px 6px 8px;
+  color: rgb(var(--ink) / 0.5);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* The qualities as separate pills (the season pills' look), the one picked white. */
+:root[data-phone-ui] .sheet .srcf-bar {
+  gap: 10px;
+}
+:root[data-phone-ui] .sheet .srcf .segmented {
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+:root[data-phone-ui] .sheet .srcf .segmented-active {
+  display: none;
+}
+:root[data-phone-ui] .sheet .srcf .segmented-item {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.07);
+  color: rgb(var(--ink) / 0.72);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s, color 0.2s;
+}
+:root[data-phone-ui] .sheet .srcf .segmented-item[aria-checked="true"] {
+  background: var(--text);
+  color: var(--bg);
+}
+:root[data-phone-ui] .sheet .srcf-filters {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.07);
+  box-shadow: none;
+  outline: none;
+}
+:root[data-phone-ui] .sheet .stream-row {
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+}
+:root[data-phone-ui] .sheet .stream-row:active {
+  background: rgb(var(--ink) / 0.06);
+}
+:root[data-phone-ui] .sheet .stream-row[data-featured="true"] {
+  background: rgb(var(--ink) / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.12);
+}
+:root[data-phone-ui] .sheet .stream-title {
+  font-size: 16px;
+  font-weight: 650;
+}
+:root[data-phone-ui] .sheet .stream-sub {
+  color: var(--ph-text-3);
+  font-size: 12.5px;
+}
+:root[data-phone-ui] .sheet .stream-lead {
+  color: var(--text);
+}
+:root[data-phone-ui] .sheet .stream-size {
+  color: rgb(var(--ink) / 0.7);
+  font-size: 13px;
+  font-weight: 600;
+}
+:root[data-phone-ui] .sheet .stream-match-pill {
+  border: 0;
+  background: rgb(var(--ink) / 0.08);
+  color: rgb(var(--ink) / 0.75);
+}
+
+
+/* Notifications. */
+.ph-notes {
+  margin: 0;
+  padding: 4px 0 calc(var(--safe-bottom) + 24px);
+  list-style: none;
+}
+.ph-notes button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.ph-notes button:active {
+  background: rgb(var(--ink) / 0.06);
+}
+.ph-notes-still {
+  flex: none;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #2a2a2a;
+}
+.ph-notes-still img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-notes-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+}
+.ph-notes-text strong {
+  font-size: 15px;
+}
+.ph-notes-text small {
+  color: var(--ph-text-3);
+  font-size: 12px;
+}
+.ph-notes-empty {
+  display: grid;
+  justify-items: center;
+  padding: 48px 32px;
+  color: var(--ph-text-2);
+  text-align: center;
+}
+
+@keyframes ph-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes ph-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes ph-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ph-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ph-bar-lens,
+  .ph-search-cancel {
+    transition: none;
+  }
+}
+
+/* The app's own rows (Continue Watching) on the phone's pages: lined up with the phone's rows. */
+.ph-rows > .row,
+.ph-rows .continue-edit-row,
+.ph-rows .row {
+  --gutter: 10px;
+  --content-start: 10px;
+}
+
+/* A show's season dropdown (SeasonPicker): the row's size, not the big screens' large one. */
+.ps-season-dropdown .select-trigger[data-size="large"] {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px 0 14px;
+  border-radius: 18px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+/* A title sheet on its way out: a pane over everything that takes the touches (TitleSheet.tsx). */
+.ps-catch {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  touch-action: none;
+}
+.ps-layer[data-leaving] .ps-scrim {
+  pointer-events: none;
+}
+
+/* Continue Watching on a phone: a tap on a card opens its title (a long press, its menu); no play button on it. */
+.ph .card-play {
+  display: none;
+}
+/* Its heading a little further from the card above, and Edit as its pencil alone. */
+.ph-rows .cw-edit {
+  margin-top: 30px;
+}
+.cw-edit-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-right: -8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+}
+.cw-edit-icon:active {
+  opacity: 0.6;
+}
+
+/* Sources and Download: the qualities on one line, under them the add-on and Filters side by side, the pair as
+   wide as the qualities; nothing outlined. */
+:root[data-phone-ui] .sheet .srcf-bar {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 8px;
+  max-width: 100%;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .segmented,
+:root[data-phone-ui] .sheet .srcf-bar > span:first-child {
+  grid-column: 1 / -1;
+}
+:root[data-phone-ui] .sheet .srcf-addon {
+  grid-column: 1;
+  min-width: 0;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .srcf-filters {
+  grid-column: 2;
+}
+:root[data-phone-ui] .sheet .srcf-addon .select-trigger {
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 17px;
+  background: rgb(var(--ink) / 0.07);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .segmented,
+:root[data-phone-ui] .sheet .srcf-bar > span:first-child {
+  grid-row: 1;
+}
+:root[data-phone-ui] .sheet .srcf-addon,
+:root[data-phone-ui] .sheet .srcf-bar > .srcf-filters {
+  grid-row: 2;
+}
+/* The add-on's name never widens the pair past the qualities. */
+:root[data-phone-ui] .sheet .srcf-addon {
+  contain: inline-size;
+}
+/* The header grows with its subtitle, and leaves a clear gap before what's under it. */
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-header {
+  height: auto;
+  padding-bottom: 18px;
+}
+:root[data-phone-ui] .sheet[data-edge="bottom"] .sheet-header {
+  flex: none;
+}
+:root[data-phone-ui] .sheet .srcf-bar {
+  align-self: flex-start;
+}
+:root[data-phone-ui] .sheet .srcf-bar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: max-content;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .segmented {
+  width: max-content;
+}
+:root[data-phone-ui] .sheet .srcf .segmented-item {
+  flex: none;
+}
+
+/* Sources and Download, final layout: the qualities across the whole list, each chip an equal share; under them the
+   add-on and Filters (named) as two equal halves. */
+:root[data-phone-ui] .sheet .srcf-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: auto;
+  align-self: stretch;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .segmented {
+  display: flex;
+  width: auto;
+}
+:root[data-phone-ui] .sheet .srcf .segmented-item {
+  flex: 1 1 0;
+  padding: 0 6px;
+}
+:root[data-phone-ui] .sheet .srcf-addon {
+  contain: none;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .srcf-filters {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  height: 34px;
+  border-radius: 17px;
+  font-size: 14px;
+  font-weight: 600;
+}
+:root[data-phone-ui] .sheet .srcf-bar > .srcf-filters .srcf-filters-label {
+  display: inline;
+}
+/* The scores sit apart from Play under them. */
+.ps-scores {
+  margin-bottom: 14px;
+}
+.profile-sheet-loading {
+  display: grid;
+  place-items: center;
+  height: 50vh;
+}
+:root[data-phone-ui] .sheet .srcf-addon {
+  max-width: none;
+  min-width: 0;
+  order: 0;
+}
+
+/* The Anime tab: the app's Anime page, its top under the tab bar's height; the bar black once scrolled. */
+.ph-anime .ph-head-bg {
+  --tint: var(--bg);
+}
+.ph-anime > .page {
+  position: absolute;
+  inset: 0;
+  --nav-h: calc(var(--safe-top) + var(--ph-head-h));
+}
+:root[data-phone-ui] .sheet .srcf-bar > .segmented {
+  justify-self: stretch;
+  width: 100%;
+  max-width: none;
+}
+:root[data-phone-ui] .sheet .srcf {
+  padding: 0 12px;
+}
+:root[data-phone-ui] .sheet .srcf {
+  padding: 0;
+}

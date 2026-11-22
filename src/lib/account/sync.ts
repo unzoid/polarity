@@ -121,7 +121,7 @@ async function syncPlaylists(space: string) {
   if (full) throw full;
 }
 
-const displayDeps: DisplayDeps = { untitled: api.untitled, fill: api.fillDisplay, meta: api.meta };
+const displayDeps: DisplayDeps = { untitled: api.untitled, fill: api.fillDisplay, meta: api.metaDisplay };
 /** Titles whose lookup failed this session: not asked for again every round. */
 const lookupFailed = new Set<string>();
 let filling = false;

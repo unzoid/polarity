@@ -1,28 +1,35 @@
+import "../styles/screens.css";
 import { useQuery } from "@tanstack/react-query";
-import { memo, useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cardArtUrl } from "../lib/ui";
 import { AnimeCard } from "../components/anime/AnimeCard";
+import { Img } from "../components/Img";
 import { PosterCard } from "../components/PosterCard";
+import { Segmented } from "../components/Segmented";
 import { Shelf } from "../components/title/Shelf";
 import { type AnimeCard as Card, retryTitle, useAnimeAliases, useAnimeGenreArt, useAnimeResults, withoutAnime } from "../lib/anime";
 import { api } from "../lib/api";
 import {
   addRecentSearch,
+  applySmartFilters,
   catalogKey,
   catalogTitle,
   clearRecentSearches,
   FOCUS_SEARCH_EVENT,
   genreOf,
+  parseSmartQuery,
   SEARCH_ANIME,
   SEARCH_GENRES,
   searchMinLength,
   searchRows,
+  trendingPicks,
   type SearchRow,
   setSearchText,
   useAddonSearches,
   useRecentSearches,
   useListable,
   useSearchText,
+  useTrending,
   catalogBound,
   keepWithinLimit,
   useViewingLimit,
@@ -31,10 +38,11 @@ import { usePrefs } from "../lib/settings";
 import { useRouter, useNavigation } from "../lib/router";
 import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
-import type { ContentType, MetaPreview } from "../lib/types";
+import type { ContentType, MetaPreview, PersonHit } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { SearchField } from "../components/ui/SearchField";
 import { Search as SearchIcon } from "../components/icons";
+import { initialsOf } from "./Person";
 
 /**
  * Results for whatever is typed, one row per kind so movies, series and anime all show without scrolling. A
@@ -115,7 +123,7 @@ function SearchHeader() {
 }
 
 /** Nothing typed on the phone's page: your last searches, then genres as tiles, one tap from their titles. */
-function SearchStart() {
+export function SearchStart() {
   const { animeEnabled } = usePrefs();
   const recent = useRecentSearches();
   const { data: animeArt, isPending: animeArtPending } = useAnimeGenreArt(SEARCH_ANIME, animeEnabled);
@@ -233,6 +241,8 @@ function useGenreRow(type: ContentType, genre: string, enabled = true) {
   });
 }
 
+type SearchFilter = "all" | "movies" | "series" | "people" | "anime";
+
 function Results({ text }: { text: string }) {
   const [query, setQuery] = useState(text);
   const deferred = useDeferredValue(query);
@@ -247,31 +257,94 @@ function Results({ text }: { text: string }) {
 }
 
 const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { query: string; typing: boolean }) {
+  const [filter, setFilter] = useState<SearchFilter>("all");
+  const [dismissedChips, setDismissedChips] = useState<Set<string>>(() => new Set());
   const { animeEnabled } = usePrefs();
   const { navigate } = useNavigation();
+  useEffect(() => {
+    setFilter("all");
+    setDismissedChips(new Set());
+  }, [deferred]);
 
-  const { data, isPlaceholderData } = useSearch(deferred);
+  const parsed = useMemo(() => parseSmartQuery(deferred), [deferred]);
+  const activeChips = useMemo(
+    () => parsed.chips.filter((c) => !dismissedChips.has(c.id)),
+    [parsed.chips, dismissedChips],
+  );
+  // When smart chips are active and literal text remains, search the cleaned text; otherwise search the raw query.
+  const effectiveQuery = activeChips.length > 0 && parsed.textQuery.length >= searchMinLength(parsed.textQuery) ? parsed.textQuery : deferred;
+  const activeTypeChip = activeChips.find((c) => c.kind === "type")?.mediaType;
+  const activeGenreChip = activeChips.find((c) => c.kind === "genre")?.genre;
+
+  const { data, isPlaceholderData, isError, refetch } = useSearch(effectiveQuery);
   const hasQuery = deferred.length >= searchMinLength(deferred);
-  const genre = hasQuery ? genreOf(deferred) : undefined;
+  const genre = hasQuery ? (genreOf(deferred) ?? activeGenreChip) : undefined;
   // What the catalogs found (they forgive typos): what AniList is asked for when the typed words find nothing.
-  const anime = useAnimeResults(animeEnabled && hasQuery ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
+  const anime = useAnimeResults(animeEnabled && hasQuery ? effectiveQuery : "", retryTitle(data?.series ?? [], data?.movies ?? []));
   const aliases = useAnimeAliases();
-  const fromAddons = useAddonSearches(hasQuery ? deferred : "");
+  const fromAddons = useAddonSearches(hasQuery ? effectiveQuery : "");
   const viewing = useViewingLimit();
 
   // An anime shows once, as the anime (AniList), not again as a series or movie.
   // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
-  const movies = withoutAnime(data?.movies, anime.all, aliases);
-  const series = withoutAnime(data?.series, anime.all, aliases);
-  const waiting = !hasQuery || !data;
-  const stale = !waiting && (typing || isPlaceholderData);
-  const addonsBusy = fromAddons.some((r) => !r.items && !r.failed);
-  const addonsFound = fromAddons.some((r) => r.items?.length);
+  const movies = useMemo(
+    () => applySmartFilters(withoutAnime(data?.movies, anime.all, aliases), parsed, dismissedChips),
+    [data?.movies, anime.all, aliases, parsed, dismissedChips],
+  );
+  const series = useMemo(
+    () => applySmartFilters(withoutAnime(data?.series, anime.all, aliases), parsed, dismissedChips),
+    [data?.series, anime.all, aliases, parsed, dismissedChips],
+  );
+  const people = data?.people ?? [];
+  const waiting = !hasQuery || (!data && !isError);
+  const stale = !waiting && !isError && (typing || isPlaceholderData);
+  const mainIds = useMemo(
+    () => new Set([...(movies ?? []).map((m) => m.id), ...(series ?? []).map((s) => s.id)]),
+    [movies, series],
+  );
+  const dedupedAddons = useMemo(
+    () =>
+      fromAddons.map((r) => ({
+        ...r,
+        items: r.items ? keepWithinLimit(r.items, viewing).filter((m) => !mainIds.has(m.id)) : undefined,
+      })),
+    [fromAddons, viewing, mainIds],
+  );
+  const addonsBusy = dedupedAddons.some((r) => !r.items && !r.failed);
+  const addonsFound = dedupedAddons.some((r) => r.items?.length);
+
+  const filterOptions = useMemo(() => {
+    const opts: { id: SearchFilter; label: string }[] = [{ id: "all", label: "All" }];
+    if (movies?.length || (genre && filter === "movies")) opts.push({ id: "movies", label: "Movies" });
+    if (series?.length || (genre && filter === "series")) opts.push({ id: "series", label: "Series" });
+    if (people.length) opts.push({ id: "people", label: "People" });
+    if (animeEnabled && anime.items?.length) opts.push({ id: "anime", label: "Anime" });
+    return opts;
+  }, [movies?.length, series?.length, people.length, animeEnabled, anime.items?.length, genre, filter]);
+
+  const effectiveFilter: SearchFilter =
+    filter !== "all"
+      ? filter
+      : activeTypeChip === "movie"
+        ? "movies"
+        : activeTypeChip === "series"
+          ? "series"
+          : activeTypeChip === "anime"
+            ? "anime"
+            : "all";
+
+  const showRow = (row: SearchRow) => {
+    if (effectiveFilter === "all") return true;
+    if (effectiveFilter === "movies") return row === "movies" || row === "movieGenre";
+    if (effectiveFilter === "series") return row === "series" || row === "seriesGenre";
+    if (effectiveFilter === "anime") return row === "anime";
+    return false;
+  };
   const rows: Record<SearchRow, ReactNode> = {
     movieGenre: genre && <GenreRow key="movieGenre" type="movie" genre={genre} />,
     seriesGenre: genre && <GenreRow key="seriesGenre" type="series" genre={genre} />,
-    movies: <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
-    series: <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
+    movies: !isError && <ResultRow key="movies" title={genre ? "Movies Named Like It" : "Movies"} items={waiting ? undefined : movies} />,
+    series: !isError && <ResultRow key="series" title={genre ? "Series Named Like It" : "Series"} items={waiting ? undefined : series} />,
     anime: animeEnabled && (
       <AnimeRow
         key="anime"
@@ -285,26 +358,103 @@ const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { que
       />
     ),
   };
-  const nothing = !waiting && !stale && !genre && !movies!.length && !series!.length && !anime.items?.length && !anime.loading && !addonsBusy && !addonsFound;
+  const nothing =
+    !waiting &&
+    !stale &&
+    !isError &&
+    !genre &&
+    !(movies?.length) &&
+    !(series?.length) &&
+    !people.length &&
+    !anime.items?.length &&
+    !anime.loading &&
+    !addonsBusy &&
+    !addonsFound;
 
   return (
     <>
+      {activeChips.length > 0 && (
+        <div className="search-filters" role="group" aria-label="Detected search filters">
+          {activeChips.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              className="search-recent-item"
+              onClick={() => setDismissedChips((prev) => new Set(prev).add(chip.id))}
+              title={`Remove filter "${chip.label}" and search literally`}
+            >
+              <span>{chip.label}</span>
+              <span aria-hidden>×</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {filterOptions.length > 2 && (
+        <div className="search-filters">
+          <Segmented label="Filter results" options={filterOptions} value={filter} onChange={setFilter} />
+        </div>
+      )}
+      {isError && (
+        <EmptyState action={{ label: "Try Again", onClick: () => void refetch() }}>
+          Couldn't load search results. Check your connection and try again.
+        </EmptyState>
+      )}
       {/* Opening a result counts as running the search (Recent, in the search field). */}
       <div
         className="rows search-rows"
         data-stale={stale || undefined}
-        onClickCapture={(e) => (e.target as HTMLElement).closest(".card") && addRecentSearch(deferred)}
+        onClickCapture={(e) => (e.target as HTMLElement).closest(".card, .search-person-card") && addRecentSearch(deferred)}
       >
-        {searchRows(genre, !!anime.genre).map((row) => rows[row])}
+        {searchRows(genre, !!anime.genre)
+          .filter(showRow)
+          .map((row) => rows[row])}
+        {!isError && people.length > 0 && (filter === "all" || filter === "people") && <PeopleRow people={people} />}
         {/* A failing add-on leaves its row out; Polarity's results above never wait for one. */}
-        {fromAddons.map(
-          (r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items && keepWithinLimit(r.items, viewing)} />,
-        )}
+        {filter === "all" &&
+          dedupedAddons.map(
+            (r) => !r.failed && <ResultRow key={catalogKey(r.catalog)} title={catalogTitle(r.catalog)} items={r.items} />,
+          )}
       </div>
-      {nothing && <EmptyState>Nothing found for “{deferred}”.</EmptyState>}
+      {nothing && (
+        <>
+          <EmptyState>Nothing found for “{deferred}”.</EmptyState>
+          <TrendingRecovery />
+        </>
+      )}
     </>
   );
 });
+
+function PeopleRow({ people }: { people: PersonHit[] }) {
+  const { navigate } = useRouter();
+  return (
+    <Shelf
+      title="People"
+      items={people}
+      card={(p) => (
+        <button key={p.id} className="search-person-card pressable" onClick={() => navigate({ name: "person", id: p.id, title: p.name })}>
+          <span className="search-person-photo">
+            {p.photo ? <Img src={p.photo} alt="" /> : <span aria-hidden>{initialsOf(p.name)}</span>}
+          </span>
+          <span className="search-person-name">{p.name}</span>
+          {p.knownFor && <span className="search-person-role">{p.knownFor}</span>}
+        </button>
+      )}
+    />
+  );
+}
+
+/** Recovery shelf when a search returns zero hits so the user never hits a dead end. */
+function TrendingRecovery() {
+  const trending = useTrending();
+  const picks = useMemo(() => trendingPicks(trending.series, trending.movies, [], 14), [trending.series, trending.movies]);
+  if (!picks.length) return null;
+  return (
+    <div className="rows search-recovery">
+      <ResultRow title="Trending Right Now" items={picks} />
+    </div>
+  );
+}
 
 function GenreRow({ type, genre }: { type: ContentType; genre: string }) {
   const { data } = useGenreRow(type, genre);

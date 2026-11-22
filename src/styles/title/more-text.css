@@ -44,9 +44,10 @@
     margin-left: 0.25rem;
   }
 }
-/* A phone's list puts the synopsis under the still, full width. */
+/* A phone's list puts the synopsis under the still, full width, inside the episode card's padding. */
 :root[data-form="phone"] .episode-card[data-layout="list"] .overview-more {
-  margin: -0.5rem 0 0.5rem 0.25rem;
+  margin: 0.375rem 0 0;
+  padding: 0;
 }
 
 /* TV */

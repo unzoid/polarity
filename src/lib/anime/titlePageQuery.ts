@@ -2,7 +2,8 @@ import type { AnimeLink } from "../library/identity";
 import { cachedLookup, keys, queryClient } from "../net";
 import { getPrefs } from "../settings/prefs";
 import type { ContentType, MetaPreview } from "../types";
-import { cachedAniZip } from "./anizip";
+import { animeQuery } from "./anilist";
+import { aniZipQuery, cachedAniZip } from "./anizip";
 import { animeLinks } from "./links";
 import { anilistForImdb } from "./search";
 import { syncTitlePage, titlePage, type PageLookup } from "./titlePage";
@@ -32,4 +33,13 @@ export const titlePageQuery = (type: ContentType, id: string, preview?: MetaPrev
 });
 
 /** Decide ahead, when a card is about to be opened (pointer or focus resting on it). */
-export const prefetchTitlePage = (type: ContentType, id: string, preview?: MetaPreview) => void queryClient.prefetchQuery(titlePageQuery(type, id, preview));
+export const prefetchTitlePage = (type: ContentType, id: string, preview?: MetaPreview) =>
+  void queryClient.fetchQuery(titlePageQuery(type, id, preview)).then(
+    (page) => {
+      if (page?.kind === "anime") {
+        void queryClient.prefetchQuery(animeQuery(page.anilist));
+        void queryClient.prefetchQuery(aniZipQuery(page.anilist));
+      }
+    },
+    () => {},
+  );

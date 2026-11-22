@@ -11,6 +11,7 @@ first (see `AGENTS.md`).
 | TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos, age ratings (`release_dates`, `content_ratings` appended to the details requests already made; discover's `certification_country`/`certification.lte` for a profile's age limit) | `crates/index/src/tmdb.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
 | TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers (YouTube ids), logos, a show's other episode orders (episode groups: `/tv/{id}/episode_groups`, `/tv/episode_group/{id}`) | `crates/index/src/tmdb.rs`, `crates/index/src/tmdb/orders.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
 | TMDB API v3 | Catalog, search, metadata, episodes, recommendations, images, IMDb id lookup, trailers and a title's other videos (YouTube ids), logos, people's pages (`/person/{id}` with `combined_credits`) | `crates/index/src/tmdb.rs`, `crates/index/src/tmdb/people.rs` | The user's own | About 40 requests a second; 429 answered with a back-off |
+| TMDB API v3 | "More like this": `/{tv,movie}/{id}/recommendations` (two pages); details with `keywords,credits` appended; `/discover` by one keyword and by a set of genres (most voted first); a creator's or director's `/person/{id}/tv_credits` or `movie_credits`; `/collection/{id}`; a search for a title's sequels and spin-offs | `crates/index/src/tmdb/recs.rs`, ranked by `crates/index/src/similar.rs` | The user's own | Up to about 80 requests for a title's first row (46 details, 24 keyword lists, the rest one each), many shared with other titles' rows through day-long caches |
 | Cinemeta | Catalog, search and metadata when there is no TMDB key; IMDb ids for anime ani.zip can't link | `crates/index/src/cinemeta.rs`, `src/lib/anime/search.ts` | None | None published |
 | metahub images | Posters, backgrounds, logos and episode stills for IMDb ids | `cinemeta.rs`, `src/lib/account/titleDisplay.ts`, `src/lib/anime/landscapeArt.ts` | None | None published |
 | IMDb GraphQL | Trailers as video files; each episode's IMDb rating for Episode Ratings (the owner's decision, 15/11/2026: TMDB's per-episode scores were too few and ran low), TMDB's kept for a show IMDb rates none of | `src-tauri/src/imdb.rs`, `trailers.rs`, `episode_ratings.rs` | None | Trailer links expire after about a day; episode ratings are cached 12 h per show, at most 5 pages of 250 episodes |
@@ -50,6 +51,11 @@ Every host the web view fetches from is listed in its `connect-src` policy
 - **People:** only with a TMDB key, which names cast and crew by id. A person's page is one `/person/{id}` request with
   `combined_credits`; at most 45 of their titles are kept and looked up for IMDb ids through the same day-long cache as
   list results, six at a time. Cinemeta's names have no ids and stay plain text.
+- **More like this:** with a TMDB key, candidates from TMDB's recommendations, the seed's keywords, its creators' (a
+  film's directors' and writers') other work, its franchise and its genres, ranked on the device by shared keywords
+  (weighted by how few titles carry them), people, genres and a little rating (`crates/index/src/similar.rs`). TMDB's
+  `/similar` isn't used: its lists were mostly unrelated titles. Without a key, Cinemeta's popularity lists are ranked by
+  their plot summaries' shared words and genres, with the franchise (found by a search for the title's name) first.
 - **Fillers:** Jikan first, animefillerlist.com when Jikan knows none, answers cached 24 h on disk.
 - **Anime ids:** ani.zip first; Fribb/anime-lists, downloaded when first needed and refreshed weekly, when it can't be
   reached. The list is fetched at runtime, not shipped with the app.

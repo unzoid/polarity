@@ -77,6 +77,7 @@ export function OptionsOverlay({
   foreground,
   beside = false,
   dockedTo,
+  live = false,
 }: {
   open: boolean;
   /** The playing video, frosted behind the options. */
@@ -96,6 +97,8 @@ export function OptionsOverlay({
    * The picture and the rest of the controls stay as they are; a click outside closes it.
    */
   dockedTo?: string;
+  /** Keep the live video unobstructed on the left (e.g. while tuning audio or subtitle delay when not docked). */
+  live?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const docked = !!dockedTo && !beside;
@@ -272,6 +275,7 @@ export function OptionsOverlay({
       data-open={open}
       data-tabbed={tabbed || undefined}
       data-place={beside ? "beside" : docked ? "dock" : undefined}
+      data-live={live && !beside && !docked ? "true" : undefined}
       role="dialog"
       aria-modal={!beside && !docked}
       aria-label={beside || docked ? columns.map((c) => c.title).join(" & ") : undefined}
@@ -294,9 +298,10 @@ export function OptionsOverlay({
       onPointerCancel={() => (press.current = null)}
     >
       {/* On Android mpv draws on a surface behind the clear page: a frosted snapshot over it jumped every
-          time it was retaken (#181), so the live picture shows through the shade instead. */}
-      {!beside && !docked && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
-      {!beside && !docked && <div className="options-shade" aria-hidden />}
+          time it was retaken (#181), so the live picture shows through the shade instead. Live mode (delay
+          tuning) also leaves the playing video clear when not docked. */}
+      {!beside && !docked && !live && !(os === "android" && isMpv(media)) && <VideoBackdrop media={media} />}
+      {!beside && !docked && !live && <div className="options-shade" aria-hidden />}
       {!docked && (
         <IconButton variant="player" className="options-close" onClick={onClose} label="Close" title="Close (Esc)">
           <Close size={26} />
@@ -332,14 +337,7 @@ export function OptionsOverlay({
             ) : (
               <>
                 {col.options.length === 0 && col.empty && <p className="options-empty">{col.empty}</p>}
-                <div key="list" role="radiogroup" aria-label={col.title} className="options-list">
-                  {col.options.map((o) => (
-                    <Fragment key={o.id}>
-                      {o.heading && <p className="options-group">{o.heading}</p>}
-                      <Row item={o} selected={o.id === col.value} onSelect={col.onSelect} />
-                    </Fragment>
-                  ))}
-                </div>
+                <OptionRowsList title={col.title} options={col.options} value={col.value} onSelect={col.onSelect} />
               </>
             )}
           </section>
@@ -386,6 +384,62 @@ export function outsidePanel(
   const right = Math.max(...rects.map((r) => r.right)) + margin.x;
   const bottom = Math.max(...rects.map((r) => r.bottom)) + margin.y;
   return x < left || x > right || y < top || y > bottom;
+}
+
+/** Cap initial rows in very long player lists (e.g. 200+ add-on sources); loads more smoothly on scroll. */
+const INITIAL_OPTIONS = 32;
+const OPTIONS_STEP = 32;
+
+function OptionRowsList({
+  title,
+  options,
+  value,
+  onSelect,
+}: {
+  title: string;
+  options: OptionItem[];
+  value?: string;
+  onSelect: (id: string) => void;
+}) {
+  const selectedIdx = value !== undefined ? options.findIndex((o) => o.id === value) : -1;
+  const minVisible = Math.max(INITIAL_OPTIONS, selectedIdx >= 0 ? selectedIdx + 8 : 0);
+  const [limit, setLimit] = useState(minVisible);
+  const listRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setLimit((prev) => (prev < minVisible ? minVisible : options.length <= INITIAL_OPTIONS ? minVisible : prev));
+  }, [minVisible, options.length]);
+  const shown = options.length > limit ? options.slice(0, limit) : options;
+  const remaining = options.length - shown.length;
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || remaining <= 0 || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setLimit((n) => Math.min(options.length, n + OPTIONS_STEP));
+      },
+      { root: listRef.current, rootMargin: "220px 0px" },
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [remaining, options.length, limit]);
+  return (
+    <div ref={listRef} role="radiogroup" aria-label={title} className="options-list">
+      {shown.map((o) => (
+        <Fragment key={o.id}>
+          {o.heading && <p className="options-group">{o.heading}</p>}
+          <Row item={o} selected={o.id === value} onSelect={onSelect} />
+        </Fragment>
+      ))}
+      {remaining > 0 && (
+        <div ref={sentinelRef} style={{ display: "flex", justifyContent: "center", padding: "0.375rem 0" }}>
+          <button type="button" className="options-item" onClick={() => setLimit((n) => Math.min(options.length, n + OPTIONS_STEP))}>
+            Show more ({remaining} left)
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Row({ item: o, selected, onSelect }: { item: OptionItem; selected: boolean; onSelect: (id: string) => void }) {

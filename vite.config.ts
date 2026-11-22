@@ -11,14 +11,14 @@ function gitCommit() {
   }
 }
 
-/** Preloads the primary Latin variable UI font so first paint never waits for CSS + React mount to discover it. */
+/** Preloads the default Latin variable UI font (Instrument Sans, lib/settings/fonts.ts) so first paint never waits for CSS + React mount to discover it. */
 function preloadPrimaryFont(): Plugin {
   return {
     name: "polar-preload-font",
     transformIndexHtml: {
       order: "post",
       handler(html, ctx) {
-        const fileName = Object.keys(ctx.bundle ?? {}).find((f) => /inter-latin-opsz-normal.*\.woff2$/.test(f));
+        const fileName = Object.keys(ctx.bundle ?? {}).find((f) => /instrument-sans-latin-wght-normal.*\.woff2$/.test(f));
         if (!fileName) return html;
         return html.replace(
           "</head>",
@@ -55,11 +55,11 @@ export default defineConfig({
             },
             {
               name: "app-lib",
-              test: /[\\/]src[\\/]lib[\\/]((api|contract|errors|feedback|format|navTabs|parse|router|types|updateFeed|updater)\.tsx?$|net[\\/]|platform[\\/][^\\/]+\.ts$|theme[\\/]|ui[\\/]|settings[\\/](index|prefs|overlay|keybinds|fonts|useSetting|cropMode|pages)\.ts$|account[\\/](index|AccountProvider|avatars|backend|accountFull|keyedLink|localSecrets|pin|pinTries|profileGuard|profileLock|profileRules|secrets|secretsNotice|settingsDoc|settingsSync|spacePush|sync|titleDisplay|tvSignIn|tvSignInLink|twoStep|unlock)\.tsx?$|catalog[\\/](index|shelves|browseFilter|listable|viewingLimit|ageRating|addonCatalogs|addonRows|genres|searchQuery)\.ts$|library[\\/](index|hiddenTitles|watched|identity|libraryEvents|playlists|playlistCodec|playlistChecklist|downloads|autoDownloads|keepDownloaded|episodes|episodeState)\.ts$|localFiles[\\/]|deepLink[\\/]|notifications[\\/])/,
+              test: /[\\/]src[\\/]lib[\\/]((api|contract|errors|feedback|format|navTabs|parse|router|types|updateFeed|updater)\.tsx?$|net[\\/]|platform[\\/][^\\/]+\.ts$|theme[\\/]|ui[\\/]|settings[\\/](index|prefs|overlay|keybinds|fonts|episodeLayout|cropMode|pages|changes)\.ts$|account[\\/](index|AccountProvider|avatars|backend|accountFull|keyedLink|localSecrets|pin|pinTries|profileGuard|profileLock|profileRules|secrets|secretsNotice|settingsDoc|settingsSync|spacePush|sync|titleDisplay|tvSignIn|tvSignInLink|twoStep|unlock)\.tsx?$|catalog[\\/](index|shelves|browseFilter|listable|viewingLimit|ageRating|addonCatalogs|addonRows|genres|searchQuery)\.ts$|library[\\/](index|hiddenTitles|watched|identity|libraryEvents|playlists|playlistCodec|playlistChecklist|downloads|autoDownloads|keepDownloaded|episodes|episodeState)\.ts$|localFiles[\\/]|deepLink[\\/]|notifications[\\/])/,
             },
             {
               name: "app-ui",
-              test: /[\\/]src[\\/](components[\\/](ui[\\/](Button|Chip|EmptyState|ErrorBoundary|Menu|Popover|Skeleton|Switch|TextField|Toast)\.tsx$|title[\\/](Card|HeroSkeleton|LibraryButton|PlaylistChecklist|Shelf|TitleHeading)\.tsx$|anime[\\/]SeriesPickToast\.tsx$|profileLock[\\/](PinHost\.tsx|useGuard\.ts)$|(AccountFullToast|Avatar|BackButton|BusyLabel|CardMenu|ConfirmDeleteButton|ContinueEditRow|DeepLinks|EdgeBlur|HeroGlow|HiddenTitleToast|ImdbBadge|Img|LockedKeysToast|NativeBack|NativeTabs|NavBar|OpenFiles|PlayerLayer|PosterCard|ProfileMenu|SecretsSyncToast|Sheet|SignOutDialog|Spinner|StoreProblemToast|SwapIcon|TitleLogo|Trailer|Updates|ViewStack|WindowControls|icons|profileSheetHost)\.tsx?$)|tv[\\/](tvMode|gamepad|TvChrome)\.tsx?$|screens[\\/](Home\.tsx|lazyScreens\.ts|account[\\/]profileHandoff\.ts)$)/,
+              test: /[\\/]src[\\/](components[\\/](ui[\\/](Button|Chip|EmptyState|ErrorBoundary|Menu|Popover|Skeleton|Switch|TextField|Toast)\.tsx$|title[\\/](Card|LibraryButton|PlaylistChecklist)\.tsx$|anime[\\/]SeriesPickToast\.tsx$|profileLock[\\/](PinHost\.tsx|useGuard\.ts)$|(AccountFullToast|Avatar|BusyLabel|CardMenu|ConfirmDeleteButton|DeepLinks|HiddenTitleToast|ImdbBadge|Img|LockedKeysToast|NativeBack|OpenFiles|PlayerLayer|PosterCard|ProfileMenu|SecretsSyncToast|Sheet|SignOutDialog|Spinner|StoreProblemToast|SwapIcon|TitleLogo|Trailer|Updates|ViewStack|icons|profileSheetHost)\.tsx?$)|tv[\\/](tvMode|gamepad)\.tsx?$|screens[\\/](lazyScreens\.ts|homeFeed\.ts|account[\\/]profileHandoff\.ts)$)/,
             },
           ],
         },

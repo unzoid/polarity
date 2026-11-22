@@ -1,48 +1,53 @@
 import type { BackDrag } from "../platform/back";
 import { cardGhostParts } from "./cardGhost";
-import { CARD_CLOSE_EASE, CARD_CLOSE_MS, ghostCloseFades } from "./cardMotion";
+import { CARD_CANCEL_EASE, playCardRelease } from "./cardMotion";
 import { liveCard, skipNextPageMotion, type CardRect } from "./pageMotion";
 
 /** How far left the page under starts, as a share of the width, the way iOS's comes in. */
 const UNDER_FROM = 0.3;
-/** How long the pages take to finish the move once the finger lifts (shell.css's `[data-drag-settle]` transition). */
-export const DRAG_SETTLE_MS = 280;
+/** How long non-card pages (or a cancelled card swipe) take to settle once the finger lifts. */
+export const DRAG_SETTLE_MS = 220;
 
-/** A title page from a card: how much it shrinks across the swipe, how far it follows the finger, its corners. */
-const CARD_SHRINK = 0.3;
-const CARD_FOLLOW = 0.5;
-const CARD_CORNER = 28;
-/** Let go: back into the card, on Back's clock and curve (cardMotion.ts). */
-const CARD_BACK_MS = CARD_CLOSE_MS;
-const CARD_EASE = CARD_CLOSE_EASE;
+/** A title page from a card: uniform shrink & follow during the interactive swipe-back track phase. */
+const CARD_SHRINK = 0.24;
+const CARD_FOLLOW = 0.42;
+/** Constant iPhone-bezel rounded corner set ONCE on drag begin (never mutated per frame, zero edge pop). */
+const CARD_DRAG_RADIUS = 38;
+const SCRIM_MAX = 0.72;
 
-/** `card`: the card the top page grew out of (pageMotion.ts cardOrigin): the swipe takes it back there. */
-export type DragPages = { top: HTMLElement; under: HTMLElement; card?: CardRect };
+/** `card`: the card the top page grew out of (`cardOrigin`); `scrim`: dedicated leaf overlay (0 children = 0 style recalc on under). */
+export type DragPages = { top: HTMLElement; under: HTMLElement; card?: CardRect; scrim?: HTMLElement | null };
 
 /**
- * iOS's Back as the finger moves (lib/platform/backSwipe.ts): the page on top slides right with it and the one under
- * it, kept rendered for this, comes in from a little to the left (shell.css draws both by `data-drag`). Let go far
- * enough and the top page carries on out, then `back` runs with the pages already where they end, so no page change
- * plays on top (skipNextPageMotion); let go early and both slide back. `pages` finds the two, or null when there's
- * nothing under the top page, and then the swipe isn't taken.
- *
- * A title page that grew out of a card (`card`) goes back the way it came instead, following the finger: it shrinks
- * as the finger moves, its corners rounding, with the page under it brightening in place. Let go far enough and it
- * carries on from there into the card, the card's picture coming up over it and the page fading out over the card
- * itself at the end, as Back does (shell.css card-page-back); let go early and it grows back.
+ * Interactive Back following the finger (iOS edge swipe & Android predictive back):
+ * - Track phase: pure 1:1 compositor writes (`transform` on `top` and `opacity` on the empty leaf `scrim`,
+ *   never mutating inherited CSS variables on `under` or `border-radius` per frame).
+ * - Release phase: for a card-opened title page, launches the unified Netflix uniform-scale + clip-path
+ *   zoom-into-card spring seeded with the user's actual release velocity (`playCardRelease`).
  */
 export function pageDrag(pages: () => DragPages | null, back: () => void, later: (fn: () => void, ms: number) => unknown = setTimeout): BackDrag {
-  let held: (DragPages & { width: number; height: number }) | null = null;
+  let held: (DragPages & { width: number; height: number; x: number; y: number; scale: number; scrimOpacity: number }) | null = null;
   let settling = false;
-  /** The card motion's animations, cancelled once the pages are cleared. */
   let running: Animation[] = [];
 
-  /** Where a card's page is at `at` px of the swipe: shrunk about its middle, moved along with the finger. */
   const cardPlace = (at: number, width: number, height: number) => {
-    const p = at / width;
+    const p = width > 0 ? at / width : 0;
     const s = 1 - CARD_SHRINK * p;
     const r = (n: number) => Math.round(n * 10) / 10;
-    return { transform: `translate(${r(at * CARD_FOLLOW + ((1 - s) * width) / 2)}px, ${r(((1 - s) * height) / 2)}px) scale(${r(s * 100) / 100}, ${r(s * 100) / 100})`, radius: r(CARD_CORNER * p), p };
+    const tx = r(at * CARD_FOLLOW + ((1 - s) * width) / 2);
+    const ty = r(((1 - s) * height) / 2.4);
+    const scale = Math.round(s * 1000) / 1000;
+    return { tx, ty, scale, p };
+  };
+
+  const setScrim = (p: DragPages, progress: number) => {
+    const op = Math.max(0, Math.min(SCRIM_MAX, SCRIM_MAX * (1 - progress)));
+    if (p.scrim) {
+      p.scrim.style.opacity = op.toFixed(3);
+    } else {
+      p.under.style.setProperty("--drag-in", String(progress));
+    }
+    return op;
   };
 
   const place = (x: number, width: number) => {
@@ -50,80 +55,108 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
     const at = Math.min(Math.max(x, 0), width);
     if (held.card) {
       const c = cardPlace(at, width, held.height);
-      held.top.style.transform = c.transform;
-      held.top.style.borderRadius = `${c.radius}px`;
-      held.under.style.setProperty("--drag-in", String(c.p));
+      held.x = c.tx;
+      held.y = c.ty;
+      held.scale = c.scale;
+      held.top.style.transform = `translate3d(${c.tx}px, ${c.ty}px, 0) scale(${c.scale})`;
+      held.scrimOpacity = setScrim(held, c.p);
       return;
     }
     held.top.style.transform = `translate3d(${at}px, 0, 0)`;
     held.under.style.transform = `translate3d(${Math.round((at - width) * UNDER_FROM * 10) / 10}px, 0, 0)`;
-    held.under.style.setProperty("--drag-in", String(at / width));
+    held.scrimOpacity = setScrim(held, width > 0 ? at / width : 0);
   };
 
   const clear = (p: DragPages) => {
     for (const el of [p.top, p.under]) {
       delete el.dataset.drag;
       delete el.dataset.dragSettle;
+      delete el.dataset.dragScrim;
       el.style.removeProperty("transform");
       el.style.removeProperty("transform-origin");
       el.style.removeProperty("border-radius");
+      el.style.removeProperty("clip-path");
       el.style.removeProperty("--drag-in");
+    }
+    if (p.card?.el) {
+      p.card.el.style.removeProperty("visibility");
+    }
+    if (p.scrim) {
+      delete p.scrim.dataset.dragSettle;
+      delete p.scrim.dataset.dragActive;
+      p.scrim.style.removeProperty("opacity");
     }
     for (const a of running) a.cancel();
     running = [];
     p.top.querySelector(":scope > .card-ghost[data-drag-ghost]")?.remove();
   };
 
-  /** The card's picture on the page as it goes back (shell.css `.card-ghost`), as Back plays it (cardMotion.ts). */
-  const ghost = (top: HTMLElement, src: string, ms: number) => {
+  const makeGhost = (top: HTMLElement, card: CardRect): HTMLElement | null => {
+    if (!card.src) return null;
     const box = document.createElement("div");
     box.className = "card-ghost";
     box.dataset.dragGhost = "";
     box.setAttribute("aria-hidden", "true");
-    const parts = cardGhostParts(src);
-    box.append(parts.panel, parts.soft, parts.medium, parts.sharp);
-    const opts: KeyframeAnimationOptions = { duration: ms, fill: "forwards" };
-    for (const name of ["panel", "soft", "medium", "sharp"] as const) running.push(parts[name].animate(ghostCloseFades[name], opts));
+    const parts = cardGhostParts(card.src, card.img);
+    box.append(parts.panel, parts.media);
     top.append(box);
+    return box;
   };
 
-  const settleCard = (p: DragPages & { width: number; height: number }, tapped: CardRect, goBack: boolean) => {
-    // Into the card where it is now (pageMotion.ts liveCard), the page under having been laid out again.
-    const card = liveCard(tapped);
-    const from = p.top.style.transform;
-    const fromRadius = p.top.style.borderRadius || "0px";
-    if (typeof p.top.animate !== "function") return;
+  const settleCard = (
+    p: DragPages & { width: number; height: number; x: number; y: number; scale: number; scrimOpacity: number },
+    tapped: CardRect,
+    goBack: boolean,
+    velocity: number,
+  ): number => {
     if (goBack) {
-      const sx = card.w / p.width;
-      const sy = card.h / p.height;
-      const to = `translate(${card.x}px, ${card.y}px) scale(${sx}, ${sy})`;
-      // It ends exactly on the card, its picture sharp, so the card takes its place with nothing faded over it.
+      const card = liveCard(tapped);
+      const ghost = makeGhost(p.top, card);
+      // Hand off corner clipping from static border-radius to continuous clip-path round with zero visual seam.
+      p.top.style.removeProperty("border-radius");
+      const { ms, animations } = playCardRelease({
+        page: p.top,
+        scrim: p.scrim ?? null,
+        ghost,
+        card,
+        width: p.width,
+        height: p.height,
+        from: { x: p.x, y: p.y, scale: p.scale, radius: CARD_DRAG_RADIUS, scrimOpacity: p.scrimOpacity },
+        velocity,
+      });
+      running.push(...animations);
+      if (!p.scrim) {
+        p.under.dataset.dragSettle = "";
+        p.under.style.setProperty("--drag-in", "1");
+      }
+      return ms;
+    }
+
+    if (typeof p.top.animate === "function") {
       running.push(
         p.top.animate(
           [
-            { transform: from, borderRadius: fromRadius },
-            { transform: to, borderRadius: `${8 / sx}px / ${8 / sy}px` },
+            { transform: p.top.style.transform || `translate3d(${p.x}px, ${p.y}px, 0) scale(${p.scale})` },
+            { transform: "translate3d(0px, 0px, 0) scale(1)" },
           ],
-          { duration: CARD_BACK_MS, easing: CARD_EASE, fill: "forwards" },
+          { duration: DRAG_SETTLE_MS, easing: CARD_CANCEL_EASE, fill: "forwards" },
         ),
       );
-      // The page under brightens the rest of the way (shell.css fades its dim while settling).
-      p.under.dataset.dragSettle = "";
-      p.under.style.setProperty("--drag-in", "1");
-      if (card.src) ghost(p.top, card.src, CARD_BACK_MS);
-    } else {
-      running.push(
-        p.top.animate(
-          [
-            { transform: from, borderRadius: fromRadius },
-            { transform: "translate(0px, 0px) scale(1, 1)", borderRadius: "0px" },
-          ],
-          { duration: DRAG_SETTLE_MS, easing: CARD_EASE, fill: "forwards" },
-        ),
-      );
+      if (p.scrim) {
+        running.push(
+          p.scrim.animate([{ opacity: p.scrimOpacity }, { opacity: SCRIM_MAX }], {
+            duration: DRAG_SETTLE_MS,
+            easing: CARD_CANCEL_EASE,
+            fill: "forwards",
+          }),
+        );
+      }
+    }
+    if (!p.scrim) {
       p.under.dataset.dragSettle = "";
       p.under.style.setProperty("--drag-in", "0");
     }
+    return DRAG_SETTLE_MS;
   };
 
   return {
@@ -132,45 +165,63 @@ export function pageDrag(pages: () => DragPages | null, back: () => void, later:
       const p = pages();
       if (!p) return false;
       const box = p.top.getBoundingClientRect();
-      held = { ...p, width: box.width || window.innerWidth, height: box.height || window.innerHeight };
+      held = {
+        ...p,
+        width: box.width || window.innerWidth,
+        height: box.height || window.innerHeight,
+        x: 0,
+        y: 0,
+        scale: 1,
+        scrimOpacity: SCRIM_MAX,
+      };
       p.top.dataset.drag = p.card ? "card" : "top";
       p.under.dataset.drag = "under";
-      if (p.card) p.top.style.transformOrigin = "0 0";
+      if (p.scrim) {
+        p.under.dataset.dragScrim = "";
+        p.scrim.dataset.dragActive = p.card ? "card" : "slide";
+        p.scrim.style.opacity = String(SCRIM_MAX);
+      }
+      if (p.card) {
+        p.top.style.transformOrigin = "0 0";
+        p.top.style.borderRadius = `${CARD_DRAG_RADIUS}px`;
+        if (p.card.el?.isConnected) p.card.el.style.visibility = "hidden";
+      }
       return true;
     },
     move(x, width) {
       if (held) place(x, width || held.width);
     },
-    end(goBack) {
+    end(goBack, velocity = 0) {
       const p = held;
       if (!p) return;
       settling = true;
       held = null;
-      const card = p.card;
-      if (card) settleCard(p, card, goBack);
-      else {
+      let settleMs = DRAG_SETTLE_MS;
+      if (p.card) {
+        settleMs = settleCard(p, p.card, goBack, velocity);
+      } else {
         p.top.dataset.dragSettle = "";
         p.under.dataset.dragSettle = "";
+        if (p.scrim) p.scrim.dataset.dragSettle = "";
         // Read before writing, so the transition starts from where the finger left the pages.
         void p.top.offsetWidth;
         held = p;
         place(goBack ? p.width : 0, p.width);
         held = null;
       }
-      later(
-        () => {
-          settling = false;
-          if (goBack) {
-            skipNextPageMotion();
-            back();
-            // The top page is gone once React has drawn the Back; the one under keeps its place until then.
-            later(() => clear(p), 50);
-          } else {
-            clear(p);
-          }
-        },
-        card && goBack ? CARD_BACK_MS : DRAG_SETTLE_MS,
-      );
+      later(() => {
+        settling = false;
+        if (goBack) {
+          // Reveal the underlying card slot synchronously BEFORE unmounting Detail so the slot never flashes black.
+          if (p.card?.el) p.card.el.style.removeProperty("visibility");
+          skipNextPageMotion();
+          back();
+          // Clear inline drag styles once React commits the Back route.
+          later(() => clear(p), 16);
+        } else {
+          clear(p);
+        }
+      }, settleMs);
     },
   };
 }

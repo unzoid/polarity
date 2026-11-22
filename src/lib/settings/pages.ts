@@ -128,8 +128,8 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "sound",
       label: "Sound",
-      caption: "Dialogue, volume leveling and passthrough",
-      settings: ["dialogueBoost", "volumeLeveling", "maxVolume", "passthrough"],
+      caption: "Dialogue, volume leveling, dynamic range and passthrough",
+      settings: ["dialogueBoost", "volumeLeveling", "drcProfile", "maxVolume", "passthrough"],
     },
   ],
   browsing: [
@@ -172,7 +172,7 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
       id: "browsing",
       label: "Shelves & Cards",
       caption: "What the Anime page shows, and what its cards show",
-      settings: ["animeShelves", "animeCardScores", "animeScoreFormat", "animeCardCountdown", "animeSeparateEntries", "animeScheduleAll"],
+      settings: ["animeShelves", "animeCardTitles", "animeCardPeek", "animeCardScores", "animeScoreFormat", "animeCardCountdown", "animeSeparateEntries", "animeScheduleAll"],
     },
     {
       id: "episodes",

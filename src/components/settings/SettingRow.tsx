@@ -1,4 +1,4 @@
-import { choicesOf, shownNumber, storedNumber, useSetting, type Value } from "../../lib/settings";
+import { choicesOf, shownNumber, storedNumber, useSetting, type Value } from "../../lib/settings/catalog";
 import { Dropdown } from "../Dropdown";
 import { NumberRow, PickRow, ToggleRow } from "./rows";
 

@@ -155,14 +155,17 @@ pub fn classics(lists: &[Vec<MetaPreview>], day: u64) -> Vec<MetaPreview> {
     dedupe(scored.into_iter().map(|(_, m)| m.clone()))
 }
 
-/// "More like this": candidates sharing the seed's genres, nudged towards good
-/// ratings, similar eras and (a little) popularity. Each candidate list is in
-/// popularity order.
+/// "More like this" from popularity-ordered lists that know only names, genres,
+/// ratings and plot summaries (Cinemeta): titles named after the seed first (its
+/// sequels and spin-offs), then those whose summaries share its rarer words
+/// ("emergency", "trauma") and its genres, nudged a little towards good ratings,
+/// similar eras and popularity. Genres alone say little (most titles are dramas),
+/// and a rating says nothing about likeness, so neither leads.
 pub fn similar(seed: &MetaPreview, lists: &[Vec<MetaPreview>], day: u64) -> Vec<MetaPreview> {
     let want: Vec<&str> = seed.genres.iter().take(3).map(String::as_str).collect();
-    if want.is_empty() {
-        return Vec::new();
-    }
+    let root = crate::similar::name_root(&seed.name);
+    let words = SummaryWords::new(lists.iter().flatten().chain([seed]));
+    let seed_words = words.vector(seed);
     let seed_year = year(seed);
     let mut best: std::collections::HashMap<&str, (f64, &MetaPreview)> = std::collections::HashMap::new();
     for list in lists {
@@ -172,17 +175,29 @@ pub fn similar(seed: &MetaPreview, lists: &[Vec<MetaPreview>], day: u64) -> Vec<
                 continue;
             }
             let shared = m.genres.iter().filter(|g| want.iter().any(|w| w.eq_ignore_ascii_case(g))).count();
-            if shared == 0 || (want.len() >= 2 && shared < 2 && want[0] != m.genres.first().map_or("", String::as_str))
+            let summary = words.cosine(&seed_words, &words.vector(m));
+            // Named after the seed and about the same things, so not a namesake.
+            let franchise = crate::similar::same_root(&root, &m.name) && shared > 0 && summary >= 0.08;
+            if !franchise
+                && (want.is_empty()
+                    || shared == 0
+                    || (want.len() >= 2 && shared < 2 && want[0] != m.genres.first().map_or("", String::as_str)))
             {
                 continue;
             }
-            let overlap = shared as f64 / want.len() as f64;
+            let overlap = if want.is_empty() { 0.0 } else { shared as f64 / want.len() as f64 };
             let era = match (seed_year, year(m)) {
                 (Some(a), Some(b)) if (a - b).abs() <= 8 => 0.15,
                 _ => 0.0,
             };
             let pop = 1.0 - rank as f64 / n;
-            let score = overlap + 0.5 * quality(m) + 0.25 * pop + era + 0.2 * (noise(day, &m.id) - 0.5);
+            let score = if franchise { 10.0 } else { 0.0 }
+                + 3.0 * summary
+                + 0.6 * overlap
+                + 0.25 * quality(m)
+                + 0.15 * pop
+                + era
+                + 0.1 * (noise(day, &m.id) - 0.5);
             let entry = best.entry(m.id.as_str()).or_insert((score, m));
             if score > entry.0 {
                 *entry = (score, m);
@@ -194,9 +209,144 @@ pub fn similar(seed: &MetaPreview, lists: &[Vec<MetaPreview>], day: u64) -> Vec<
     scored.into_iter().map(|(_, m)| m.clone()).collect()
 }
 
+/// Words of plot summaries weighted by how few summaries use them (TF-IDF), so
+/// "emergency" says more than "life".
+struct SummaryWords {
+    /// Per word, the summaries using it.
+    counts: std::collections::HashMap<String, u32>,
+    summaries: f64,
+}
+
+/// Words too common in summaries to say anything, beyond what short words and
+/// rarity already leave out.
+const SUMMARY_STOP: [&str; 24] = [
+    "about", "after", "their", "there", "these", "they", "this", "that", "with", "when", "where", "while", "which",
+    "what", "from", "into", "must", "find", "finds", "life", "lives", "world", "story", "becomes",
+];
+
+impl SummaryWords {
+    fn new<'a>(titles: impl Iterator<Item = &'a MetaPreview>) -> Self {
+        let mut counts = std::collections::HashMap::new();
+        let mut summaries = 0.0;
+        for m in titles {
+            let words: std::collections::HashSet<String> = summary_words(m).collect();
+            if !words.is_empty() {
+                summaries += 1.0;
+            }
+            for w in words {
+                *counts.entry(w).or_insert(0) += 1;
+            }
+        }
+        Self { counts, summaries }
+    }
+
+    fn vector(&self, m: &MetaPreview) -> std::collections::HashMap<String, f64> {
+        let mut v = std::collections::HashMap::new();
+        for w in summary_words(m) {
+            let n = f64::from(self.counts.get(&w).copied().unwrap_or(1));
+            // A word in one summary only can't be shared; in most of them, says nothing.
+            let idf = (self.summaries / n).ln().max(0.0);
+            *v.entry(w).or_insert(0.0) += idf;
+        }
+        v
+    }
+
+    fn cosine(&self, a: &std::collections::HashMap<String, f64>, b: &std::collections::HashMap<String, f64>) -> f64 {
+        let norm = |v: &std::collections::HashMap<String, f64>| v.values().map(|x| x * x).sum::<f64>().sqrt();
+        let (na, nb) = (norm(a), norm(b));
+        if na == 0.0 || nb == 0.0 {
+            return 0.0;
+        }
+        a.iter().filter_map(|(w, x)| b.get(w).map(|y| x * y)).sum::<f64>() / (na * nb)
+    }
+}
+
+/// A summary's words: lowercased, four letters or more, a plural's "s" dropped.
+fn summary_words(m: &MetaPreview) -> impl Iterator<Item = String> + '_ {
+    m.description
+        .as_deref()
+        .unwrap_or("")
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.chars().count() >= 4)
+        .map(|w| {
+            let w = w.to_lowercase();
+            match w.strip_suffix('s') {
+                Some(stem) if stem.chars().count() >= 4 && !stem.ends_with('s') => stem.to_owned(),
+                _ => w,
+            }
+        })
+        .filter(|w| !SUMMARY_STOP.contains(&w.as_str()))
+}
+
+/// Lightweight shared taste profile for Rust-side personalization (Apple TV / `crates/ffi` parity, #521).
+#[derive(Debug, Clone, Default)]
+pub struct TasteBias {
+    /// Lowercase genre -> normalized affinity in `[-1.0, 1.0]`.
+    pub genres: std::collections::HashMap<String, f64>,
+    /// Explicitly hidden or "not interested" title IDs excluded from recommendations.
+    pub hidden: std::collections::HashSet<String>,
+    /// Subtle movie vs. series preference in `[-0.25, 0.25]` (positive favours movies).
+    pub movie_bias: f64,
+}
+
+impl TasteBias {
+    pub fn affinity(&self, m: &MetaPreview) -> f64 {
+        let genre_avg = if m.genres.is_empty() {
+            0.0
+        } else {
+            let sum: f64 =
+                m.genres.iter().map(|g| self.genres.get(&g.trim().to_ascii_lowercase()).copied().unwrap_or(0.0)).sum();
+            sum / m.genres.len() as f64
+        };
+        let type_bias = if m.ty == "movie" { self.movie_bias } else { -self.movie_bias };
+        genre_avg + type_bias
+    }
+}
+
+/// Personalized "More like this": filters out hidden titles and blends the profile's genre/type
+/// affinity into [`similar`] so Apple TV (`crates/ffi`) and Desktop share one Rust ranker.
+pub fn similar_personalized(
+    seed: &MetaPreview,
+    lists: &[Vec<MetaPreview>],
+    day: u64,
+    taste: &TasteBias,
+) -> Vec<MetaPreview> {
+    let base = similar(seed, lists, day);
+    let n = (base.len().max(10)) as f64;
+    let mut scored: Vec<(f64, MetaPreview)> = base
+        .into_iter()
+        .enumerate()
+        .filter(|(_, m)| !taste.hidden.contains(&m.id))
+        .map(|(rank, m)| {
+            let base_rank = 1.0 - rank as f64 / n;
+            let score = base_rank * 0.55 + taste.affinity(&m) * 0.45;
+            (score, m)
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.into_iter().map(|(_, m)| m).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mock_preview(id: &str, ty: &str, genres: &[&str], rating: &str) -> MetaPreview {
+        MetaPreview {
+            id: id.into(),
+            ty: ty.into(),
+            name: id.into(),
+            poster: None,
+            background: None,
+            logo: None,
+            logos: Vec::new(),
+            description: None,
+            release_info: Some("2020".into()),
+            imdb_rating: Some(rating.into()),
+            genres: genres.iter().map(|s| (*s).into()).collect(),
+            certification: None,
+        }
+    }
 
     #[test]
     fn civil_dates() {
@@ -208,5 +358,75 @@ mod tests {
     fn classic_genres_rotate_but_hold_within_a_day() {
         assert_eq!(classic_genres("movie", 100, 3), classic_genres("movie", 100, 3));
         assert!((100..110).any(|d| classic_genres("movie", d, 3) != classic_genres("movie", 100, 3)));
+    }
+
+    fn described(id: &str, name: &str, genres: &[&str], rating: &str, about: &str) -> MetaPreview {
+        MetaPreview { name: name.into(), description: Some(about.into()), ..mock_preview(id, "series", genres, rating) }
+    }
+
+    #[test]
+    fn similar_leads_with_the_franchise_then_shared_subjects_over_ratings() {
+        let seed = described(
+            "tt0000001",
+            "Night Ward: Rounds",
+            &["Drama"],
+            "8.0",
+            "Doctors in a trauma ward fight to keep patients alive.",
+        );
+        let acclaimed = described(
+            "tt0000002",
+            "Crown Affairs",
+            &["Drama"],
+            "9.2",
+            "A royal family schemes over a crumbling estate.",
+        );
+        let alike = described(
+            "tt0000003",
+            "County Trauma",
+            &["Drama"],
+            "7.4",
+            "Trauma doctors and nurses save patients on the night ward.",
+        );
+        let original = described(
+            "tt0000004",
+            "Night Ward",
+            &["Drama"],
+            "7.0",
+            "A nurse joins the trauma ward of a city hospital.",
+        );
+        // Same name, other subject: a namesake, not the franchise.
+        let namesake =
+            described("tt0000020", "Night Ward", &["Drama"], "7.0", "A family keeps a secret in a small town.");
+        let filler = (5..15).map(|i| {
+            described(
+                &format!("tt00000{i:02}"),
+                &format!("Filler {i}"),
+                &["Drama"],
+                "7.5",
+                "A family keeps a secret in a small town.",
+            )
+        });
+        let list: Vec<MetaPreview> = [acclaimed, namesake, alike, original].into_iter().chain(filler).collect();
+        let ids: Vec<String> = similar(&seed, &[list], 100).into_iter().map(|m| m.id).collect();
+        assert_eq!(ids[..2], ["tt0000004", "tt0000003"]);
+        let pos = |id: &str| ids.iter().position(|i| i == id).unwrap();
+        assert!(pos("tt0000003") < pos("tt0000002"));
+        assert!(pos("tt0000020") > 2);
+    }
+
+    #[test]
+    fn personalized_similar_respects_taste_and_hides_dismissed_titles() {
+        let seed = mock_preview("tt0000001", "movie", &["Drama", "Sci-Fi"], "8.0");
+        let a = mock_preview("tt0000002", "movie", &["Drama", "Sci-Fi"], "7.8");
+        let b = mock_preview("tt0000003", "movie", &["Drama", "Sci-Fi", "Thriller"], "7.8");
+        let hidden = mock_preview("tt0000004", "movie", &["Drama", "Sci-Fi"], "8.5");
+        let mut taste = TasteBias::default();
+        taste.genres.insert("thriller".into(), 1.0);
+        taste.hidden.insert("tt0000004".into());
+
+        let ranked = similar_personalized(&seed, &[vec![hidden, a, b]], 100, &taste);
+        let ids: Vec<&str> = ranked.iter().map(|m| m.id.as_str()).collect();
+        assert!(!ids.contains(&"tt0000004"));
+        assert_eq!(ids[0], "tt0000003");
     }
 }

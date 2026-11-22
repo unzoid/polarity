@@ -13,10 +13,10 @@
 .detail-hero[data-ready="false"] :is(.detail-hero-main > :not(.hero-skeleton), .detail-credits) {
   visibility: hidden;
 }
-.detail :is(.detail-bg, .detail-bg-ambient, .seasons, .about, .anime-body) {
+.detail :is(.detail-bg, .detail-bg-ambient, .seasons, .about, .detail-shelf, .anime-body) {
   transition: opacity var(--dur-reveal) var(--ease-reveal);
 }
-.detail:has(.detail-hero[data-ready="false"]) :is(.detail-bg, .detail-bg-ambient, .seasons, .about, .anime-body) {
+.detail:has(.detail-hero[data-ready="false"]) :is(.detail-bg, .detail-bg-ambient, .seasons, .about, .detail-shelf, .anime-body) {
   opacity: 0;
   visibility: hidden;
 }
@@ -302,6 +302,7 @@
 /* The trailer button is a plain pill, like the icon buttons beside it: no fill until you point at it. */
 .btn.detail-trailer-btn {
   background: transparent;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
   transition:
@@ -525,6 +526,10 @@
 .detail-actions > * {
   flex-shrink: 0;
 }
+/* Desktop/tablet keeps every action as a direct flex item in .detail-actions; phone turns this into a full-width capsule row. */
+.detail-actions-row {
+  display: contents;
+}
 .detail-play {
   min-width: 200px;
 }
@@ -670,6 +675,7 @@
 }
 .seasons-bar > .segmented {
   background: transparent;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
 }
@@ -910,6 +916,7 @@
   height: 32px;
   color: #fff;
   background: rgb(0 0 0 / 0.42);
+  -webkit-backdrop-filter: var(--blur-control);
   backdrop-filter: var(--blur-control);
   transition:
     opacity var(--dur-fast) var(--ease-std),
@@ -1435,7 +1442,7 @@
   opacity: 0;
 }
 :root[data-form="phone"] .detail[data-ready="ready"] .detail-scroll {
-  animation: detail-together 320ms var(--ease-out);
+  animation: detail-together 200ms var(--ease-out);
 }
 @keyframes detail-together {
   from {
@@ -1447,10 +1454,16 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  transition: opacity 320ms var(--ease-out);
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+/* Wait briefly before showing placeholders so fast/cached opens reveal cleanly over the dark surface, like Netflix. */
+.detail[data-ready="pending"] .detail-skeleton {
+  animation: detail-together 220ms var(--ease-out) 180ms forwards;
 }
 .detail:not([data-ready="pending"]) .detail-skeleton {
   opacity: 0;
+  animation: none;
 }
 /* Gone, it holds still: the shimmer would repaint every frame for nothing. */
 .detail:not([data-ready="pending"]) .detail-skeleton .skeleton {
@@ -1478,18 +1491,19 @@
 }
 .detail-skeleton-play {
   width: 100%;
-  height: 3rem;
+  height: 50px;
   margin-top: 0.25rem;
   border-radius: var(--r-pill);
 }
 .detail-skeleton-buttons {
   display: flex;
-  gap: 1.5rem;
+  align-self: stretch;
+  gap: 0.5rem;
 }
 .detail-skeleton-button {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-round);
+  flex: 1 1 0;
+  height: 42px;
+  border-radius: var(--r-pill);
 }
 .detail-skeleton-text {
   display: flex;
@@ -1590,7 +1604,8 @@
   gap: 1rem;
   padding: calc(var(--art-h) - 9rem) var(--gutter) 1.75rem;
 }
-:root[data-form="phone"] :is(.detail-hero-main, .detail-credits) {
+:root[data-form="phone"] :is(.detail-hero-main, .detail-credits),
+:root[data-form="phone"] .detail-hero :is(.detail-hero-main > *, .detail-hero-main > .title-heading > *, .detail-credits) {
   animation: none;
 }
 :root[data-form="phone"] .detail-hero-main {
@@ -1619,23 +1634,58 @@
 :root[data-form="phone"] .detail-facts {
   justify-content: center;
 }
+/* Phone detail actions (Infuse layout): full-width primary pill above a full-width row of equal stadium capsules. */
 :root[data-form="phone"] .detail-actions {
   width: auto;
   align-self: stretch;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.625rem;
   margin-top: 0.5rem;
 }
 :root[data-form="phone"] .detail-actions > .detail-play {
-  flex: 1 0 100%;
+  flex: none;
+  width: 100%;
   min-width: 0;
   height: 50px;
   font-size: var(--fs-lg);
 }
-:root[data-form="phone"] .detail-actions > .btn.btn-icon {
-  width: 48px;
-  height: 48px;
+:root[data-form="phone"] .detail-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+:root[data-form="phone"] .detail-actions-row > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: 42px;
+  padding: 0 0.5rem;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.11);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.22),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 2px 8px rgb(0 0 0 / 0.24);
+  color: var(--text);
+}
+:root[data-form="phone"] .detail-actions-row > .btn:active {
+  background: rgb(255 255 255 / 0.18);
+  transform: scale(0.96);
+}
+:root[data-form="phone"][data-scheme="light"] .detail-actions:not(.scheme-dark *) .detail-actions-row > .btn {
+  background: rgb(0 0 0 / 0.06);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.92),
+    inset 0 0 0 1px rgb(0 0 0 / 0.08),
+    0 1px 4px rgb(0 0 0 / 0.07);
+}
+:root[data-form="phone"][data-scheme="light"] .detail-actions:not(.scheme-dark *) .detail-actions-row > .btn:active {
+  background: rgb(0 0 0 / 0.11);
+}
+:root[data-form="phone"] .detail-actions-row > .btn svg {
+  filter: none;
 }
 :root[data-form="phone"] .detail-hero-main > .simkl-panel {
   justify-content: center;
@@ -1769,15 +1819,29 @@
   min-width: 0;
 }
 :root[data-form="phone"] .episode-list {
-  padding-top: 0;
+  padding: 0.25rem var(--gutter) 0 var(--gutter);
+  gap: 0.25rem;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] {
   border-bottom: none;
+  margin-inline: -0.5rem;
+  padding: 0.75rem 0.625rem;
+  border-radius: var(--r-lg);
+  transition: background-color var(--dur-fast) var(--ease-std);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"][data-up-next="true"] {
+  background: var(--fill-2);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"]:has(> .episode-card-main:active) {
+  background: var(--fill-2);
+}
+:root[data-form="phone"] .episode-card[data-layout="list"][data-up-next="true"]:has(> .episode-card-main:active) {
+  background: var(--fill-3);
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main,
 :root[data-form="phone"] .episode-card[data-layout="list"]:has(.download-reveal) .episode-card-main {
   /* The rows around the text share what the still leaves, so the text sits in the middle beside it. */
-  grid-template-columns: 8.5rem minmax(0, 1fr) var(--episode-buttons, 4rem);
+  grid-template-columns: 8.5rem minmax(0, 1fr) var(--episode-buttons, 4.5rem);
   grid-template-rows: 1fr auto auto auto 1fr auto;
   grid-template-areas:
     "still . ."
@@ -1787,11 +1851,12 @@
     "still . ."
     "over over over";
   align-items: start;
-  column-gap: 0.875rem;
+  column-gap: 0.75rem;
   row-gap: 0.125rem;
-  /* Up next's fill reaches a little past the still and the synopsis; the still stays where the buttons expect it. */
-  margin: 0 -0.5rem;
-  padding: 0.75rem 0.5rem 0.75rem 0.75rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-text {
   display: contents;
@@ -1808,6 +1873,8 @@
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-title {
   grid-area: title;
   font-size: var(--fs-base);
+  line-height: 1.25;
+  white-space: normal;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1824,14 +1891,14 @@
 /* Download and Sources stand to the right of the title, level with the still's middle: plain glyphs on the
    page, not chips on the picture. The text column gives them their room (more with Show in Folder there too). */
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main {
-  --episode-buttons: 4.75rem;
+  --episode-buttons: 4.5rem;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-card-main:active {
-  background: var(--fill-2);
-  border-radius: var(--r-md);
+  background: none;
+  border-radius: 0;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"]:has(.download-reveal) {
-  --episode-buttons: 7.25rem;
+  --episode-buttons: 7rem;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download) {
   top: calc(0.75rem + 8.5rem * 9 / 32 - 20px);
@@ -1841,6 +1908,7 @@
   margin-top: 0;
   color: var(--text-2);
   background: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon:is(.episode-sources, .episode-download):active {
@@ -1850,13 +1918,13 @@
   filter: none;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-sources {
-  right: -0.25rem;
+  right: 0.125rem;
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .episode-download {
-  right: calc(40px - 0.25rem);
+  right: calc(40px + 0.125rem);
 }
 :root[data-form="phone"] .episode-card[data-layout="list"] .btn.btn-icon.episode-download.download-reveal {
-  right: calc(80px - 0.25rem);
+  right: calc(80px + 0.125rem);
 }
 
 /* A hidden title's page (HiddenTitleControls.tsx): what that means, and Unhide. */
@@ -1929,9 +1997,13 @@
 }
 
 /* A title's extras (ExtrasShelf.tsx): a row of tiles under the page; a tile without a still says what it is. */
-.extras {
+.extras,
+.detail-shelf {
   position: relative;
-  padding: 0 0 1rem;
+  padding: 0 0 1.25rem;
+}
+.detail-collection-card[data-current="true"] .card-frame {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 .extra-play {
   position: absolute;
@@ -2063,6 +2135,9 @@
   margin: 0;
   white-space: pre-line;
   color: var(--text-2);
+}
+.person-filter {
+  margin-top: 0.5rem;
 }
 .person-titles h2 {
   margin: 0 0 0.75rem;

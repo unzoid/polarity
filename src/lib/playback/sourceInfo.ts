@@ -13,7 +13,7 @@
 import { formatBytes } from "../format";
 import { isKitsuId } from "../anime/kitsu";
 import { languageLabel, matches, NO_FILTER, SORTS, TAG_LABELS, tagsOf, type SourceFilter } from "./sources";
-import { scoreOne, type Match } from "./bestMatch";
+import { explainDifference, scoreOne, type Match } from "./bestMatch";
 import type { RankedStream, SourceSort } from "../types";
 
 /** What a masked value shows instead. */
@@ -146,6 +146,8 @@ export interface SourceInfoContext {
   sort?: SourceSort;
   /** Best Match's score and reasons for this source, as the list worked them out (useSourceFilters' `match`). */
   match?: Match;
+  /** The #1 ranked source's Match, to show differential deciding deltas when inspecting lower-ranked sources (#596). */
+  best?: Match;
   /** Only for the playing source. */
   playing?: PlayingReport;
 }
@@ -208,7 +210,12 @@ const ordinal = (n: number) => {
 /** Best Match's table (#274): one row per factor bestMatch.ts scores, whatever they are, then the total and the rank. */
 function scoreSection(r: RankedStream, ctx: SourceInfoContext): InfoSection {
   // Without the list's (a source made in the app), only what the file says.
-  const { score, factors, rank } = ctx.match ?? scoreOne(r);
+  const match = ctx.match ?? scoreOne(r);
+  const { score, factors, rank } = match;
+  const diffs =
+    rank && rank.position > 1 && ctx.best && ctx.best !== match
+      ? explainDifference(match, ctx.best, 3).map((d) => `${d.label} (${signed(d.delta)})`)
+      : [];
   return {
     title: "Best Match",
     table: {
@@ -218,6 +225,7 @@ function scoreSection(r: RankedStream, ctx: SourceInfoContext): InfoSection {
     },
     rows: [
       row("Rank", rank && `${ordinal(rank.position)} of ${rank.of}`),
+      row("Why #1 beat this", diffs.length ? diffs.join(" · ") : null),
       row("List sorted by", ctx.sort && ctx.sort !== "best" ? SORTS[ctx.sort] : null),
     ].filter((x): x is InfoRow => !!x),
   };
@@ -271,7 +279,7 @@ export function sourceInfo(r: RankedStream, ctx: SourceInfoContext = {}): InfoSe
       title: "What Polarity Made of It",
       rows: [
         row("Resolution", q.resolution ? (q.resolution === 2160 ? "4K (2160p)" : `${q.resolution}p`) : "Unknown"),
-        row("HDR", q.dolbyVision ? "Dolby Vision" : q.hdr ? "HDR" : null),
+        row("HDR", q.dolbyVision && q.hdr10Plus ? "Dolby Vision · HDR10+" : q.dolbyVision ? "Dolby Vision" : q.hdr10Plus ? "HDR10+" : q.hdr ? "HDR" : null),
         row("Codec", q.codec),
         row("Size", q.sizeBytes ? formatBytes(q.sizeBytes) : null),
         row("Audio languages", q.languages?.length ? q.languages.map(languageLabel).join(", ") : "Not stated"),

@@ -1,3 +1,4 @@
+import "../../styles/account.css";
 import { useId, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { Avatar } from "../../components/Avatar";
 import { Check } from "../../components/icons";

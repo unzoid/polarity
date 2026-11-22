@@ -1,6 +1,6 @@
 import { ORIGINAL_LANGUAGE, PREFERRED_LANGUAGES, SAME_AS_OTHERS, languageName } from "../playback/languages";
 import { LIMIT_STEPS } from "../catalog/ageRating";
-import { isMac } from "../platform/device";
+import { osName } from "../platform/device";
 import { CROP_MODES, cropModeLabel } from "./cropMode";
 import { MAX_VOLUMES } from "../playback/volume";
 import type { Prefs } from "./prefs";
@@ -675,8 +675,8 @@ export const SETTINGS: SettingDef[] = [
     id: "dialogueBoost",
     page: "subtitles",
     title: "Boost dialogue",
-    caption: "Makes voices clearer on surround (5.1 and 7.1) audio by turning the centre channel up and the rest down",
-    keywords: "voices clear center centre channel surround quiet speech",
+    caption: "Makes voices clearer on both stereo (vocal EQ) and surround (5.1/7.1 centre-channel boost) audio",
+    keywords: "voices clear center centre channel surround stereo quiet speech",
     bind: p("dialogueBoost"),
     control: toggle,
   },
@@ -688,6 +688,19 @@ export const SETTINGS: SettingDef[] = [
     keywords: "night mode loudness normalize compression leveling",
     bind: p("volumeLeveling"),
     control: toggle,
+  },
+  {
+    id: "drcProfile",
+    page: "subtitles",
+    title: "Dynamic range",
+    caption: "Pure keeps full cinema dynamics, Living Room follows volume leveling, Late Night applies full compression",
+    keywords: "drc dynamic range pure audiophile living room late night compression",
+    bind: p("drcProfile"),
+    control: choice([
+      { value: "pure", label: "Pure" },
+      { value: "livingRoom", label: "Living Room" },
+      { value: "lateNight", label: "Late Night" },
+    ]),
   },
   {
     id: "maxVolume",
@@ -726,6 +739,15 @@ export const SETTINGS: SettingDef[] = [
   { id: "theme", page: "appearance", title: "Theme", keywords: "colour color accent highlight background black oled dark create custom" },
   { id: "uiScale", page: "appearance", title: "Interface size", keywords: "zoom scale bigger smaller text" },
   {
+    id: "classicDesktop",
+    page: "appearance",
+    title: "Classic layout",
+    caption: "The previous top bar and full-page titles, on computers and tablets",
+    keywords: "layout old previous classic navbar design tab bar",
+    bind: p("classicDesktop"),
+    control: toggle,
+  },
+  {
     id: "cardSize",
     page: "appearance",
     title: "Card size",
@@ -762,7 +784,7 @@ export const SETTINGS: SettingDef[] = [
     keywords: "animations accessibility",
     bind: s("reduceMotion", "system"),
     control: choice([
-      { value: "system", label: isMac ? "Match macOS" : "Match Windows" },
+      { value: "system", label: `Match ${osName}` },
       { value: "on", label: "On" },
       { value: "off", label: "Off" },
     ]),
@@ -1036,6 +1058,24 @@ export const SETTINGS: SettingDef[] = [
     page: "anime",
     title: "Shelves",
     keywords: "anime rows featured carousel airing today season trending upcoming top rated popular movies genres",
+  },
+  {
+    id: "animeCardTitles",
+    page: "anime",
+    title: "Show titles & details",
+    caption: "Show the title and facts under each anime poster, separate from Home",
+    keywords: "anime cards posters titles captions names details year format",
+    bind: p("animeCardTitles"),
+    control: toggle,
+  },
+  {
+    id: "animeCardPeek",
+    page: "anime",
+    title: "Hover preview",
+    caption: "Show synopsis, genres and airing status when hovering an anime card",
+    keywords: "anime hover preview popover synopsis description tooltip discovery",
+    bind: p("animeCardPeek"),
+    control: toggle,
   },
   {
     id: "animeCardScores",
@@ -1387,10 +1427,27 @@ export const SETTINGS: SettingDef[] = [
     id: "deband",
     page: "advanced",
     title: "Smooth colour banding",
-    caption: "Removes visible steps in dark scenes and skies, at a small cost in GPU power",
-    keywords: "deband gradients color",
+    caption: "Removes visible steps in dark scenes and skies. Auto turns it on only when banding is detected.",
+    keywords: "deband gradients color cambi auto",
     bind: p("deband"),
-    control: toggle,
+    control: choice([
+      { value: "off", label: "Off" },
+      { value: "auto", label: "Auto" },
+      { value: "on", label: "On" },
+    ]),
+  },
+  {
+    id: "frameRateMatch",
+    page: "advanced",
+    title: "Match frame rate",
+    caption: "Matches display cadence during full-screen playback (off while browsing or with audio passthrough)",
+    keywords: "frame rate refresh hz judder 24p display resample seamless",
+    bind: p("frameRateMatch"),
+    control: choice([
+      { value: "off", label: "Off" },
+      { value: "seamless", label: "Seamless" },
+      { value: "always", label: "Always" },
+    ]),
   },
   {
     id: "cropMode",
@@ -1478,6 +1535,19 @@ export const SETTINGS: SettingDef[] = [
     control: choice([
       { value: "library", label: "Everything in my library" },
       { value: "started", label: "Only shows I've started" },
+    ]),
+  },
+  {
+    id: "notifyPacing",
+    page: "notifications",
+    title: "Notification pace",
+    caption: "Balanced limits alerts to 1/day and 5/week, rolling extras into a digest; Quiet limits to 3/week.",
+    keywords: "notify notification pacing quiet balanced digest frequency spam",
+    bind: p("notifyPacing"),
+    control: choice([
+      { value: "quiet", label: "Quiet" },
+      { value: "balanced", label: "Balanced" },
+      { value: "all", label: "All" },
     ]),
   },
   {
