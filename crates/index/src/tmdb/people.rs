@@ -307,6 +307,8 @@ mod tests {
                 release_date: None,
                 first_air_date: None,
                 vote_average: None,
+                vote_count: None,
+                original_language: None,
                 genre_ids: vec![],
             },
         };

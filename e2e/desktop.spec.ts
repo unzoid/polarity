@@ -1301,9 +1301,13 @@ test("on the desktop, Episodes is a list above its button: the one playing opens
   await app.locator(".episode-card-main:not([disabled])").nth(5).click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
-  await app.mouse.move(300, 300);
-  await app.mouse.move(310, 310);
-  await player.locator(".player-dock").getByRole("button", { name: "Episodes", exact: true }).click();
+  // The controls hide on their timer, which a slow runner can reach between waking them and the click: the picture
+  // then takes the click, and Playwright never moves the pointer to wake them, so wake and click again.
+  const episodes = player.locator(".player-dock").getByRole("button", { name: "Episodes", exact: true });
+  await expect(async () => {
+    await wakeControls(app);
+    await episodes.click({ timeout: 2_000 });
+  }).toPass();
   const menu = app.locator(".ep-menu");
   await expect(menu.locator(".ep-menu-title")).toHaveText("Season 1");
   // The one playing is open on its still, in view and focused for the keyboard.
@@ -1721,25 +1725,49 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(player).not.toContainText("An Open Film");
     const overlaps = () =>
       app.evaluate(() => {
+        const player = document.querySelector(".player")!;
         const frame = document.querySelector("iframe.player-youtube")!;
         const f = frame.getBoundingClientRect();
+        // Where an element is drawn: its box cut to every ancestor that clips it, nothing if it or an
+        // ancestor is see-through. The bar above the frame collapses once playing starts, its buttons
+        // fading out and hanging past its clipped edge, so their own boxes alone would cross the frame.
+        const drawn = (el: Element) => {
+          let { left, top, right, bottom } = el.getBoundingClientRect();
+          for (let a: Element | null = el; a && a !== player; a = a.parentElement) {
+            const s = getComputedStyle(a);
+            if (s.opacity === "0") return null;
+            if (a !== el && (s.overflowX !== "visible" || s.overflowY !== "visible")) {
+              const c = a.getBoundingClientRect();
+              left = Math.max(left, c.left);
+              top = Math.max(top, c.top);
+              right = Math.min(right, c.right);
+              bottom = Math.min(bottom, c.bottom);
+            }
+          }
+          return { left, top, right, bottom };
+        };
         // Everything drawn in the player but the frame and what holds it.
         return [...document.querySelectorAll(".player *")]
           .filter((el) => !el.contains(frame) && getComputedStyle(el).visibility !== "hidden")
-          .map((el) => [el, el.getBoundingClientRect()] as const)
-          .filter(([, r]) => r.width > 0 && r.height > 0 && r.left < f.right - 0.5 && r.right > f.left + 0.5 && r.top < f.bottom - 0.5 && r.bottom > f.top + 0.5)
+          .map((el) => [el, drawn(el)] as const)
+          .filter(([, r]) => r && r.right - r.left > 0 && r.bottom - r.top > 0 && r.left < f.right - 0.5 && r.right > f.left + 0.5 && r.top < f.bottom - 0.5 && r.bottom > f.top + 0.5)
           .map(([el]) => el.className || el.tagName);
       });
-    expect(await overlaps()).toEqual([]);
+    await expect.poll(overlaps).toEqual([]);
 
     // Playing, the bar above the frame collapses to a strip; a key or the pointer on the top edge brings it back.
+    // Its heights are compared once each has settled: on a slow runner the bar may have collapsed before anything here
+    // is measured, so the frame's first size isn't the one beside the full bar.
     const box = (await frame.boundingBox())!;
+    const height = async (l: typeof frame) => (await l.boundingBox())!.height;
     await app.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 10_000 });
-    expect((await frame.boundingBox())!.height).toBeGreaterThan(box.height);
-    // A key brings it back too, a seek included.
+    await expect.poll(() => height(bar)).toBeLessThan(20);
+    const collapsed = await height(frame);
+    // A key brings it back too, a seek included, and the frame gives the room back.
     await app.keyboard.press("ArrowRight");
     await expect(bar).toHaveAttribute("data-shown", "true");
+    await expect.poll(() => height(frame)).toBeLessThan(collapsed - 20);
     await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 10_000 });
     await app.mouse.move(box.x + box.width / 2, 2);
     await expect(bar).toHaveAttribute("data-shown", "true");
@@ -1753,7 +1781,7 @@ test.describe("signed in, on a fresh profile", () => {
     const narrowed = (await frame.boundingBox())!;
     expect(narrowed.width).toBeLessThan(box.width - 100);
     expect((await panel.boundingBox())!.x).toBeGreaterThanOrEqual(narrowed.x + narrowed.width - 0.5);
-    expect(await overlaps()).toEqual([]);
+    await expect.poll(overlaps).toEqual([]);
     await app.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
 
