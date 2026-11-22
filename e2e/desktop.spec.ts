@@ -1721,16 +1721,35 @@ test.describe("signed in, on a fresh profile", () => {
     await expect(player).not.toContainText("An Open Film");
     const overlaps = () =>
       app.evaluate(() => {
+        const player = document.querySelector(".player")!;
         const frame = document.querySelector("iframe.player-youtube")!;
         const f = frame.getBoundingClientRect();
+        // Where an element is drawn: its box cut to every ancestor that clips it, nothing if it or an
+        // ancestor is see-through. The bar above the frame collapses once playing starts, its buttons
+        // fading out and hanging past its clipped edge, so their own boxes alone would cross the frame.
+        const drawn = (el: Element) => {
+          let { left, top, right, bottom } = el.getBoundingClientRect();
+          for (let a: Element | null = el; a && a !== player; a = a.parentElement) {
+            const s = getComputedStyle(a);
+            if (s.opacity === "0") return null;
+            if (a !== el && (s.overflowX !== "visible" || s.overflowY !== "visible")) {
+              const c = a.getBoundingClientRect();
+              left = Math.max(left, c.left);
+              top = Math.max(top, c.top);
+              right = Math.min(right, c.right);
+              bottom = Math.min(bottom, c.bottom);
+            }
+          }
+          return { left, top, right, bottom };
+        };
         // Everything drawn in the player but the frame and what holds it.
         return [...document.querySelectorAll(".player *")]
           .filter((el) => !el.contains(frame) && getComputedStyle(el).visibility !== "hidden")
-          .map((el) => [el, el.getBoundingClientRect()] as const)
-          .filter(([, r]) => r.width > 0 && r.height > 0 && r.left < f.right - 0.5 && r.right > f.left + 0.5 && r.top < f.bottom - 0.5 && r.bottom > f.top + 0.5)
+          .map((el) => [el, drawn(el)] as const)
+          .filter(([, r]) => r && r.right - r.left > 0 && r.bottom - r.top > 0 && r.left < f.right - 0.5 && r.right > f.left + 0.5 && r.top < f.bottom - 0.5 && r.bottom > f.top + 0.5)
           .map(([el]) => el.className || el.tagName);
       });
-    expect(await overlaps()).toEqual([]);
+    await expect.poll(overlaps).toEqual([]);
 
     // Playing, the bar above the frame collapses to a strip; a key or the pointer on the top edge brings it back.
     const box = (await frame.boundingBox())!;
@@ -1753,7 +1772,7 @@ test.describe("signed in, on a fresh profile", () => {
     const narrowed = (await frame.boundingBox())!;
     expect(narrowed.width).toBeLessThan(box.width - 100);
     expect((await panel.boundingBox())!.x).toBeGreaterThanOrEqual(narrowed.x + narrowed.width - 0.5);
-    expect(await overlaps()).toEqual([]);
+    await expect.poll(overlaps).toEqual([]);
     await app.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
 
