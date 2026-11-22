@@ -1301,9 +1301,13 @@ test("on the desktop, Episodes is a list above its button: the one playing opens
   await app.locator(".episode-card-main:not([disabled])").nth(5).click();
   const player = app.locator(".player");
   await expect(player).toHaveAttribute("data-started", "true");
-  await app.mouse.move(300, 300);
-  await app.mouse.move(310, 310);
-  await player.locator(".player-dock").getByRole("button", { name: "Episodes", exact: true }).click();
+  // The controls hide on their timer, which a slow runner can reach between waking them and the click: the picture
+  // then takes the click, and Playwright never moves the pointer to wake them, so wake and click again.
+  const episodes = player.locator(".player-dock").getByRole("button", { name: "Episodes", exact: true });
+  await expect(async () => {
+    await wakeControls(app);
+    await episodes.click({ timeout: 2_000 });
+  }).toPass();
   const menu = app.locator(".ep-menu");
   await expect(menu.locator(".ep-menu-title")).toHaveText("Season 1");
   // The one playing is open on its still, in view and focused for the keyboard.
@@ -1752,13 +1756,18 @@ test.describe("signed in, on a fresh profile", () => {
     await expect.poll(overlaps).toEqual([]);
 
     // Playing, the bar above the frame collapses to a strip; a key or the pointer on the top edge brings it back.
+    // Its heights are compared once each has settled: on a slow runner the bar may have collapsed before anything here
+    // is measured, so the frame's first size isn't the one beside the full bar.
     const box = (await frame.boundingBox())!;
+    const height = async (l: typeof frame) => (await l.boundingBox())!.height;
     await app.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 10_000 });
-    expect((await frame.boundingBox())!.height).toBeGreaterThan(box.height);
-    // A key brings it back too, a seek included.
+    await expect.poll(() => height(bar)).toBeLessThan(20);
+    const collapsed = await height(frame);
+    // A key brings it back too, a seek included, and the frame gives the room back.
     await app.keyboard.press("ArrowRight");
     await expect(bar).toHaveAttribute("data-shown", "true");
+    await expect.poll(() => height(frame)).toBeLessThan(collapsed - 20);
     await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 10_000 });
     await app.mouse.move(box.x + box.width / 2, 2);
     await expect(bar).toHaveAttribute("data-shown", "true");
