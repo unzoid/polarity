@@ -10,6 +10,7 @@ import { Switch } from "../ui/Switch";
 import { RatingsLegend, RatingsTable } from "./EpisodeRatings";
 
 type View = "grid" | "wrapped" | "timeline" | "list";
+type Axis = "vertical" | "horizontal";
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "grid", label: "Grid" },
@@ -20,12 +21,20 @@ const VIEWS: { id: View; label: string }[] = [
 
 /** The view last picked, kept on this device only (a convenience; the grid when it can't be read). */
 const VIEW_KEY = "polar.episodeRatingsView";
+const AXIS_KEY = "polar.episodeRatingsAxis";
 function savedView(): View {
   try {
     const v = localStorage.getItem(VIEW_KEY);
     return VIEWS.some((o) => o.id === v) ? (v as View) : "grid";
   } catch {
     return "grid";
+  }
+}
+function savedAxis(): Axis {
+  try {
+    return localStorage.getItem(AXIS_KEY) === "horizontal" ? "horizontal" : "vertical";
+  } catch {
+    return "vertical";
   }
 }
 
@@ -63,6 +72,7 @@ function useHeight(ref: RefObject<HTMLElement | null>) {
  */
 export function EpisodeRatingsViews({ grid, onOpen }: { grid: RatingGrid; onOpen: (v: Video) => void }) {
   const [view, setView] = useState<View>(savedView);
+  const [axis, setAxis] = useState<Axis>(savedAxis);
   const [dir, setDir] = useState(1);
   const byKey = useRef(false);
   const content = useRef<HTMLDivElement>(null);
@@ -78,18 +88,61 @@ export function EpisodeRatingsViews({ grid, onOpen }: { grid: RatingGrid; onOpen
       // Not kept: the grid next time.
     }
   };
+  const pickAxis = (next: Axis) => {
+    if (next === axis) return;
+    setDir(next === "horizontal" ? 1 : -1);
+    setAxis(next);
+    try {
+      localStorage.setItem(AXIS_KEY, next);
+    } catch {
+      // Not kept: vertical next time.
+    }
+  };
   const transition = byKey.current ? { duration: 0 } : prefersReducedMotion() ? { duration: 0.15 } : springs.tabs;
+  const panelKey = view === "grid" ? `grid-${axis}` : view;
 
   return (
     <div className="ratings-views" data-view={view}>
       <div className="ratings-views-bar" onKeyDownCapture={() => (byKey.current = true)} onPointerDownCapture={() => (byKey.current = false)}>
         <Segmented label="Chart" value={view} onChange={pick} options={VIEWS} />
+        {view === "grid" && (
+          <div className="ratings-axis" role="radiogroup" aria-label="Grid orientation">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={axis === "vertical"}
+              aria-label="Vertical (seasons as columns)"
+              title="Seasons as columns"
+              onClick={() => pickAxis("vertical")}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+                <rect x="2" y="2.5" width="3.2" height="11" rx="1" fill="currentColor" />
+                <rect x="6.4" y="2.5" width="3.2" height="11" rx="1" fill="currentColor" opacity="0.72" />
+                <rect x="10.8" y="2.5" width="3.2" height="11" rx="1" fill="currentColor" opacity="0.45" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={axis === "horizontal"}
+              aria-label="Horizontal (seasons as rows)"
+              title="Seasons as rows"
+              onClick={() => pickAxis("horizontal")}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+                <rect x="2.5" y="2" width="11" height="3.2" rx="1" fill="currentColor" />
+                <rect x="2.5" y="6.4" width="11" height="3.2" rx="1" fill="currentColor" opacity="0.72" />
+                <rect x="2.5" y="10.8" width="11" height="3.2" rx="1" fill="currentColor" opacity="0.45" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
       <motion.div className="ratings-views-frame" initial={false} animate={height === null ? undefined : { height }} transition={transition}>
         <div ref={content}>
           <AnimatePresence mode="popLayout" initial={false} custom={{ dir, still }}>
             <motion.div
-              key={view}
+              key={panelKey}
               className="ratings-views-panel"
               custom={{ dir, still }}
               variants={panel}
@@ -99,7 +152,7 @@ export function EpisodeRatingsViews({ grid, onOpen }: { grid: RatingGrid; onOpen
               transition={transition}
             >
               {view === "grid" ? (
-                <RatingsTable grid={grid} dialog legend={false} onOpen={onOpen} />
+                <RatingsTable grid={grid} dialog legend={false} horizontal={axis === "horizontal"} onOpen={onOpen} />
               ) : view === "wrapped" ? (
                 <Wrapped grid={grid} onOpen={onOpen} />
               ) : view === "timeline" ? (

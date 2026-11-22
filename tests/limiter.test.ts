@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BUSY_AFTER, concurrency, Limiter, limitedFetch, PRIORITY, retryAfter, type Clock, type HostLimits } from "../src/lib/net/limiter";
+import { BUSY_AFTER, concurrency, ExclusivePriorityQueue, Limiter, limitedFetch, LoadCoordinator, PRIORITY, retryAfter, TIER, type Clock, type HostLimits } from "../src/lib/net/limiter";
 
 /** Virtual time: sleeping moves the clock on at once. */
 function fakeClock(): Clock & { t: number; slept: number[] } {
@@ -213,5 +213,65 @@ describe("Limiter priorities (#109)", () => {
     await expect(gone).rejects.toThrow("gone");
     await l.take(undefined, PRIORITY.background);
     expect(clock.t).toBe(1000);
+  });
+});
+
+describe("LoadCoordinator 4-tier shedding & ExclusivePriorityQueue", () => {
+  test("sheds bestEffort and bulk during critical playback or >40% slow SLO, never critical", () => {
+    const coord = new LoadCoordinator();
+    expect(coord.shouldShed(TIER.bestEffort)).toBe(false);
+    expect(coord.shouldShed(TIER.bulk)).toBe(false);
+
+    const release = coord.enterCritical();
+    expect(coord.shouldShed(TIER.critical)).toBe(false);
+    expect(coord.shouldShed(TIER.degraded)).toBe(false);
+    expect(coord.shouldShed(TIER.bestEffort)).toBe(true);
+    expect(coord.shouldShed(TIER.bulk)).toBe(true);
+    release();
+    expect(coord.shouldShed(TIER.bestEffort)).toBe(false);
+
+    // Record >40% requests over 2000ms SLO -> sheds bestEffort/bulk even without active critical playback.
+    for (let i = 0; i < 6; i++) coord.recordLatency(2500);
+    for (let i = 0; i < 4; i++) coord.recordLatency(300);
+    expect(coord.degraded).toBe(true);
+    expect(coord.shouldShed(TIER.bestEffort)).toBe(true);
+    expect(coord.shouldShed(TIER.critical)).toBe(false);
+  });
+
+  test("ExclusivePriorityQueue enforces 1 active task per key without head-of-line blocking other keys", async () => {
+    const q = new ExclusivePriorityQueue<string>(2);
+    const order: string[] = [];
+    let releaseA1!: () => void;
+    let releaseB1!: () => void;
+
+    // A1 occupies slot 1 on host A; A2 has higher priority (0) on same host A (must wait);
+    // B1 has lower priority (5) on host B (must run immediately in slot 2, no HoL block!).
+    const pA1 = q.run("host-a", async () => {
+      order.push("start:A1");
+      await new Promise<void>((r) => (releaseA1 = r));
+      order.push("end:A1");
+    }, 0);
+    const pA2 = q.run("host-a", async () => {
+      order.push("start:A2");
+    }, 0);
+    const pB1 = q.run("host-b", async () => {
+      order.push("start:B1");
+      await new Promise<void>((r) => (releaseB1 = r));
+      order.push("end:B1");
+    }, 5);
+
+    await Promise.resolve();
+    expect(order).toEqual(["start:A1", "start:B1"]);
+    expect(q.activeCount).toBe(2);
+    expect(q.pendingCount).toBe(1);
+
+    releaseB1();
+    await pB1;
+    // A2 still cannot start until A1 finishes (host-a exclusivity!).
+    expect(order).toEqual(["start:A1", "start:B1", "end:B1"]);
+
+    releaseA1();
+    await Promise.all([pA1, pA2]);
+    expect(order).toEqual(["start:A1", "start:B1", "end:B1", "end:A1", "start:A2"]);
   });
 });

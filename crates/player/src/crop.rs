@@ -152,6 +152,10 @@ const COMMON_FRAMES: usize = 4;
 /// edge is crisp and found on the same row every frame; dark picture content
 /// fades out at a different row from one frame to the next.
 const EDGE_SLACK: i64 = 4;
+/// Frames of steady bars before static-lock hysteresis engages (suppresses
+/// 5–6px noisy edge drift between cuts while still reacting to real cuts/reveals).
+const STATIC_LOCK_FRAMES: usize = 6;
+const STATIC_LOCK_DEADZONE: i64 = 6;
 /// Picture shapes films and shows are made in. Bars that leave one of these
 /// are believed sooner than bars that leave an odd shape.
 const COMMON_ASPECTS: &[f64] = &[1.33, 1.37, 1.43, 1.5, 1.66, 1.78, 1.85, 1.9, 2.0, 2.2, 2.35, 2.39, 2.4, 2.55, 2.76];
@@ -258,6 +262,8 @@ pub struct CropTracker {
     crisp_run: [usize; 2],
     /// Per axis: following bars the film animates.
     follow: [bool; 2],
+    /// Consecutive frames bars stayed within `EDGE_SLACK` of `shown` while static.
+    static_lock: [usize; 2],
     /// Bars removed now: (top and bottom, left and right).
     shown: (i64, i64),
     /// Bar thicknesses cropped earlier in this load, per axis.
@@ -381,18 +387,30 @@ impl CropTracker {
         let shown = [self.shown.0, self.shown.1];
         let mut next = shown;
         let mut tracked = [false; 2];
+        let newest_raw = self.recent.back().map_or([0; 4], |r| *r);
         for axis in 0..2 {
             let was = self.follow[axis];
             self.follow[axis] = (was || self.animated(axis)) && self.still_animated(axis);
             // Followed, or come to rest with crisp edges: exactly where the newest reading has them.
             tracked[axis] = self.follow[axis] || (was && self.crisp_edges(axis) == Some(true));
             if tracked[axis] {
-                let newest = self.recent.back().map_or([0; 4], |r| *r);
-                next[axis] = newest[2 * axis].min(newest[2 * axis + 1]);
-            } else if let Some(thinner) = self.revealed(axis, shown[axis]) {
-                next[axis] = thinner;
-            } else if let Some(bars) = self.settled(axis, shown, display) {
-                next[axis] = bars;
+                self.static_lock[axis] = 0;
+                next[axis] = newest_raw[2 * axis].min(newest_raw[2 * axis + 1]);
+            } else {
+                let cur_bar = newest_raw[2 * axis].min(newest_raw[2 * axis + 1]);
+                let locked = shown[axis] > 0 && self.static_lock[axis] >= STATIC_LOCK_FRAMES;
+                let within_deadzone =
+                    |candidate: i64| locked && candidate > 0 && (candidate - shown[axis]).abs() <= STATIC_LOCK_DEADZONE;
+                if let Some(thinner) = self.revealed(axis, shown[axis]).filter(|&b| !within_deadzone(b)) {
+                    next[axis] = thinner;
+                } else if let Some(bars) = self.settled(axis, shown, display).filter(|&b| !within_deadzone(b)) {
+                    next[axis] = bars;
+                }
+                if next[axis] != shown[axis] || next[axis] == 0 {
+                    self.static_lock[axis] = 0;
+                } else if (cur_bar - shown[axis]).abs() <= EDGE_SLACK {
+                    self.static_lock[axis] = self.static_lock[axis].saturating_add(1);
+                }
             }
         }
         for axis in 0..2 {
@@ -454,7 +472,8 @@ impl CropTracker {
             }
         }
         // The frames before the cut say nothing about the shot after it.
-        (self.recent, self.crisp, self.crisp_run, self.follow) = (VecDeque::new(), [false; 2], [0; 2], [false; 2]);
+        (self.recent, self.crisp, self.crisp_run, self.follow, self.static_lock) =
+            (VecDeque::new(), [false; 2], [0; 2], [false; 2], [0; 2]);
         self.shown = (next[0], next[1]);
         self.cut = Some(why);
     }
@@ -521,7 +540,8 @@ impl CropTracker {
         if load != self.load || full != self.full {
             *self = CropTracker { load, full, ..Default::default() };
         }
-        (self.recent, self.crisp, self.crisp_run, self.follow) = (VecDeque::new(), [false; 2], [0; 2], [false; 2]);
+        (self.recent, self.crisp, self.crisp_run, self.follow, self.static_lock) =
+            (VecDeque::new(), [false; 2], [0; 2], [false; 2], [0; 2]);
         (self.change, self.cut) = (None, None);
     }
 
@@ -875,6 +895,21 @@ mod tests {
         t.update_measured(1, HD, HD, crisp_scope(120));
         assert!(!t.following());
         assert_eq!((t.bars(1), t.changed()), ((120, 0), Some(Why::Follow)), "at rest on the readings at once");
+    }
+
+    #[test]
+    fn static_lock_suppresses_small_edge_drift_without_blocking_cuts() {
+        let mut t = CropTracker::default();
+        // Establish 140px static letterbox and hold steady past STATIC_LOCK_FRAMES.
+        feed(&mut t, &[Some(SCOPE); 12]);
+        assert_eq!(t.bars(1), (140, 0));
+        // A noisy 6px drift (134px) is absorbed by the static-lock dead-zone.
+        let drift_thin = Rect { w: 1920, h: 1080 - 2 * 134, x: 0, y: 134 };
+        assert!(feed(&mut t, &[Some(drift_thin); 6]).iter().all(|b| *b == (140, 0)));
+        let drift_thick = Rect { w: 1920, h: 1080 - 2 * 146, x: 0, y: 146 };
+        assert!(feed(&mut t, &[Some(drift_thick); 6]).iter().all(|b| *b == (140, 0)));
+        // A real full-frame cut still un-crops immediately on the very first frame.
+        assert_eq!(feed(&mut t, &[Some(FULL)]).last(), Some(&(0, 0)));
     }
 
     #[test]

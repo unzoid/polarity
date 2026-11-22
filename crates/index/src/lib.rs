@@ -29,6 +29,7 @@ use tokio::sync::OnceCell;
 
 use polar_addon::{CatalogExtra, Manifest, ManifestCatalog, ManifestResource, Meta, MetaPreview};
 
+pub use cache::scale_capacity;
 use cache::TtlCache;
 
 /// Titles per page of a TMDB catalog (`skip` counts titles, not pages).
@@ -82,6 +83,18 @@ pub struct IndexConfig {
     pub language: Option<String>,
 }
 
+/// Read projection for [`Indexer::meta_with`] (Netflix #451): avoids per-season TMDB fan-out
+/// and Cinemeta episode renumbering when the caller only needs display fields (name/poster/backdrop).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetaMask {
+    /// Name, poster, backdrop, rating, genres (used by `fillUntitled` library hydration).
+    Display,
+    /// Full title details, logos, cast and trailers, without per-season episode lists.
+    Overview,
+    /// Everything, including all seasons/episodes renumbered onto IMDb ids.
+    Full,
+}
+
 enum Backend {
     Tmdb(Box<tmdb::Tmdb>),
     Cinemeta(cinemeta::Cinemeta),
@@ -91,6 +104,8 @@ pub struct Indexer {
     backend: Backend,
     catalogs: TtlCache<String, Vec<MetaPreview>>,
     metas: TtlCache<String, Meta>,
+    /// Lightweight `MetaMask::Display` / `Overview` cache so `fillUntitled` never pollutes full `metas`.
+    display_metas: TtlCache<String, Meta>,
     /// Candidate pools (several upstream pages each), shared by curated shelves.
     /// One fetch per pool however many shelves ask for it at once.
     pools: TtlCache<String, Arc<OnceCell<Vec<MetaPreview>>>>,
@@ -106,16 +121,21 @@ pub struct Indexer {
 
 impl Indexer {
     pub fn new(config: IndexConfig) -> Self {
+        Self::with_client(config, polar_addon::shared_http_client())
+    }
+
+    pub fn with_client(config: IndexConfig, http: reqwest::Client) -> Self {
         let backend = match config.tmdb_key.filter(|k| !k.trim().is_empty()) {
-            Some(key) => Backend::Tmdb(Box::new(tmdb::Tmdb::new(key, config.language))),
-            None => Backend::Cinemeta(cinemeta::Cinemeta::new()),
+            Some(key) => Backend::Tmdb(Box::new(tmdb::Tmdb::with_client(key, config.language, http.clone()))),
+            None => Backend::Cinemeta(cinemeta::Cinemeta::with_client(http.clone())),
         };
         Self {
             backend,
             catalogs: TtlCache::new(Duration::from_secs(60 * 60), 256),
             metas: TtlCache::new(Duration::from_secs(6 * 60 * 60), 2048),
+            display_metas: TtlCache::new(Duration::from_secs(12 * 60 * 60), 2048),
             pools: TtlCache::new(Duration::from_secs(3 * 60 * 60), 64),
-            numbering: cinemeta::Cinemeta::new(),
+            numbering: cinemeta::Cinemeta::with_client(http),
             orders: episode_order::Cache::new(),
             people: TtlCache::new(Duration::from_secs(6 * 60 * 60), 256),
             people_search: TtlCache::new(Duration::from_secs(60 * 60), 128),
@@ -127,6 +147,41 @@ impl Indexer {
         match self.backend {
             Backend::Tmdb(_) => "TMDB",
             Backend::Cinemeta(_) => "Cinemeta (fallback)",
+        }
+    }
+
+    /// 3-level OOM governor hook: sheds cached metadata proportionally to OS/device memory pressure.
+    /// - Level 1 (moderate): drop expired entries + oldest 25% of secondary caches.
+    /// - Level 2 (high): evict 50% of all caches and clear candidate pools.
+    /// - Level 3 (critical): clear pools/people/search caches and evict 75% of metadata caches.
+    pub fn trim_memory(&self, level: u8) -> usize {
+        match level {
+            0 => 0,
+            1 => {
+                self.pools.evict_fraction(0.25)
+                    + self.people.evict_fraction(0.25)
+                    + self.people_search.evict_fraction(0.25)
+                    + self.catalogs.evict_fraction(0.25)
+                    + self.display_metas.evict_fraction(0.15)
+            }
+            2 => {
+                let mut n = self.pools.clear();
+                n += self.people.evict_fraction(0.5);
+                n += self.people_search.evict_fraction(0.5);
+                n += self.catalogs.evict_fraction(0.5);
+                n += self.display_metas.evict_fraction(0.5);
+                n += self.metas.evict_fraction(0.5);
+                n
+            }
+            _ => {
+                let mut n = self.pools.clear();
+                n += self.people.clear();
+                n += self.people_search.clear();
+                n += self.catalogs.evict_fraction(0.75);
+                n += self.display_metas.evict_fraction(0.75);
+                n += self.metas.evict_fraction(0.75);
+                n
+            }
         }
     }
 
@@ -177,7 +232,8 @@ impl Indexer {
             }
             _ => return Err(IndexError::NotFound),
         };
-        self.catalogs.insert(key, metas.clone());
+        let metas =
+            self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
     }
 
@@ -204,7 +260,8 @@ impl Indexer {
                 curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect()
             }
         };
-        self.catalogs.insert(key, metas.clone());
+        let metas =
+            self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
     }
 
@@ -242,7 +299,8 @@ impl Indexer {
             Backend::Tmdb(t) => t.search(ty, query, year).await?,
             Backend::Cinemeta(c) => c.search(ty, query).await?,
         };
-        self.catalogs.insert(key, metas.clone());
+        let metas =
+            self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
     }
 
@@ -275,6 +333,12 @@ impl Indexer {
     }
 
     pub async fn meta(&self, ty: &str, id: &str) -> Result<Meta> {
+        self.meta_with(ty, id, MetaMask::Full).await
+    }
+
+    /// Fetch title metadata projected to `mask` ([`MetaMask::Display`] skips Cinemeta episode
+    /// renumbering and per-season TMDB fan-out). Always serves from the full cache when warm.
+    pub async fn meta_with(&self, ty: &str, id: &str, mask: MetaMask) -> Result<Meta> {
         check_type(ty)?;
         if !id.starts_with("tt") {
             return Err(IndexError::UnsupportedId(id.into()));
@@ -282,6 +346,19 @@ impl Indexer {
         let key = format!("{ty}/{id}");
         if let Some(hit) = self.metas.get(&key) {
             return Ok(hit);
+        }
+        if mask != MetaMask::Full {
+            let proj_key = format!("{}/{key}", if mask == MetaMask::Display { "d" } else { "o" });
+            if let Some(hit) = self.display_metas.get(&proj_key) {
+                return Ok(hit);
+            }
+            let meta = match &self.backend {
+                Backend::Tmdb(t) => t.meta_projection(ty, id, mask == MetaMask::Overview).await?,
+                Backend::Cinemeta(c) => c.meta(ty, id).await?,
+            };
+            let ttl = meta_ttl(&meta, curate::today());
+            let meta = self.display_metas.insert_if_valid(proj_key, meta, ttl, meta_valid);
+            return Ok(meta);
         }
         let meta = match &self.backend {
             Backend::Tmdb(t) if ty == "series" => {
@@ -297,7 +374,8 @@ impl Indexer {
             Backend::Tmdb(t) => t.meta(ty, id).await?,
             Backend::Cinemeta(c) => c.meta(ty, id).await?,
         };
-        self.metas.insert(key, meta.clone());
+        let ttl = meta_ttl(&meta, curate::today());
+        let meta = self.metas.insert_if_valid(key, meta, ttl, meta_valid);
         Ok(meta)
     }
 
@@ -370,14 +448,180 @@ fn check_type(ty: &str) -> Result<()> {
     }
 }
 
+/// Data Canary LKG predicate for catalogs: reject HTTP-200 empty responses or >80% sudden drops
+/// when overwriting a previously populated list.
+fn catalog_valid(old: &[MetaPreview], new: &[MetaPreview]) -> bool {
+    if old.is_empty() {
+        return true;
+    }
+    if new.is_empty() {
+        return false;
+    }
+    !(old.len() >= 10 && new.len() * 5 < old.len())
+}
+
+/// Data Canary LKG predicate for full metadata: never let an empty episode list overwrite a
+/// previously populated series.
+fn meta_valid(old: &Meta, new: &Meta) -> bool {
+    !(old.preview.ty == "series" && !old.videos.is_empty() && new.videos.is_empty())
+}
+
+/// Parse `YYYY-MM-DD` (or ISO prefix) into Unix day count (matching [`curate::today`]).
+fn parse_day(date: &str) -> Option<u64> {
+    let prefix = date.get(..10)?;
+    let mut parts = prefix.split('-');
+    let y: i64 = parts.next()?.parse().ok()?;
+    let m: i64 = parts.next()?.parse().ok()?;
+    let d: i64 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let y = y - i64::from(m <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    u64::try_from(days).ok()
+}
+
+/// Volatility-matched TTL for title metadata (Netflix #630 / #654):
+/// - Series with an episode airing within ±2 days (live edge): 45 min
+/// - Ended/canceled series or films released >180 days ago (settled): 24 hours
+/// - Active returning series / recent releases: 6 hours
+fn meta_ttl(meta: &Meta, today_day: u64) -> Duration {
+    const LIVE: Duration = Duration::from_secs(45 * 60);
+    const DEFAULT: Duration = Duration::from_secs(6 * 60 * 60);
+    const SETTLED: Duration = Duration::from_secs(24 * 60 * 60);
+
+    if meta.preview.ty == "series" {
+        let airing_near = meta
+            .videos
+            .iter()
+            .any(|v| v.released.as_deref().and_then(parse_day).is_some_and(|d| d.abs_diff(today_day) <= 2));
+        if airing_near {
+            return LIVE;
+        }
+        let ended = meta.details.status.as_deref().is_some_and(|s| {
+            s.eq_ignore_ascii_case("ended") || s.eq_ignore_ascii_case("canceled") || s.eq_ignore_ascii_case("cancelled")
+        });
+        if ended {
+            return SETTLED;
+        }
+        return DEFAULT;
+    }
+
+    if let Some(day) = meta.details.released.as_deref().and_then(parse_day) {
+        if today_day.saturating_sub(day) > 180 {
+            return SETTLED;
+        }
+    }
+    DEFAULT
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use polar_addon::{MetaDetails, Video};
+
+    fn preview(ty: &str) -> MetaPreview {
+        MetaPreview {
+            id: "tt0000001".into(),
+            ty: ty.into(),
+            name: "Test Title".into(),
+            poster: None,
+            background: None,
+            logo: None,
+            logos: Vec::new(),
+            description: None,
+            release_info: None,
+            imdb_rating: None,
+            genres: Vec::new(),
+            certification: None,
+        }
+    }
+
+    fn test_meta(ty: &str, details: MetaDetails, videos: Vec<Video>) -> Meta {
+        Meta {
+            preview: preview(ty),
+            runtime: None,
+            cast: Vec::new(),
+            director: Vec::new(),
+            trailer_yt_id: None,
+            trailer_source: None,
+            videos,
+            people: Vec::new(),
+            details,
+            crew: Vec::new(),
+            extras: Vec::new(),
+        }
+    }
+
+    fn ep(id: &str, season: u32, episode: u32, released: Option<&str>) -> Video {
+        Video {
+            id: id.into(),
+            title: format!("Episode {episode}"),
+            season,
+            episode,
+            released: released.map(str::to_owned),
+            thumbnail: None,
+            overview: None,
+            rating: None,
+        }
+    }
 
     #[tokio::test]
     async fn tmdb_ids_need_a_tmdb_key() {
         let ix = Indexer::new(IndexConfig::default());
         assert_eq!(ix.imdb_for_tmdb("movie", 603).await.unwrap(), None);
         assert!(ix.imdb_for_tmdb("anime", 603).await.is_err());
+    }
+
+    #[test]
+    fn meta_ttl_matches_title_volatility() {
+        let today = parse_day("2026-11-22").unwrap();
+        let ended_show =
+            test_meta("series", MetaDetails { status: Some("Ended".into()), ..Default::default() }, vec![]);
+        assert_eq!(meta_ttl(&ended_show, today), Duration::from_secs(24 * 60 * 60));
+
+        let airing_show = test_meta("series", MetaDetails::default(), vec![ep("tt1:1:5", 1, 5, Some("2026-11-23"))]);
+        assert_eq!(meta_ttl(&airing_show, today), Duration::from_secs(45 * 60));
+
+        let old_film =
+            test_meta("movie", MetaDetails { released: Some("2024-01-10".into()), ..Default::default() }, vec![]);
+        assert_eq!(meta_ttl(&old_film, today), Duration::from_secs(24 * 60 * 60));
+
+        let new_film =
+            test_meta("movie", MetaDetails { released: Some("2026-10-15".into()), ..Default::default() }, vec![]);
+        assert_eq!(meta_ttl(&new_film, today), Duration::from_secs(6 * 60 * 60));
+    }
+
+    #[test]
+    fn data_canary_guards_reject_empty_overwrites() {
+        let prev_show = test_meta("series", MetaDetails::default(), vec![ep("tt1:1:1", 1, 1, None)]);
+        let empty_show = test_meta("series", MetaDetails::default(), vec![]);
+        assert!(!meta_valid(&prev_show, &empty_show));
+        assert!(meta_valid(&empty_show, &prev_show));
+
+        let populated: Vec<MetaPreview> = (0..12).map(|_| preview("movie")).collect();
+        assert!(!catalog_valid(&populated, &[]));
+        assert!(!catalog_valid(&populated, &[preview("movie")]));
+        assert!(catalog_valid(&populated, &populated[..5]));
+    }
+
+    #[test]
+    fn trim_memory_evicts_proportionally_across_levels() {
+        let ix = Indexer::new(IndexConfig::default());
+        for i in 0..8 {
+            ix.metas.insert(format!("tt000000{i}"), test_meta("movie", MetaDetails::default(), vec![]));
+            ix.catalogs.insert(format!("movie/trending/{i}"), vec![preview("movie")]);
+        }
+        assert_eq!(ix.trim_memory(0), 0);
+        let l1 = ix.trim_memory(1);
+        assert!(l1 >= 2, "level 1 should trim secondary caches, trimmed {l1}");
+        let l2 = ix.trim_memory(2);
+        assert!(l2 >= 4, "level 2 should evict half of caches, trimmed {l2}");
+        let l3 = ix.trim_memory(3);
+        assert!(l3 >= 2, "level 3 should aggressively evict remaining entries, trimmed {l3}");
     }
 }

@@ -46,6 +46,9 @@ export function PlayerStatus({
   onSources,
   onSettings,
   onRetry,
+  onFix,
+  fixLabel,
+  diagnosisNote,
   onYouTube,
 }: {
   state: ReturnType<typeof useSource>["state"];
@@ -67,6 +70,10 @@ export function PlayerStatus({
   onSettings?: (page: "sources" | "addons") => void;
   /** Asks the add-ons again after finding no source or none that played (#375). */
   onRetry?: () => void;
+  /** One-click self-healing playback troubleshooter (resets filters / HDR / hwdec / fallback). */
+  onFix?: () => void;
+  fixLabel?: string;
+  diagnosisNote?: string;
   /** A YouTube video that can't play here (Android): open it in YouTube. */
   onYouTube?: () => void;
 }) {
@@ -163,9 +170,10 @@ export function PlayerStatus({
         <p key={message} className="player-status-message t-callout" role="status">
           {message}
         </p>
-        {failed && (stageAt || steps.length > 0) && (
+        {failed && (stageAt || diagnosisNote || steps.length > 0) && (
           <div className="player-status-meta">
             {stageAt && <p className="player-status-where t-caption">Failed at {STAGE_LABEL[stageAt]}</p>}
+            {diagnosisNote && <p className="player-status-where t-caption">{diagnosisNote}</p>}
             {steps.length > 0 && (
               <button type="button" className="player-status-log t-caption" aria-expanded={log} onClick={() => setLog((v) => !v)}>
                 {log ? "Hide Steps" : "Show Steps"}
@@ -177,8 +185,13 @@ export function PlayerStatus({
         {failed && (
           <div className="player-status-actions">
             {/* Focused, so Enter (or a controller's A) picks it straight away. */}
+            {onFix && (
+              <Button variant="primary" onClick={onFix} autoFocus={!onSources}>
+                {fixLabel ?? "Fix Playback"}
+              </Button>
+            )}
             {onSources && (
-              <Button variant="primary" onClick={onSources} autoFocus>
+              <Button variant={onFix ? "glass" : "primary"} onClick={onSources} autoFocus>
                 <Sources size={17} /> Choose Another Source
               </Button>
             )}

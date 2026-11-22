@@ -28,6 +28,8 @@ final class MpvPlayer: ObservableObject {
     @Published private(set) var problem: String?
     /// Played to the end.
     @Published private(set) var ended = false
+    /// Container video frame rate reported by mpv (`container-fps`), for display refresh-rate matching (#515).
+    @Published private(set) var frameRate: Double = 0
 
     /// What mpv draws into; `nil` when mpv couldn't start (`problem` says why).
     private(set) var video: MpvVideoView?
@@ -67,6 +69,7 @@ final class MpvPlayer: ObservableObject {
         mpv_observe_property(h, 0, "paused-for-cache", MPV_FORMAT_FLAG)
         // A node property read as a string comes as JSON.
         mpv_observe_property(h, 0, "track-list", MPV_FORMAT_STRING)
+        mpv_observe_property(h, 0, "container-fps", MPV_FORMAT_DOUBLE)
 
         let pump = EventPump(handle: h) { [weak self] events in self?.apply(events) }
         let retained = Unmanaged.passRetained(pump)
@@ -168,6 +171,7 @@ final class MpvPlayer: ObservableObject {
                 loaded = true
                 buffering = waitingForCache
             case let .tracks(json): tracks = MpvPlayer.tracks(fromJSON: json)
+            case let .frameRate(value): frameRate = value
             case .ended: ended = true
             case let .failed(reason): problem = reason
             }
@@ -201,6 +205,7 @@ enum PlayerEvent {
     case waitingForCache(Bool)
     case loaded
     case tracks(String)
+    case frameRate(Double)
     case ended
     case failed(String)
 }
@@ -267,6 +272,8 @@ final class EventPump: @unchecked Sendable {
             case ("track-list", MPV_FORMAT_STRING):
                 guard let string = data.load(as: UnsafePointer<CChar>?.self) else { return nil }
                 return .tracks(String(cString: string))
+            case ("container-fps", MPV_FORMAT_DOUBLE):
+                return .frameRate(data.load(as: Double.self))
             default:
                 return nil
             }

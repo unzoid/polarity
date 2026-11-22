@@ -21,6 +21,7 @@ use serde::Serialize;
 static HTTP: LazyLock<Option<reqwest::Client>> = LazyLock::new(|| {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(8))
+        .http2_adaptive_window(true)
         .user_agent("mpv")
         // Followed by hand, so each hop can be reported.
         .redirect(reqwest::redirect::Policy::none())
@@ -48,6 +49,9 @@ pub enum ProbeEvent {
         reason: Option<String>,
         /// Without parameters: `video/x-matroska`.
         content_type: Option<String>,
+        /// Container or payload sniffed from the first 1 KB without extra RTT (e.g. `matroska`, `mp4 (dvhe)`, `hls`, `html`).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        container: Option<String>,
         /// The whole file's size in bytes, when the server says.
         size: Option<u64>,
         ms: u64,
@@ -140,13 +144,16 @@ impl Probe {
 fn judge(result: Result<String, String>, events: &[ProbeEvent], ms: u64) -> Readiness {
     let not_ready = |reason: &str| Readiness::NotReady { reason: reason.into() };
     let response = events.iter().rev().find_map(|e| match e {
-        ProbeEvent::Response { status, content_type, .. } => Some((*status, content_type.as_deref())),
+        ProbeEvent::Response { status, content_type, container, .. } => {
+            Some((*status, content_type.as_deref(), container.as_deref()))
+        }
         _ => None,
     });
     match (result, events.last()) {
         (Err(why), _) if why.contains("placeholder") => not_ready("Not ready at the source"),
+        (Err(why), _) if why.contains("page, not a video") => not_ready("Answered with a page, not a video"),
         (Err(_), _) => match response {
-            Some((status, _)) => Readiness::NotReady { reason: format!("The link answered {status}") },
+            Some((status, _, _)) => Readiness::NotReady { reason: format!("The link answered {status}") },
             None => not_ready("Didn't answer"),
         },
         (Ok(_), Some(ProbeEvent::Skipped { .. })) | (Ok(_), None) => Readiness::Unchecked,
@@ -155,7 +162,8 @@ fn judge(result: Result<String, String>, events: &[ProbeEvent], ms: u64) -> Read
         }
         (Ok(_), Some(ProbeEvent::Unreachable { .. })) => not_ready("Didn't answer"),
         (Ok(_), _) => match response {
-            Some((_, Some(t))) if is_page(t) => not_ready("Answered with a page, not a video"),
+            Some((_, Some(t), _)) if is_page(t) => not_ready("Answered with a page, not a video"),
+            Some((_, _, Some(c))) if is_sniffed_page(c) => not_ready("Answered with a page, not a video"),
             Some(_) => Readiness::Ready { ms },
             None => Readiness::Unchecked,
         },
@@ -270,20 +278,33 @@ impl Probe {
                 url = next;
             };
             let status = res.status();
+            let ctype = content_type(&res);
+            let size = total_size(&res);
+            let placeholder = self.placeholders && is_placeholder(&res);
+            let sniffed = if status.is_success() {
+                sniff_head(res, until.checked_duration_since(Instant::now())).await
+            } else {
+                None
+            };
+            let container = sniffed.as_ref().map(|s| s.label());
             on(ProbeEvent::Response {
                 host: host_label(&url),
                 status: status.as_u16(),
                 reason: status.canonical_reason().map(str::to_owned),
-                content_type: content_type(&res),
-                size: total_size(&res),
+                content_type: ctype,
+                container: container.clone(),
+                size,
                 ms: took,
             });
             if status.is_success() {
-                if self.placeholders && is_placeholder(&res) {
+                if placeholder {
                     return Err(
                         "This source isn't ready (it sent a placeholder clip instead of the video). Choose another source."
                             .into(),
                     );
+                }
+                if sniffed.as_ref().is_some_and(|s| s.is_error_page()) {
+                    return Err("The source answered with a web page, not a video. Choose another source.".into());
                 }
                 return Ok(url.into());
             }
@@ -356,6 +377,147 @@ fn describe(e: &reqwest::Error) -> String {
         Some(detail) => format!("{kind}: {detail}"),
         None => kind.to_owned(),
     }
+}
+
+/// Container or masquerading error payload detected from the first 1 KB of the stream probe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SniffedContainer {
+    Matroska,
+    Webm,
+    /// MP4/MOV container with optional notable ISO BMFF brand (`dvhe`/`dvh1`/`dby1`/`av01`).
+    Mp4 {
+        brand: Option<String>,
+    },
+    MpegTs,
+    Hls,
+    Dash,
+    Avi,
+    Flv,
+    Ogg,
+    /// HTML or JSON error page sent with a misleading 200/206 `application/octet-stream` or `video/*` header.
+    ErrorPage(&'static str),
+}
+
+impl SniffedContainer {
+    pub fn label(&self) -> String {
+        match self {
+            Self::Matroska => "matroska".into(),
+            Self::Webm => "webm".into(),
+            Self::Mp4 { brand: Some(b) } => format!("mp4 ({b})"),
+            Self::Mp4 { brand: None } => "mp4".into(),
+            Self::MpegTs => "mpegts".into(),
+            Self::Hls => "hls".into(),
+            Self::Dash => "dash".into(),
+            Self::Avi => "avi".into(),
+            Self::Flv => "flv".into(),
+            Self::Ogg => "ogg".into(),
+            Self::ErrorPage(kind) => (*kind).into(),
+        }
+    }
+
+    pub fn is_error_page(&self) -> bool {
+        matches!(self, Self::ErrorPage(_))
+    }
+}
+
+fn is_sniffed_page(label: &str) -> bool {
+    matches!(label, "html" | "json" | "xml")
+}
+
+/// Read at most 1024 bytes from an already-opened probe response (zero extra RTT).
+async fn sniff_head(mut res: reqwest::Response, budget: Option<Duration>) -> Option<SniffedContainer> {
+    let wait = budget?.min(Duration::from_millis(500));
+    if wait.is_zero() {
+        return None;
+    }
+    let mut buf = Vec::with_capacity(1024);
+    let read = async {
+        while buf.len() < 1024 {
+            match res.chunk().await {
+                Ok(Some(chunk)) => {
+                    let take = (1024 - buf.len()).min(chunk.len());
+                    buf.extend_from_slice(&chunk[..take]);
+                    if chunk.len() >= 1024 || buf.len() >= 32 {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+    };
+    let _ = tokio::time::timeout(wait, read).await;
+    sniff_container(&buf)
+}
+
+/// Inspect magic bytes from the start of a stream response.
+pub fn sniff_container(bytes: &[u8]) -> Option<SniffedContainer> {
+    if bytes.len() < 4 {
+        return None;
+    }
+    // EBML (Matroska / WebM): 0x1A 0x45 0xDF 0xA3
+    if bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        if bytes.windows(4).any(|w| w.eq_ignore_ascii_case(b"webm")) {
+            return Some(SniffedContainer::Webm);
+        }
+        return Some(SniffedContainer::Matroska);
+    }
+    // ISO BMFF / MP4 / MOV: [size:4][ftyp:4][major_brand:4][minor_ver:4][compat_brands...]
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        let box_len = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let end = box_len.clamp(12, bytes.len());
+        let notable = ["dby1", "dvhe", "dvh1", "av01"];
+        let mut brand = None;
+        let major = &bytes[8..12];
+        if notable.iter().any(|b| b.as_bytes() == major) {
+            brand = Some(String::from_utf8_lossy(major).into_owned());
+        } else if end >= 16 {
+            for chunk in bytes[16..end].as_chunks::<4>().0 {
+                if notable.iter().any(|b| b.as_bytes() == chunk.as_slice()) {
+                    brand = Some(String::from_utf8_lossy(chunk).into_owned());
+                    break;
+                }
+            }
+        }
+        return Some(SniffedContainer::Mp4 { brand });
+    }
+    // AVI (RIFF....AVI )
+    if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"AVI " {
+        return Some(SniffedContainer::Avi);
+    }
+    // FLV
+    if bytes.starts_with(b"FLV") {
+        return Some(SniffedContainer::Flv);
+    }
+    // Ogg
+    if bytes.starts_with(b"OggS") {
+        return Some(SniffedContainer::Ogg);
+    }
+    // MPEG-TS (188-byte sync 0x47) or BDAV M2TS (4-byte timestamp + 0x47 every 192 bytes)
+    if (bytes[0] == 0x47 && (bytes.len() < 189 || bytes[188] == 0x47))
+        || (bytes.len() >= 197 && bytes[4] == 0x47 && bytes[196] == 0x47)
+    {
+        return Some(SniffedContainer::MpegTs);
+    }
+    // Text-based manifests or masquerading HTML/JSON/XML error pages.
+    let trimmed = bytes.iter().position(|b| !b.is_ascii_whitespace()).map(|i| &bytes[i..]).unwrap_or(&[]);
+    let head = String::from_utf8_lossy(&trimmed[..trimmed.len().min(256)]);
+    let low = head.to_ascii_lowercase();
+    if low.starts_with("#extm3u") {
+        return Some(SniffedContainer::Hls);
+    }
+    if low.contains("<mpd") {
+        return Some(SniffedContainer::Dash);
+    }
+    if low.starts_with("<!doctype html") || low.starts_with("<html") || low.starts_with("<head") {
+        return Some(SniffedContainer::ErrorPage("html"));
+    }
+    if low.starts_with("<?xml") {
+        return Some(SniffedContainer::ErrorPage("xml"));
+    }
+    if trimmed.starts_with(b"{") && head.contains(':') && head.contains('"') {
+        return Some(SniffedContainer::ErrorPage("json"));
+    }
+    None
 }
 
 fn content_type(res: &reqwest::Response) -> Option<String> {
@@ -888,11 +1050,53 @@ mod tests {
             status: 206,
             reason: None,
             content_type: Some("video/mp4".into()),
+            container: Some("mp4 (dvhe)".into()),
             size: Some(1),
             ms: 3,
         };
         let json = serde_json::to_value(&e).unwrap();
         assert_eq!(json["kind"], "response");
         assert_eq!(json["contentType"], "video/mp4");
+        assert_eq!(json["container"], "mp4 (dvhe)");
+    }
+
+    #[test]
+    fn sniffs_containers_and_masquerading_html_pages() {
+        assert_eq!(sniff_container(&[0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86]), Some(SniffedContainer::Matroska));
+        assert_eq!(sniff_container(b"\x1A\x45\xDF\xA3\x42\x82\x84webm"), Some(SniffedContainer::Webm));
+        let mp4_dv = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00dvheav01";
+        assert_eq!(sniff_container(mp4_dv), Some(SniffedContainer::Mp4 { brand: Some("dvhe".into()) }));
+        let mut ts = vec![0u8; 200];
+        ts[0] = 0x47;
+        ts[188] = 0x47;
+        assert_eq!(sniff_container(&ts), Some(SniffedContainer::MpegTs));
+        assert_eq!(sniff_container(b"#EXTM3U\n#EXT-X-VERSION:3\n"), Some(SniffedContainer::Hls));
+        assert_eq!(sniff_container(b"<?xml version=\"1.0\"?><MPD></MPD>"), Some(SniffedContainer::Dash));
+        assert_eq!(
+            sniff_container(b"  <!DOCTYPE html><html><body>Error 522</body></html>"),
+            Some(SniffedContainer::ErrorPage("html"))
+        );
+        assert_eq!(sniff_container(br#"{"error":"rate limited"}"#), Some(SniffedContainer::ErrorPage("json")));
+    }
+
+    #[test]
+    fn rejects_html_masquerading_as_octet_stream() {
+        block(async {
+            let base = serve(|_, _| {
+                format!(
+                    "{}<!DOCTYPE html><html><body>Access denied</body></html>",
+                    answer("200 OK", &[("Content-Type", "application/octet-stream")])
+                )
+            })
+            .await;
+            let (r, events) = run(&format!("{base}/fake.mkv")).await;
+            assert!(r.unwrap_err().contains("web page, not a video"));
+            assert!(matches!(
+                events.last(),
+                Some(ProbeEvent::Response { container: Some(c), .. }) if c == "html"
+            ));
+            let ready = Probe { retry_after: vec![], ..Probe::default() }.readiness(&format!("{base}/fake.mkv")).await;
+            assert_eq!(ready, Readiness::NotReady { reason: "Answered with a page, not a video".into() });
+        })
     }
 }

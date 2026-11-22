@@ -64,6 +64,7 @@ function SoundCard() {
     >
       <SettingRow id="dialogueBoost" disabled={hasMpv === false} />
       <SettingRow id="volumeLeveling" disabled={hasMpv === false} />
+      <SettingRow id="drcProfile" disabled={hasMpv === false} />
       {/* Phones leave the volume to their own buttons (Player.tsx's systemVolume). */}
       {(isDesktop || isTvDevice) && <SettingRow id="maxVolume" disabled={hasMpv === false} />}
       {/* iPhones and iPads have no receiver output mpv can pass sound through to. */}

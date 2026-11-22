@@ -24,11 +24,69 @@ export interface StartStep {
   stage?: StartStage;
 }
 
+/** Structured playback start span for correlated waterfall diagnostics (Netflix #441/#669). */
+export interface StartSpan {
+  id: string;
+  attemptId: string;
+  parentId?: string;
+  stage: StartStage;
+  label: string;
+  startMs: number;
+  endMs?: number;
+  outcome?: "ok" | "warn" | "fail";
+}
+
+let attemptCounter = 0;
+
+/** Short monotonic zero-PII attempt identifier (`p-0001`, `p-0002`, ...) for correlated logs. */
+export function nextAttemptId(): string {
+  attemptCounter = (attemptCounter + 1) % 100_000;
+  return `p-${String(attemptCounter).padStart(4, "0")}`;
+}
+
+/**
+ * Collapse repetitive boilerplate steps (e.g. repeated "Buffering" / identical retry lines)
+ * when they exceed 30% of the log, keeping the first & last occurrence plus a summary line.
+ */
+export function filterBoilerplateSteps(steps: readonly StartStep[], threshold = 0.3): StartStep[] {
+  if (steps.length < 6) return [...steps];
+  const counts = new Map<string, number>();
+  for (const s of steps) {
+    const key = `${s.stage ?? ""}|${s.tone}|${s.text}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const noisy = new Set<string>();
+  for (const [k, count] of counts) {
+    if (count >= 3 && count / steps.length > threshold) noisy.add(k);
+  }
+  if (!noisy.size) return [...steps];
+
+  const out: StartStep[] = [];
+  const seen = new Map<string, number>();
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const key = `${s.stage ?? ""}|${s.tone}|${s.text}`;
+    if (!noisy.has(key)) {
+      out.push(s);
+      continue;
+    }
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    const total = counts.get(key)!;
+    if (n === 1) {
+      out.push(s);
+    } else if (n === total) {
+      out.push({ ...s, text: `${s.text} (repeated ${total}× total)` });
+    }
+  }
+  return out;
+}
+
 /** One step of the backend's link check (`polar_addon::probe::ProbeEvent`). */
 export type ProbeEvent =
   | { kind: "request"; host: string; attempt: number }
   | { kind: "redirect"; from: string; to: string; status: number; ms: number }
-  | { kind: "response"; host: string; status: number; reason?: string | null; contentType?: string | null; size?: number | null; ms: number }
+  | { kind: "response"; host: string; status: number; reason?: string | null; contentType?: string | null; container?: string | null; size?: number | null; ms: number }
   | { kind: "retry"; afterMs: number }
   | { kind: "unreachable"; host: string; error: string; ms: number }
   | { kind: "skipped"; reason: string };
@@ -109,6 +167,7 @@ export function describeProbe(e: ProbeEvent): Omit<StartStep, "at"> {
     case "response": {
       const parts = [`${e.status}${e.reason ? ` ${e.reason}` : ""} from ${e.host}`];
       if (e.contentType) parts.push(e.contentType);
+      if (e.container && (!e.contentType || !e.contentType.includes(e.container.split(" ")[0]))) parts.push(`sniffed ${e.container}`);
       if (e.size != null) parts.push(formatBytes(e.size));
       parts.push(formatMs(e.ms));
       const ok = e.status >= 200 && e.status < 300;
@@ -152,13 +211,50 @@ export function failedStage(steps: StartStep[]): StartStage | undefined {
   return (failed ?? steps[steps.length - 1])?.stage;
 }
 
+const TLS_ERROR_RE = /\b(tls|ssl|x509|cert(?:ificate)?|handshake|mbedtls|gnutls|verify(?:_peer)?)\b/i;
+
+/**
+ * Split-brain TLS diagnosis (Netflix BetterTLS #461): Polarity's rustls link check succeeded,
+ * then the player (mpv/mbedTLS/FFmpeg) failed on TLS/certificate verification.
+ */
+export function isSplitBrainTls(steps: readonly StartStep[], outcome: string): boolean {
+  const probeOk = steps.some((s) => s.stage === "server" && s.tone === "ok");
+  if (!probeOk) return false;
+  if (TLS_ERROR_RE.test(outcome)) return true;
+  return steps.some((s) => s.stage === "player" && s.tone === "fail" && TLS_ERROR_RE.test(s.text));
+}
+
 /** The text "Copy details" puts on the clipboard. Already redacted. */
-export function formatReport(steps: StartStep[], info: { app: string; platform: string; backend: string; outcome: string; stage?: StartStage }): string {
+export function formatReport(
+  steps: StartStep[],
+  info: {
+    app: string;
+    platform: string;
+    backend: string;
+    outcome: string;
+    stage?: StartStage;
+    attemptId?: string;
+    spans?: readonly StartSpan[];
+  },
+): string {
+  const filtered = filterBoilerplateSteps(steps);
   const lines = [
-    `Polarity ${info.app} · ${info.platform} · player: ${info.backend}`,
+    `Polarity ${info.app} · ${info.platform} · player: ${info.backend}${info.attemptId ? ` · attempt: ${info.attemptId}` : ""}`,
     `Result: ${info.outcome}${info.stage ? ` (at ${STAGE_LABEL[info.stage]})` : ""}`,
+    ...(isSplitBrainTls(steps, info.outcome)
+      ? ["Diagnosis: split-brain TLS (rustls link check succeeded, player TLS verification failed)"]
+      : []),
+    ...(info.spans?.length
+      ? [
+          "Spans:",
+          ...info.spans.map((sp) => {
+            const dur = sp.endMs != null ? `${Math.max(0, Math.round(sp.endMs - sp.startMs))}ms` : "open";
+            return `  [${sp.attemptId}/${sp.id}${sp.parentId ? `<${sp.parentId}` : ""}] ${sp.stage}: ${sp.label} (${dur}${sp.outcome ? `, ${sp.outcome}` : ""})`;
+          }),
+        ]
+      : []),
     "",
-    ...steps.map(
+    ...filtered.map(
       (s) => `${`+${(s.at / 1000).toFixed(2)}s`.padStart(8)}  ${s.tone === "info" ? "  " : s.tone === "ok" ? "✓ " : s.tone === "warn" ? "! " : "✗ "}${s.text}`,
     ),
   ];

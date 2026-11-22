@@ -24,11 +24,20 @@ import { EpisodeRatingsViews } from "./EpisodeRatingsViews";
  * The table shows a season per column and an episode per row, so the keys turn: up and down move through a
  * season's episodes (the grid's "left" and "right"), left and right between seasons (its "up" and "down").
  */
-const KEYS: Record<string, GridMove> = {
+const KEYS_VERTICAL: Record<string, GridMove> = {
   ArrowUp: "left",
   ArrowDown: "right",
   ArrowLeft: "up",
   ArrowRight: "down",
+  Home: "home",
+  End: "end",
+};
+
+const KEYS_HORIZONTAL: Record<string, GridMove> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
   Home: "home",
   End: "end",
 };
@@ -66,6 +75,7 @@ export function RatingsTable({
   tv = false,
   dialog = false,
   legend = true,
+  horizontal = false,
 }: {
   grid: RatingGrid;
   onOpen: (v: Video) => void;
@@ -74,6 +84,8 @@ export function RatingsTable({
   dialog?: boolean;
   /** Its own legend above it; off where the views share one (EpisodeRatingsViews). */
   legend?: boolean;
+  /** Seasons as rows, episodes as columns, averages down the right edge. */
+  horizontal?: boolean;
 }) {
   const heading = useId();
   const box = useRef<HTMLDivElement>(null);
@@ -89,7 +101,7 @@ export function RatingsTable({
 
   const cellAt = (r: number, c: number) => box.current?.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`) ?? null;
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const move = KEYS[e.key];
+    const move = (horizontal ? KEYS_HORIZONTAL : KEYS_VERTICAL)[e.key];
     const from = (e.target as HTMLElement).closest<HTMLElement>("[data-r]");
     if (tv || !move || !from) return;
     e.preventDefault();
@@ -106,10 +118,50 @@ export function RatingsTable({
     el.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   };
 
+  const shownCols = horizontal ? grid.columns + 1 : grid.rows.length;
+  const shownRows = horizontal ? grid.rows.length : grid.columns;
+  const density = shownCols <= 8 && shownRows <= 14 ? "large" : shownCols <= 14 ? "medium" : "compact";
+
+  const renderCell = (r: number, c: number, key: number) => {
+    const cell = grid.rows[r].cells[c];
+    if (!cell) return <td key={key} className="episode-ratings-empty" />;
+    const v = cell.video;
+    const shown = cell.rating === undefined ? "–" : formatRating(cell.rating);
+    const said = cell.rating === undefined ? "no rating" : `rated ${shown}`;
+    const title = `Season ${v.season}, episode ${v.episode}${v.title ? `, ${v.title}` : ""}`;
+    const code = `S${v.season} E${v.episode}${v.title ? ` · ${v.title}` : ""}`;
+    return (
+      <td key={key} data-step={cell.step}>
+        {cell.released ? (
+          <button
+            type="button"
+            className="episode-ratings-cell"
+            data-r={r}
+            data-c={c}
+            tabIndex={tv || (r === atRow && c === atCol) ? 0 : -1}
+            data-nav-default={(tv && r === first?.[0] && c === first?.[1]) || undefined}
+            aria-label={`${title}, ${said}`}
+            title={`${code} · ${cell.rating === undefined ? "No rating" : `★ ${shown}`}`}
+            onClick={() => onOpen(v)}
+          >
+            {shown}
+          </button>
+        ) : (
+          <span className="episode-ratings-cell" data-upcoming title={`${code} · Not out yet`}>
+            <span aria-hidden>·</span>
+            <span className="episode-ratings-sr">{title}, not out yet</span>
+          </span>
+        )}
+      </td>
+    );
+  };
+
   return (
     <section
       className="episode-ratings"
       data-variant={tv ? "tv" : dialog ? "dialog" : undefined}
+      data-axis={horizontal ? "horizontal" : "vertical"}
+      data-density={density}
       aria-labelledby={dialog ? undefined : heading}
       aria-label={dialog ? "Episode Ratings" : undefined}
     >
@@ -121,75 +173,81 @@ export function RatingsTable({
       {legend && <RatingsLegend />}
       <div className="episode-ratings-box" ref={box} onKeyDown={onKeyDown} onFocus={onFocus}>
         <table className="episode-ratings-table tabular">
-          <thead>
-            <tr>
-              <th scope="col" className="episode-ratings-corner">
-                <span className="episode-ratings-sr">Episode</span>
-              </th>
-              {grid.rows.map((row) => (
-                <th key={row.season} scope="col">
-                  <span aria-hidden>S{row.season}</span>
-                  <span className="episode-ratings-sr">Season {row.season}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: grid.columns }, (_, c) => (
-              <tr key={c}>
-                <th scope="row" className="episode-ratings-episode">
-                  <span aria-hidden>E{c + 1}</span>
-                  <span className="episode-ratings-sr">Episode {c + 1}</span>
-                </th>
-                {grid.rows.map((row, r) => {
-                  const cell = row.cells[c];
-                  if (!cell) return <td key={row.season} className="episode-ratings-empty" />;
-                  const v = cell.video;
-                  const shown = cell.rating === undefined ? "–" : formatRating(cell.rating);
-                  const said = cell.rating === undefined ? "no rating" : `rated ${shown}`;
-                  const title = `Season ${v.season}, episode ${v.episode}${v.title ? `, ${v.title}` : ""}`;
-                  const code = `S${v.season} E${v.episode}${v.title ? ` · ${v.title}` : ""}`;
-                  return (
-                    <td key={row.season} data-step={cell.step}>
-                      {cell.released ? (
-                        <button
-                          type="button"
-                          className="episode-ratings-cell"
-                          data-r={r}
-                          data-c={c}
-                          tabIndex={tv || (r === atRow && c === atCol) ? 0 : -1}
-                          data-nav-default={(tv && r === first?.[0] && c === first?.[1]) || undefined}
-                          aria-label={`${title}, ${said}`}
-                          title={`${code} · ${cell.rating === undefined ? "No rating" : `★ ${shown}`}`}
-                          onClick={() => onOpen(v)}
-                        >
-                          {shown}
-                        </button>
-                      ) : (
-                        <span className="episode-ratings-cell" data-upcoming title={`${code} · Not out yet`}>
-                          <span aria-hidden>·</span>
-                          <span className="episode-ratings-sr">{title}, not out yet</span>
-                        </span>
-                      )}
+          {horizontal ? (
+            <>
+              <thead>
+                <tr>
+                  <th scope="col" className="episode-ratings-corner">
+                    <span className="episode-ratings-sr">Season</span>
+                  </th>
+                  {Array.from({ length: grid.columns }, (_, c) => (
+                    <th key={c} scope="col">
+                      <span aria-hidden>E{c + 1}</span>
+                      <span className="episode-ratings-sr">Episode {c + 1}</span>
+                    </th>
+                  ))}
+                  <th scope="col" className="episode-ratings-avg-head">
+                    <span aria-hidden>AVG.</span>
+                    <span className="episode-ratings-sr">Season average</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {grid.rows.map((row, r) => (
+                  <tr key={row.season}>
+                    <th scope="row" className="episode-ratings-episode">
+                      <span aria-hidden>S{row.season}</span>
+                      <span className="episode-ratings-sr">Season {row.season}</span>
+                    </th>
+                    {Array.from({ length: grid.columns }, (_, c) => renderCell(r, c, c))}
+                    <td className="episode-ratings-average episode-ratings-average-col" data-step={row.averageStep}>
+                      <span className="episode-ratings-avg">{row.average === undefined ? "–" : formatRating(row.average)}</span>
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th scope="row" className="episode-ratings-episode">
-                <span aria-hidden>AVG.</span>
-                <span className="episode-ratings-sr">Season average</span>
-              </th>
-              {grid.rows.map((row) => (
-                <td key={row.season} className="episode-ratings-average" data-step={row.averageStep}>
-                  <span className="episode-ratings-avg">{row.average === undefined ? "–" : formatRating(row.average)}</span>
-                </td>
-              ))}
-            </tr>
-          </tfoot>
+                  </tr>
+                ))}
+              </tbody>
+            </>
+          ) : (
+            <>
+              <thead>
+                <tr>
+                  <th scope="col" className="episode-ratings-corner">
+                    <span className="episode-ratings-sr">Episode</span>
+                  </th>
+                  {grid.rows.map((row) => (
+                    <th key={row.season} scope="col">
+                      <span aria-hidden>S{row.season}</span>
+                      <span className="episode-ratings-sr">Season {row.season}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: grid.columns }, (_, c) => (
+                  <tr key={c}>
+                    <th scope="row" className="episode-ratings-episode">
+                      <span aria-hidden>E{c + 1}</span>
+                      <span className="episode-ratings-sr">Episode {c + 1}</span>
+                    </th>
+                    {grid.rows.map((row, r) => renderCell(r, c, row.season))}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" className="episode-ratings-episode">
+                    <span aria-hidden>AVG.</span>
+                    <span className="episode-ratings-sr">Season average</span>
+                  </th>
+                  {grid.rows.map((row) => (
+                    <td key={row.season} className="episode-ratings-average" data-step={row.averageStep}>
+                      <span className="episode-ratings-avg">{row.average === undefined ? "–" : formatRating(row.average)}</span>
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </>
+          )}
         </table>
       </div>
     </section>

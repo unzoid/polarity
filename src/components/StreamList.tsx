@@ -63,7 +63,12 @@ export function StreamList({
   infoRef.current = { info, f };
   const showInfo = useCallback(
     (s: RankedStream, anchor: HTMLElement) =>
-      infoRef.current.info.show(s, sourceRow(s).title, { filter: infoRef.current.f.filter, sort: infoRef.current.f.sort, match: infoRef.current.f.match(s) }, anchor),
+      infoRef.current.info.show(
+        s,
+        sourceRow(s).title,
+        { filter: infoRef.current.f.filter, sort: infoRef.current.f.sort, match: infoRef.current.f.match(s), best: infoRef.current.f.bestMatch },
+        anchor,
+      ),
     [],
   );
   const openMenu = useCallback((s: RankedStream, anchor: HTMLElement) => setMenu({ s, anchor }), []);

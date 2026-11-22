@@ -46,6 +46,8 @@ export function AnimePage({ section, openSection }: SectionProps) {
             </div>
           </Card>
           <Card title="Cards">
+            <SettingRow id="animeCardTitles" />
+            <SettingRow id="animeCardPeek" />
             <SettingRow id="animeCardScores" />
             <SettingRow id="animeScoreFormat" />
             <SettingRow id="animeCardCountdown" />

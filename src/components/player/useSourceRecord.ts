@@ -44,10 +44,13 @@ export function useThroughput(media: MediaLike | null, playing: boolean, enabled
   useEffect(() => {
     if (!media || !isMpv(media) || !playing || !enabled) return;
     const id = window.setInterval(() => {
-      void media
-        .command("get_property", "cache-speed")
-        .then((v) => {
-          if (typeof v === "number" && v > 0) samples.current.push((v * 8) / 1e6);
+      // Sample only while mpv's demuxer cache is actively filling (not idle/trickling at video bitrate, #533).
+      void Promise.all([
+        media.command("get_property", "cache-speed"),
+        media.command("get_property", "demuxer-cache-idle").catch(() => false),
+      ])
+        .then(([v, idle]) => {
+          if (idle !== true && typeof v === "number" && v > 0) samples.current.push((v * 8) / 1e6);
         })
         .catch(() => {});
     }, SAMPLE_MS);

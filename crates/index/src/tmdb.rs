@@ -66,13 +66,14 @@ struct Run {
 }
 
 impl Tmdb {
+    #[cfg(test)]
     pub fn new(key: String, language: Option<String>) -> Self {
+        Self::with_client(key, language, polar_addon::shared_http_client())
+    }
+
+    pub fn with_client(key: String, language: Option<String>, http: reqwest::Client) -> Self {
         Self {
-            http: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .timeout(Duration::from_secs(15))
-                .build()
-                .expect("http client"),
+            http,
             api: API.to_owned(),
             key: key.trim().to_owned(),
             language: language.unwrap_or_else(|| "en-US".into()),
@@ -309,6 +310,29 @@ impl Tmdb {
         };
         let mut meta = detail_to_meta(ty, imdb_id, &d, videos, logos);
         meta.preview.certification = pick_certification(ty, &d, &self.region());
+        Ok(meta)
+    }
+
+    /// Lightweight metadata projection (`MetaMask::Display` / `Overview`): skips per-season
+    /// episode fan-out (and for `Display`, skips credits/videos/release_dates) so synced library
+    /// hydration (`fillUntitled`) uses a single TMDB call instead of N+2 calls.
+    pub async fn meta_projection(&self, ty: &str, imdb_id: &str, include_overview: bool) -> Result<Meta> {
+        let tmdb_id = self.find(ty, imdb_id).await?;
+        let kind = tmdb_kind(ty);
+        let d: Value = if include_overview {
+            self.get(
+                &format!("/{kind}/{tmdb_id}"),
+                &[("append_to_response", meta_append(ty)), ("include_image_language", "en,null")],
+            )
+            .await?
+        } else {
+            self.get(&format!("/{kind}/{tmdb_id}"), &[]).await?
+        };
+        let logos = if include_overview { self.logos(kind, tmdb_id, &d).await } else { Vec::new() };
+        let mut meta = detail_to_meta(ty, imdb_id, &d, Vec::new(), logos);
+        if include_overview {
+            meta.preview.certification = pick_certification(ty, &d, &self.region());
+        }
         Ok(meta)
     }
 

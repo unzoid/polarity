@@ -300,10 +300,21 @@ impl AnimeLists {
         Self::with_url(cache_dir, URL)
     }
 
+    /// Reuses an existing shared HTTP connection pool.
+    pub fn with_client(cache_dir: PathBuf, http: reqwest::Client) -> Self {
+        Self {
+            path: cache_dir.join(FILE),
+            url: URL.into(),
+            http,
+            state: Mutex::new(State { index: None, fetched: None, tried: None }),
+        }
+    }
+
     fn with_url(cache_dir: PathBuf, url: &str) -> Self {
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(60))
+            .http2_adaptive_window(true)
             .user_agent(concat!("polarity/", env!("CARGO_PKG_VERSION")))
             .build()
             .unwrap_or_default();

@@ -176,6 +176,8 @@ export interface Stream {
 export interface StreamQuality {
   resolution?: number;
   hdr: boolean;
+  /** Dynamic HDR10+ metadata. */
+  hdr10Plus?: boolean;
   dolbyVision: boolean;
   codec?: string;
   sizeBytes?: number;

@@ -11,8 +11,10 @@ import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { useBatchDownload } from "../components/BatchDownload";
 import { cardMenu } from "../components/CardMenu";
 import { DownloadButton } from "../components/DownloadButton";
+import { Star } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleLogo } from "../components/TitleLogo";
+import { useEpisodeRatings } from "../components/title/EpisodeRatings";
 import { useLibraryToggle } from "../components/title/LibraryButton";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
 import { ScoreRow } from "../components/title/TitleDetails";
@@ -60,7 +62,7 @@ import {
 } from "../lib/anime";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
 import { formatRemaining } from "../lib/format";
-import { episodeEntry } from "../lib/library";
+import { episodeEntry, watchedFraction } from "../lib/library";
 import { useMeta, useProgressOf, useRatings } from "../lib/net";
 import type { PlayRequest } from "../lib/playback";
 import { useNavigation } from "../lib/router";
@@ -68,7 +70,9 @@ import { setPrefs, useEpisodeLayout, usePrefs } from "../lib/settings";
 import type { Meta, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
 import { IconCheck, IconChevronRight, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "../phone/icons";
+import { AnimatedSwap, EpisodeSearch, filterEpisodes } from "./EpisodeTools";
 import { ListDialog } from "./ListDialog";
+import { DeskRatingsOverlay } from "./RatingsOverlay";
 import { ProgressLine as ProgressBar } from "./Rows";
 import { SeasonChooser, type SeasonOption } from "./SeasonChooser";
 
@@ -87,11 +91,13 @@ export function AnimeTitleView({
   preview,
   episode,
   top = true,
+  fallbackArt,
 }: {
   id: number;
   preview?: AnimeCard;
   episode?: string;
   top?: boolean;
+  fallbackArt?: string;
 }) {
   const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const [activeId, setActiveId] = useState(id);
@@ -202,15 +208,22 @@ export function AnimeTitleView({
     return list;
   }, [isMovieOnly, hasTrailer]);
   const [tab, setTab] = useState<AnimeTab>(isMovieOnly ? "more" : "episodes");
+  const [tabDir, setTabDir] = useState(1);
   const shownTab = tabs.some((t) => t.id === tab) ? tab : tabs[0].id;
+  const pickTab = (nextTab: AnimeTab) => {
+    const prevIdx = tabs.findIndex((t) => t.id === shownTab);
+    const nextIdx = tabs.findIndex((t) => t.id === nextTab);
+    setTabDir(nextIdx >= prevIdx ? 1 : -1);
+    setTab(nextTab);
+  };
   const [logoFailed, setLogoFailed] = useState(false);
   const logoSrc = pb.meta?.logo ? sizedArt(pb.meta.logo, "w500") : undefined;
   useEffect(() => setLogoFailed(false), [logoSrc]);
 
   if (verdict === "hide") return <p className="dk-t-note">{LIMIT_NOTICE}</p>;
   if (isError && !shown) return <p className="dk-t-note">Couldn't load this anime from AniList. Try again in a minute.</p>;
-  if (!shown || verdict === "wait") {
-    const skArt = preview?.bannerImage ?? preview?.coverImage.extraLarge ?? preview?.coverImage.large;
+  if (!shown || verdict === "wait" || (seasonsLoading && !found)) {
+    const skArt = preview?.bannerImage ?? preview?.coverImage.extraLarge ?? preview?.coverImage.large ?? fallbackArt;
     return (
       <div className="dk-t" aria-busy>
         <div className="dk-t-media scheme-dark">{skArt && <Img className="dk-t-art" src={skArt} alt="" loading="eager" />}</div>
@@ -440,7 +453,7 @@ export function AnimeTitleView({
         </div>
       </div>
 
-      <Tabs className="dk-t-tabs" value={shownTab} onValueChange={(v) => v && setTab(v as AnimeTab)}>
+      <Tabs className="dk-t-tabs" value={shownTab} onValueChange={(v) => v && pickTab(v as AnimeTab)}>
         <TabsList className="dk-t-tablist" aria-label="More about this title">
           <TabsIndicator className="dk-t-tab-mark" />
           {tabs.map((t) => (
@@ -450,9 +463,9 @@ export function AnimeTitleView({
           ))}
         </TabsList>
 
-        {tabs.map((t) => (
-          <TabsPanel key={t.id} value={t.id} className="dk-t-panel">
-            {t.id === "episodes" && loaded && (
+        <TabsPanel value={shownTab} className="dk-t-panel">
+          <AnimatedSwap activeKey={shownTab} dir={tabDir}>
+            {shownTab === "episodes" && loaded && (
               <DeskAnimeEpisodes
                 anime={loaded}
                 pb={activePb}
@@ -465,16 +478,16 @@ export function AnimeTitleView({
                 fallbackBg={artBg ?? coverFallbacks[0]}
               />
             )}
-            {t.id === "more" && loaded && (
+            {shownTab === "more" && loaded && (
               <DeskAnimeMore anime={loaded} franchiseCards={seasons?.map((s) => s.card)} />
             )}
-            {t.id === "details" && loaded && (
+            {shownTab === "details" && loaded && (
               <div className="dk-t-anime-details">
                 {(loaded.characters.edges.length > 0 || loaded.staff.edges.length > 0) && <AnimeCharacters anime={loaded} />}
                 <AnimeDetails anime={loaded} />
               </div>
             )}
-            {t.id === "trailers" && ytTrailerId && (
+            {shownTab === "trailers" && ytTrailerId && (
               <div className="dk-t-trailers">
                 <button
                   type="button"
@@ -491,8 +504,8 @@ export function AnimeTitleView({
                 </button>
               </div>
             )}
-          </TabsPanel>
-        ))}
+          </AnimatedSwap>
+        </TabsPanel>
       </Tabs>
 
       <SourcePicker picker={picker} />
@@ -594,6 +607,8 @@ function DeskActionBtn({ label, onClick, pressed, disabled, children }: { label:
   );
 }
 
+const NO_VIDEOS: Video[] = [];
+
 function DeskAnimeEpisodes({
   anime,
   pb,
@@ -617,7 +632,11 @@ function DeskAnimeEpisodes({
 }) {
   const prefs = usePrefs();
   const [layout, setLayout] = useEpisodeLayout();
+  const [epDir, setEpDir] = useState(1);
   const [choosingRange, setChoosingRange] = useState(false);
+  const [ratingsOpen, setRatingsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ratingsGrid = useEpisodeRatings(pb.meta?.videos ?? NO_VIDEOS);
   const picker = useSourcePicker(onSheet);
   const { data: flags } = useEpisodeFlags(pb.malId, [anime.title.english, anime.title.romaji]);
   const hasFiller = !!flags && [...flags.values()].some((f) => f.filler);
@@ -638,7 +657,12 @@ function DeskAnimeEpisodes({
   const upNextId = pb.next.kind !== "start" ? pb.next.ep?.video?.id : undefined;
   const upTo = Math.max(0, list.findIndex((v) => v.id === (pb.next.ep?.video?.id ?? "")));
   const currentPage = Math.min(Math.max(0, pages - 1), page ?? Math.floor(upTo / PAGE));
-  const visible = pages > 1 ? list.slice(currentPage * PAGE, currentPage * PAGE + PAGE) : list;
+  const searching = query.trim().length > 0;
+  // When searching, scan across ALL episodes of the season (e.g. One Piece ep 1015) rather than only the current 100-ep slice.
+  const visible = useMemo(
+    () => (searching ? filterEpisodes(list, query) : pages > 1 ? list.slice(currentPage * PAGE, currentPage * PAGE + PAGE) : list),
+    [searching, list, query, pages, currentPage],
+  );
 
   const request = (v: Video): PlayRequest | undefined =>
     v.id.startsWith(PENDING_EPISODE) || !pb.metaId
@@ -674,6 +698,18 @@ function DeskAnimeEpisodes({
       ? { type: "movie", metaId: pb.metaId, videoId: pb.metaId, resumable: !!pb.next.resumeAt, subtitle: currentSeasonLabel }
       : undefined;
 
+  const pickSeason = (nextId: number) => {
+    const prevIdx = seasonChoices.findIndex((s) => s.id === activeSeasonId);
+    const nextIdx = seasonChoices.findIndex((s) => s.id === nextId);
+    setEpDir(nextIdx >= prevIdx ? 1 : -1);
+    onSelectSeason(nextId);
+  };
+  const pickLayout = (nextLayout: "row" | "list") => {
+    if (nextLayout === layout) return;
+    setEpDir(nextLayout === "list" ? 1 : -1);
+    setLayout(nextLayout);
+  };
+
   return (
     <section className="dk-eps" data-layout={layout}>
       <div className="dk-eps-bar">
@@ -682,7 +718,7 @@ function DeskAnimeEpisodes({
             options={seasonChoices}
             value={activeSeasonId}
             currentLabel={currentSeasonLabel}
-            onPick={onSelectSeason}
+            onPick={pickSeason}
             resetKey={anime.id}
           />
         ) : (
@@ -691,7 +727,7 @@ function DeskAnimeEpisodes({
             {!seasonsLoading && list.length > 0 && <span className="dk-season-inline-count tabular"> ({list.length} {list.length === 1 ? "Episode" : "Episodes"})</span>}
           </span>
         )}
-        {pages > 1 && (
+        {pages > 1 && !searching && (
           <button type="button" className="dk-season dk-season-range" onClick={() => setChoosingRange(true)}>
             {rangeOptions[currentPage]?.label}
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
@@ -710,124 +746,189 @@ function DeskAnimeEpisodes({
           </button>
         )}
         <span className="dk-flex" />
+        {!isMoviePart && ratingsGrid && (
+          <button type="button" className="dk-eps-ratings-btn" onClick={() => setRatingsOpen(true)}>
+            <Star size={14} />
+            <span>Ratings</span>
+          </button>
+        )}
         {!isMoviePart && (
-          <div className="dk-eps-layout" role="radiogroup" aria-label="Episode layout">
-            <button type="button" role="radio" aria-checked={layout === "row"} aria-label="Side by side" onClick={() => setLayout("row")}>
-              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
-                <rect x="2" y="5" width="7" height="10" rx="2" fill="currentColor" />
-                <rect x="11" y="5" width="7" height="10" rx="2" fill="currentColor" opacity="0.55" />
-              </svg>
-            </button>
-            <button type="button" role="radio" aria-checked={layout === "list"} aria-label="Listed" onClick={() => setLayout("list")}>
-              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
-                <rect x="2" y="3.5" width="16" height="5.5" rx="1.8" fill="currentColor" />
-                <rect x="2" y="11" width="16" height="5.5" rx="1.8" fill="currentColor" opacity="0.55" />
-              </svg>
-            </button>
+          <div className="dk-eps-layout" role="group" aria-label="Episode tools">
+            <EpisodeSearch value={query} onChange={setQuery} resetKey={anime.id} />
+            <span className="dk-eps-layout-sep" aria-hidden />
+            <div className="dk-eps-radios" role="radiogroup" aria-label="Episode layout">
+              <button type="button" role="radio" aria-checked={layout === "row"} aria-label="Side by side" onClick={() => pickLayout("row")}>
+                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+                  <rect x="2" y="5" width="7" height="10" rx="2" fill="currentColor" />
+                  <rect x="11" y="5" width="7" height="10" rx="2" fill="currentColor" opacity="0.55" />
+                </svg>
+              </button>
+              <button type="button" role="radio" aria-checked={layout === "list"} aria-label="Listed" onClick={() => pickLayout("list")}>
+                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
+                  <rect x="2" y="3.5" width="16" height="5.5" rx="1.8" fill="currentColor" />
+                  <rect x="2" y="11" width="16" height="5.5" rx="1.8" fill="currentColor" opacity="0.55" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {isMoviePart ? (
-        <ol className="dk-ep-list">
-          <li className="dk-ep">
-            <button
-              type="button"
-              className="dk-ep-row-still scheme-dark"
-              aria-label={`Play ${currentSeasonLabel}`}
-              disabled={!movieReq}
-              onClick={() => movieReq && picker.play(movieReq)}
-            >
-              <Img src={anime.bannerImage ?? fallbackBg} fallbacks={[anime.coverImage.extraLarge ?? ""].filter(Boolean)} alt="" loading="lazy" />
-              {movieReq && (
-                <span className="dk-ep-play" aria-hidden>
-                  <IconPlayRing size={36} />
+      <AnimatedSwap activeKey={`${anime.id}:${isMoviePart ? "movie" : layout}:${currentPage}`} dir={epDir} slide={44}>
+        {isMoviePart ? (
+          <ol className="dk-ep-list">
+            <li className="dk-ep">
+              <button
+                type="button"
+                className="dk-ep-main"
+                aria-label={`Play ${currentSeasonLabel}`}
+                disabled={!movieReq}
+                onClick={() => movieReq && picker.play(movieReq)}
+              >
+                <span className="dk-ep-row-num tabular">1</span>
+                <span className="dk-ep-row-still scheme-dark">
+                  <Img src={anime.bannerImage ?? fallbackBg} fallbacks={[anime.coverImage.extraLarge ?? ""].filter(Boolean)} alt="" loading="lazy" />
+                  {movieReq && (
+                    <>
+                      <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
+                        <IconPlayRing size={34} />
+                      </span>
+                      {anime.duration && (
+                        <span className="dk-ep-runtime tabular" aria-hidden>
+                          <IconPlay size={9} />
+                          {anime.duration}m
+                        </span>
+                      )}
+                    </>
+                  )}
+                </span>
+                <span className="dk-ep-body">
+                  <span className="dk-ep-name">
+                    <strong>{currentSeasonLabel}</strong>
+                  </span>
+                  {anime.description && <span className="dk-ep-text">{cleanDescription(anime.description)[0]}</span>}
+                  {anime.seasonYear && <span className="dk-ep-date tabular">{anime.seasonYear}</span>}
+                </span>
+              </button>
+              {movieReq && pb.meta && (
+                <span className="dk-ep-dl-slot">
+                  <DownloadButton item={pb.meta} className="dk-ep-dl" size={18} />
+                  <button type="button" className="dk-ep-src" aria-label={`Sources for ${currentSeasonLabel}`} title="Choose source" onClick={() => picker.choose(movieReq)}>
+                    <IconSources size={18} />
+                  </button>
                 </span>
               )}
-            </button>
-            <div className="dk-ep-body">
-              <div className="dk-ep-name">
-                <strong>{currentSeasonLabel}</strong>
-                <span>{[anime.seasonYear, anime.duration && `${anime.duration} min`].filter(Boolean).join(" · ")}</span>
-              </div>
-              {anime.description && <p className="dk-ep-text">{cleanDescription(anime.description)[0]}</p>}
-            </div>
-          </li>
-        </ol>
-      ) : !visible.length ? (
-        <p className="dk-t-empty">{comesOut(anime) ? `${comesOut(anime)}.` : pb.loading || pb.metaLoading ? "Loading episodes…" : "No episodes to play yet."}</p>
-      ) : layout === "row" ? (
-        <AnimeEpStrip
-          meta={pb.meta}
-          episodes={visible}
-          progress={pb.byVideo}
-          flags={flags}
-          upNextId={upNextId}
-          fallbackBg={fallbackBg}
-          runtime={anime.duration ? `${anime.duration} min` : undefined}
-          onPlay={(v) => {
-            const req = request(v);
-            if (req) picker.play(req);
-          }}
-        />
-      ) : (
-        <ol className="dk-ep-list">
-          {visible.map((v) => {
-            const req = request(v);
-            const p = pb.byVideo.get(v.id);
-            const flag = flags?.get(v.episode);
-            const pending = v.id.startsWith(PENDING_EPISODE);
-            const menuProps = pb.meta && !pending ? cardMenu(pb.meta, episodeEntry(pb.meta, v, p), { episode: true }) : {};
-            return (
-              <li key={v.id} className="dk-ep" {...menuProps}>
-                <button
-                  type="button"
-                  className="dk-ep-row-still scheme-dark"
-                  aria-label={`Play episode ${v.episode}`}
-                  disabled={!req}
-                  onClick={() => req && picker.play(req)}
-                >
-                  <Img
-                    src={v.thumbnail ? sizedArt(v.thumbnail, "w300") : fallbackBg}
-                    fallbacks={fallbackBg ? [fallbackBg] : undefined}
-                    alt=""
-                    loading="lazy"
-                  />
-                  {req && (
-                    <span className="dk-ep-play" aria-hidden>
-                      <IconPlayRing size={36} />
+            </li>
+          </ol>
+        ) : pb.loading ? (
+          <p className="dk-t-empty">Loading episodes…</p>
+        ) : searching && !visible.length ? (
+          <p className="dk-t-empty">No episodes match “{query.trim()}”.</p>
+        ) : !visible.length ? (
+          <p className="dk-t-empty">{comesOut(anime) ? `${comesOut(anime)}.` : pb.metaLoading ? "Loading episodes…" : "No episodes to play yet."}</p>
+        ) : layout === "row" ? (
+          <AnimeEpStrip
+            meta={pb.meta}
+            episodes={visible}
+            progress={pb.byVideo}
+            flags={flags}
+            upNextId={upNextId}
+            fallbackBg={fallbackBg}
+            runtime={anime.duration ? `${anime.duration}m` : undefined}
+            onPlay={(v) => {
+              const req = request(v);
+              if (req) picker.play(req);
+            }}
+            onSources={(v) => {
+              const req = request(v);
+              if (req) picker.choose(req);
+            }}
+          />
+        ) : (
+          <ol className="dk-ep-list">
+            {visible.map((v) => {
+              const req = request(v);
+              const p = pb.byVideo.get(v.id);
+              const flag = flags?.get(v.episode);
+              const pending = v.id.startsWith(PENDING_EPISODE);
+              const future = !!v.released && new Date(v.released).getTime() > Date.now();
+              const unreleased = pending || future;
+              const playable = !!req && !unreleased;
+              const fraction = p && p.duration > 0 ? p.position / p.duration : 0;
+              const watched = fraction >= watchedFraction();
+              const inProgress = fraction > 0 && !watched;
+              const timeLabel = inProgress && p ? formatRemaining(p.position, p.duration) : anime.duration ? `${anime.duration}m` : undefined;
+              const shortDate = v.released ? new Date(v.released).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : undefined;
+              const fullDate = v.released ? new Date(v.released).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined;
+              const menuProps = pb.meta && playable ? cardMenu(pb.meta, episodeEntry(pb.meta, v, p), { episode: true }) : {};
+              return (
+                <li key={v.id} className="dk-ep" data-up-next={v.id === upNextId || undefined} data-unreleased={unreleased || undefined} {...menuProps}>
+                  <button
+                    type="button"
+                    className="dk-ep-main"
+                    aria-label={`Play episode ${v.episode}: ${v.title?.trim() || `Episode ${v.episode}`}`}
+                    disabled={!playable}
+                    onClick={() => playable && req && picker.play(req)}
+                  >
+                    <span className="dk-ep-row-num tabular">{v.episode}</span>
+                    <span className="dk-ep-row-still scheme-dark" data-progress={inProgress || undefined}>
+                      <Img
+                        src={v.thumbnail ? sizedArt(v.thumbnail, "w300") : fallbackBg}
+                        fallbacks={fallbackBg ? [fallbackBg] : undefined}
+                        alt=""
+                        loading="lazy"
+                      />
+                      {playable ? (
+                        <>
+                          <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
+                            <IconPlayRing size={34} />
+                          </span>
+                          {timeLabel && (
+                            <span className="dk-ep-runtime tabular" aria-hidden>
+                              <IconPlay size={9} />
+                              {timeLabel}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="dk-ep-soon">{shortDate ?? "TBA"}</span>
+                      )}
+                      {watched && (
+                        <span className="dk-ep-watched" aria-label="Watched">
+                          <IconCheck size={12} stroke={3} />
+                        </span>
+                      )}
+                      {inProgress && <ProgressBar fraction={fraction} />}
+                    </span>
+                    <span className="dk-ep-body">
+                      <span className="dk-ep-name">
+                        <strong>
+                          {v.title?.trim() || `Episode ${v.episode}`}
+                          {unreleased && <span className="dk-ep-upcoming-pill">Upcoming</span>}
+                          {flag?.filler && <span className="dk-ep-badge">Filler</span>}
+                          {flag?.recap && <span className="dk-ep-badge">Recap</span>}
+                        </strong>
+                      </span>
+                      {v.overview && <span className="dk-ep-text">{v.overview}</span>}
+                      <span className="dk-ep-date tabular">
+                        {unreleased ? (shortDate ? `Coming ${shortDate}` : "Not yet released") : fullDate}
+                      </span>
+                    </span>
+                  </button>
+                  {playable && req && pb.meta && (
+                    <span className="dk-ep-dl-slot">
+                      <DownloadButton item={pb.meta} video={v} className="dk-ep-dl" size={18} />
+                      <button type="button" className="dk-ep-src" aria-label={`Sources for episode ${v.episode}`} title="Choose source" onClick={() => picker.choose(req)}>
+                        <IconSources size={18} />
+                      </button>
                     </span>
                   )}
-                  {p && p.duration > 0 && <ProgressBar fraction={p.position / p.duration} />}
-                </button>
-                <div className="dk-ep-body">
-                  <div className="dk-ep-name">
-                    <strong>
-                      {v.episode}. {v.title?.trim() || `Episode ${v.episode}`}
-                      {flag?.filler && <span className="dk-ep-badge">Filler</span>}
-                      {flag?.recap && <span className="dk-ep-badge">Recap</span>}
-                    </strong>
-                    <span>
-                      {[
-                        anime.duration && `${anime.duration} min`,
-                        v.released && !pending ? new Date(v.released).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </div>
-                  {v.overview && <p className="dk-ep-text">{v.overview}</p>}
-                </div>
-                {req && pb.meta && (
-                  <span className="dk-ep-dl-slot">
-                    <DownloadButton item={pb.meta} video={v} className="dk-ep-dl" size={22} />
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </AnimatedSwap>
 
       {pages > 1 && (
         <ListDialog
@@ -840,6 +941,18 @@ function DeskAnimeEpisodes({
             setChoosingRange(false);
           }}
           onClose={() => setChoosingRange(false)}
+        />
+      )}
+      {ratingsGrid && (
+        <DeskRatingsOverlay
+          grid={ratingsGrid}
+          title={currentSeasonLabel}
+          open={ratingsOpen}
+          onClose={() => setRatingsOpen(false)}
+          onOpen={(v) => {
+            const req = request(v) ?? (pb.metaId ? { type: "series" as const, metaId: pb.metaId, videoId: v.id, resumable: pb.byVideo.has(v.id), subtitle: `Episode ${v.episode}${v.title ? ` · ${v.title}` : ""}` } : undefined);
+            if (req) picker.choose(req);
+          }}
         />
       )}
       <SourcePicker picker={picker} />
@@ -856,6 +969,7 @@ function AnimeEpStrip({
   fallbackBg,
   runtime,
   onPlay,
+  onSources,
 }: {
   meta?: Meta;
   episodes: Video[];
@@ -865,6 +979,7 @@ function AnimeEpStrip({
   fallbackBg?: string;
   runtime?: string;
   onPlay: (v: Video) => void;
+  onSources: (v: Video) => void;
 }) {
   const strip = useRef<HTMLOListElement>(null);
   const [ends, setEnds] = useState({ start: true, end: true });
@@ -901,12 +1016,20 @@ function AnimeEpStrip({
         {episodes.map((v) => {
           const p = progress.get(v.id);
           const pending = v.id.startsWith(PENDING_EPISODE);
-          const on = !pending && !!meta;
+          const future = !!v.released && new Date(v.released).getTime() > Date.now();
+          const unreleased = pending || future;
+          const on = !unreleased && !!meta;
+          const fraction = p && p.duration > 0 ? p.position / p.duration : 0;
+          const watched = fraction >= watchedFraction();
+          const inProgress = fraction > 0 && !watched;
+          const timeLabel = inProgress && p ? formatRemaining(p.position, p.duration) : runtime;
           const flag = flags?.get(v.episode);
+          const shortDate = v.released ? new Date(v.released).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : undefined;
+          const fullDate = v.released ? new Date(v.released).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined;
           const menuProps = meta && on ? cardMenu(meta, episodeEntry(meta, v, p), { episode: true }) : {};
           return (
-            <li key={v.id} className="dk-ep-card" data-up-next={v.id === upNextId || undefined} {...menuProps}>
-              <button type="button" className="dk-ep-still scheme-dark" aria-label={`Play episode ${v.episode}`} disabled={!on} onClick={() => onPlay(v)}>
+            <li key={v.id} className="dk-ep-card" data-up-next={v.id === upNextId || undefined} data-unreleased={unreleased || undefined} {...menuProps}>
+              <button type="button" className="dk-ep-still scheme-dark" data-progress={inProgress || undefined} aria-label={`Play episode ${v.episode}`} disabled={!on} onClick={() => onPlay(v)}>
                 <Img
                   src={v.thumbnail ? sizedArt(v.thumbnail, "w500") : fallbackBg}
                   fallbacks={fallbackBg ? [fallbackBg] : undefined}
@@ -914,33 +1037,47 @@ function AnimeEpStrip({
                   loading="lazy"
                 />
                 {on ? (
-                  <span className="dk-ep-play" aria-hidden>
-                    <IconPlayRing size={40} />
-                  </span>
+                  <>
+                    <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
+                      <IconPlayRing size={40} />
+                    </span>
+                    {timeLabel && (
+                      <span className="dk-ep-runtime tabular" aria-hidden>
+                        <IconPlay size={10} />
+                        {timeLabel}
+                      </span>
+                    )}
+                  </>
                 ) : (
-                  <span className="dk-ep-soon">{v.released ? new Date(v.released).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Soon"}</span>
+                  <span className="dk-ep-soon">{shortDate ? `Coming ${shortDate}` : "Upcoming"}</span>
                 )}
-                {p && p.duration > 0 && <ProgressBar fraction={p.position / p.duration} />}
+                {watched && (
+                  <span className="dk-ep-watched" aria-label="Watched">
+                    <IconCheck size={12} stroke={3} />
+                  </span>
+                )}
+                {inProgress && <ProgressBar fraction={fraction} />}
               </button>
-              <div className="dk-ep-head">
-                <strong>
-                  <span className="dk-ep-num">{v.episode}</span>
-                  {v.title?.trim() || `Episode ${v.episode}`}
-                  {flag?.filler && <span className="dk-ep-badge">Filler</span>}
-                  {flag?.recap && <span className="dk-ep-badge">Recap</span>}
-                </strong>
+              <div className="dk-ep-kicker-row">
+                <span className="dk-ep-kicker tabular">EPISODE {v.episode}</span>
                 {on && meta && (
                   <span className="dk-ep-dl-slot">
-                    <DownloadButton item={meta} video={v} className="dk-ep-dl" size={20} />
+                    <DownloadButton item={meta} video={v} className="dk-ep-dl" size={16} />
+                    <button type="button" className="dk-ep-src" aria-label={`Sources for episode ${v.episode}`} title="Choose source" onClick={() => onSources(v)}>
+                      <IconSources size={16} />
+                    </button>
                   </span>
                 )}
               </div>
-              <span className="dk-ep-meta">
-                {[runtime, v.released && !pending ? new Date(v.released).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
+              <strong className="dk-ep-card-title">
+                {v.title?.trim() || `Episode ${v.episode}`}
+                {flag?.filler && <span className="dk-ep-badge">Filler</span>}
+                {flag?.recap && <span className="dk-ep-badge">Recap</span>}
+              </strong>
               {v.overview && <p className="dk-ep-text">{v.overview}</p>}
+              <span className="dk-ep-date tabular">
+                {unreleased ? (shortDate ? `Coming ${shortDate}` : "Not yet released") : fullDate}
+              </span>
             </li>
           );
         })}

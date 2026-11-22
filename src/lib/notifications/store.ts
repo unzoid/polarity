@@ -18,6 +18,10 @@ export interface Memory {
   shows: Record<string, ShowMemory>;
   /** Phones: per show, the memory as it will be after each planned note (whatsNew.ts `upcoming`). */
   planned: Record<string, PlannedMemory[]>;
+  /** Timestamps (epoch ms) of recently emitted OS notifications for pacing budgets (#642). */
+  sentAt?: number[];
+  /** Last time the user opened/interacted with this profile (for inactivity auto-throttling). */
+  lastActiveAt?: number;
 }
 
 const key = (profile: string) => `polar.notifications.${profile}`;
@@ -57,6 +61,10 @@ export function readMemory(v: unknown): Memory {
       if (plans.length) out.planned[id] = plans;
     }
   }
+  const sentAt = listOf(v.sentAt, (n) => (num(n) != null ? (n as number) : undefined));
+  if (sentAt.length) out.sentAt = sentAt;
+  const lastActiveAt = num(v.lastActiveAt);
+  if (lastActiveAt != null) out.lastActiveAt = lastActiveAt;
   return out;
 }
 

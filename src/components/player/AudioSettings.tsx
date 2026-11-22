@@ -1,4 +1,4 @@
-import { setPrefs, usePrefs } from "../../lib/settings";
+import { setPrefs, usePrefs, type DrcProfile } from "../../lib/settings";
 import { Chips, Setting, Stepper } from "./SubtitleSettings";
 
 const ON_OFF = [
@@ -6,14 +6,20 @@ const ON_OFF = [
   { value: 1, label: "On" },
 ];
 
+const DRC_PROFILES: { value: DrcProfile; label: string }[] = [
+  { value: "pure", label: "Pure" },
+  { value: "livingRoom", label: "Room" },
+  { value: "lateNight", label: "Night" },
+];
+
 /**
  * The sound's options, shown in place of the audio list (the Audio column's cog), as the subtitle
  * settings are beside it. Each applies to the playing video straight away. The delay is this source's
- * (remembered with its tracks, lib/playback/trackMemory.ts); the two switches are this device's, as in
+ * (remembered with its tracks, lib/playback/trackMemory.ts); the switches are this device's, as in
  * Settings → Subtitles & Audio.
  */
 export function AudioSettings({ delay, onDelay }: { delay: number; onDelay: (seconds: number) => void }) {
-  const { dialogueBoost, volumeLeveling } = usePrefs();
+  const { dialogueBoost, volumeLeveling, drcProfile } = usePrefs();
   return (
     <div className="sub-settings">
       <Setting
@@ -43,11 +49,14 @@ export function AudioSettings({ delay, onDelay }: { delay: number; onDelay: (sec
           )}
         </div>
       </Setting>
-      <Setting label="Boost dialogue" caption="Clearer voices on 5.1 and 7.1 sound">
+      <Setting label="Boost dialogue" caption="Clearer voices on stereo and surround sound">
         <Chips value={dialogueBoost ? 1 : 0} options={ON_OFF} onChange={(v) => setPrefs({ dialogueBoost: v === 1 })} />
       </Setting>
       <Setting label="Even out volume" caption="Quieter explosions, louder whispers">
         <Chips value={volumeLeveling ? 1 : 0} options={ON_OFF} onChange={(v) => setPrefs({ volumeLeveling: v === 1 })} />
+      </Setting>
+      <Setting label="Dynamic range" caption="Pure cinema, Living Room, or Late Night">
+        <Chips value={drcProfile} options={DRC_PROFILES} onChange={(v) => setPrefs({ drcProfile: v })} />
       </Setting>
     </div>
   );

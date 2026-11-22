@@ -7,11 +7,16 @@ import type { RankedStream, ScoreReason } from "../types";
  * explained ("+35 1080p on a 1080p screen", "−10 2.1 Mbps is low for 1080p").
  * The add-on side only says what a file is (crates/addon's rank.rs); every weight
  * is here, in WEIGHTS.
+ *
+ * Factors follow a 3-tier precedence structure (Netflix Hendrix #426):
+ *   Tier 1 — Safety & Compatibility Guardrails (`otherEpisode`, `cam`, `notOutYet`, `dolbyVisionUnsupported`)
+ *   Tier 2 — User & Connection Constraints (audio language, burst-adjusted connection fit, screen fit, SW decode, reliability)
+ *   Tier 3 — Quality Tie-Breakers (viewing-distance resolution, direct link, codec-normalized bitrate, dynamic HDR, HW decode, prefs)
  */
 
 /** Every point the score gives or takes. */
 export const WEIGHTS = {
-  /** The picture's height. */
+  /** The picture's height (adjusted by Device.form viewing distance when known). */
   resolution: { 2160: 40, 1440: 37, 1080: 35, 720: 22, below: 10, unknown: 15 },
   /** Taller than this screen shows (with Settings → Sources' "prefer this screen"). */
   overScreen: -8,
@@ -24,25 +29,27 @@ export const WEIGHTS = {
   notOutYet: -40,
 
   // Bitrate: size ÷ runtime. Size alone never costs points.
-  /** Below the least a file of its height needs to look right (BITRATE_FLOOR). */
+  /** Below the least a file of its height needs to look right (codec-normalized against BITRATE_FLOOR). */
   bitrateLow: -10,
-  /** Under half the middle bitrate of the other files of its height. */
+  /** Under half the middle effective bitrate of the other files of its height. */
   bitrateBelowOthers: -4,
-  /** At least 1.3× that middle bitrate, and the connection carries it: a better picture. */
+  /** At least 1.3× that middle effective bitrate, and the connection carries it: a better picture. */
   bitrateAboveOthers: 3,
-  /** More than the connection has carried (≥ 90 % of it): it would stall. */
+  /** Peak bitrate more than the connection has carried (≥ 90 % of it): it would stall. */
   connectionTooSlow: -15,
-  /** Over 60 % of the connection: a slow start, stalls on a bad evening. */
+  /** Peak bitrate over 60 % of the connection: a slow start, stalls on a bad evening. */
   connectionTight: -5,
 
   // The device.
   hdr: 2,
+  /** Dynamic HDR10+ metadata: higher than static HDR10 on HDR displays. */
+  hdr10Plus: 2.5,
   dolbyVision: 3,
-  /** Dolby Vision without an HDR10 layer, on a device that can't show Dolby Vision: wrong colours. */
+  /** Dolby Vision without an HDR10 / HDR10+ layer, on a device that can't show Dolby Vision: wrong colours. */
   dolbyVisionUnsupported: -10,
   /** HEVC or AV1 decoded by the hardware: smaller for the same picture. */
   efficientCodec: 1,
-  /** HEVC or AV1 this device decodes in software: hot, and it may drop frames. 4K doubles it. */
+  /** HEVC or AV1 this device decodes in software: hot, and it may drop frames. 4K doubles it; desktop dav1d ≤1080p softens it. */
   softwareDecode: -6,
 
   // The user's preferences (Settings → Subtitles & Audio, Sources, Anime).
@@ -61,7 +68,7 @@ export const WEIGHTS = {
   failRate: -12,
   /** Times the share of starts that played through. */
   playedThrough: 4,
-  /** Failed just now, fading out over RECENT_FAIL_HOURS. */
+  /** Failed just now, fading out over RECENT_FAIL_HOURS (boosted on rapid outage streaks). */
   recentFail: -15,
   /** Took longer than SLOW_START_MS to start, on average. */
   slowStart: -3,
@@ -88,6 +95,7 @@ export const FACTOR_LABELS: Record<Factor, string> = {
   connectionTooSlow: "More than the connection carries",
   connectionTight: "Close to the connection's limit",
   hdr: "HDR",
+  hdr10Plus: "HDR10+",
   dolbyVision: "Dolby Vision",
   dolbyVisionUnsupported: "Dolby Vision this device can't show",
   efficientCodec: "Hardware decoding",
@@ -103,13 +111,20 @@ export const FACTOR_LABELS: Record<Factor, string> = {
   slowStart: "Slow to start here",
 };
 
-/** Mbps below which a file of each height is a re-encode squeezed too small. */
+/** H.264-equivalent Mbps below which a file of each height is squeezed too small. */
 export const BITRATE_FLOOR: Record<number, number> = { 2160: 8, 1440: 4, 1080: 2.5, 720: 1.2, 0: 0.6 };
+/** Perceptual compression efficiency relative to H.264 (Netflix AV1/HEVC VMAF studies #467/#590/#614). */
+export const CODEC_EFFICIENCY: Record<string, number> = { "H.264": 1, HEVC: 1.35, AV1: 1.6, AV2: 1.8 };
+/** Scene-cut VBR peak burst headroom over average bitrate (Netflix #533/#628). */
+export const BURST_MULTIPLIER = { remux: 1.5, hdr4k: 1.3, default: 1 } as const;
 export const MIN_TRIES = 2;
 export const RECENT_FAIL_HOURS = 24;
 export const SLOW_START_MS = 10_000;
 /** How long after an episode airs a disc release of it can't be out yet. */
 export const NEW_EPISODE_DAYS = 28;
+
+/** Viewing distance / screen class (Netflix VMAF v1: Phone@5H, TV@3H, Desktop@1.5H). */
+export type DeviceForm = "phone" | "tablet" | "desktop" | "tv";
 
 /** What this device can show and decode; `null` = couldn't tell (no points either way). */
 export interface Device {
@@ -121,6 +136,11 @@ export interface Device {
   dolbyVision: boolean | null;
   hevc: boolean | null;
   av1: boolean | null;
+  /** 10-bit 4K hardware decode capability when probed separately from 1080p. */
+  hevc4k?: boolean | null;
+  av14k?: boolean | null;
+  /** Viewing form factor for resolution uplift scaling and desktop dav1d SW decode nuance. */
+  form?: DeviceForm;
 }
 
 /** How a kind of source has done on this device (sourceHistory.ts). */
@@ -134,6 +154,8 @@ export interface SourceRecord {
   startMs: number;
   /** When it last failed (ms since the epoch). */
   lastFail?: number;
+  /** Consecutive failures within the fast 30-minute outage window, when ≥ 2. */
+  recentFails?: number;
 }
 
 export interface MatchContext {
@@ -201,6 +223,31 @@ export function bitrateMbps(r: RankedStream, runtimeSec: number | null): number 
   if (!size || !runtimeSec || runtimeSec < 60) return null;
   return (size * 8) / runtimeSec / 1e6;
 }
+/** H.264-equivalent quality bitrate accounting for HEVC/AV1/AV2 coding efficiency. */
+export function effectiveBitrateMbps(r: RankedStream, rawMbps: number): number {
+  return rawMbps * (CODEC_EFFICIENCY[r.quality.codec ?? ""] ?? 1);
+}
+/** Peak burst factor over average bitrate for connection headroom checks. */
+export function burstMultiplier(r: RankedStream): number {
+  const q = r.quality;
+  if ((q.tags ?? []).some((t) => t.toLowerCase() === "remux")) return BURST_MULTIPLIER.remux;
+  if ((q.resolution ?? 0) >= 2160 && (q.hdr || q.hdr10Plus || q.dolbyVision)) return BURST_MULTIPLIER.hdr4k;
+  return BURST_MULTIPLIER.default;
+}
+const hasHdr10Plus = (q: RankedStream["quality"]) =>
+  Boolean(q.hdr10Plus || (q.tags ?? []).some((t) => /^hdr10(?:\+|plus)$/i.test(t)));
+
+/** Resolution points scaled by viewing distance (Phone@5H flattens 4K uplift; TV@3H is modest; Desktop@1.5H is full). */
+function resolutionPoints(h: number | undefined, form: DeviceForm | undefined): number {
+  const W = WEIGHTS.resolution;
+  if (h == null) return W.unknown;
+  if (h >= 2160) return form === "phone" ? 36 : form === "tv" ? 38.5 : W[2160];
+  if (h >= 1440) return form === "phone" ? 35.5 : form === "tv" ? 36.5 : W[1440];
+  if (h >= 1080) return W[1080];
+  if (h >= 720) return W[720];
+  return W.below;
+}
+
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
   const m = s.length >> 1;
@@ -211,18 +258,21 @@ const groupTags = (r: RankedStream) => {
   const q = r.quality;
   const t = (q.tags ?? []).map((x) => x.toLowerCase());
   if (q.dolbyVision) t.push("dv");
-  if (q.hdr) t.push("hdr");
+  if (q.hdr10Plus) t.push("hdr10+");
+  if (q.hdr || q.hdr10Plus) t.push("hdr");
   if (q.codec) t.push(q.codec.toLowerCase());
   return t;
 };
 const TAG_NAMES: Record<string, string> = { dv: "Dolby Vision", hdr: "HDR", "hdr10+": "HDR10+", remux: "Remux", atmos: "Atmos", hevc: "HEVC", "10-bit": "10-bit" };
 
-/** Each source's score and its reasons, the list taken together (bitrates compare within it). */
+/** Each source's score and its reasons, the list taken together (codec-normalized bitrates compare within it). */
 export function scoreSources(streams: RankedStream[], ctx: MatchContext = NEUTRAL): Map<RankedStream, Match> {
   const rates = new Map<number, number[]>();
   for (const r of streams) {
     const b = bitrateMbps(r, ctx.runtimeSec);
-    if (b != null && !r.quality.lowQualitySource) rates.set(bucket(r), [...(rates.get(bucket(r)) ?? []), b]);
+    if (b != null && !r.quality.lowQualitySource) {
+      rates.set(bucket(r), [...(rates.get(bucket(r)) ?? []), effectiveBitrateMbps(r, b)]);
+    }
   }
   // Fewer than three files of a height with a known size aren't much to compare with.
   const middle = new Map([...rates].filter(([, xs]) => xs.length >= 3).map(([k, xs]) => [k, median(xs)]));
@@ -231,7 +281,30 @@ export function scoreSources(streams: RankedStream[], ctx: MatchContext = NEUTRA
   return new Map(scored.map(([r, m]) => [r, { ...m, rank: { position: 1 + scored.filter(([, o]) => o.score > m.score).length, of } }]));
 }
 
-/** One source's score; `middle` is the middle bitrate of the other files of its height, when there are enough. */
+/** Top deciding factor deltas explaining why `#1` (`best`) outscored `candidate` (Netflix #596). */
+export interface FactorDelta {
+  factor: Factor;
+  label: string;
+  /** Negative means `best` beat `candidate` by `|delta|` points on this factor. */
+  delta: number;
+  candidatePoints: number;
+  bestPoints: number;
+}
+
+export function explainDifference(candidate: Match, best: Match, maxReasons = 3): FactorDelta[] {
+  const bestByFactor = new Map(best.factors.map((f) => [f.factor, f.points]));
+  return candidate.factors
+    .map((f) => {
+      const bp = bestByFactor.get(f.factor) ?? 0;
+      const delta = Math.round((f.points - bp) * 10) / 10;
+      return { factor: f.factor, label: f.label, delta, candidatePoints: f.points, bestPoints: bp };
+    })
+    .filter((d) => d.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, maxReasons);
+}
+
+/** One source's score; `middle` is the middle codec-normalized bitrate of the other files of its height, when there are enough. */
 export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: number | null = null): Match {
   const W = WEIGHTS;
   const q = r.quality;
@@ -245,17 +318,7 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
     by.set(factor, [...(by.get(factor) ?? []), x]);
   };
 
-  // The picture.
-  const h = q.resolution;
-  const onScreen = d.preferScreen ? ` on a ${resName(d.screen)} screen` : "";
-  if (h == null) add("resolution", "Unknown resolution", W.resolution.unknown);
-  else if (h >= 2160) add("resolution", `4K${onScreen}`, W.resolution[2160]);
-  else if (h >= 1440) add("resolution", `1440p${onScreen}`, W.resolution[1440]);
-  else if (h >= 1080) add("resolution", `1080p${onScreen}`, W.resolution[1080]);
-  else if (h >= 720) add("resolution", `720p${onScreen}`, W.resolution[720]);
-  else add("resolution", "Below 720p", W.resolution.below);
-  if (d.preferScreen && d.screen < 1300 && (h ?? 0) > Math.max(d.screen, 1080)) add("overScreen", "Bigger than this screen shows", W.overScreen);
-  if (q.direct) add("direct", "Direct link", W.direct);
+  // --- Tier 1: Safety & Compatibility Guardrails ---
   if (q.lowQualitySource) add("cam", "CAM or telesync", W.cam);
   if (r.otherEpisode) add("otherEpisode", `The file says ${r.fileEpisode ?? "another episode"}`, W.otherEpisode);
   const days = ctx.aired == null ? null : (ctx.now - ctx.aired) / 86_400_000;
@@ -263,30 +326,63 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
     const when = days < 0 ? "hasn't aired yet" : days < 1 ? "aired today" : `aired ${Math.floor(days)} day${Math.floor(days) === 1 ? "" : "s"} ago`;
     add("notOutYet", `A disc release, but the episode ${when}`, W.notOutYet);
   }
+  const hdr10p = hasHdr10Plus(q);
+  const hasHdrFallback = Boolean(q.hdr || hdr10p);
+  if (q.dolbyVision && !hasHdrFallback && d.dolbyVision === false) {
+    add("dolbyVisionUnsupported", "Dolby Vision only, which this device can't show", W.dolbyVisionUnsupported);
+  }
 
-  // Bitrate, against the others of its height and the connection.
+  // --- Tier 2: User, Device & Connection Constraints ---
+  const h = q.resolution;
+  const onScreen = d.preferScreen ? ` on a ${resName(d.screen)} screen` : "";
+  if (d.preferScreen && d.screen < 1300 && (h ?? 0) > Math.max(d.screen, 1080)) {
+    add("overScreen", "Bigger than this screen shows", W.overScreen);
+  }
+
+  // Raw bitrate + burst multiplier against the connection; codec-normalized effective bitrate for quality.
   const rate = bitrateMbps(r, ctx.runtimeSec);
   if (rate != null && !q.lowQualitySource) {
     const b = bucket(r);
-    const fits = ctx.connectionMbps == null || rate < ctx.connectionMbps * 0.6;
-    if (rate < BITRATE_FLOOR[b]) add("bitrateLow", `${mbps(rate)} is low for ${b ? resName(b) : "its size"}`, W.bitrateLow);
-    else if (middle != null && rate < middle * 0.5) add("bitrateBelowOthers", `${mbps(rate)}, under half the other ${b ? resName(b) : "small"} files' ${mbps(middle)}`, W.bitrateBelowOthers);
-    else if (middle != null && rate >= middle * 1.3 && fits) add("bitrateAboveOthers", `${mbps(rate)}, more detail than the other ${b ? resName(b) : "small"} files' ${mbps(middle)}`, W.bitrateAboveOthers);
+    const eff = effectiveBitrateMbps(r, rate);
+    const burst = burstMultiplier(r);
+    const peak = rate * burst;
+    const fits = ctx.connectionMbps == null || peak < ctx.connectionMbps * 0.6;
+    if (eff < BITRATE_FLOOR[b]) {
+      add("bitrateLow", `${mbps(rate)} is low for ${b ? resName(b) : "its size"}`, W.bitrateLow);
+    } else if (b >= 1440 && eff < BITRATE_FLOOR[b] * 1.25) {
+      // AIM starvation penalty (#644): barely-above-floor 4K/1440p loses its uplift against a clean 1080p encode.
+      add("bitrateLow", `${mbps(rate)} is thin for ${resName(b)}`, W.bitrateLow * 0.6);
+    } else if (middle != null && eff < middle * 0.5) {
+      add("bitrateBelowOthers", `${mbps(rate)}, under half the other ${b ? resName(b) : "small"} files' ${mbps(middle)}`, W.bitrateBelowOthers);
+    } else if (middle != null && eff >= middle * 1.3 && fits) {
+      add("bitrateAboveOthers", `${mbps(rate)}, more detail than the other ${b ? resName(b) : "small"} files' ${mbps(middle)}`, W.bitrateAboveOthers);
+    }
     if (ctx.connectionMbps != null) {
-      if (rate >= ctx.connectionMbps * 0.9) add("connectionTooSlow", `${mbps(rate)} is more than this connection carries (${mbps(ctx.connectionMbps)})`, W.connectionTooSlow);
-      else if (rate >= ctx.connectionMbps * 0.6) add("connectionTight", `${mbps(rate)} is close to this connection's ${mbps(ctx.connectionMbps)}`, W.connectionTight);
+      const rateLabel = burst > 1 ? `${mbps(rate)} (peaks ~${mbps(peak)})` : mbps(rate);
+      if (peak >= ctx.connectionMbps * 0.9) {
+        add("connectionTooSlow", `${rateLabel} is more than this connection carries (${mbps(ctx.connectionMbps)})`, W.connectionTooSlow);
+      } else if (peak >= ctx.connectionMbps * 0.6) {
+        add("connectionTight", `${rateLabel} is close to this connection's ${mbps(ctx.connectionMbps)}`, W.connectionTight);
+      }
     }
   }
 
-  // The device.
-  if (q.dolbyVision && !q.hdr && d.dolbyVision === false) add("dolbyVisionUnsupported", "Dolby Vision only, which this device can't show", W.dolbyVisionUnsupported);
-  else if (q.dolbyVision && d.hdr && d.dolbyVision) add("dolbyVision", "Dolby Vision on an HDR screen", W.dolbyVision);
-  else if ((q.hdr || q.dolbyVision) && d.hdr) add("hdr", "HDR on an HDR screen", W.hdr);
-  const codec = q.codec === "HEVC" ? d.hevc : q.codec === "AV1" ? d.av1 : undefined;
-  if (codec === true) add("efficientCodec", `${q.codec}, decoded by this device's hardware`, W.efficientCodec);
-  else if (codec === false) add("softwareDecode", `${q.codec} without hardware decoding here`, W.softwareDecode * ((h ?? 0) >= 2160 ? 2 : 1));
+  // Codec hardware vs. software decode (uses 4K 10-bit probe when available; softens desktop dav1d ≤1080p).
+  const is4k = (h ?? 0) >= 2160;
+  const codecCap =
+    q.codec === "HEVC"
+      ? (is4k && d.hevc4k !== undefined ? d.hevc4k : d.hevc)
+      : q.codec === "AV1"
+        ? (is4k && d.av14k !== undefined ? d.av14k : d.av1)
+        : undefined;
+  if (codecCap === true) {
+    add("efficientCodec", `${q.codec}, decoded by this device's hardware`, W.efficientCodec);
+  } else if (codecCap === false) {
+    const penalty = is4k ? W.softwareDecode * 2 : q.codec === "AV1" && d.form === "desktop" ? -2 : W.softwareDecode;
+    add("softwareDecode", `${q.codec} without hardware decoding here`, penalty);
+  }
 
-  // Preferences.
+  // Audio language constraint.
   const own = ctx.audioLanguage ? null : ctx.ownLanguage;
   const pref = ctx.audioLanguage || own?.code;
   if (pref) {
@@ -300,28 +396,59 @@ export function scoreOne(r: RankedStream, ctx: MatchContext = NEUTRAL, middle: n
       add("audioOtherLanguage", `Audio in ${other}, not ${name}`, W.audioOtherLanguage);
     }
   }
-  const tags = groupTags(r);
-  for (const t of ctx.preferredTags) if (tags.includes(t)) add("preferredTag", `${TAG_NAMES[t] ?? t}, which you prefer`, W.preferredTag);
-  const group = q.source ? ctx.preferredGroups.findIndex((g) => groupKey(g) === groupKey(q.source!)) : -1;
-  if (group >= 0) add("preferredGroup", `${q.source}, a release group you prefer`, W.preferredGroup[Math.min(group, W.preferredGroup.length - 1)]);
 
-  // What happened before.
+  // Historical reliability (EWMA-decayed in sourceHistory.ts + fast outage streak).
   const seen: [string, SourceRecord | undefined][] = [
     ["Add-on", ctx.history("addon", r.addon)],
     ["Release group", q.source ? ctx.history("group", q.source) : undefined],
   ];
   let lastFail = 0;
+  let burstFails = 0;
   for (const [who, rec] of seen) {
     if (!rec) continue;
-    if (rec.tries >= MIN_TRIES && rec.fails) add("failRate", `${who} failed ${rec.fails} of ${rec.tries} times here`, W.failRate * (rec.fails / rec.tries));
-    if (rec.starts >= MIN_TRIES && rec.through) add("playedThrough", `${who} played through ${rec.through} of ${rec.starts} times here`, W.playedThrough * (rec.through / rec.starts));
-    if (rec.starts >= MIN_TRIES && rec.startMs / rec.starts > SLOW_START_MS)
+    if (rec.tries >= MIN_TRIES && rec.fails) {
+      const failsLabel = Number.isInteger(rec.fails) ? rec.fails : Math.round(rec.fails * 10) / 10;
+      const triesLabel = Number.isInteger(rec.tries) ? rec.tries : Math.round(rec.tries * 10) / 10;
+      add("failRate", `${who} failed ${failsLabel} of ${triesLabel} times here`, W.failRate * (rec.fails / rec.tries));
+    }
+    if (rec.starts >= MIN_TRIES && rec.through) {
+      const throughLabel = Number.isInteger(rec.through) ? rec.through : Math.round(rec.through * 10) / 10;
+      const startsLabel = Number.isInteger(rec.starts) ? rec.starts : Math.round(rec.starts * 10) / 10;
+      add("playedThrough", `${who} played through ${throughLabel} of ${startsLabel} times here`, W.playedThrough * (rec.through / rec.starts));
+    }
+    if (rec.starts >= MIN_TRIES && rec.startMs / rec.starts > SLOW_START_MS) {
       add("slowStart", `${who} takes ${Math.round(rec.startMs / rec.starts / 1000)} s to start here`, W.slowStart);
+    }
     lastFail = Math.max(lastFail, rec.lastFail ?? 0);
+    burstFails = Math.max(burstFails, rec.recentFails ?? 0);
   }
   const hours = (ctx.now - lastFail) / 3_600_000;
-  if (lastFail && hours >= 0 && hours < RECENT_FAIL_HOURS)
-    add("recentFail", `Failed here ${hours < 1 ? "within the hour" : `${Math.floor(hours)} h ago`}`, W.recentFail * (1 - hours / RECENT_FAIL_HOURS));
+  if (lastFail && hours >= 0 && hours < RECENT_FAIL_HOURS) {
+    const burstScale = burstFails >= 2 && hours < 0.5 ? Math.min(1.5, 1 + 0.25 * (burstFails - 1)) : 1;
+    const when = hours < 1 ? "within the hour" : `${Math.floor(hours)} h ago`;
+    const suffix = burstScale > 1 ? ` (${burstFails}× in a row)` : "";
+    add("recentFail", `Failed here ${when}${suffix}`, W.recentFail * (1 - hours / RECENT_FAIL_HOURS) * burstScale);
+  }
+
+  // --- Tier 3: Quality Tie-Breakers & Preferences ---
+  const resPts = resolutionPoints(h, d.form);
+  if (h == null) add("resolution", "Unknown resolution", resPts);
+  else if (h >= 2160) add("resolution", `4K${onScreen}`, resPts);
+  else if (h >= 1440) add("resolution", `1440p${onScreen}`, resPts);
+  else if (h >= 1080) add("resolution", `1080p${onScreen}`, resPts);
+  else if (h >= 720) add("resolution", `720p${onScreen}`, resPts);
+  else add("resolution", "Below 720p", resPts);
+  if (q.direct) add("direct", "Direct link", W.direct);
+
+  // Dynamic HDR hierarchy: Dolby Vision (+3) > HDR10+ (+2.5) > static HDR10 (+2).
+  if (q.dolbyVision && d.hdr && d.dolbyVision) add("dolbyVision", "Dolby Vision on an HDR screen", W.dolbyVision);
+  else if (hdr10p && d.hdr) add("hdr10Plus", "HDR10+ on an HDR screen", W.hdr10Plus);
+  else if ((q.hdr || q.dolbyVision) && d.hdr) add("hdr", "HDR on an HDR screen", W.hdr);
+
+  const tags = groupTags(r);
+  for (const t of ctx.preferredTags) if (tags.includes(t)) add("preferredTag", `${TAG_NAMES[t] ?? t}, which you prefer`, W.preferredTag);
+  const group = q.source ? ctx.preferredGroups.findIndex((g) => groupKey(g) === groupKey(q.source!)) : -1;
+  if (group >= 0) add("preferredGroup", `${q.source}, a release group you prefer`, W.preferredGroup[Math.min(group, W.preferredGroup.length - 1)]);
 
   const total = (xs: ScoreReason[]) => Math.round(xs.reduce((n, x) => n + x.points, 0) * 10) / 10;
   const factors = (Object.keys(W) as Factor[]).map((factor) => {

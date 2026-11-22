@@ -276,3 +276,171 @@ export function concurrency(limit: number) {
     }
   };
 }
+
+// --- 4-tier prioritized shedding & ExclusivePriorityQueue (Netflix resilience) ---
+
+/**
+ * 4-tier request criticality: lower tiers are never shed while higher tiers yield
+ * immediately during active playback buffering or network latency spikes.
+ */
+export const TIER = {
+  /** Active playback start, live buffering, user-triggered stream resolution. */
+  critical: 0,
+  /** Current page metadata and visible row images. */
+  degraded: 1,
+  /** Background readiness probes, next-episode warming, near-viewport prefetches. */
+  bestEffort: 2,
+  /** Bulk library hydration, periodic notification sweeps, speculative cache fills. */
+  bulk: 3,
+} as const;
+
+export type ShedTier = (typeof TIER)[keyof typeof TIER];
+
+const LATENCY_WINDOW = 20;
+const SLO_MS = 2000;
+const DEGRADED_RATIO = 0.4;
+const SEVERE_RATIO = 0.75;
+
+/**
+ * Tracks active critical playback and rolling upstream latency SLOs so background work
+ * (`readiness.ts`, warming, bulk hydration) yields cleanly when playback needs the pipe.
+ */
+export class LoadCoordinator {
+  private criticalActive = 0;
+  private latencies: number[] = [];
+  private listeners = new Set<() => void>();
+
+  /** Mark a critical playback operation active; call the returned function when done. */
+  enterCritical(): () => void {
+    this.criticalActive++;
+    this.notify();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.criticalActive = Math.max(0, this.criticalActive - 1);
+      this.notify();
+    };
+  }
+
+  get critical(): boolean {
+    return this.criticalActive > 0;
+  }
+
+  /** Record a completed request's latency in ms for rolling SLO shedding. */
+  recordLatency(ms: number) {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    this.latencies.push(ms);
+    if (this.latencies.length > LATENCY_WINDOW) this.latencies.shift();
+  }
+
+  /** Fraction of recent requests exceeding the 2s SLO (0..1). */
+  slowRatio(): number {
+    if (this.latencies.length < 5) return 0;
+    let slow = 0;
+    for (const ms of this.latencies) if (ms > SLO_MS) slow++;
+    return slow / this.latencies.length;
+  }
+
+  get degraded(): boolean {
+    return this.slowRatio() > DEGRADED_RATIO;
+  }
+
+  /** True when work at `tier` should pause or be skipped to protect critical playback. */
+  shouldShed(tier: ShedTier): boolean {
+    if (tier <= TIER.critical) return false;
+    if (tier >= TIER.bestEffort) return this.critical || this.degraded;
+    // TIER.degraded only yields when both critical playback is active and upstream is severely congested.
+    return this.critical && this.slowRatio() > SEVERE_RATIO;
+  }
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+
+  reset() {
+    this.criticalActive = 0;
+    this.latencies = [];
+    this.notify();
+  }
+
+  private notify() {
+    for (const l of this.listeners) l();
+  }
+}
+
+export const loadCoordinator = new LoadCoordinator();
+
+interface ExclusiveEntry<K> {
+  key: K;
+  priority: number;
+  seq: number;
+  start: () => void;
+}
+
+/**
+ * Priority concurrency queue with per-key exclusivity (Netflix `ExclusivePriorityQueue`):
+ * runs up to `limit` tasks concurrently, but at most 1 active task per `key` (e.g. URL host).
+ * When the highest-priority waiting task's key is busy, lower-priority tasks on unblocked keys
+ * proceed immediately — preventing Head-of-Line blocking by a single stalled host.
+ */
+export class ExclusivePriorityQueue<K = string> {
+  private running = 0;
+  private activeKeys = new Set<K>();
+  private queue: ExclusiveEntry<K>[] = [];
+  private seq = 0;
+
+  constructor(private readonly limit: number) {}
+
+  run<T>(key: K, task: () => Promise<T>, priority = 0, signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    return new Promise<T>((resolve, reject) => {
+      const execute = () => {
+        signal?.removeEventListener("abort", onAbort);
+        this.running++;
+        this.activeKeys.add(key);
+        Promise.resolve()
+          .then(task)
+          .then(resolve, reject)
+          .finally(() => {
+            this.running--;
+            this.activeKeys.delete(key);
+            this.pump();
+          });
+      };
+
+      const entry: ExclusiveEntry<K> = { key, priority, seq: this.seq++, start: execute };
+      const onAbort = () => {
+        const idx = this.queue.indexOf(entry);
+        if (idx >= 0) this.queue.splice(idx, 1);
+        reject(signal!.reason);
+      };
+
+      if (this.running < this.limit && !this.activeKeys.has(key)) {
+        execute();
+        return;
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.queue.push(entry);
+      this.queue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
+    });
+  }
+
+  private pump() {
+    while (this.running < this.limit) {
+      const idx = this.queue.findIndex((e) => !this.activeKeys.has(e.key));
+      if (idx < 0) return;
+      const [next] = this.queue.splice(idx, 1);
+      next.start();
+    }
+  }
+
+  get activeCount() {
+    return this.running;
+  }
+
+  get pendingCount() {
+    return this.queue.length;
+  }
+}

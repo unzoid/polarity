@@ -22,7 +22,7 @@ import { hasPin } from "../lib/account/profileRules";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
-import { lazyNamed, useFormFactor, whenIdle } from "../lib/ui";
+import { canPreloadChunks, lazyNamed, useFormFactor, whenIdle } from "../lib/ui";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { useGuard } from "./profileLock/useGuard";
@@ -418,9 +418,7 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
   }, [list]);
   // Settings is loaded once the app has genuinely settled on fast connections, so initial load on slow networks never competes with it.
   useEffect(() => {
-    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } };
-    const c = nav.connection;
-    if (c && (c.saveData || c.effectiveType === "slow-2g" || c.effectiveType === "2g" || c.effectiveType === "3g" || (c.downlink && c.downlink < 2.5))) return;
+    if (!canPreloadChunks()) return;
     let cancelIdle: (() => void) | undefined;
     const later = window.setTimeout(() => {
       cancelIdle = whenIdle(() => void SettingsOverlay.preload().catch(() => {}), 5000);
