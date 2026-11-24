@@ -1,0 +1,77 @@
+/* Import Playlist (components/library/ImportPlaylist.tsx): the Watch Party dialog's look (party.css), a link
+   field with its button, then the films to pick in a list that scrolls. */
+.import-playlist {
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+}
+.import-playlist-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.625rem;
+  width: 100%;
+}
+.import-playlist-form .text-field {
+  min-width: 0;
+}
+.import-playlist-status,
+.import-playlist-error {
+  min-height: 1.25rem;
+  margin: 0.625rem 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.import-playlist-error {
+  color: var(--danger, #ff453a);
+}
+.import-playlist-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  text-align: left;
+}
+.import-playlist-picks li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.import-playlist-film {
+  font-weight: 600;
+}
+.import-playlist-none {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+.import-playlist-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.import-playlist-choice {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.import-playlist-choice:hover {
+  color: var(--text);
+}
+.import-playlist-choice[aria-pressed="true"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg, #000);
+}
+.import-playlist-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}

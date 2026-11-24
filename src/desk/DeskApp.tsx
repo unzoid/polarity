@@ -377,6 +377,12 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
     under.current = below;
     const clearUnder = () => below?.getAnimations().forEach((a) => a.id === "under" && a.cancel());
     if (reduced()) return clearUnder;
+    // On a computer it's a page like any website's: it takes the window's place under the bar, the page it left
+    // staying put underneath (no slide, no shove), with only a quick fade so the swap doesn't flash.
+    if (chrome === "nav") {
+      el.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+      return clearUnder;
+    }
     const frames = samples(OPEN_OMEGA, OPEN_MS);
     el.current?.animate(
       frames.map(({ offset, p }) => ({ offset, transform: `translateX(${((1 - p) * 100).toFixed(3)}%)` })),
@@ -396,6 +402,10 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
       onGone();
     };
     if (reduced() || !el.current) return settle();
+    if (chrome === "nav") {
+      void el.current.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-out", fill: "forwards" }).finished.finally(settle);
+      return;
+    }
     const ease = { duration: 320, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "forwards" } as const;
     const a = el.current.animate([{ transform: "none" }, { transform: "translateX(100%)" }], ease);
     below?.getAnimations().forEach((x) => x.id === "under" && x.cancel());
@@ -403,8 +413,19 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
     void a.finished.finally(settle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaving]);
+  // Library's own pages (Playlists, a playlist, My List, Watched) head themselves: their back link over the page's
+  // big title. On a computer that's the only heading, as on a website, rather than a second bar above it.
+  const ownHead = chrome === "nav" && (entry.route.name === "playlist" || (entry.route.name === "library-collection" && entry.route.view !== "downloads"));
   return (
-    <section ref={el} className="page dk-pushed" style={{ zIndex: z }} data-active={top && !leaving} data-page-key={entry.key} inert={!top || leaving || undefined}>
+    <section
+      ref={el}
+      className="page dk-pushed"
+      style={{ zIndex: z }}
+      data-active={top && !leaving}
+      data-page-key={entry.key}
+      data-own-head={ownHead || undefined}
+      inert={!top || leaving || undefined}
+    >
       <div className="dk-pushed-body">
         {entry.route.name === "discover" ? (
           <ErrorBoundary where="section">
@@ -420,15 +441,17 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
           </ErrorBoundary>
         ) : (
           <>
-            <header className="dk-bar dk-pagebar" data-tauri-drag-region>
-              <div className="dk-bar-lead" data-tauri-drag-region>
-                <button type="button" className="dk-round dk-back" aria-label="Back" onClick={onBack}>
-                  <IconBack size={22} stroke={2.2} />
-                </button>
-                <h1 className="dk-bar-title">{titleOf(entry.route)}</h1>
-              </div>
-              {chrome === "tabs" && <BarActions />}
-            </header>
+            {!ownHead && (
+              <header className="dk-bar dk-pagebar" data-tauri-drag-region>
+                <div className="dk-bar-lead" data-tauri-drag-region>
+                  <button type="button" className="dk-round dk-back" aria-label="Back" onClick={onBack}>
+                    <IconBack size={22} stroke={2.2} />
+                  </button>
+                  <h1 className="dk-bar-title">{titleOf(entry.route)}</h1>
+                </div>
+                {chrome === "tabs" && <BarActions />}
+              </header>
+            )}
             <ErrorBoundary where={`page ${entry.route.name}`}>
               <Screen route={entry.route} />
             </ErrorBoundary>

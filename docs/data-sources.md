@@ -36,6 +36,7 @@ first (see `AGENTS.md`).
 | Add-on list | The curated list in Settings → Add-ons | `src/lib/catalog/marketplace.ts` | None | — |
 | GitHub releases API | Release notes for updates | `src/lib/updater.ts` | None | 60 unauthenticated requests an hour |
 | Letterboxd export (a file) | Watchlist and watched films the user imports (#87) | `src/lib/library/letterboxdImport.ts`, `src/components/settings/LetterboxdImport.tsx` | None | Read on the device; nothing is fetched from Letterboxd and its `boxd.it` links are never followed. Films are found through the catalog above, two searches at a time |
+| Letterboxd list pages (letterboxd.com) | A public list the user pastes the link of, made into a playlist (Import Playlist) | `src-tauri/src/letterboxd.rs`, `src/components/library/ImportPlaylist.tsx` | None | Read only when the user asks: the list's pages one after another (100 films each, at most 5), and a `boxd.it` short link followed once to its list. Nothing else is fetched from the site. Films are found through the catalog above, two searches at a time |
 | Supabase | Accounts and sync, the owner's project | `src/lib/account/` | Owner's publishable key | `docs/supabase-storage.md` |
 
 Every host the web view fetches from is listed in its `connect-src` policy
@@ -89,6 +90,9 @@ Every host the web view fetches from is listed in its `connect-src` policy
   downloads from Letterboxd's settings. The export carries no IMDb or TMDB ids, so each film is matched by title and year
   through the catalog (TMDB's search narrowed to the year, Cinemeta's plain search). A row that matches no film, or more
   than one, is left for the user to pick. Ratings aren't imported: Polarity has no rating of its own.
+  Import Playlist reads a public list from its link: the owner decided (2026-11-23) that Polarity reads a list's page,
+  only its name and its films' titles and years, when the user pastes a link and asks. Posters, film pages and
+  accounts aren't read; films are matched as the export's are, and a playlist holds the first 500.
 - **Credits:** Settings → About → Credits names every source and shows TMDB's notice and logo (`src/lib/settings/credits.ts`).
 
 ## 3. What the app keeps on disk

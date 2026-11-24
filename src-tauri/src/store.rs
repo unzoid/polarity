@@ -50,7 +50,7 @@ pub struct Settings {
     pub rating_colors: bool,
     /// How a season's episodes are laid out: "row" (horizontal shelf) or "list".
     pub episode_layout: String,
-    /// Interface font: "instrument" (bundled, the default), "inter", … or "system" (Segoe UI Variable on Windows).
+    /// Interface font: "polarity" (bundled Polarity Sans, the default), "inter" (bundled) or "system" (Segoe UI Variable on Windows).
     pub ui_font: String,
     /// How subtitles look in the player.
     pub subtitle_style: SubtitleStyle,
@@ -230,7 +230,7 @@ impl Default for Settings {
             show_card_ratings: false,
             rating_colors: false,
             episode_layout: "row".into(),
-            ui_font: "instrument".into(),
+            ui_font: "polarity".into(),
             subtitle_style: SubtitleStyle::default(),
             autoplay_countdown: 8,
             still_watching_after: 0,

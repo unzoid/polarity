@@ -1,4 +1,4 @@
-import { os as deviceOs, isIpad, type Os } from "./device";
+import { devPhoneEmulation, os as deviceOs, isIpad, type Os } from "./device";
 
 /**
  * What kind of device the app is laid out for (docs/ARCHITECTURE.md §4). The screens are the same on every one;
@@ -48,6 +48,7 @@ export function isCompactOf(form: FormFactor, { width }: ScreenInfo): boolean {
 }
 
 function measure(s: ScreenInfo) {
+  if (devPhoneEmulation) return { form: "phone" as FormFactor, touch: true, compact: true };
   const form = formFactorOf(deviceOs, s, isIpad);
   return { form, touch: isTouchOf(deviceOs, s), compact: isCompactOf(form, s) };
 }

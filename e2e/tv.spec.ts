@@ -298,7 +298,7 @@ test("Downloads opens from the Library's rail and its titles open and close with
 test("signed out, the TV offers the phone first; denied, it says so and gets a new code (#133)", async ({ app }) => {
   await app.goto("/fake.html?account=signed-out");
   const phone = app.getByRole("button", { name: "Sign in with your phone" });
-  await expect(app.locator(".auth-actions button").first()).toHaveAccessibleName("Sign in with your phone");
+  await expect(app.locator(".si-start-actions button").first()).toHaveAccessibleName("Sign In with Your Phone");
   await phone.focus();
   await press(app, "Enter");
   const code = app.locator(".auth-device-code");

@@ -69,16 +69,13 @@ export function PolarityExport() {
   };
 
   return (
-    <Card
-      title="Export library and history"
-      footer="Your library, every episode and film you've watched or started, anime links and playlists. Sources you played, add-ons and keys aren't in the file. Importing a Polarity export adds what isn't here; anything newer here stays, and importing the same file again adds nothing."
-    >
+    <Card title="Export library and history">
       {isDesktop && (
         <>
           <ActionRow
             setting="polarityExport"
             title="Polarity export"
-            caption="A .json file this or another device can import"
+            caption="JSON"
             label="Export…"
             disabled={busy != null}
             pending={busy === "json"}
@@ -87,7 +84,6 @@ export function PolarityExport() {
           />
           <ActionRow
             title="Watch history as CSV"
-            caption="Title, type, season, episode, episode title, watched on and progress, for a spreadsheet"
             label="Export…"
             disabled={busy != null}
             pending={busy === "csv"}
@@ -99,7 +95,6 @@ export function PolarityExport() {
       <ActionRow
         setting="polarityImport"
         title="Import a Polarity export"
-        caption="The .json file from Export library and history"
         label="Choose File…"
         disabled={busy != null}
         pending={busy === "import"}

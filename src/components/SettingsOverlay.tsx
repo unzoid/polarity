@@ -1,5 +1,6 @@
 import "../styles/screens.css";
 import "../styles/settings-overlay.css";
+import "../styles/family-settings-phone.css";
 import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
 import { animate } from "motion/react";
@@ -25,6 +26,7 @@ import {
 } from "../lib/settings";
 import { searchSettings, type SettingEntry } from "../lib/settings/catalog";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
+import { PhoneFamilySettings } from "./settings/PhoneFamilySettings";
 import { PAGES } from "./settings/pages";
 
 /**
@@ -90,7 +92,17 @@ export type SettingsHead = { label: string; back: () => void };
  * it's the same drawer, in its look. The sheet draws the header: `onHead` says what it shows (Settings, or the
  * section open, with Back to the list), and the list's Back is `onExit` (back to the profiles).
  */
-export function SettingsOverlay({
+export function SettingsOverlay(props: {
+  embedded?: boolean;
+  onExit?: () => void;
+  onHead?: (head: SettingsHead) => void;
+} = {}) {
+  const { form } = useFormFactor();
+  if (form === "phone") return <PhoneFamilySettings {...props} />;
+  return <DesktopSettingsOverlay {...props} />;
+}
+
+function DesktopSettingsOverlay({
   embedded = false,
   onExit,
   onHead,

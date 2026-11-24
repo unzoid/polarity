@@ -13,9 +13,10 @@ import { showWhereStored, useSecretsNote } from "../../components/settings/secre
 import { useKeyGate, useSecretsPlain } from "../../components/settings/KeyWarning";
 import { linkHasKey, useAccount, useSecretsLocked } from "../../lib/account";
 import { addonHomeCatalogs, catalogKey, useAddonCatalogs, useHomeCatalogSetting, withAddonOnHome, withCatalogMoved } from "../../lib/catalog";
-import { setStremioLinks, stremioLinksOs, type Os } from "../../lib/platform";
+import { setStremioLinks, stremioLinksOs } from "../../lib/platform";
 import { setPrefs } from "../../lib/settings";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { useFormFactor } from "../../lib/ui";
 import type { InstalledAddon } from "../../lib/types";
 
 const hintsTried = new Set<string>();
@@ -29,6 +30,7 @@ export function AddonsPage() {
   const gate = useKeyGate();
   const plain = useSecretsPlain();
   // Signed in on a new device with the keys sealed (#470): said first, with the way to unlock them.
+  const phone = useFormFactor().form === "phone";
   const account = useAccount();
   const locked = useSecretsLocked(account.status === "ready" ? account.profile?.id : null);
 
@@ -135,8 +137,15 @@ export function AddonsPage() {
                   {a.manifest.description && <p className="settings-expand-text">{a.manifest.description}</p>}
                   <p className="settings-expand-text settings-url">{a.manifestUrl}</p>
                   {linkHasKey(a.manifestUrl) && <KeyedLinkNote plain={plain} />}
+                  {phone && (
+                    <label className="settings-expand-toggle">
+                      <span>Enabled</span>
+                      <Switch checked={!a.disabled} disabled={toggle.isPending} onChange={(on) => toggle.mutate({ id, on })} />
+                    </label>
+                  )}
                   {!a.disabled && <HomeLists addon={id} />}
                   <div className="settings-expand-actions">
+                    {phone && <CopyLinkPill url={a.manifestUrl} name={a.manifest.name} />}
                     {a.manifest.behaviorHints?.configurable && <ConfigureButton manifestUrl={a.manifestUrl} />}
                     <Button
                       variant="danger"
@@ -161,11 +170,11 @@ export function AddonsPage() {
           <p className="settings-card-pad settings-expand-text">No add-ons yet. Titles have no sources to play until you install one.</p>
         </Card>
       )}
-      <Card
-        title="Install from URL"
-        footer="Or browse the Marketplace."
-      >
+      <Card title={phone ? undefined : "Install from URL"}>
         <FormRow
+          title="Install from URL"
+          icon={Plus}
+          emptyValue="Paste link"
           placeholder="https://…/manifest.json"
           value={url}
           onChange={setUrl}
@@ -213,6 +222,7 @@ function AddonItem({
   enabling: boolean;
   children: ReactNode;
 }) {
+  const phone = useFormFactor().form === "phone";
   const controls = useDragControls();
   const dragged = useRef(false);
   const [lifted, setLifted] = useState(false);
@@ -280,6 +290,7 @@ function AddonItem({
         lead={<AddonLogo key={`${a.manifestUrl} ${a.manifest.logo ?? ""}`} addon={a} />}
         title={name}
         caption={linkHasKey(a.manifestUrl) ? "This link contains a key" : undefined}
+        value={phone ? (a.disabled ? "Disabled" : "Enabled") : undefined}
         accessory={
           <>
             <CopyLink url={a.manifestUrl} name={name} />
@@ -352,6 +363,24 @@ function ConfigureButton({ manifestUrl }: { manifestUrl: string }) {
   );
 }
 
+function CopyLinkPill({ url, name }: { url: string; name: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+  return (
+    <Button
+      aria-label={copied ? `${name} link copied` : `Copy ${name} link`}
+      onClick={() => void navigator.clipboard.writeText(url).then(() => setCopied(true), () => {})}
+    >
+      {copied ? <Check size={15} /> : <LinkIcon size={15} />}
+      {copied ? "Copied" : "Copy Link"}
+    </Button>
+  );
+}
+
 /**
  * Copies an installed add-on's manifest link, to install it elsewhere or share it. The glyph turns into a
  * check for a moment to say it worked. The link is copied as it is, key included: that's what installs it.
@@ -412,15 +441,6 @@ function HomeLists({ addon }: { addon: string }) {
   );
 }
 
-/** What each system does with "Open Stremio links in Polarity" (src-tauri/src/stremio_links.rs). */
-const STREMIO_LINKS_ON: Record<Os, string> = {
-  windows: "On: Polarity opens them on this computer. Off: they go back to the app that opened them before, such as Stremio.",
-  macos: "macOS opens these links in one app. On: Polarity. Off: back to Stremio, if it's installed.",
-  linux: "On: Polarity becomes the default app for these links. Off: it stops being one.",
-  android: "With Stremio installed too, Android asks which app to open each link with.",
-  ios: "",
-};
-
 /** Settings → Add-ons → Open Stremio links in Polarity (#163): this device's choice, on until the user turns it off (#428). */
 function StremioLinksCard() {
   const os = stremioLinksOs();
@@ -435,8 +455,8 @@ function StremioLinksCard() {
     });
   };
   return (
-    <Card title="Links" footer="Polarity isn't Stremio: these are links meant for Stremio, opened by Polarity.">
-      <SettingRow id="stremioLinks" caption={`Links meant for the Stremio app, such as an add-on's install button or a title's link. ${STREMIO_LINKS_ON[os]}`} onChanged={(v) => change(!!v)} />
+    <Card title="Links">
+      <SettingRow id="stremioLinks" onChanged={(v) => change(!!v)} />
       {error && (
         <p className="settings-card-pad settings-error" role="alert">
           {error}

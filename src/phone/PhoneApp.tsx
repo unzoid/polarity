@@ -4,6 +4,8 @@ import { AccountFullToast } from "../components/AccountFullToast";
 import { Avatar } from "../components/Avatar";
 import { CardMenuHost } from "../components/CardMenu";
 import { useNativeSwipe } from "../components/NativeBack";
+import { useNativeTabs } from "../components/NativeTabs";
+import type { NavLink } from "../lib/navTabs";
 import { OpenFilesHost } from "../components/OpenFiles";
 import { PlayerLayer, usePlayerLayer } from "../components/PlayerLayer";
 import { ProfileMenu } from "../components/ProfileMenu";
@@ -20,7 +22,7 @@ import { ALL_GENRES, BROWSE_GENRES } from "../lib/catalog";
 import { useSettings } from "../lib/net";
 import { leaveApp, systemBack } from "../lib/platform";
 import { rootTab, useRouter, type Entry, type Route } from "../lib/router";
-import { isSettingsOpen, usePrefs } from "../lib/settings";
+import { isSettingsOpen, usePrefs, useSettingsOverlay } from "../lib/settings";
 import { canPreloadChunks, dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality, whenIdle } from "../lib/ui";
 import { IconAnime, IconBack, IconHome, IconSearch } from "./icons";
 import { OPEN_MS, OPEN_OMEGA, samples, reduced } from "./motion";
@@ -35,6 +37,7 @@ const PhoneMy = lazyNamed(() => import("./PhoneMy"), "PhoneMy");
 const PhoneSearch = lazyNamed(() => import("./PhoneSearch"), "PhoneSearch");
 const PhoneSection = lazyNamed(() => import("./PhoneSection"), "PhoneSection");
 const TitleSheet = lazyNamed(() => import("./TitleSheet"), "TitleSheet");
+const SettingsOverlay = lazyNamed(() => import("../components/SettingsOverlay"), "SettingsOverlay");
 
 type Run = { key: number; kind: "sheet"; entries: Entry[] } | { key: number; kind: "page"; entries: [Entry] };
 type Shown = Run & { leaving?: boolean };
@@ -61,6 +64,10 @@ function runsOf(overlays: Entry[]): Run[] {
 export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }) {
   const { stack, kept, current, back, backTo, tab } = useRouter();
   const { playing, player, leaving: playerLeaving } = usePlayerLayer(current);
+  const settingsOverlay = useSettingsOverlay();
+  const standaloneSettings = settingsOverlay.open && !settingsOverlay.embedded;
+  const [settingsMounted, setSettingsMounted] = useState(standaloneSettings);
+  if (standaloneSettings && !settingsMounted) setSettingsMounted(true);
   const { data: settings } = useSettings();
   const pages = useMemo(() => stack.filter((e) => e.route.name !== "player"), [stack]);
   const root = pages[0];
@@ -170,7 +177,8 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     >
       <div
         className="ph-main"
-        inert={!!playing || undefined}
+        data-settings-open={standaloneSettings || undefined}
+        inert={!!playing || standaloneSettings || undefined}
         onPointerDownCapture={(e) => {
           if ((e.target as Element | null)?.closest?.("[data-origin]")) void TitleSheet.preload().catch(() => {});
         }}
@@ -184,7 +192,7 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
             </section>
           ))}
         </div>
-        <TabBar root={root} z={barZ} onTop={(key) => backTo(key)} />
+        <TabBar root={root} z={barZ} covered={firstSheet >= 0} onTop={(key) => backTo(key)} />
         {shown.map((r, i) => {
           const z = 20 + i * 2;
           const close = () => {
@@ -209,6 +217,11 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
       }} />
       <div className="sheet-host" />
       <ProfileMenu trigger={false} />
+      {settingsMounted && (
+        <Suspense fallback={null}>
+          <SettingsOverlay />
+        </Suspense>
+      )}
       <LazyNotificationsSheet />
       <ErrorBoundary where="toasts" quiet>
         <div className="toast-stack">
@@ -282,7 +295,7 @@ function TabPage({
 }
 
 /** The bar's three places. My Polarity's glyph is the profile's picture, as My Netflix's is. */
-function TabBar({ root, z, onTop }: { root: Entry; z: number; onTop: (key: number) => void }) {
+function TabBar({ root, z, covered, onTop }: { root: Entry; z: number; covered: boolean; onTop: (key: number) => void }) {
   const { stack, tab } = useRouter();
   const account = useAccount();
   const me = account.status !== "guest" ? account.profile : null;
@@ -296,6 +309,14 @@ function TabBar({ root, z, onTop }: { root: Entry; z: number; onTop: (key: numbe
     { id: "library", label: "My Polarity", glyph: <Avatar id={me?.avatar ?? "guest"} className="ph-bar-avatar" /> },
   ];
   const index = items.findIndex((i) => i.id === at);
+  // On iOS the same places are iOS's own tab bar (Liquid Glass on iOS 26), and this one hides (phone.css).
+  const links = useMemo(
+    (): NavLink[] => items.map((i) => ({ route: { name: i.id }, label: i.label, icon: i.id === "library" ? "person.crop.circle" : undefined })),
+    // `items` is new each render; what it holds changes with the Anime setting alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [animeEnabled],
+  );
+  useNativeTabs(links, covered);
   return (
     <nav className="ph-bar" style={{ zIndex: z, "--n": items.length, "--at": Math.max(0, index) } as CSSProperties} aria-label="Sections">
       <span className="ph-bar-lens" data-hidden={index < 0 || undefined} aria-hidden />

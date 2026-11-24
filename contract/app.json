@@ -9,6 +9,8 @@
   "EpisodeOrderInfo": ["description","episodeCount","groupCount","id","kind","name"],
   "Imported": ["library","progress"],
   "InstalledAddon": ["disabled","manifest","manifestUrl"],
+  "LetterboxdList": ["films","name","truncated"],
+  "ListFilm": ["name","year"],
   "LocalChanges": ["library","links","progress","pulledAt"],
   "PersonHit": ["id","knownFor","name","photo"],
   "PersonPage": ["acting","biography","birthplace","born","died","directing","id","knownFor","name","photo","writing"],

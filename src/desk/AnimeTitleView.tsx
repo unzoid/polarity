@@ -11,8 +11,8 @@ import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { useBatchDownload } from "../components/BatchDownload";
 import { cardMenu } from "../components/CardMenu";
 import { DownloadButton } from "../components/DownloadButton";
-import { Star } from "../components/icons";
 import { Img } from "../components/Img";
+import { preloadPlayerNow } from "../components/PlayerLayer";
 import { TitleLogo } from "../components/TitleLogo";
 import { useEpisodeRatings } from "../components/title/EpisodeRatings";
 import { useLibraryToggle } from "../components/title/LibraryButton";
@@ -75,6 +75,7 @@ import { ListDialog } from "./ListDialog";
 import { DeskRatingsOverlay } from "./RatingsOverlay";
 import { ProgressLine as ProgressBar } from "./Rows";
 import { SeasonChooser, type SeasonOption } from "./SeasonChooser";
+import { CompactPlay, IconRatingsGrid, NextUp, PinnedBar, useCardStrip } from "./TitleParts";
 
 type AnimeTab = "episodes" | "more" | "details" | "trailers";
 
@@ -219,6 +220,7 @@ export function AnimeTitleView({
   const [logoFailed, setLogoFailed] = useState(false);
   const logoSrc = pb.meta?.logo ? sizedArt(pb.meta.logo, "w500") : undefined;
   useEffect(() => setLogoFailed(false), [logoSrc]);
+  const actionRow = useRef<HTMLDivElement>(null);
 
   if (verdict === "hide") return <p className="dk-t-note">{LIMIT_NOTICE}</p>;
   if (isError && !shown) return <p className="dk-t-note">Couldn't load this anime from AniList. Try again in a minute.</p>;
@@ -230,7 +232,6 @@ export function AnimeTitleView({
         <div className="dk-t-info">
           <span className="dk-sk dk-sk-title" />
           <span className="dk-sk dk-sk-line" />
-          <span className="dk-sk dk-sk-btn" />
           <span className="dk-sk dk-sk-btn" />
           <span className="dk-sk dk-sk-text" />
           <span className="dk-sk dk-sk-text dk-sk-short" />
@@ -295,7 +296,10 @@ export function AnimeTitleView({
   const watched = target ? pb.byVideo.get(target) : undefined;
   const resuming = !!pb.next.resumeAt && !!watched?.duration;
   const paragraphs = cleanDescription((headAnime ?? anime)?.description);
-  const synopsis = (resuming || pb.next.kind === "next") && pb.next.ep?.overview ? pb.next.ep.overview : paragraphs.join(" ");
+  const synopsis = paragraphs.join(" ");
+  const play = () => request && picker.play(request);
+  const nextEp = !pb.isMovie && (resuming || pb.next.kind === "next") ? pb.next.ep : undefined;
+  const logoShown = !!logoSrc && !logoFailed;
   const ytTrailerId = (headAnime ?? anime)?.trailer?.site === "youtube" ? (headAnime ?? anime)!.trailer!.id : meta?.trailerYtId;
 
   const seasonChoices: SeasonOption[] = seasons
@@ -314,12 +318,15 @@ export function AnimeTitleView({
 
   return (
     <div className="dk-t">
+      <PinnedBar anchor={actionRow} name={displayName}>
+        <CompactPlay label={playLabel} disabled={!request} onPlay={play} onPreload={preloadPlayerNow} />
+      </PinnedBar>
       <div className="dk-t-media scheme-dark">
         {(artBg || coverFallbacks[0]) && (
           <Img className="dk-t-art" src={artBg ?? coverFallbacks[0]} fallbacks={coverFallbacks} alt="" loading="eager" fetchPriority="high" />
         )}
         {trailer.node}
-        {logoSrc && !logoFailed && (
+        {logoShown && (
           <TitleLogo
             key={logoSrc}
             className="dk-t-logo"
@@ -345,7 +352,7 @@ export function AnimeTitleView({
       </div>
 
       <div className="dk-t-info">
-        <h1 className="dk-t-name">{displayName}</h1>
+        <h1 className={logoShown ? "dk-sr" : "dk-t-name"}>{displayName}</h1>
         {subTitle && <p className="dk-t-subname">{subTitle}</p>}
         <p className="dk-t-facts">
           {score && <span className="dk-t-score">★ {score}</span>}
@@ -367,9 +374,9 @@ export function AnimeTitleView({
           </p>
         )}
 
-        <div className="dk-t-action-row">
+        <div className="dk-t-action-row" ref={actionRow}>
           <div className="dk-t-buttons">
-            <button type="button" className="dk-t-btn dk-t-btn-white" disabled={!request} onClick={() => request && picker.play(request)}>
+            <button type="button" className="dk-t-btn dk-t-btn-white" disabled={!request} onPointerEnter={preloadPlayerNow} onPointerDown={preloadPlayerNow} onClick={play}>
               <IconPlay size={24} />
               {playLabel}
             </button>
@@ -397,41 +404,34 @@ export function AnimeTitleView({
 
         <div className="dk-t-meta-grid">
           <div className="dk-t-meta-main">
-            {resuming && watched && (
-              <div className="dk-t-resume">
-                {pb.next.ep && (
-                  <p className="dk-t-ep">
-                    Episode {pb.next.ep.number}
-                    {pb.next.ep.title ? ` · ${pb.next.ep.title}` : ""}
-                  </p>
-                )}
-                <div className="dk-t-resume-bar">
-                  <ProgressBar fraction={watched.position / watched.duration} />
-                  <span>{formatRemaining(watched.position, watched.duration)}</span>
-                </div>
-              </div>
-            )}
-            {!resuming && !pb.isMovie && pb.next.ep && (
-              <p className="dk-t-ep">
-                Episode {pb.next.ep.number}
-                {pb.next.ep.title ? ` · ${pb.next.ep.title}` : ""}
-              </p>
-            )}
-
             {synopsis && <AnimeSynopsis text={synopsis} />}
+            {(nextEp || resuming) && (
+              <NextUp
+                kicker={resuming ? "Continue watching" : "Up next"}
+                line={nextEp ? `Episode ${nextEp.number}${nextEp.title ? ` · ${nextEp.title}` : ""}` : undefined}
+                overview={nextEp?.overview}
+              >
+                {resuming && watched && (
+                  <div className="dk-t-resume-bar">
+                    <ProgressBar fraction={watched.position / watched.duration} />
+                    <span>{formatRemaining(watched.position, watched.duration)}</span>
+                  </div>
+                )}
+              </NextUp>
+            )}
           </div>
           <div className="dk-t-meta-side">
             <div className="dk-t-credits">
               {studios.length > 0 && (
                 <p>
-                  <span className="dk-t-credit-label">Studio: </span>
-                  {studios.slice(0, 3).join(", ")}
+                  <span className="dk-t-credit-label">Studio</span>
+                  <span>{studios.slice(0, 3).join(", ")}</span>
                 </p>
               )}
               {!!(headItem ?? shown).genres?.length && (
                 <p>
-                  <span className="dk-t-credit-label">Genres: </span>
-                  {(headItem ?? shown).genres!.slice(0, 5).join(", ")}
+                  <span className="dk-t-credit-label">Genres</span>
+                  <span>{(headItem ?? shown).genres!.slice(0, 5).join(", ")}</span>
                 </p>
               )}
               {(unavailable || pb.pickable) && (
@@ -557,9 +557,7 @@ function AnimeActionBar({
       <DeskActionBtn label="Sources" disabled={!request} onClick={onSources}>
         <IconSources size={27} />
       </DeskActionBtn>
-      {meta && !activePb.isMovie && downloads.length > 0 && (
-        <AnimeSeasonDownload item={meta} videos={downloads} />
-      )}
+      {meta && activeAnime && !activePb.isMovie && downloads.length > 0 && <AnimeSeasonDownload item={meta} videos={downloads} part={activeAnime.id} />}
     </div>
   );
 }
@@ -573,8 +571,9 @@ function AnimeLibraryAction({ item }: { item: Meta }) {
   );
 }
 
-function AnimeSeasonDownload({ item, videos }: { item: Meta; videos: Video[] }) {
-  const d = useBatchDownload({ item, videos, season: 1 });
+/** Download Season: the season tab that's open (each tab its own batch). */
+function AnimeSeasonDownload({ item, videos, part }: { item: Meta; videos: Video[]; part: number }) {
+  const d = useBatchDownload({ item, videos, part });
   return (
     <DeskActionBtn
       label={
@@ -726,8 +725,7 @@ function DeskAnimeEpisodes({
             {seasonsLoading ? `${currentSeasonLabel}…` : currentSeasonLabel}
             {!seasonsLoading && list.length > 0 && <span className="dk-season-inline-count tabular"> ({list.length} {list.length === 1 ? "Episode" : "Episodes"})</span>}
           </span>
-        )}
-        {pages > 1 && !searching && (
+        )}        {pages > 1 && !searching && (
           <button type="button" className="dk-season dk-season-range" onClick={() => setChoosingRange(true)}>
             {rangeOptions[currentPage]?.label}
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
@@ -748,8 +746,8 @@ function DeskAnimeEpisodes({
         <span className="dk-flex" />
         {!isMoviePart && ratingsGrid && (
           <button type="button" className="dk-eps-ratings-btn" onClick={() => setRatingsOpen(true)}>
-            <Star size={14} />
-            <span>Ratings</span>
+            <IconRatingsGrid />
+            <span>Episode ratings</span>
           </button>
         )}
         {!isMoviePart && (
@@ -990,9 +988,10 @@ function AnimeEpStrip({
     const end = s.scrollLeft + s.clientWidth >= s.scrollWidth - 2;
     setEnds((e) => (e.start === start && e.end === end ? e : { start, end }));
   }, []);
+  const { alignTo, page } = useCardStrip(strip);
   useLayoutEffect(() => {
     const el = strip.current?.querySelector<HTMLElement>("[data-up-next]");
-    if (el && strip.current) strip.current.scrollLeft = el.offsetLeft - 28;
+    if (el) alignTo(el);
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1004,11 +1003,6 @@ function AnimeEpStrip({
     ro.observe(s);
     return () => ro.disconnect();
   }, [measure, episodes]);
-  const page = (dir: 1 | -1) => {
-    const s = strip.current;
-    if (!s) return;
-    s.scrollBy({ left: dir * Math.max(240, s.clientWidth - 96), behavior: "smooth" });
-  };
 
   return (
     <div className="dk-strip-wrap dk-ep-strip-wrap">
@@ -1058,17 +1052,15 @@ function AnimeEpStrip({
                 )}
                 {inProgress && <ProgressBar fraction={fraction} />}
               </button>
-              <div className="dk-ep-kicker-row">
-                <span className="dk-ep-kicker tabular">EPISODE {v.episode}</span>
-                {on && meta && (
-                  <span className="dk-ep-dl-slot">
-                    <DownloadButton item={meta} video={v} className="dk-ep-dl" size={16} />
-                    <button type="button" className="dk-ep-src" aria-label={`Sources for episode ${v.episode}`} title="Choose source" onClick={() => onSources(v)}>
-                      <IconSources size={16} />
-                    </button>
-                  </span>
-                )}
-              </div>
+              {on && meta && (
+                <span className="dk-ep-dl-slot dk-ep-card-tools">
+                  <DownloadButton item={meta} video={v} className="dk-ep-dl" size={16} />
+                  <button type="button" className="dk-ep-src" aria-label={`Sources for episode ${v.episode}`} title="Choose source" onClick={() => onSources(v)}>
+                    <IconSources size={16} />
+                  </button>
+                </span>
+              )}
+              <span className="dk-ep-kicker tabular">EPISODE {v.episode}</span>
               <strong className="dk-ep-card-title">
                 {v.title?.trim() || `Episode ${v.episode}`}
                 {flag?.filler && <span className="dk-ep-badge">Filler</span>}

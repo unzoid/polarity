@@ -2,10 +2,16 @@ import type { ReactNode } from "react";
 
 type IconProps = { size?: number; stroke?: number; className?: string };
 
+const iconStyle = (size: number) => ({
+  width: `calc(${size} * var(--pl-pt, 1px))`,
+  height: `calc(${size} * var(--pl-pt, 1px))`,
+});
+
 const svg = (size: number, className: string | undefined, children: ReactNode, stroke = 1.7, viewBox = "0 0 24 24") => (
   <svg
     width={size}
     height={size}
+    style={iconStyle(size)}
     viewBox={viewBox}
     fill="none"
     stroke="currentColor"
@@ -227,7 +233,7 @@ export function IconSun({ size = 22, stroke = 1.65, className }: IconProps) {
 /** Crisp solid play triangle: centre transport. */
 export function IconPlaySolid({ size = 50, className }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden focusable={false}>
+    <svg width={size} height={size} style={iconStyle(size)} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden focusable={false}>
       <path d="M6.2 3.4c0-.7.76-1.14 1.38-.78l13.2 7.6c.62.36.62 1.24 0 1.6l-13.2 7.6c-.62.36-1.38-.08-1.38-.78V3.4Z" />
     </svg>
   );
@@ -236,7 +242,7 @@ export function IconPlaySolid({ size = 50, className }: IconProps) {
 /** Crisp solid pause bars: centre transport. */
 export function IconPauseSolid({ size = 50, className }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden focusable={false}>
+    <svg width={size} height={size} style={iconStyle(size)} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden focusable={false}>
       <rect x="5.5" y="3.5" width="4.4" height="17" rx="1.1" />
       <rect x="14.1" y="3.5" width="4.4" height="17" rx="1.1" />
     </svg>

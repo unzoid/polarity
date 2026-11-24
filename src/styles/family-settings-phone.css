@@ -1,0 +1,1946 @@
+/*
+ * 1:1 Family Wallet mobile Settings (strictly scoped to `:root[data-form="phone"]` and `.fms-*` / `.ft-*`).
+ * Desktop settings are completely unaffected.
+ */
+
+/* --- Page → Settings / Profiles full-screen vertical push transition (1:1 Family Wallet, no drawer, no darkening) --- */
+:root[data-form="phone"] .ph-main {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+:root[data-form="phone"] .ph-main[data-settings-open],
+:root[data-form="phone"][data-profiles-open] .ph-main {
+  transform: translateY(100dvh);
+}
+
+/* --- Root Palette & Full-Screen Frame ---
+ * Rules below that style settings content use `.fms-root.fms-root`: settings-overlay.css has phone rules for the
+ * same elements at the same specificity (`:root[data-form="phone"] .t3s …`), and which stylesheet loads last
+ * changes with lazy loading. The doubled class makes these win either way. */
+:root[data-form="phone"] .fms-root {
+  --fms-bg: #000000;
+  --fms-fg: #ffffff;
+  --fms-sub: #7e7e86;
+  --fms-eyebrow: #787880;
+  --fms-icon: #7a7a82;
+  --fms-chev: #58585f;
+  --fms-dots: #6c6c74;
+  --fms-hairline: rgb(255 255 255 / 0.08);
+  --fms-press: rgb(255 255 255 / 0.06);
+  --fms-search-bg: #161618;
+  --fms-dim: rgb(0 0 0 / 0.38);
+
+  --t3-bg: var(--fms-bg);
+  --t3-card: transparent;
+  --t3-fg: var(--fms-fg);
+  --t3-muted-fg: var(--fms-sub);
+  --t3-border: var(--fms-hairline);
+  --t3-selected: var(--fms-press);
+  --t3-icon: var(--fms-icon);
+
+  display: flex;
+  flex-direction: column;
+  background: var(--fms-bg);
+  color: var(--fms-fg);
+  overflow: hidden;
+}
+
+:root[data-form="phone"][data-scheme="light"] .fms-root {
+  --fms-bg: #ffffff;
+  --fms-fg: #111113;
+  --fms-sub: #8e8e93;
+  --fms-eyebrow: #8e8e93;
+  --fms-icon: #7c7c84;
+  --fms-chev: #c7c7cc;
+  --fms-dots: #aeaeb2;
+  --fms-hairline: rgb(0 0 0 / 0.075);
+  --fms-press: rgb(0 0 0 / 0.04);
+  --fms-search-bg: #f2f2f6;
+  --fms-dim: rgb(0 0 0 / 0.14);
+}
+
+/* Override settings-overlay.css's bottom-sheet drawer rules for standalone full-screen phone Settings */
+:root[data-form="phone"] .t3s.fms-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal, 100) + 5);
+  width: 100vw;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--fms-bg);
+  display: flex;
+  flex-direction: column;
+  transition: none;
+}
+
+:root[data-form="phone"] .t3s.fms-root[data-embedded] {
+  --fms-bg: #000000;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: var(--fms-bg);
+}
+:root[data-form="phone"][data-scheme="light"] .t3s.fms-root[data-embedded] {
+  --fms-bg: #ffffff;
+}
+:root[data-form="phone"] .t3s.fms-root[data-embedded] .fms-layer-pushed {
+  background: var(--fms-bg);
+}
+
+/* Touch hygiene */
+:root[data-form="phone"] .fms-root.fms-root :is(button, [role="button"], label.settings-row) {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* --- 1:1 Family Header Bar (bare × / <, centered title, no borders, no circles) --- */
+.fms-header {
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  min-height: calc(var(--safe-top, 0px) + 54px);
+  padding: calc(var(--safe-top, 0px) + 4px) 10px 4px;
+  background: var(--fms-bg);
+  position: relative;
+  z-index: 6;
+}
+.fms-head-btn {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fms-fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 130ms var(--ease-out), opacity 130ms var(--ease-out);
+}
+.fms-head-btn:active {
+  transform: scale(0.86);
+  opacity: 0.65;
+}
+.fms-head-title-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 28px;
+}
+.fms-head-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fms-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.fms-header.is-searching {
+  display: flex;
+  padding: calc(var(--safe-top, 0px) + 7px) 16px 7px;
+}
+.fms-head-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.fms-head-search .fms-search {
+  flex: 1;
+  min-width: 0;
+}
+.fms-search-cancel {
+  flex: none;
+  height: 40px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 500 16px/1 inherit;
+  letter-spacing: -0.015em;
+  cursor: pointer;
+  transition: opacity 120ms var(--ease-out);
+}
+.fms-search-cancel:active {
+  opacity: 0.55;
+}
+.fms-head-spacer {
+  width: 44px;
+  height: 44px;
+}
+
+/* --- Horizontal Navigation Stack (1:1 Family: clean side-by-side slide + opacity crossfade, zero darkening) --- */
+.fms-stack {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.fms-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--fms-bg);
+  will-change: transform, opacity;
+}
+.fms-layer-list {
+  z-index: 1;
+}
+.fms-layer-pushed {
+  z-index: 2;
+}
+.fms-layer-top {
+  z-index: 3;
+}
+.fms-layer[data-covered="true"] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.fms-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: calc(var(--safe-bottom, 0px) + 32px);
+}
+.fms-scroll::-webkit-scrollbar,
+.ft-step::-webkit-scrollbar {
+  display: none;
+}
+
+/* Collapsible Family pill search */
+.fms-search-holder {
+  overflow: hidden;
+  padding: 2px 22px 10px;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-search {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fms-search-bg);
+  box-shadow: none;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-search input {
+  font-size: 16px;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-search .search-field-kbd {
+  display: none;
+}
+
+/* --- Account Hero Row (1:1 to Family IMG_3010 & 14-30-52) --- */
+.fms-hero-wrap {
+  position: relative;
+}
+.ft-account-hero {
+  position: relative;
+  width: 100%;
+  padding: 12px 22px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fms-fg);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out);
+}
+.ft-account-hero::after {
+  content: "";
+  position: absolute;
+  left: 81px;
+  right: 22px;
+  bottom: 0;
+  height: 1px;
+  background: var(--fms-hairline);
+  pointer-events: none;
+}
+.ft-account-hero:active {
+  background: var(--fms-press);
+}
+.ft-account-hero .avatar {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 999px !important;
+  flex: none;
+}
+.ft-account-hero-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--fms-search-bg);
+  color: var(--fms-fg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.ft-account-hero-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ft-account-hero-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+  line-height: 1.25;
+}
+.ft-account-hero-sub {
+  font-size: 14.5px;
+  color: var(--fms-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Root Settings List Rows (1:1 to Family IMG_3010 & 14-30-52) --- */
+.fms-group {
+  margin-top: 22px;
+}
+.fms-eyebrow {
+  margin: 0;
+  padding: 0 22px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--fms-eyebrow);
+}
+.fms-list {
+  display: flex;
+  flex-direction: column;
+}
+.fms-row {
+  position: relative;
+  width: 100%;
+  min-height: 58px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fms-fg);
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out);
+}
+.fms-row + .fms-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 61px;
+  right: 22px;
+  height: 1px;
+  background: var(--fms-hairline);
+  pointer-events: none;
+}
+.fms-row:active {
+  background: var(--fms-press);
+}
+.fms-row-ico {
+  flex: none;
+  color: var(--fms-icon);
+}
+.fms-row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 16.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+.fms-row-val {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--fms-fg);
+  letter-spacing: -0.01em;
+}
+.fms-row-chev {
+  flex: none;
+  color: var(--fms-chev);
+}
+.fms-row-danger,
+.fms-row-danger .fms-row-ico {
+  color: var(--danger, #ff3b30);
+}
+
+/* Search results */
+.fms-results {
+  display: flex;
+  flex-direction: column;
+}
+.fms-result {
+  position: relative;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 20px;
+  border: 0;
+  background: transparent;
+  color: var(--fms-fg);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.fms-result + .fms-result::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 54px;
+  right: 20px;
+  height: 1px;
+  background: var(--fms-hairline);
+}
+.fms-result:active {
+  background: var(--fms-press);
+}
+.fms-result-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fms-result-title {
+  font-size: 15.5px;
+  font-weight: 550;
+}
+.fms-result-path {
+  font-size: 12.5px;
+  color: var(--fms-sub);
+}
+
+/* --- Sub-pages Inside Pushed Layers (Edge-to-Edge Borderless Family Rows) --- */
+:root[data-form="phone"] .fms-root.fms-root .fms-page {
+  gap: 22px;
+  padding: 8px 0 32px;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-group {
+  gap: 0;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-group-title {
+  padding: 0 22px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--fms-eyebrow);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-footer,
+:root[data-form="phone"] .fms-root.fms-root .settings-error {
+  padding: 8px 22px 0;
+  color: var(--fms-sub);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-card > :first-child,
+:root[data-form="phone"] .fms-root.fms-root .settings-card > :last-child {
+  border-radius: 0;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-card > * {
+  position: relative;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-card > * + * {
+  border-top: 0;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row {
+  position: relative;
+  min-height: 58px;
+  padding: 13px 22px;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 15px;
+  transition: background-color 120ms var(--ease-out);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-card > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 22px;
+  right: 22px;
+  height: 1px;
+  background: var(--fms-hairline);
+  pointer-events: none;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row:has(> .settings-row-icon) + .settings-row::before,
+:root[data-form="phone"] .fms-root.fms-root .settings-expand + .settings-expand::before,
+:root[data-form="phone"] .fms-root.fms-root .addon-item + .addon-item::before {
+  left: 59px;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row-button:active,
+:root[data-form="phone"] .fms-root.fms-root label.settings-row:active {
+  background: var(--fms-press);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row-title {
+  font-size: 16.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  color: var(--fms-fg);
+  overflow-wrap: anywhere;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row-caption {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--fms-sub);
+  overflow-wrap: anywhere;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-expand-body {
+  padding: 0 22px 14px;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-expand-text {
+  overflow-wrap: anywhere;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-card-pad {
+  padding: 12px 22px;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--fms-icon);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-chevron {
+  color: var(--fms-chev);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-sub-sample {
+  height: 132px;
+  margin: 0 22px;
+  border-radius: 18px;
+  box-shadow: none;
+}
+
+/* Subtitle Style (PhoneSubtitleStyle): a title on the left, a stepper or swatches in place on the right. */
+:root[data-form="phone"] .fms-root.fms-root .ft-inline-row {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-inline-row .settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-stepper {
+  flex: none;
+  gap: 2px;
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-stepper button {
+  width: 32px;
+  height: 32px;
+  background: var(--fms-search-bg);
+  color: var(--fms-fg);
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-stepper button:active:not(:disabled) {
+  transform: scale(0.9);
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-stepper-value {
+  min-width: 68px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--fms-fg);
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-swatches {
+  flex: none;
+  gap: 10px;
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-swatch {
+  width: 26px;
+  height: 26px;
+  box-shadow: inset 0 0 0 1px var(--fms-hairline);
+}
+:root[data-form="phone"] .fms-root.fms-root .sub-swatch[aria-checked="true"] {
+  box-shadow:
+    inset 0 0 0 1px var(--fms-hairline),
+    0 0 0 2px var(--fms-bg),
+    0 0 0 4px var(--accent);
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-reset-row {
+  justify-content: flex-start;
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-reset-row:disabled {
+  opacity: 0.4;
+}
+
+/* Single-line Family choice row (Title on left, crisp value + ⋮ on right) */
+:root[data-form="phone"] .fms-root.fms-root .ft-choice-row {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-choice-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 52%;
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-choice-value {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--fms-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-choice-dots {
+  color: var(--fms-dots);
+  flex: none;
+}
+:root[data-form="phone"] .fms-root.fms-root .ft-swatch-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
+}
+
+/* Exact 1:1 Family Switch (51×31px track, 27px thumb, horizontal press stretch + glow halo) */
+:root[data-form="phone"] .fms-root.fms-root .switch {
+  --fms-switch-bg: #39393d;
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  background: var(--fms-switch-bg);
+  box-shadow: none;
+  transition: background-color 200ms var(--ease-out);
+}
+:root[data-form="phone"][data-scheme="light"] .fms-root .switch {
+  --fms-switch-bg: #e5e5ea;
+}
+:root[data-form="phone"] .fms-root.fms-root .switch:checked {
+  background: var(--accent);
+}
+:root[data-form="phone"] .fms-root.fms-root .switch::after {
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow:
+    0 2px 5px rgb(0 0 0 / 0.22),
+    0 0 0 0.5px rgb(0 0 0 / 0.04);
+  transition:
+    transform 260ms cubic-bezier(0.34, 1.38, 0.64, 1),
+    width 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+:root[data-form="phone"] .fms-root.fms-root .switch:checked::after {
+  transform: translateX(20px);
+}
+:root[data-form="phone"] .fms-root.fms-root .switch:active::after {
+  width: 33px;
+  box-shadow:
+    0 2px 8px rgb(0 0 0 / 0.24),
+    0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+:root[data-form="phone"] .fms-root.fms-root .switch:active:checked::after {
+  transform: translateX(14px);
+}
+
+/* ==========================================================================
+   1:1 FAMILY FLOATING DYNAMIC TRAY (Apple 60% corner-smoothed squircle)
+   ========================================================================== */
+.ft-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal, 100) + 25);
+  background: rgb(0 0 0 / 0.62);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding:
+    calc(var(--safe-top, 0px) + 14px)
+    calc(var(--safe-right, 0px) + 14px)
+    calc(var(--safe-bottom, 0px) + 14px)
+    calc(var(--safe-left, 0px) + 14px);
+}
+:root[data-scheme="light"] .ft-backdrop {
+  background: rgb(0 0 0 / 0.30);
+}
+
+.ft-tray-wrap {
+  width: 100%;
+  max-width: 420px;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 20px 36px rgb(0 0 0 / 0.52));
+}
+:root[data-scheme="light"] .ft-tray-wrap {
+  filter: drop-shadow(0 14px 32px rgb(0 0 0 / 0.16));
+}
+
+.ft-tray {
+  --ft-bg: #1c1c1e;
+  --ft-row: #28282c;
+  --ft-row-press: #323237;
+  --ft-fg: #ffffff;
+  --ft-muted: #8e8e93;
+  --ft-rim: rgb(255 255 255 / 0.08);
+  --ft-tile-rim: rgb(255 255 255 / 0.07);
+  --ft-swatch-rim: rgb(255 255 255 / 0.14);
+  --ft-cta-bg: #ffffff;
+  --ft-cta-fg: #0a0a0b;
+  --ft-sec-bg: #2c2c2e;
+  --ft-sec-fg: #ffffff;
+
+  position: relative;
+  width: 100%;
+  border-radius: 34px;
+  background: var(--ft-bg);
+  color: var(--ft-fg);
+  overflow: hidden;
+}
+:root[data-scheme="light"] .ft-tray {
+  --ft-bg: #ffffff;
+  --ft-row: #f5f5f7;
+  --ft-row-press: #ebebf0;
+  --ft-fg: #111113;
+  --ft-muted: #8e8e93;
+  --ft-rim: transparent;
+  --ft-tile-rim: rgb(0 0 0 / 0.06);
+  --ft-swatch-rim: rgb(0 0 0 / 0.08);
+  --ft-cta-bg: var(--accent);
+  --ft-cta-fg: var(--accent-fg);
+  --ft-sec-bg: #f2f2f6;
+  --ft-sec-fg: #111113;
+}
+.ft-smooth-rim,
+.ft-smooth-stroke {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.ft-viewport {
+  position: relative;
+  overflow: hidden;
+}
+.ft-measure {
+  position: relative;
+}
+.ft-step {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 26px 28px;
+  max-height: calc(100dvh - var(--safe-top, 0px) - var(--safe-bottom, 0px) - 44px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0;
+  margin-bottom: 18px;
+  touch-action: none;
+}
+.ft-head-hero {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.ft-hero-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ft-warn-ico {
+  color: #ff3b30 !important;
+}
+.ft-title-hero {
+  margin: 0 0 10px;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.022em;
+}
+.ft-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ft-title {
+  margin: 0;
+  font-size: 18.5px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  color: var(--ft-fg);
+}
+.ft-circle-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--ft-sec-bg);
+  color: var(--ft-muted);
+  display: grid;
+  place-items: center;
+  flex: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 130ms var(--ease-out), background-color 130ms var(--ease-out);
+}
+.ft-circle-btn:active {
+  transform: scale(0.88);
+  background: var(--ft-row-press);
+}
+
+/* 1:1 Family Picker List: borderless clean rows + springing circular accent check + Done pill */
+/* A long list (fonts) scrolls on its own, so the header and Done stay in view. */
+.ft-picker-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -26px;
+  padding: 0 26px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.ft-picker-list::-webkit-scrollbar {
+  display: none;
+}
+.ft-head,
+.ft-picker-foot {
+  flex: none;
+}
+.ft-picker-opt {
+  width: calc(100% + 20px);
+  margin: 0 -10px;
+  min-height: 46px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ft-fg);
+  font: 500 16px/1.25 inherit;
+  letter-spacing: -0.015em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 120ms var(--ease-out), transform 130ms var(--ease-out);
+}
+.ft-picker-opt:active {
+  background: var(--ft-row);
+  transform: scale(0.985);
+}
+.ft-picker-label {
+  flex: 1;
+  min-width: 0;
+}
+.ft-picker-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: grid;
+  place-items: center;
+  flex: none;
+  transform: scale(0.5);
+  opacity: 0;
+  transition:
+    transform 240ms cubic-bezier(0.34, 1.45, 0.64, 1),
+    opacity 150ms var(--ease-out);
+}
+.ft-picker-opt.is-selected .ft-picker-check {
+  transform: scale(1);
+  opacity: 1;
+}
+.ft-picker-foot {
+  margin-top: 18px;
+}
+
+/* Family tray forms, inputs, switches & buttons (Services, Add-ons, FormRow trays) */
+.ft-tray-body,
+.ft-input-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Buttons too long to share a row ("Make Playlist of 24 films"): one above the other. */
+.ft-actions.ft-actions-stack {
+  flex-direction: column;
+}
+.ft-actions-stack .ft-pill {
+  flex: none;
+  width: 100%;
+}
+/* Import Playlist on a phone (components/library/ImportPlaylist.tsx): where it's got to, and the films to pick. */
+.ft-import-status {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ft-muted);
+}
+.ft-import-status:empty {
+  display: none;
+}
+.ft-tray .import-playlist-picks {
+  margin: 0 0 20px;
+  gap: 16px;
+}
+.ft-tray .import-playlist-film {
+  font-size: 15.5px;
+  color: var(--ft-fg);
+}
+.ft-tray .import-playlist-none {
+  font-size: 14px;
+  color: var(--ft-muted);
+}
+.ft-tray .import-playlist-choices {
+  gap: 8px;
+}
+.ft-tray .import-playlist-choice {
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ft-row);
+  color: var(--ft-fg);
+  font-size: 14px;
+  font-weight: 550;
+}
+.ft-tray .import-playlist-choice[aria-pressed="true"] {
+  background: var(--ft-fg);
+  color: var(--ft-bg);
+}
+.ft-desc-error {
+  color: #ff3b30;
+  margin: 0;
+}
+.ft-tray .settings-expand-text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ft-muted);
+  overflow-wrap: anywhere;
+}
+.ft-tray .settings-expand-text strong {
+  color: var(--ft-fg);
+}
+.ft-tray .settings-error {
+  color: #ff3b30;
+  padding: 0;
+  margin: 0;
+}
+.ft-tray .settings-url {
+  font-size: 12.5px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ft-row);
+  color: var(--ft-muted);
+  word-break: break-all;
+}
+.ft-tray .settings-expand-form,
+.ft-tray .settings-expand-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+.ft-tray .text-field {
+  flex: none;
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 15px;
+  background: var(--ft-row);
+  color: var(--ft-fg);
+  font-size: 16px;
+  line-height: 1.25;
+  box-shadow: none;
+}
+/* screens.css lets a stacked form's fields grow (`flex: 1 1 12rem`); in the tray's column that's 12rem of height. */
+.ft-tray :is(.settings-expand-form, .settings-pick) .text-field {
+  flex: none;
+}
+.ft-tray .text-field:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.ft-tray .btn {
+  flex: none;
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  border-radius: 999px;
+  border: 0;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--ft-sec-bg);
+  color: var(--ft-sec-fg);
+  justify-content: center;
+  box-shadow: none;
+}
+.ft-tray .btn:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+.ft-tray .btn-primary {
+  background: var(--ft-cta-bg);
+  color: var(--ft-cta-fg);
+}
+.ft-tray .btn-danger {
+  background: rgb(255 59 48 / 0.14);
+  color: #ff3b30;
+}
+.ft-tray .settings-expand-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--ft-row);
+  color: var(--ft-fg);
+  font-size: 15.5px;
+  font-weight: 500;
+}
+.ft-key-warn {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ft-key-warn .ft-desc {
+  margin: 0;
+}
+.ft-key-warn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ft-inline-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ft-fg);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.ft-tray .switch {
+  --ft-switch-bg: #39393d;
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  background: var(--ft-switch-bg);
+  box-shadow: none;
+}
+:root[data-scheme="light"] .ft-tray .switch {
+  --ft-switch-bg: #e5e5ea;
+}
+.ft-tray .switch:checked {
+  background: var(--accent);
+}
+.ft-tray .switch::after {
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.22);
+}
+.ft-tray .switch:checked::after {
+  transform: translateX(20px);
+}
+
+/* Phone Marketplace & ActionRow pill polish (compact Family / iOS tinted pills, crisp full-width descriptions) */
+:root[data-form="phone"] .fms-root.fms-root .market {
+  gap: 18px;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-market-search {
+  padding: 2px 22px 0;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-market-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 15px 22px;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-market-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-market-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-market-author {
+  font-size: 13px;
+  color: var(--fms-sub);
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-market-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 35px;
+}
+:root[data-form="phone"] .fms-root.fms-root .market-about {
+  font-size: 13.5px;
+  line-height: 1.42;
+  color: var(--fms-sub);
+}
+:root[data-form="phone"] .fms-root.fms-root .market-actions {
+  width: auto;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+:root[data-form="phone"] .fms-root.fms-root .market-actions .btn,
+:root[data-form="phone"] .fms-root.fms-root .settings-row .btn {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border: 0;
+  box-shadow: none;
+  background: var(--fms-search-bg);
+  color: var(--fms-fg);
+}
+:root[data-form="phone"] .fms-root.fms-root .market-actions .btn-primary,
+:root[data-form="phone"] .fms-root.fms-root .settings-row .btn-primary {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+:root[data-form="phone"] .fms-root.fms-root .market-actions .btn-danger,
+:root[data-form="phone"] .fms-root.fms-root .settings-row .btn-danger {
+  background: rgb(255 59 48 / 0.14);
+  color: #ff3b30;
+}
+:root[data-form="phone"] .fms-root.fms-root .market-installed {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--fms-search-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fms-sub);
+}
+:root[data-form="phone"] .fms-root.fms-root .market-empty {
+  padding: 0 22px;
+}
+
+/* ==========================================================================
+   1:1 FAMILY FULL-SCREEN PROFILES PAGE (modeled on Family's "Wallets" page)
+   ========================================================================== */
+:root[data-form="phone"] .sheet.fms-profiles-page {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal, 100) + 4);
+  width: 100vw;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--fms-bg);
+  color: var(--fms-fg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.fmp-head-action {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 500 16px/1 inherit;
+  letter-spacing: -0.015em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  cursor: pointer;
+  transition: opacity 120ms var(--ease-out);
+}
+.fmp-head-action:active {
+  opacity: 0.55;
+}
+.fmp-body {
+  padding: 8px 0 36px;
+}
+.fmp-wallets {
+  padding: 0 20px;
+}
+.fmp-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+.fmp-section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--fms-fg);
+}
+.fmp-section-sub {
+  font-size: 13px;
+  color: var(--fms-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fmp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.fmp-card {
+  --fmp-active-ring: color-mix(in srgb, var(--accent) 85%, #ffffff);
+  --fmp-card-rim: rgb(255 255 255 / 0.08);
+  --fmp-card-bg: #161618;
+  position: relative;
+  min-height: 126px;
+  border-radius: 22px;
+  background: var(--fmp-card-bg);
+  color: var(--fms-fg);
+  overflow: hidden;
+}
+:root[data-scheme="light"] .fmp-card {
+  --fmp-active-ring: var(--accent);
+  --fmp-card-rim: rgb(0 0 0 / 0.08);
+  --fmp-card-bg: #f3f3f6;
+}
+.fmp-card.is-active {
+  background: linear-gradient(
+    145deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 76%, #181436) 100%
+  );
+  color: #ffffff;
+}
+.fmp-card-placeholder {
+  min-height: 126px;
+}
+.fmp-card-slot {
+  transition: transform 140ms var(--ease-out);
+}
+.fmp-card-slot:has(.fmp-card-hit:active) {
+  transform: scale(0.97);
+}
+/* A profile's page over the list (Family's card scale): the list stays where it is, everything but the card
+   blurs out, and the page (transparent) blurs its own content in around the same card. */
+.fmp-edit-layer.fmp-edit-layer {
+  background: transparent;
+}
+.fmp-veil {
+  transition:
+    opacity 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 140ms var(--ease-out);
+}
+.fmp-body[data-veiled] .fmp-veil {
+  opacity: 0;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   EDIT PROFILE: FAMILY HERO CARD (scaled via layoutId) + NETFLIX ROWS BELOW
+   ========================================================================== */
+.fpe-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 24px;
+}
+.fpe-hero-card {
+  --fmp-card-rim: rgb(255 255 255 / 0.08);
+  --fpe-hero-bg: #1a1a1d;
+  position: relative;
+  min-height: 188px;
+  padding: 18px 20px;
+  border-radius: 28px;
+  background: var(--fpe-hero-bg);
+  color: var(--fms-fg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+:root[data-scheme="light"] .fpe-hero-card {
+  --fmp-card-rim: rgb(0 0 0 / 0.08);
+  --fpe-hero-bg: #f2f2f6;
+}
+.fpe-hero-card.is-active {
+  background: linear-gradient(
+    145deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 72%, #181436) 100%
+  );
+  color: #ffffff;
+}
+.fpe-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fpe-hero-avatar {
+  position: relative;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  transition: transform 140ms var(--ease-out);
+}
+.fpe-hero-avatar:active {
+  transform: scale(0.93);
+}
+.fpe-hero-avatar .avatar {
+  width: 54px !important;
+  height: 54px !important;
+  border-radius: 999px !important;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.24);
+}
+.fpe-hero-pill-meta {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.78;
+  padding-top: 2px;
+}
+.fpe-hero-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fpe-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fpe-hero-name {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fpe-hero-sub {
+  font-size: 13.5px;
+  opacity: 0.76;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fpe-hero-customize {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.22);
+  color: #ffffff;
+  font: 600 13.5px/1 inherit;
+  cursor: pointer;
+  transition: transform 130ms var(--ease-out), background-color 130ms var(--ease-out);
+}
+.fpe-hero-card:not(.is-active) .fpe-hero-customize {
+  background: var(--fms-press);
+  color: var(--fms-fg);
+}
+.fpe-hero-customize:active {
+  transform: scale(0.94);
+}
+
+.fpe-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Netflix-style Profile Name floating-label field */
+.fpe-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px 11px;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: transparent;
+  transition: border-color 150ms var(--ease-out);
+}
+:root[data-scheme="light"] .fpe-name-field {
+  border-color: rgb(0 0 0 / 0.16);
+}
+.fpe-name-field:focus-within {
+  border-color: var(--accent);
+}
+.fpe-name-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fms-sub);
+}
+.fpe-name-field input {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--fms-fg);
+  font: 500 17px/1.3 inherit;
+  letter-spacing: -0.015em;
+  outline: none;
+}
+
+/* Netflix-style individual rounded row cards underneath Profile Name (Polarity Dark / Light colors) */
+.fpe-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fpe-row {
+  --fpe-row-bg: #19191c;
+  --fpe-row-press: #222226;
+  width: 100%;
+  min-height: 66px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fpe-row-bg);
+  color: var(--fms-fg);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), transform 130ms var(--ease-out);
+}
+:root[data-scheme="light"] .fpe-row {
+  --fpe-row-bg: #f3f3f6;
+  --fpe-row-press: #e9e9ee;
+}
+.fpe-row:active {
+  transform: scale(0.988);
+  background: var(--fpe-row-press);
+}
+.fpe-row:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+.fpe-row-ico {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--fms-fg);
+  opacity: 0.86;
+}
+.fpe-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fpe-row-title {
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+  line-height: 1.25;
+  color: var(--fms-fg);
+}
+.fpe-row-sub {
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--fms-sub);
+}
+.fpe-row-chev {
+  flex: none;
+  color: var(--fms-chev);
+}
+.fpe-row-danger .fpe-row-ico,
+.fpe-row-danger .fpe-row-title {
+  color: #ff3b30;
+  opacity: 1;
+}
+.fpe-advice {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #19191c;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--fms-sub);
+}
+:root[data-scheme="light"] .fpe-advice {
+  background: #f3f3f6;
+}
+.fpe-advice p {
+  margin: 0;
+}
+.fmp-card-hit,
+.fmp-card-inner {
+  width: 100%;
+  height: 100%;
+  min-height: 126px;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+}
+.fmp-card-inner {
+  cursor: default;
+}
+.fmp-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fmp-card-avatar {
+  position: relative;
+  display: inline-flex;
+}
+.fmp-card-avatar .avatar {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 999px !important;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+}
+.fmp-card-lock {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--fms-bg);
+  color: var(--fms-fg);
+  display: grid;
+  place-items: center;
+}
+.fmp-card-dots,
+.fmp-card-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 0;
+  background: rgb(255 255 255 / 0.22);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 130ms var(--ease-out), background-color 130ms var(--ease-out);
+}
+.fmp-card:not(.is-active) .fmp-card-badge {
+  background: var(--fms-press);
+  color: var(--fms-fg);
+}
+.fmp-card-dots:active {
+  transform: scale(0.88);
+  background: rgb(255 255 255 / 0.34);
+}
+.fmp-card-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fmp-card-name {
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fmp-card-sub {
+  font-size: 13px;
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fmp-row-ico {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+.fmp-row-ico svg {
+  width: 21px;
+  height: 21px;
+}
+.fmp-count-pill {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-grid;
+  place-items: center;
+}
+.fmp-version {
+  margin: 22px 22px 0;
+  font-size: 12.5px;
+  color: var(--fms-sub);
+}
+.fmp-sub-scroll {
+  padding: 12px 20px calc(var(--safe-bottom, 0px) + 32px);
+}
+
+/* 1:1 Family Appearance 3-tile squircle grid (concentric 25px Apple 60% corner smoothing) */
+.ft-scheme-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.ft-scheme-tile {
+  position: relative;
+  border: 0;
+  border-radius: 25px;
+  padding: 20px 8px 16px;
+  background: var(--ft-row);
+  color: var(--ft-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font: 600 14px/1 inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 140ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+.ft-scheme-tile:active {
+  transform: scale(0.95);
+}
+.ft-scheme-tile.is-selected {
+  background: var(--ft-bg);
+  color: var(--ft-fg);
+}
+
+/* Accent colour tray (AccentPicker): a dot per accent with its name, then "Custom" with the system's picker. */
+.ft-accent-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 8px;
+  margin-bottom: 22px;
+}
+.ft-accent-tile {
+  position: relative;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ft-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  font: 550 12.5px/1.2 inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 150ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+.ft-accent-tile:active {
+  transform: scale(0.92);
+}
+.ft-accent-tile[aria-checked="true"] {
+  color: var(--ft-fg);
+}
+.ft-accent-dot {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--swatch);
+  box-shadow:
+    inset 0 0 0 1px var(--ft-swatch-rim),
+    0 0 0 0 var(--ft-bg),
+    0 0 0 0 var(--ft-fg);
+  transition: box-shadow 180ms var(--ease-out);
+}
+.ft-accent-tile[aria-checked="true"] .ft-accent-dot {
+  box-shadow:
+    inset 0 0 0 1px var(--ft-swatch-rim),
+    0 0 0 3px var(--ft-bg),
+    0 0 0 5px var(--ft-fg);
+}
+.ft-accent-custom:not([data-custom="true"]) .ft-accent-dot {
+  background: conic-gradient(#ff5f5f, #ffd25f, #7cf29a, #5fd8ff, #8a7dff, #ff6fd8, #ff5f5f);
+}
+.ft-accent-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Tray hero icon, body copy, and 50px Family full-pill CTAs */
+/* The PIN prompt on a phone (PinHost): whose PIN (their picture, or a lock), then PinFlow's pad at thumb size. */
+.ft-pin-lock {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--ft-sec-bg);
+  color: var(--ft-fg);
+  display: grid;
+  place-items: center;
+}
+.avatar.ft-pin-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+}
+.ft-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.ft-pin .pin-text {
+  font-size: 15px;
+  color: var(--ft-muted);
+}
+.ft-pin .pin-pad {
+  width: 100%;
+  gap: 22px;
+}
+.ft-pin .pin-dot {
+  width: 13px;
+  height: 13px;
+  box-shadow: inset 0 0 0 1.5px var(--ft-muted);
+}
+.ft-pin .pin-dot[data-filled] {
+  background: var(--ft-fg);
+  box-shadow: none;
+}
+.ft-pin .pin-keys {
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.ft-pin .pin-key {
+  height: 56px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--ft-row);
+  color: var(--ft-fg);
+  font-size: 24px;
+  font-weight: 500;
+  touch-action: manipulation;
+}
+.ft-pin .pin-key:active:not(:disabled) {
+  background: var(--ft-row-press);
+  transform: scale(0.95);
+}
+.ft-pin .pin-error {
+  min-height: 1.25em;
+  font-size: 14px;
+  color: #ff3b30;
+}
+.ft-pin .pin-error:empty {
+  display: none;
+}
+.ft-pin .auth-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ft-pin .pin-whose-profile,
+.ft-pin .pin-whose-current {
+  color: var(--ft-fg);
+}
+
+.ft-hero-badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+.ft-hero-danger {
+  background: rgb(255 59 48 / 0.14);
+  color: #ff3b30;
+}
+.ft-desc {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ft-muted);
+}
+.ft-done-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.ft-done-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #30d158;
+  color: #000;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.ft-done-text {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ft-actions {
+  display: flex;
+  gap: 10px;
+}
+.ft-pill {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 0;
+  font: 620 16px/1 inherit;
+  letter-spacing: -0.015em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out);
+}
+.ft-pill:active {
+  transform: scale(0.97);
+}
+.ft-pill:disabled {
+  opacity: 0.45;
+}
+.ft-pill-cta,
+.ft-pill-primary {
+  background: var(--ft-cta-bg);
+  color: var(--ft-cta-fg);
+}
+.ft-pill-secondary {
+  background: var(--ft-sec-bg);
+  color: var(--ft-sec-fg);
+}
+.ft-pill-destructive {
+  background: #ff3b30;
+  color: #ffffff;
+}
+.ft-pill-danger {
+  background: rgb(255 59 48 / 0.14);
+  color: #ff3b30;
+}
+
+/* Hold-to-Reset clip-path fill (asymmetric: 1150ms linear press, 200ms ease-out release) */
+.ft-hold-fill {
+  position: absolute;
+  inset: 0;
+  background: #ff3b30;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 200ms var(--ease-out);
+  pointer-events: none;
+}
+.ft-pill.is-holding .ft-hold-fill {
+  clip-path: inset(0 0% 0 0);
+  transition: clip-path 1150ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion="off"])[data-form="phone"] .ph-main[data-settings-open] {
+    transform: none;
+  }
+  :root:not([data-reduce-motion="off"]) .ft-pill.is-holding .ft-hold-fill {
+    transition-duration: 250ms;
+  }
+}

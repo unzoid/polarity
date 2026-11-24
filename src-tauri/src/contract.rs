@@ -125,6 +125,12 @@ fn field_names_match_contract() {
         "EpisodeRating",
         keys(&crate::episode_ratings::EpisodeRating { season: 1, episode: 1, rating: 8.0, votes: Some(1) }),
     );
+    let film = crate::letterboxd::ListFilm { name: "x".into(), year: Some(1922) };
+    add("ListFilm", keys(&film));
+    add(
+        "LetterboxdList",
+        keys(&crate::letterboxd::LetterboxdList { name: "x".into(), films: vec![film], truncated: false }),
+    );
     add("CmdError", keys(&CmdError::Other("x".into())));
     add(
         "EpisodeOrderInfo",

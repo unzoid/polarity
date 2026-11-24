@@ -14,6 +14,7 @@ mod external_player;
 mod imdb;
 mod introdb;
 mod keychain;
+mod letterboxd;
 mod library_export;
 mod local_files;
 mod locks;
@@ -314,6 +315,7 @@ pub fn run() {
             commands::mal_token,
             commands::ratings,
             commands::episode_ratings,
+            commands::letterboxd_list,
             commands::addons_list,
             commands::addon_catalog,
             commands::addons_bundled,

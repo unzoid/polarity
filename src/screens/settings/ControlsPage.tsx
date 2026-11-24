@@ -17,7 +17,6 @@ export function ControlsPage() {
           <>
             <ActionRow
               title="TV mode"
-              caption="A fullscreen interface for a remote or controller."
               label="Open TV Mode"
               onClick={() => setTvMode(true)}
             />

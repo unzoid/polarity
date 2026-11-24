@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { MARKET_CATEGORIES, MARKETPLACE_REPO, searchMarketplace, useMarketplace, type MarketCategory } from "../lib/catalog";
 import { keys, useAddons } from "../lib/net";
 import { openSettings } from "../lib/settings";
+import { useFormFactor } from "../lib/ui";
 import { Captions, Check, Info, LayoutList, Play, type Icon } from "./icons";
 import { Button } from "./ui/Button";
 import { SearchField } from "./ui/SearchField";
@@ -25,6 +26,7 @@ export function MarketplacePage() {
   const [installing, setInstalling] = useState<Set<string>>(() => new Set());
   const [installError, setInstallError] = useState<string | null>(null);
   const { addons: market } = useMarketplace();
+  const phone = useFormFactor().form === "phone";
 
   const startInstall = (url: string) => {
     if (installing.has(url)) return;
@@ -57,7 +59,21 @@ export function MarketplacePage() {
 
   return (
     <div className="market">
-      <SearchField value={query} onChange={setQuery} label="Search add-ons" placeholder="Search add-ons" data-setting="marketplace" />
+      {phone ? (
+        <div className="fms-market-search">
+          <SearchField
+            look="plain"
+            className="fms-search"
+            value={query}
+            onChange={setQuery}
+            label="Search add-ons"
+            placeholder="Search add-ons"
+            data-setting="marketplace"
+          />
+        </div>
+      ) : (
+        <SearchField value={query} onChange={setQuery} label="Search add-ons" placeholder="Search add-ons" data-setting="marketplace" />
+      )}
 
       {groups.map(({ category, items }) => {
         const Cat = CATEGORY_ICON[category];
@@ -66,6 +82,59 @@ export function MarketplacePage() {
             {items.map((a) => {
               const installed = installedIds.has(a.manifestId);
               const busy = installing.has(a.install);
+              const actionControl = (
+                <span className="market-actions">
+                  {a.configure && (installed || !a.setupRequired) && (
+                    <Button onClick={() => void api.openExternal(a.configure!)}>
+                      Configure
+                    </Button>
+                  )}
+                  {installed ? (
+                    <span className="market-installed">
+                      <Check size={15} strokeWidth={2.4} /> Installed
+                    </span>
+                  ) : a.setupRequired ? (
+                    // Its setup page hands back a personal link; that goes in Install from URL.
+                    <Button
+                      variant="primary"
+                      title="Set it up on its own page, then paste the link it gives you under Add-ons → Install from URL"
+                      onClick={() => void api.openExternal(a.configure!)}
+                    >
+                      Set Up
+                    </Button>
+                  ) : (
+                    <Button variant="primary" busy={busy} disabled={busy} onClick={() => startInstall(a.install)}>
+                      Install
+                    </Button>
+                  )}
+                </span>
+              );
+              if (phone) {
+                return (
+                  <div className="settings-row market-row fms-market-row" key={a.manifestId}>
+                    <div className="fms-market-head">
+                      <Cat className="settings-row-icon" size={20} strokeWidth={1.9} />
+                      <span className="fms-market-meta">
+                        <span className="settings-row-title">{a.name}</span>
+                        {a.author !== a.name && <span className="fms-market-author">by {a.author}</span>}
+                      </span>
+                      {actionControl}
+                    </div>
+                    <div className="fms-market-desc">
+                      <span className="market-about">{a.about}</span>
+                      {a.setupRequired && !installed && (
+                        <span className="market-about">
+                          Set up on its page, then paste the link in{" "}
+                          <button type="button" className="settings-link" onClick={() => openSettings("addons")}>
+                            Install from URL
+                          </button>
+                          .
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div className="settings-row market-row" key={a.manifestId}>
                   <Cat className="settings-row-icon" size={20} strokeWidth={1.9} />
@@ -85,31 +154,7 @@ export function MarketplacePage() {
                       </span>
                     )}
                   </span>
-                  <span className="market-actions">
-                    {a.configure && (installed || !a.setupRequired) && (
-                      <Button onClick={() => void api.openExternal(a.configure!)}>
-                        Configure
-                      </Button>
-                    )}
-                    {installed ? (
-                      <span className="market-installed">
-                        <Check size={16} strokeWidth={2.25} /> Installed
-                      </span>
-                    ) : a.setupRequired ? (
-                      // Its setup page hands back a personal link; that goes in Install from URL.
-                      <Button
-                        variant="primary"
-                        title="Set it up on its own page, then paste the link it gives you under Add-ons → Install from URL"
-                        onClick={() => void api.openExternal(a.configure!)}
-                      >
-                        Set Up
-                      </Button>
-                    ) : (
-                      <Button variant="primary" busy={busy} disabled={busy} onClick={() => startInstall(a.install)}>
-                        Install
-                      </Button>
-                    )}
-                  </span>
+                  {actionControl}
                 </div>
               );
             })}

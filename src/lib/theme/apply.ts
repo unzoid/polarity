@@ -1,29 +1,29 @@
 import { useSyncExternalStore } from "react";
-import { accentForeground, baseFor, themeBackground, type ColorScheme, type Theme } from "./themes";
+import { accentForeground, baseFor, DARK_BASE, type ColorScheme } from "./themes";
 
 /**
- * Puts a theme on the page: the three values styles/tokens.css builds every surface from, the text
- * colour on an accent fill, the scheme (`data-scheme`, which flips text, fills and lines) and the
- * browser's theme colour (a phone's status bar). Everything else follows through the tokens.
- * `--theme-base-dark` is for the parts that stay dark in light mode (the player, TV mode).
+ * Puts the accent and scheme on the page: the values styles/tokens.css builds every surface from, the
+ * text colour on an accent fill, the scheme (`data-scheme`, which flips text, fills and lines) and the
+ * browser's theme colour (a phone's status bar). `--theme-base-dark` is for the parts that stay dark in
+ * light mode (the player, TV mode).
  */
-export function applyTheme(t: Theme, scheme: ColorScheme, root: HTMLElement = document.documentElement): void {
-  root.style.setProperty("--accent", t.accent);
-  root.style.setProperty("--accent-fg", accentForeground(t.accent));
-  root.style.setProperty("--theme-base", baseFor(t, scheme));
-  root.style.setProperty("--theme-base-dark", t.base);
-  root.style.setProperty("--theme-tint", `${t.tint}%`);
+export function applyAccent(accent: string, scheme: ColorScheme, root: HTMLElement = document.documentElement): void {
+  root.style.setProperty("--accent", accent);
+  root.style.setProperty("--accent-fg", accentForeground(accent));
+  root.style.setProperty("--theme-base", baseFor(scheme));
+  root.style.setProperty("--theme-base-dark", DARK_BASE);
+  root.style.setProperty("--theme-tint", "0%");
   root.dataset.scheme = scheme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeBackground(t, scheme));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", baseFor(scheme));
 }
 
-/** Style for an element that shows a theme other than the page's (a theme's tile, the Create theme preview). */
-export function themeStyle(t: Pick<Theme, "accent" | "base" | "tint">, scheme: ColorScheme): Record<string, string> {
+/** Style for an element drawn in a scheme other than the page's (Appearance's Light / Dark tiles). */
+export function schemeStyle(accent: string, scheme: ColorScheme): Record<string, string> {
   return {
-    "--accent": t.accent,
-    "--accent-fg": accentForeground(t.accent),
-    "--theme-base": baseFor(t, scheme),
-    "--theme-tint": `${t.tint}%`,
+    "--accent": accent,
+    "--accent-fg": accentForeground(accent),
+    "--theme-base": baseFor(scheme),
+    "--theme-tint": "0%",
   };
 }
 

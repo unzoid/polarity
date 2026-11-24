@@ -1,54 +1,58 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ease, springs } from "../../lib/ui";
-import logo from "../../assets/polarity-white.png";
-import { Button } from "../../components/ui/Button";
-import { TextField, type TextFieldProps } from "../../components/ui/TextField";
-import { AccountError, formatTvCode, useAccount, type TvSignInRequest } from "../../lib/account";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { CodeInput } from "../../components/ui/CodeInput";
+import { formatTvCode, useAccount, type TvSignInRequest } from "../../lib/account";
 import { useTvMode } from "../../tv/tvMode";
 import { api } from "../../lib/api";
 import { PRIVACY_URL, TERMS_URL } from "../../lib/settings/catalog";
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
 import { Captcha } from "./Captcha";
+import { ErrorLine, errorCode, Primary, SignInFrame, useHandOff, useWideSignIn, WrongCode, type Lead } from "./SignInFrame";
+import { SignInMark } from "./SignInMark";
 import { TvSignInQr } from "./TvSignInQr";
 import { TwoStepBody } from "./TwoStepScreen";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** The server only sends a new code once a minute. */
 const RESEND_AFTER_S = 60;
+/** The email's code (Supabase's email OTP, six digits: docs/supabase-storage.md). */
+const CODE_LENGTH = 6;
 
 type Failure = { message: string; signedIn?: boolean };
 type Step = "start" | "email" | "code" | "device";
+type Active = Step | "two-step";
+
+/** Steps in order, for which way a change slides: forward goes left, back goes right. */
+const ORDER: Record<Active, number> = { start: 0, email: 1, device: 2, code: 2, "two-step": 3 };
 
 /**
- * Passwordless sign-in, laid out like Linear's: a narrow centred column on a
- * dark vertical gradient - the mark, one short question, pill buttons - one
- * step at a time. Start → "What's your email address?" → "Check your email"
- * with the code field. New emails get an account automatically. Or "Sign in with another device"
- * (first on a TV, #133): a code to approve on a phone or computer that's signed in.
- *
- * Changing step, as Linear does: everything but the logo fades out with a
- * barely-there sink (98%), then the next step fades in and settles to full
- * size on a gentle spring, all of it together.
+ * Passwordless sign-in, after Family's: an opening picture with the ways in, then one question per step in
+ * SignInFrame (title on the left, the bar across the top, one wide button at the foot). Start → "Your Email" →
+ * "Verification Code" (six cells, CodeInput) → signed in; or a code for another device to approve (#133; first on a
+ * TV). New emails get an account automatically.
  */
 export function AuthScreen() {
   const account = useAccount();
-  const reduce = useReducedMotion();
   const [step, setStep] = useState<Step>("start");
+  const [deviceFrom, setDeviceFrom] = useState<Step>("start");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  // Bumped when the server refuses a code: the cells shake and empty.
+  const [refused, setRefused] = useState(0);
+  // The last code was refused, until a digit of the next is typed.
+  const [wrong, setWrong] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   const [sentAt, setSentAt] = useState(0);
   // Each time the server asks for a CAPTCHA (#110) a fresh one: a token works once.
   const [captcha, setCaptcha] = useState(0);
   const wait = useCountdown(sentAt, RESEND_AFTER_S);
+  const tv = useTvMode();
 
-  // Changing step: AnimatePresence plays the old step's exit, then mounts the next.
   const go = (s: Step) => {
     setError(null);
     setCaptcha(0);
+    if (s === "device") setDeviceFrom(step);
     setStep(s);
   };
 
@@ -58,7 +62,14 @@ export function AuthScreen() {
     try {
       await fn();
     } catch (e) {
-      const isCodeError = e instanceof AccountError && (e.code === "invalid_code" || e.code === "invalid_email");
+      const isCodeError = errorCode(e) === "invalid_code" || errorCode(e) === "invalid_email";
+      if (errorCode(e) === "invalid_code" && step === "code") {
+        // A wrong code: the cells shake and empty, the ring turns red, the badge says so (no error line).
+        setRefused((n) => n + 1);
+        setCode("");
+        setWrong(true);
+        return;
+      }
       setError({
         message: errorMessage(e),
         // A code was accepted but setting up profiles failed: retrying the
@@ -75,7 +86,7 @@ export function AuthScreen() {
       try {
         await account.sendCode(email.trim(), captchaToken);
       } catch (e) {
-        if (!(e instanceof AccountError && e.code === "captcha_needed")) throw e;
+        if (errorCode(e) !== "captcha_needed") throw e;
         setCaptcha((n) => n + 1);
         return;
       }
@@ -85,134 +96,115 @@ export function AuthScreen() {
       if (step !== "code") go("code");
     });
 
-  const submitEmail = (e: FormEvent) => {
-    e.preventDefault();
-    if (!EMAIL_RE.test(email.trim())) return setError({ message: "Enter a valid email address." });
-    void send();
+  const emailOk = EMAIL_RE.test(email.trim());
+  const submitEmail = (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!emailOk) return setError({ message: "Enter a valid email address." });
+    if (!busy) void send();
   };
 
   const verify = (value: string) => {
-    if (value.length < 6) return setError({ message: "Enter the code from the email." });
-    void attempt(() => account.verifyCode(email.trim(), value), { signedIn: true });
+    if (value.length < CODE_LENGTH) return setError({ message: "Enter the code from the email." });
+    if (!busy) void attempt(() => account.verifyCode(email.trim(), value), { signedIn: true });
   };
 
-  const tv = useTvMode();
   const skip = account.canCancelSignIn ? account.cancelSignIn : account.continueAsGuest;
-  const activeStep = account.twoStep ? "two-step" : step;
+  const active: Active = account.twoStep ? "two-step" : step;
+
+  // The bar: close on the first question, back after it; how far along.
+  const lead: Lead =
+    active === "email"
+      ? { icon: "close", label: "Close", onPress: () => go("start") }
+      : active === "code"
+        ? { icon: "back", label: "Back", onPress: () => go("email") }
+        : active === "device"
+          ? { icon: "back", label: "Back", onPress: () => go(deviceFrom) }
+          : active === "two-step"
+            ? { icon: "back", label: "Back to sign in", onPress: () => void account.cancelTwoStep() }
+            : null;
+  const progress = active === "email" ? ([0, 2] as const) : active === "code" ? ([1, 2] as const) : active === "two-step" ? ([2, 3] as const) : null;
 
   return (
     <AccountShell plain>
-      <div className="auth">
-        <img className="auth-mark wordmark" src={logo} alt="Polarity" draggable={false} />
-        <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          className="auth-body"
-          key={activeStep}
-          // Nearly in place: a 2% sink while fading out, then the next step
-          // fades in and springs from 98% to full size with a hint of overshoot.
-          // (Scale props, not a transform string: nothing else runs on this screen.)
-          // Scaled from the top edge, so the title stays on its line and only
-          // the lower part of the step gives.
-          style={{ transformOrigin: "50% 0%" }}
-          initial={{ opacity: 0, scale: reduce ? 1 : 0.98 }}
-          animate={{ opacity: 1, scale: 1, transition: { scale: springs.settle, opacity: { duration: 0.29, ease: ease.out } } }}
-          exit={{ opacity: 0, scale: reduce ? 1 : 0.98, transition: { duration: 0.21, ease: ease.out } }}
-        >
+      <SignInFrame step={active} order={ORDER[active]} lead={lead} progress={progress} bare={active === "start"}>
+        {active === "two-step" && <TwoStepBody />}
 
-        {activeStep === "two-step" && <TwoStepBody />}
-
-        {activeStep === "start" && (
-          <>
-            <h1 className="auth-title">Sign in to Polarity</h1>
-            <div className="auth-actions">
-              {/* On a TV, typing an email with a remote is the slow way: the phone comes first. */}
-              {tv && (
-                <Button variant="accent" size="block" onClick={() => go("device")}>
-                  Sign in with your phone
-                </Button>
-              )}
-              <Button variant={tv ? undefined : "accent"} size="block" onClick={() => go("email")}>
-                Continue with email
-              </Button>
-              {!tv && (
-                <Button size="block" onClick={() => go("device")}>
-                  Sign in with another device
-                </Button>
-              )}
-              <Button size="block" onClick={skip}>
-                Continue without an account
-              </Button>
-            </div>
-            <p className="auth-fine">
-              An account keeps your profiles, library, watch history and settings in sync across devices. New here? Signing in
-              creates one.
-            </p>
-            <LegalLinks />
-          </>
+        {active === "start" && (
+          <StartStep
+            tv={tv}
+            onEmail={() => go("email")}
+            onDevice={() => go("device")}
+            onSkip={skip}
+            skipLabel={account.canCancelSignIn ? "Cancel" : "Continue Without an Account"}
+          />
         )}
 
-        {activeStep === "email" && (
-          <form className="auth-form" onSubmit={submitEmail} noValidate>
-            <h1 className="auth-title">What's your email address?</h1>
-            <div className="auth-actions">
-              <Input
-                aria-label="Email address"
-                type="email"
-                autoComplete="email"
-                placeholder="name@example.com"
-                value={email}
-                onValue={setEmail}
-                autoFocus
-              />
-              <Button size="block" type="submit" disabled={busy} busy={busy}>
-                Continue with email
-              </Button>
-            </div>
+        {active === "email" && (
+          <form className="si-step-body" onSubmit={submitEmail} noValidate>
+            <h1 className="si-title">Your Email</h1>
+            <p className="si-sub">Enter your email to sign in, or to make an account if you're new.</p>
+            <input
+              className="si-input"
+              aria-label="Email address"
+              type="email"
+              autoComplete="email"
+              placeholder="Email Address"
+              spellCheck={false}
+              autoCapitalize="off"
+              value={email}
+              onChange={(e) => (setEmail(e.target.value), setError(null))}
+              autoFocus
+            />
+            <p className="si-note">Your profiles, library and settings are kept with your account, ready on your other devices.</p>
             {captcha > 0 && <Captcha key={captcha} onToken={(t) => void send(t)} />}
             <ErrorLine error={error} />
-            <button type="button" className="auth-link" onClick={() => go("start")}>
-              Back to sign in
-            </button>
-            <LegalLinks />
+            <Primary label="Continue" enabled={emailOk} busy={busy} onPress={() => submitEmail()} />
+            {/* Keeps Enter in the field working (the Continue button is an ordinary button). */}
+            <button type="submit" hidden />
+            <div className="si-or">
+              <button type="button" onClick={() => go("device")}>
+                or sign in with another device
+              </button>
+            </div>
           </form>
         )}
 
-        {activeStep === "code" && (
+        {active === "code" && (
           <form
-            className="auth-form"
+            className="si-step-body"
             onSubmit={(e) => {
               e.preventDefault();
               verify(code);
             }}
             noValidate
           >
-            <h1 className="auth-title">Check your email</h1>
-            <p className="auth-sub">
-              Enter the code sent to <strong>{email.trim()}</strong>.
+            <h1 className="si-title">Verification Code</h1>
+            <p className="si-sub">
+              We've sent a code to <strong>{email.trim()}</strong>.
             </p>
-            <div className="auth-actions">
-              <Input
-                aria-label="Login code"
-                className="auth-code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={10}
+            <div className="si-code">
+              <CodeInput
+                aria-label="Verification code"
+                length={CODE_LENGTH}
                 value={code}
-                onValue={(v) => setCode(v.replace(/\D/g, ""))}
-                onPaste={(e) => {
-                  const pasted = e.clipboardData.getData("text").replace(/\D/g, "");
-                  if (pasted.length >= 6) {
-                    e.preventDefault();
-                    setCode(pasted);
-                    verify(pasted);
-                  }
-                }}
+                onChange={(v) => (setCode(v), setError(null), setWrong(false))}
+                onComplete={verify}
+                errorKey={refused}
+                disabled={busy}
                 autoFocus
               />
-              <Button variant="accent" size="block" type="submit" disabled={busy || !code} busy={busy}>
-                Continue
-              </Button>
             </div>
+            <p className="si-resend">
+              Didn't receive a code?{" "}
+              {wait > 0 ? (
+                <span className="tabular">Resend in {wait}s</span>
+              ) : (
+                <button type="button" onClick={() => void send()} disabled={busy}>
+                  Resend
+                </button>
+              )}
+            </p>
+            <WrongCode show={wrong} />
             {captcha > 0 && <Captcha key={captcha} onToken={(t) => void send(t)} />}
             <ErrorLine
               error={error}
@@ -224,20 +216,70 @@ export function AuthScreen() {
                 ) : null
               }
             />
-            <button type="button" className="auth-link" onClick={() => go("email")}>
-              Back to sign in
-            </button>
-            <button type="button" className="auth-link auth-link-quiet" onClick={() => void send()} disabled={busy || wait > 0}>
-              {wait > 0 ? `Send a new code in ${wait}s` : "Didn't get it? Send a new code"}
-            </button>
+            <Primary label="Continue" enabled={code.length === CODE_LENGTH} busy={busy} onPress={() => verify(code)} />
+            <button type="submit" hidden />
           </form>
         )}
 
-        {activeStep === "device" && <DeviceStep tv={tv} onBack={() => go("start")} />}
-        </motion.div>
-        </AnimatePresence>
-      </div>
+        {active === "device" && <DeviceStep tv={tv} />}
+      </SignInFrame>
     </AccountShell>
+  );
+}
+
+/**
+ * The opening: the wordmark (on a phone; wider, the frame has it over the column), a line about what an account is
+ * for, the ways in, the terms. The email button becomes the next step's Continue (useHandOff).
+ */
+function StartStep({ tv, onEmail, onDevice, onSkip, skipLabel }: { tv: boolean; onEmail: () => void; onDevice: () => void; onSkip: () => void; skipLabel: string }) {
+  const wide = useWideSignIn();
+  const handOff = useHandOff();
+  const email = (e: MouseEvent<HTMLButtonElement>) => {
+    handOff(e.currentTarget);
+    onEmail();
+  };
+  // The wordmark says where you are; the heading is for screen readers.
+  const copy = (
+    <div className="si-start-copy">
+      <h1 className="si-sr">Sign in to Polarity</h1>
+      <p className="si-start-sub">Sign in to keep your profiles, watch history and settings with you on every device.</p>
+    </div>
+  );
+  return (
+    <div className="si-start">
+      {/* On a phone the line about accounts sits under the wordmark, in the room above the buttons. */}
+      {wide ? (
+        copy
+      ) : (
+        <div className="si-hero">
+          <SignInMark />
+          {copy}
+        </div>
+      )}
+      <div className="si-start-actions">
+        {/* On a TV, typing an email with a remote is the slow way: the phone comes first. */}
+        <button type="button" className="si-btn si-btn-light" onClick={tv ? onDevice : email}>
+          {tv ? "Sign In with Your Phone" : "Continue with Email"}
+        </button>
+        <button type="button" className="si-btn si-btn-dark" onClick={tv ? email : onDevice}>
+          {tv ? "Continue with Email" : "Sign In with Another Device"}
+        </button>
+        <button type="button" className="si-btn-text" onClick={onSkip}>
+          {skipLabel}
+        </button>
+      </div>
+      <p className="si-legal">
+        By continuing, you agree to our{" "}
+        <button type="button" onClick={() => void api.openExternal(TERMS_URL)}>
+          Terms of Use
+        </button>{" "}
+        and{" "}
+        <button type="button" onClick={() => void api.openExternal(PRIVACY_URL)}>
+          Privacy Policy
+        </button>
+        .
+      </p>
+    </div>
   );
 }
 
@@ -251,7 +293,7 @@ type DeviceState =
  * Signing in from another device (#133): a code to enter on a phone or computer that's signed in,
  * until it's approved (the account then moves on to the profiles), denied or expired.
  */
-function DeviceStep({ tv, onBack }: { tv: boolean; onBack: () => void }) {
+function DeviceStep({ tv }: { tv: boolean }) {
   const account = useAccount();
   const [state, setState] = useState<DeviceState>({ kind: "loading" });
   const [round, setRound] = useState(0);
@@ -277,41 +319,31 @@ function DeviceStep({ tv, onBack }: { tv: boolean; onBack: () => void }) {
   }, [round]);
   const left = useLeft(state.kind === "code" ? state.request.expiresAt : 0);
   return (
-    <div className="auth-form">
-      <h1 className="auth-title">{tv ? "Sign in with your phone" : "Sign in with another device"}</h1>
-      <p className="auth-sub">
-        On a phone or computer that's signed in to Polarity, open <strong>Settings → Account → Sign in a TV</strong> and enter this code.
+    <div className="si-step-body">
+      <h1 className="si-title">{tv ? "Sign In with Your Phone" : "Another Device"}</h1>
+      <p className="si-sub">
+        On a phone or computer that's signed in to Polarity, open <strong>Settings → Account → Sign in a TV</strong> and enter this
+        code.
       </p>
-      <div className="auth-device-code" aria-live="polite" data-state={state.kind}>
-        {state.kind === "code" ? formatTvCode(state.request.code) : state.kind === "signing-in" ? "Signing in…" : state.kind === "loading" ? "········" : ""}
-      </div>
-      {(state.kind === "code" || state.kind === "loading") && (
-        <p className="auth-fine">
-          {state.kind === "code"
-            ? `Waiting for approval · the code expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
-            : "\u00a0"}
-        </p>
-      )}
-      {state.kind === "loading" && (
-        <div className="auth-device-qr" aria-hidden>
-          <div className="auth-device-qr-skeleton skeleton" />
-          <p className="auth-fine">On an Android phone with Polarity, you can scan this with the camera instead.</p>
+      <div className="si-device">
+        <div className="auth-device-code" aria-live="polite" data-state={state.kind}>
+          {state.kind === "code" ? formatTvCode(state.request.code) : state.kind === "signing-in" ? "Signing in…" : state.kind === "loading" ? "········" : ""}
         </div>
-      )}
-      {state.kind === "code" && <TvSignInQr code={state.request.code} />}
-      {state.kind === "over" && (
-        <>
-          <ErrorLine error={{ message: state.message }} />
-          <div className="auth-actions">
-            <Button variant="accent" size="block" onClick={() => setRound((n) => n + 1)}>
-              Get a new code
-            </Button>
+        {(state.kind === "code" || state.kind === "loading") && (
+          <p className="si-note si-device-wait">
+            {state.kind === "code" ? `Waiting for approval · the code expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : " "}
+          </p>
+        )}
+        {state.kind === "loading" && (
+          <div className="auth-device-qr" aria-hidden>
+            <div className="auth-device-qr-skeleton skeleton" />
+            <p className="auth-fine">On an Android phone with Polarity, you can scan this with the camera instead.</p>
           </div>
-        </>
-      )}
-      <button type="button" className="auth-link" onClick={onBack}>
-        Back to sign in
-      </button>
+        )}
+        {state.kind === "code" && <TvSignInQr code={state.request.code} />}
+        {state.kind === "over" && <ErrorLine error={{ message: state.message }} />}
+      </div>
+      {state.kind === "over" && <Primary label="Get a New Code" enabled onPress={() => setRound((n) => n + 1)} />}
     </div>
   );
 }
@@ -342,36 +374,7 @@ function useCountdown(from: number, seconds: number) {
       if (v === 0) window.clearInterval(t);
     }, 1000);
     return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, seconds]);
   return from ? value : 0;
-}
-
-/** A field with no label above it (the placeholder asks; aria-label names it), as Linear's. */
-function Input({ onValue, type = "text", ...rest }: { value: string; onValue: (v: string) => void } & Omit<TextFieldProps, "onChange" | "look">) {
-  return <TextField look="block" type={type} onChange={onValue} spellCheck={false} autoCapitalize="off" {...rest} />;
-}
-
-/** The privacy policy and terms (#157), under the steps that create an account. */
-function LegalLinks() {
-  return (
-    <p className="auth-legal">
-      <button type="button" onClick={() => void api.openExternal(PRIVACY_URL)}>
-        Privacy Policy
-      </button>
-      <span aria-hidden>·</span>
-      <button type="button" onClick={() => void api.openExternal(TERMS_URL)}>
-        Terms of Use
-      </button>
-    </p>
-  );
-}
-
-function ErrorLine({ error, action }: { error: Failure | null; action?: ReactNode }) {
-  if (!error) return null;
-  return (
-    <div className="auth-error" role="alert">
-      <span>{error.message}</span>
-      {action}
-    </div>
-  );
 }

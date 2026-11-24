@@ -72,17 +72,16 @@ function PadBindingRow({ layout, button, lit }: { layout: Layout; button: PadBut
   );
 }
 
-function PadBindingsCard({ layout, title, footer }: { layout: Layout; title: string; footer: string }) {
+function PadBindingsCard({ layout, title }: { layout: Layout; title: string }) {
   const bindings = usePadBindings();
   const lit = usePressedButton();
   return (
-    <Card title={title} footer={footer}>
+    <Card title={title}>
       {PAD_BUTTONS.map((b) => (
         <PadBindingRow key={b} layout={layout} button={b} lit={lit === b} />
       ))}
       <ActionRow
         title="Standard layout"
-        caption="Put every button back as it came"
         label="Reset"
         glyph={<Reset size={15} />}
         disabled={!padBindingsCustomized(bindings, layout)}
@@ -127,16 +126,8 @@ export function ControllerPage() {
         <SettingRow id="padPlayerVolume" />
       </Card>
 
-      <PadBindingsCard
-        layout="nav"
-        title="Buttons while browsing"
-        footer="Give a button a job another one has and the two swap. Select and Back always keep a button."
-      />
-      <PadBindingsCard
-        layout="player"
-        title="Buttons in the player"
-        footer="Left and right skip by the seek step under Playback. In the menus over the video, your Select and Back buttons work as they do everywhere else."
-      />
+      <PadBindingsCard layout="nav" title="Buttons while browsing" />
+      <PadBindingsCard layout="player" title="Buttons in the player" />
     </>
   );
 }

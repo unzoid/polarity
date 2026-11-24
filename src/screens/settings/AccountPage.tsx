@@ -28,10 +28,10 @@ export function AccountPage() {
 
   if (account.status === "guest") {
     return (
-      <Card footer="Your library and watch history move into your first profile.">
+      <Card>
         <ActionRow
           title="Not signed in"
-          caption="Sign in to keep profiles, your library, history and settings on every device."
+          caption="Sign in to sync profiles, library, history and settings."
           label="Sign In"
           variant="primary"
           onClick={account.showSignIn}
@@ -44,13 +44,13 @@ export function AccountPage() {
     <>
       {account.profile && <ExposedNotice profileId={account.profile.id} onPassphrase={() => openSecrets(expand("secrets"))} />}
 
-      <Card footer="Your library, where you are in each title, playlists, settings, shortcuts, API keys and add-ons sync automatically. Volume and TV mode stay on this device.">
+      <Card>
         <ActionRow title="Email" caption={account.user?.email} label="Sign Out" onClick={() => void account.signOut()} />
       </Card>
 
       <AccountSecurityCard expand={expand} />
 
-      <Card footer="The TV gets its own sign-in: signing out there leaves this device signed in, and the other way round.">
+      <Card>
         <TvSignInRow {...expand("tv")} />
       </Card>
 
@@ -290,7 +290,7 @@ function TvSignInRow(props: Expandable) {
   });
   const typedWrong = code.replace(/[^A-Za-z0-9]/g, "").length >= 8 && !isTvCode(code);
   return (
-    <ExpandRow setting="tv-sign-in" icon={Tv} title="Sign in a TV" caption="Or another computer or phone, with the code it shows" {...props}>
+    <ExpandRow setting="tv-sign-in" icon={Tv} title="Sign in a TV" {...props}>
       {!asking && (
         <>
           <p className="settings-expand-text">

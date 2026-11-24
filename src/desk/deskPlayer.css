@@ -1,32 +1,60 @@
 /* --- Desk Netflix Player (IMG_3251–IMG_3254): 1:1 iPad/desktop player chrome & frosted glass edge sheets. */
 
 .player[data-desk-player] {
+  --pl-pt: clamp(1px, min(calc(100vw / 1194), calc(100vh / 670)), 1.5px);
+  /* px written for the player (here and in player.css) is drawn in its points (scripts/pointScale.ts). */
+  --ui-pt: var(--pl-pt);
   --dk-pl-surface: rgb(22 22 22 / 0.86);
   --dk-pl-accent: var(--dk-accent, var(--accent, #5e5ce6));
 }
 
-/* Strong Netflix-grade full-frame dark vignette while controls are up (matches iPad reference photos). */
-.player[data-desk-player]::before {
+/* The scrim/vignette while controls are up: mobile/touch only (desktop stays clear over the picture). */
+:root[data-touch="true"] .player[data-desk-player]::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: radial-gradient(
-    ellipse 92% 82% at 50% 50%,
-    rgb(0 0 0 / 0.28) 0%,
-    rgb(0 0 0 / 0.44) 55%,
-    rgb(0 0 0 / 0.68) 100%
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.73) 0%,
+    rgb(0 0 0 / 0.31) 50%,
+    rgb(0 0 0 / 0.73) 100%
   );
   pointer-events: none;
   transition: opacity var(--dur-base) var(--ease-std);
 }
-.player[data-desk-player][data-chrome="false"]::before,
-.player[data-desk-player][data-desk-sheet="speed"]::before,
-.player[data-desk-player][data-desk-sheet="tracks"]::before {
+:root[data-touch="true"] .player[data-desk-player][data-chrome="false"]::before {
   opacity: 0;
 }
-.player[data-desk-player][data-instant="true"]::before {
+/* The speed and track sheets keep the scrim under them on mobile/touch, whether or not the controls are up. */
+:root[data-touch="true"] .player[data-desk-player]:is([data-desk-sheet="speed"], [data-desk-sheet="tracks"])::before {
+  opacity: 1;
+}
+:root[data-touch="true"] .player[data-desk-player][data-instant="true"]::before {
   transition: none;
+}
+
+/* On desktop, keep the middle of the picture completely clear and use only subtle eased edge fades
+   behind the top and bottom control bars so white controls stay readable over bright frames. */
+:root:not([data-touch="true"]) .dk-pl-top {
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.56) 0%,
+    rgb(0 0 0 / 0.42) 22%,
+    rgb(0 0 0 / 0.24) 48%,
+    rgb(0 0 0 / 0.09) 74%,
+    transparent 100%
+  );
+}
+:root:not([data-touch="true"]) .dk-pl-bottom {
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.64) 0%,
+    rgb(0 0 0 / 0.48) 22%,
+    rgb(0 0 0 / 0.28) 48%,
+    rgb(0 0 0 / 0.1) 74%,
+    transparent 100%
+  );
 }
 
 /* --- Chrome visibility & sheet coordination (matches IMG_3251–3254) --- */
@@ -59,7 +87,8 @@
 /* Sheet-specific HUD visibility:
    - tracks (IMG_3253): top sheet covers upper half; bottom timeline + actions STAY VISIBLE underneath!
    - episodes (IMG_3252): right drawer covers right 42%; main HUD STAYS VISIBLE on the left!
-   - speed (IMG_3254), sources, sleep, party: hide main HUD so only the video + sheet show. */
+   - speed: the top bar and centre transport stay up over the scrim; only the bottom bar makes way for the sheet.
+   - sources, sleep, party: hide main HUD so only the video + sheet show. */
 .player[data-desk-player][data-desk-sheet="tracks"] :is(.dk-pl-top, .dk-pl-center) {
   opacity: 0;
   pointer-events: none;
@@ -73,9 +102,14 @@
   opacity: 0.72;
   pointer-events: none;
 }
-.player[data-desk-player]:is([data-desk-sheet="speed"], [data-desk-sheet="sources"], [data-desk-sheet="sleep"], [data-desk-sheet="party"]) :is(.dk-pl-top, .dk-pl-center, .dk-pl-bottom, .dk-pl-bright) {
+.player[data-desk-player]:is([data-desk-sheet="sources"], [data-desk-sheet="sleep"], [data-desk-sheet="party"]) :is(.dk-pl-top, .dk-pl-center, .dk-pl-bottom, .dk-pl-bright),
+.player[data-desk-player][data-desk-sheet="speed"] .dk-pl-bottom {
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
+}
+.player[data-desk-player][data-desk-sheet="speed"] :is(.dk-pl-top, .dk-pl-center > *, .dk-pl-bright) {
+  opacity: 1;
   pointer-events: none;
 }
 
@@ -87,15 +121,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
-  padding: calc(16px + var(--safe-top)) calc(20px + var(--safe-right)) 116px calc(20px + var(--safe-left));
-  background: linear-gradient(
-    to bottom,
-    rgb(0 0 0 / 0.88) 0%,
-    rgb(0 0 0 / 0.64) 36%,
-    rgb(0 0 0 / 0.26) 70%,
-    transparent 100%
-  );
+  gap: calc(16 * var(--pl-pt));
+  padding: calc(16 * var(--pl-pt) + var(--safe-top)) calc(20 * var(--pl-pt) + var(--safe-right)) calc(116 * var(--pl-pt)) calc(20 * var(--pl-pt) + var(--safe-left));
   color: #fff;
   pointer-events: none;
 }
@@ -105,7 +132,7 @@
 .dk-pl-top-start {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10 * var(--pl-pt));
   min-width: 0;
 }
 .dk-pl-title {
@@ -113,7 +140,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 16px;
+  font-size: calc(16 * var(--pl-pt));
   font-weight: 650;
   letter-spacing: -0.01em;
   color: #fff;
@@ -128,15 +155,15 @@
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(6 * var(--pl-pt));
 }
 
 .dk-pl-icon {
   display: grid;
   place-items: center;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: calc(40 * var(--pl-pt));
+  height: calc(40 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -157,20 +184,20 @@
   color: var(--dk-pl-accent);
 }
 .dk-pl-close {
-  margin-left: -6px;
+  margin-left: calc(-6 * var(--pl-pt));
 }
 
 /* Top-center circular rating pills (IMG_3251) */
 .dk-pl-ratings {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(12 * var(--pl-pt));
 }
 .dk-pl-rate {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: calc(38 * var(--pl-pt));
+  height: calc(38 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -205,40 +232,40 @@
   transition: width 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, padding 200ms ease;
 }
 .dk-pl-vol:is(:hover, :focus-within) .dk-pl-vol-pop {
-  width: 92px;
+  width: calc(92 * var(--pl-pt));
   opacity: 1;
-  padding: 0 8px 0 4px;
+  padding: 0 calc(8 * var(--pl-pt)) 0 calc(4 * var(--pl-pt));
 }
 .dk-pl-vol-pop input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  width: 80px;
-  height: 24px;
+  width: calc(80 * var(--pl-pt));
+  height: calc(24 * var(--pl-pt));
   background: transparent;
   cursor: pointer;
 }
 .dk-pl-vol-pop input[type="range"]::-webkit-slider-runnable-track {
-  height: 3.5px;
+  height: calc(3.5 * var(--pl-pt));
   border-radius: 999px;
   background: linear-gradient(to right, #fff var(--value), rgb(255 255 255 / 0.28) var(--value));
 }
 .dk-pl-vol-pop input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: -4.25px;
+  width: calc(12 * var(--pl-pt));
+  height: calc(12 * var(--pl-pt));
+  margin-top: calc(-4.25 * var(--pl-pt));
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
 }
 .dk-pl-vol-pop input[type="range"]::-moz-range-track {
-  height: 3.5px;
+  height: calc(3.5 * var(--pl-pt));
   border-radius: 999px;
   background: linear-gradient(to right, #fff var(--value), rgb(255 255 255 / 0.28) var(--value));
 }
 .dk-pl-vol-pop input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: calc(12 * var(--pl-pt));
+  height: calc(12 * var(--pl-pt));
   border: 0;
   border-radius: 50%;
   background: #fff;
@@ -247,13 +274,13 @@
 /* --- Left-edge vertical brightness slider (IMG_3251) --- */
 .dk-pl-bright {
   position: absolute;
-  left: calc(22px + var(--safe-left));
+  left: calc(22 * var(--pl-pt) + var(--safe-left));
   top: 50%;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: calc(12 * var(--pl-pt));
   transform: translateY(-50%);
   color: #fff;
 }
@@ -264,14 +291,14 @@
 .dk-pl-bright-rail {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: min(210px, 34vh);
+  width: calc(28 * var(--pl-pt));
+  height: min(calc(210 * var(--pl-pt)), 34vh);
   cursor: pointer;
   touch-action: none;
 }
 .dk-pl-bright-track {
   position: relative;
-  width: 4.5px;
+  width: calc(4.5 * var(--pl-pt));
   height: 100%;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.28);
@@ -294,15 +321,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(88px, 19vw, 270px);
+  gap: clamp(88px, 19vw, calc(270 * var(--pl-pt)));
   pointer-events: none;
 }
 .dk-pl-play {
   pointer-events: auto;
   display: grid;
   place-items: center;
-  width: 84px;
-  height: 84px;
+  width: calc(84 * var(--pl-pt));
+  height: calc(84 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -315,28 +342,28 @@
   transform: scale(0.9);
 }
 .dk-pl-play-tri {
-  translate: 3px 0;
+  translate: calc(3 * var(--pl-pt)) 0;
 }
 .player[data-desk-player] .dk-pl-center .skip-transport {
-  width: 68px;
-  height: 68px;
-  --skip-half: 34px;
-  --skip-out: 10px;
+  width: calc(68 * var(--pl-pt));
+  height: calc(68 * var(--pl-pt));
+  --skip-half: calc(34 * var(--pl-pt));
+  --skip-out: calc(10 * var(--pl-pt));
 }
 .player[data-desk-player] .dk-pl-center .skip-arrow {
-  width: 48px;
-  height: 48px;
+  width: calc(48 * var(--pl-pt));
+  height: calc(48 * var(--pl-pt));
 }
 .player[data-desk-player] .dk-pl-center .skip-arrow g {
   stroke-width: 1.55;
 }
 .player[data-desk-player] .dk-pl-center .skip-num {
-  font-size: 14.5px;
+  font-size: calc(14.5 * var(--pl-pt));
   font-weight: 600;
-  padding-top: 2px;
+  padding-top: calc(2 * var(--pl-pt));
 }
 .player[data-desk-player] .dk-pl-center .skip-total {
-  font-size: 1.25rem;
+  font-size: calc(20 * var(--pl-pt));
   font-weight: 600;
 }
 
@@ -345,14 +372,7 @@
   position: absolute;
   inset: auto 0 0 0;
   z-index: 3;
-  padding: 120px calc(26px + var(--safe-right)) calc(14px + var(--safe-bottom)) calc(26px + var(--safe-left));
-  background: linear-gradient(
-    to top,
-    rgb(0 0 0 / 0.92) 0%,
-    rgb(0 0 0 / 0.68) 38%,
-    rgb(0 0 0 / 0.26) 72%,
-    transparent 100%
-  );
+  padding: calc(120 * var(--pl-pt)) calc(26 * var(--pl-pt) + var(--safe-right)) calc(14 * var(--pl-pt) + var(--safe-bottom)) calc(26 * var(--pl-pt) + var(--safe-left));
   color: #fff;
   pointer-events: none;
 }
@@ -362,7 +382,7 @@
 .dk-pl-timeline {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: calc(20 * var(--pl-pt));
 }
 .dk-pl-timeline .scrubber {
   flex: 1;
@@ -372,35 +392,13 @@
   visibility: hidden;
   pointer-events: none;
 }
-/* Thin Netflix timeline track + permanent solid accent dot (preserve Scrubber's inline translateX!) */
-.player[data-desk-player] .scrubber-track {
-  height: 4px;
-  background: rgb(255 255 255 / 0.28);
-  border-radius: 999px;
-  transform: none;
-}
-.player[data-desk-player] .scrubber:is(:hover, [data-scrubbing="true"]) .scrubber-track {
-  transform: scaleY(1.35);
-}
-.player[data-desk-player] .scrubber-fill {
-  background: var(--dk-pl-accent);
-}
-.player[data-desk-player] .scrubber-knob {
-  left: -8px;
-  margin-top: -8px;
-  width: 16px;
-  height: 16px;
-  opacity: 1;
-  scale: 1;
-  background: var(--dk-pl-accent);
-  box-shadow: 0 1px 6px rgb(0 0 0 / 0.45);
-}
-.player[data-desk-player] .scrubber:is(:hover, [data-scrubbing="true"]) .scrubber-knob {
-  opacity: 1;
-  scale: 1.22;
+/* The timeline itself is the app's own (player.css .scrubber): the Apple TV bar, white fill on a soft track that
+   thickens under the pointer, the knob only while hovering or dragging. */
+.player[data-desk-player] .scrubber-time {
+  font-size: calc(12.5 * var(--pl-pt));
 }
 .player[data-desk-player] .player-remaining {
-  font-size: 14.5px;
+  font-size: calc(14.5 * var(--pl-pt));
   font-weight: 500;
   color: rgb(255 255 255 / 0.92);
   min-width: 4.2ch;
@@ -408,14 +406,14 @@
 .dk-pl-sleep-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 10px;
+  gap: calc(5 * var(--pl-pt));
+  height: calc(26 * var(--pl-pt));
+  padding: 0 calc(10 * var(--pl-pt));
   border: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.14);
   color: #fff;
-  font-size: 12.5px;
+  font-size: calc(12.5 * var(--pl-pt));
   font-weight: 600;
 }
 .dk-pl-sleep-pill:hover {
@@ -428,8 +426,8 @@
   align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: clamp(14px, 2.6vw, 34px);
-  margin-top: 10px;
+  gap: clamp(14px, 2.6vw, calc(34 * var(--pl-pt)));
+  margin-top: calc(10 * var(--pl-pt));
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -440,14 +438,14 @@
   display: inline-flex;
   align-items: center;
   flex: none;
-  gap: 8px;
-  height: 38px;
-  padding: 0 10px;
+  gap: calc(8 * var(--pl-pt));
+  height: calc(38 * var(--pl-pt));
+  padding: 0 calc(10 * var(--pl-pt));
   border: 0;
-  border-radius: 8px;
+  border-radius: calc(8 * var(--pl-pt));
   background: transparent;
   color: rgb(255 255 255 / 0.9);
-  font-size: 14px;
+  font-size: calc(14 * var(--pl-pt));
   font-weight: 550;
   letter-spacing: -0.005em;
   white-space: nowrap;
@@ -506,7 +504,11 @@
   transition-duration: 0ms;
 }
 
+/* Sheet materials: a flat neutral grey with only a faint trace of the picture through it, so a warm or
+   colourful frame never tints the panel. Over black the speed sheet reads #202020 and the audio &
+   subtitles sheet and side drawers #141414; the picture adds about a fifth and a tenth of itself respectively. */
 .dk-pl-sheet {
+  --dk-pl-veil: rgb(40 40 40 / 0.8);
   position: relative;
   isolation: isolate;
   display: flex;
@@ -527,7 +529,7 @@
   width: 100%;
   height: 100%;
   transform: scale(1.12);
-  filter: blur(28px) brightness(0.86);
+  filter: blur(28px);
   opacity: 0;
   transition: opacity 260ms var(--ease-std);
   pointer-events: none;
@@ -535,7 +537,7 @@
 .dk-pl-frost[data-ready] {
   opacity: 1;
 }
-/* Deep neutral charcoal veil matching IMG_3252 (#161616) + fine dither grain to eliminate 8-bit banding. */
+/* Flat neutral veil over the frosted copy + fine dither grain to eliminate 8-bit banding. */
 .dk-pl-sheet::before,
 .dk-pl-sheet::after {
   content: "";
@@ -545,14 +547,7 @@
   pointer-events: none;
 }
 .dk-pl-sheet::before {
-  background:
-    linear-gradient(to bottom, rgb(255 255 255 / 0.03), transparent 72px),
-    rgb(20 20 20 / 0.64);
-}
-.dk-pl-sheet[data-side="right"]::before {
-  background:
-    linear-gradient(to right, rgb(255 255 255 / 0.025), transparent 44px),
-    rgb(20 20 20 / 0.68);
+  background: var(--dk-pl-veil);
 }
 .dk-pl-sheet::after {
   opacity: 0.075;
@@ -577,13 +572,13 @@
 /* Close ✕ button inside every sheet */
 .dk-pl-sheet-close {
   position: absolute;
-  top: 20px;
-  right: 22px;
+  top: calc(20 * var(--pl-pt));
+  right: calc(22 * var(--pl-pt));
   z-index: 4;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: calc(36 * var(--pl-pt));
+  height: calc(36 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -599,12 +594,10 @@
 /* --- 1. Speed Bottom Sheet (IMG_3254) --- */
 .dk-pl-sheet[data-side="bottom"] {
   width: 100%;
-  min-height: 126px;
-  padding: 36px 12% 24px;
-  border-radius: 14px 14px 0 0;
-  border-top: 1px solid rgb(255 255 255 / 0.08);
-  background: rgb(22 22 22 / 0.86);
-  box-shadow: 0 -14px 44px rgb(0 0 0 / 0.5);
+  min-height: calc(126 * var(--pl-pt));
+  padding: calc(36 * var(--pl-pt)) 12% calc(24 * var(--pl-pt));
+  border-radius: calc(14 * var(--pl-pt)) calc(14 * var(--pl-pt)) 0 0;
+  background: rgb(32 32 32 / 0.94);
   @starting-style {
     transform: translateY(100%);
   }
@@ -614,19 +607,19 @@
   transition-duration: 160ms;
 }
 .dk-pl-sheet[data-side="bottom"] .dk-pl-sheet-close {
-  top: 32px;
-  right: 22px;
+  top: calc(32 * var(--pl-pt));
+  right: calc(22 * var(--pl-pt));
 }
 .dk-pl-speed {
   width: 100%;
-  max-width: 1040px;
+  max-width: calc(1040 * var(--pl-pt));
   margin: 0 auto;
 }
 .dk-pl-speed-track {
   position: relative;
   display: flex;
   align-items: center;
-  height: 28px;
+  height: calc(28 * var(--pl-pt));
   cursor: pointer;
   touch-action: none;
   outline: none;
@@ -634,9 +627,9 @@
 .dk-pl-speed-rail {
   position: relative;
   width: 100%;
-  height: 4.5px;
+  height: calc(4.5 * var(--pl-pt));
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.24);
+  background: rgb(255 255 255 / 0.13);
   overflow: hidden;
 }
 .dk-pl-speed-fill {
@@ -659,25 +652,36 @@
 .dk-pl-speed-track[data-drag] .dk-pl-speed-rider {
   transition-duration: 50ms;
 }
+/* The thumb is an SVG path (DeskPlayerSheets: THUMB_PATH): its squarer-than-elliptical ends can't be drawn
+   with border-radius. The shadow follows the path through drop-shadow; the focus ring is a wide stroke under the fill. */
 .dk-pl-speed-thumb {
   display: block;
-  width: 34px;
-  height: 19px;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.5);
+  width: calc(29 * var(--pl-pt));
+  height: calc(19 * var(--pl-pt));
+  overflow: visible;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.45));
   transition: transform 120ms ease;
+}
+.dk-pl-speed-thumb-fill {
+  fill: #fff;
+}
+.dk-pl-speed-thumb-ring {
+  fill: none;
+  stroke: var(--dk-pl-accent);
+  stroke-width: 6;
+  stroke-linejoin: round;
+  opacity: 0;
 }
 .dk-pl-speed-track[data-drag] .dk-pl-speed-thumb {
   transform: scale(1.06);
 }
-.dk-pl-speed-track:focus-visible .dk-pl-speed-thumb {
-  box-shadow: 0 0 0 3px var(--dk-pl-accent), 0 2px 8px rgb(0 0 0 / 0.5);
+.dk-pl-speed-track:focus-visible .dk-pl-speed-thumb-ring {
+  opacity: 1;
 }
 .dk-pl-speed-stops {
   position: relative;
-  height: 42px;
-  margin-top: 8px;
+  height: calc(42 * var(--pl-pt));
+  margin-top: calc(8 * var(--pl-pt));
 }
 .dk-pl-speed-stop {
   position: absolute;
@@ -686,24 +690,24 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
+  gap: calc(3 * var(--pl-pt));
+  padding: calc(2 * var(--pl-pt)) calc(6 * var(--pl-pt));
   border: 0;
-  border-radius: 6px;
+  border-radius: calc(6 * var(--pl-pt));
   background: transparent;
-  color: rgb(255 255 255 / 0.48);
+  color: rgb(255 255 255 / 0.52);
   transition: color 140ms ease;
 }
 .dk-pl-speed-stop:hover {
   color: rgb(255 255 255 / 0.9);
 }
 .dk-pl-speed-val {
-  font-size: 14px;
+  font-size: calc(14 * var(--pl-pt));
   font-weight: 500;
   line-height: 1.2;
 }
 .dk-pl-speed-norm {
-  font-size: 12px;
+  font-size: calc(12 * var(--pl-pt));
   font-weight: 500;
   line-height: 1.1;
   color: rgb(255 255 255 / 0.45);
@@ -721,10 +725,10 @@
 /* --- 2. Audio & Subtitles Top Sheet (IMG_3253) --- */
 .dk-pl-sheet[data-side="top"] {
   width: 100%;
-  height: min(52vh, 450px);
-  padding: 34px clamp(36px, 8.5vw, 128px) 18px;
-  background: rgb(22 22 22 / 0.84);
-  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  height: min(52vh, calc(450 * var(--pl-pt)));
+  padding: calc(34 * var(--pl-pt)) clamp(36px, 8.5vw, calc(128 * var(--pl-pt))) calc(18 * var(--pl-pt));
+  --dk-pl-veil: rgb(22 22 22 / 0.91);
+  background: rgb(20 20 20 / 0.96);
   box-shadow: 0 20px 54px rgb(0 0 0 / 0.45);
   transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), height 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
   @starting-style {
@@ -733,8 +737,7 @@
   }
 }
 .dk-pl-sheet-layer[data-side="top"][data-expanded] .dk-pl-sheet {
-  height: min(54vh, 440px);
-  padding: 30px clamp(28px, 4.5vw, 72px) 18px;
+  height: min(60vh, calc(480 * var(--pl-pt)));
 }
 .dk-pl-sheet-layer[data-side="top"][data-open="false"] .dk-pl-sheet {
   transform: translateY(-22px);
@@ -742,19 +745,21 @@
   transition-duration: 150ms;
 }
 .dk-pl-sheet[data-side="top"] .dk-pl-sheet-close {
-  top: 28px;
-  right: 24px;
+  top: calc(28 * var(--pl-pt));
+  right: calc(24 * var(--pl-pt));
 }
 .dk-pl-tracks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(32px, 6vw, 96px);
+  /* One row as tall as the sheet, never taller: a long pane scrolls inside its column instead of being cut off. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: clamp(32px, 6vw, calc(96 * var(--pl-pt)));
   height: 100%;
   min-height: 0;
 }
 .dk-pl-tracks[data-cols="3"] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(20px, 3vw, 48px);
+  gap: clamp(20px, 3vw, calc(48 * var(--pl-pt)));
 }
 .dk-pl-tracks[data-sub-settings] {
   grid-template-columns: minmax(0, 1fr);
@@ -796,13 +801,13 @@
 .dk-pl-tracks-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: calc(12 * var(--pl-pt));
+  margin-bottom: calc(14 * var(--pl-pt));
   flex: none;
 }
 .dk-pl-tracks-title {
   margin: 0;
-  font-size: 19px;
+  font-size: calc(19 * var(--pl-pt));
   font-weight: 700;
   letter-spacing: -0.012em;
   color: #fff;
@@ -810,14 +815,14 @@
 .dk-pl-tune-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
+  gap: calc(6 * var(--pl-pt));
+  height: calc(28 * var(--pl-pt));
+  padding: 0 calc(10 * var(--pl-pt));
   border: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.08);
   color: rgb(255 255 255 / 0.68);
-  font-size: 12.5px;
+  font-size: calc(12.5 * var(--pl-pt));
   font-weight: 600;
   transition: background-color 140ms ease, color 140ms ease;
 }
@@ -835,7 +840,9 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 2px 10px 24px 0;
+  /* Rows reach 12pt left of their text (.dk-pl-track-row); the list starts that far out so their hover isn't cut. */
+  margin-left: calc(-12 * var(--pl-pt));
+  padding: calc(2 * var(--pl-pt)) calc(10 * var(--pl-pt)) calc(24 * var(--pl-pt)) calc(12 * var(--pl-pt));
   scrollbar-width: none;
 }
 .dk-pl-tracks-scroll::-webkit-scrollbar,
@@ -847,15 +854,14 @@
 .dk-pl-track-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  padding: 9px 12px;
-  margin-left: -12px;
-  width: calc(100% + 12px);
+  gap: calc(12 * var(--pl-pt));
+  width: calc(100% + 12 * var(--pl-pt));
+  padding: calc(9 * var(--pl-pt)) calc(12 * var(--pl-pt));
+  margin-left: calc(-12 * var(--pl-pt));
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
-  color: rgb(255 255 255 / 0.64);
+  color: rgb(255 255 255 / 0.72);
   text-align: left;
   transition: color 120ms ease, background-color 120ms ease;
 }
@@ -877,9 +883,9 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
+  width: calc(20 * var(--pl-pt));
+  height: calc(20 * var(--pl-pt));
+  margin-top: calc(1 * var(--pl-pt));
   color: #fff;
 }
 .dk-pl-track-text {
@@ -888,96 +894,225 @@
   min-width: 0;
 }
 .dk-pl-track-label {
-  font-size: 15.5px;
+  font-size: calc(15.5 * var(--pl-pt));
   font-weight: 400;
   line-height: 1.3;
 }
 .dk-pl-track-detail {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: calc(2 * var(--pl-pt));
+  font-size: calc(12 * var(--pl-pt));
   color: rgb(255 255 255 / 0.42);
 }
 .dk-pl-group-heading {
-  margin: 14px 0 6px 32px;
-  font-size: 11px;
+  margin: calc(14 * var(--pl-pt)) 0 calc(6 * var(--pl-pt)) calc(32 * var(--pl-pt));
+  font-size: calc(11 * var(--pl-pt));
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: rgb(255 255 255 / 0.42);
 }
 .dk-pl-empty {
-  margin: 12px 0;
-  font-size: 14px;
+  margin: calc(12 * var(--pl-pt)) 0;
+  font-size: calc(14 * var(--pl-pt));
   color: rgb(255 255 255 / 0.5);
 }
 
 /* Audio & Subtitle settings styled cleanly across the top sheet */
 .dk-pl-settings-body {
-  padding-right: 6px;
+  padding-right: calc(6 * var(--pl-pt));
 }
 .dk-pl-settings-body .sub-settings {
-  gap: 10px;
+  gap: calc(10 * var(--pl-pt));
 }
 .dk-pl-settings-body .sub-setting {
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: calc(8 * var(--pl-pt)) calc(12 * var(--pl-pt));
+  border-radius: calc(10 * var(--pl-pt));
   background: rgb(255 255 255 / 0.06);
   border: 1px solid rgb(255 255 255 / 0.08);
 }
-.dk-pl-sub-studio-host .sub-studio {
+/* Subtitle Style (DeskSubtitleStyle.tsx): columns in the sheet's own type, no wells. As many columns as fit at
+   264pt or more, so a narrow window gets two, then one, and the pane scrolls instead of squeezing a control. */
+.dk-pl-style {
+  display: flex;
+  flex-direction: column;
+  gap: calc(18 * var(--pl-pt));
+}
+.dk-pl-style-cols {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  max-width: 920px;
-  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(264 * var(--pl-pt))), 1fr));
+  gap: calc(26 * var(--pl-pt)) clamp(28px, 4vw, calc(64 * var(--pl-pt)));
+  align-items: start;
 }
-.dk-pl-sub-studio-host .sub-studio:has(> section[aria-label="Timing"]) {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  max-width: 1180px;
+.dk-pl-style-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-@media (max-width: 920px) {
-  .dk-pl-sub-studio-host .sub-studio:has(> section[aria-label="Timing"]) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.dk-pl-style-title {
+  margin: 0 0 calc(4 * var(--pl-pt));
+  font-size: calc(15 * var(--pl-pt));
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
 }
-.dk-pl-sub-studio-host .sub-group {
-  padding: 13px 15px;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 0.065);
-  border: 1px solid rgb(255 255 255 / 0.1);
+.dk-pl-style-title[data-follows] {
+  margin-top: calc(18 * var(--pl-pt));
 }
-.dk-pl-sub-studio-host .sub-reset {
-  grid-column: 1 / -1;
-  justify-self: start;
+.dk-pl-style-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(16 * var(--pl-pt));
+  min-height: calc(48 * var(--pl-pt));
+  padding: calc(5 * var(--pl-pt)) 0;
+}
+.dk-pl-style-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dk-pl-style-label {
+  font-size: calc(15.5 * var(--pl-pt));
+  line-height: 1.3;
+  color: rgb(255 255 255 / 0.9);
+}
+.dk-pl-style-detail {
+  margin-top: calc(2 * var(--pl-pt));
+  overflow: hidden;
+  font-size: calc(12 * var(--pl-pt));
+  color: rgb(255 255 255 / 0.42);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dk-pl-style .sub-stepper {
+  flex: none;
+  gap: calc(2 * var(--pl-pt));
+}
+.dk-pl-style :is(.sub-stepper button, .dk-pl-style-pair button) {
+  display: grid;
+  place-items: center;
+  width: calc(30 * var(--pl-pt));
+  height: calc(30 * var(--pl-pt));
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.1);
+  color: #fff;
+  transition: background-color 140ms ease, transform 120ms ease;
+}
+.dk-pl-style :is(.sub-stepper button, .dk-pl-style-pair button, .dk-pl-style-reset) svg {
+  width: calc(16 * var(--pl-pt));
+  height: calc(16 * var(--pl-pt));
+}
+.dk-pl-style :is(.sub-stepper button, .dk-pl-style-pair button):not(:disabled):hover {
+  background: rgb(255 255 255 / 0.2);
+}
+.dk-pl-style :is(.sub-stepper button, .dk-pl-style-pair button):not(:disabled):active {
+  transform: scale(0.92);
+}
+.dk-pl-style .sub-stepper button:disabled {
+  opacity: 0.3;
+}
+.dk-pl-style .sub-stepper-value {
+  min-width: 4.6em;
+  font-size: calc(15 * var(--pl-pt));
+  font-weight: 600;
+  color: #fff;
+}
+.dk-pl-style-pair {
+  display: flex;
+  flex: none;
+  gap: calc(8 * var(--pl-pt));
+}
+.dk-pl-style .select-trigger {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 62%;
+  min-height: calc(32 * var(--pl-pt));
+  padding: 0 calc(10 * var(--pl-pt)) 0 calc(14 * var(--pl-pt));
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  box-shadow: none;
+  color: #fff;
+  font-size: calc(14 * var(--pl-pt));
+  font-weight: 600;
+  transition: background-color 140ms ease;
+}
+.dk-pl-style .select-trigger:hover {
+  background: rgb(255 255 255 / 0.2);
+}
+.dk-pl-style .select-value {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dk-pl-style .sub-swatches {
+  flex: none;
+  gap: calc(10 * var(--pl-pt));
+}
+.dk-pl-style .sub-swatch {
+  width: calc(22 * var(--pl-pt));
+  height: calc(22 * var(--pl-pt));
+}
+.dk-pl-style .sub-swatch[aria-checked="true"] {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.25),
+    0 0 0 2px rgb(20 20 20),
+    0 0 0 4px #fff;
+}
+.dk-pl-style-reset {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--pl-pt));
+  height: calc(32 * var(--pl-pt));
+  margin-left: calc(-12 * var(--pl-pt));
+  padding: 0 calc(12 * var(--pl-pt));
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.6);
+  font-size: calc(13.5 * var(--pl-pt));
+  font-weight: 600;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.dk-pl-style-reset:not(:disabled):hover {
+  background: rgb(255 255 255 / 0.1);
+  color: #fff;
+}
+.dk-pl-style-reset:disabled {
+  opacity: 0.35;
 }
 
 /* --- 3. Right Drawers: Episodes (IMG_3252), Sources, Sleep Timer, Watch Party --- */
 .dk-pl-sheet[data-side="right"] {
-  width: min(42vw, 540px);
-  min-width: 380px;
+  width: min(42vw, calc(540 * var(--pl-pt)));
+  min-width: calc(380 * var(--pl-pt));
   max-width: 92vw;
   height: 100%;
-  background: rgb(22 22 22 / 0.88);
-  border-left: 1px solid rgb(255 255 255 / 0.08);
+  --dk-pl-veil: rgb(22 22 22 / 0.91);
+  background: rgb(20 20 20 / 0.96);
   box-shadow: -24px 0 64px rgb(0 0 0 / 0.5);
   @starting-style {
     transform: translateX(100%);
   }
 }
 .dk-pl-sheet[data-side="right"] .dk-pl-sheet-close {
-  top: 17px;
-  right: 18px;
+  top: calc(17 * var(--pl-pt));
+  right: calc(18 * var(--pl-pt));
 }
 .dk-pl-sheet[data-side="right"][data-kind="episodes"] .dk-pl-sheet-close {
-  top: 26px;
+  top: calc(26 * var(--pl-pt));
 }
 .dk-pl-sheet[data-side="right"][data-kind="sleep"] {
-  width: min(34vw, 360px);
-  min-width: 300px;
+  width: min(34vw, calc(360 * var(--pl-pt)));
+  min-width: calc(300 * var(--pl-pt));
 }
 .dk-pl-sheet[data-side="right"][data-kind="sources"] {
-  width: min(44vw, 560px);
-  min-width: 400px;
+  width: min(44vw, calc(560 * var(--pl-pt)));
+  min-width: calc(400 * var(--pl-pt));
 }
 .dk-pl-sheet-layer[data-side="right"][data-open="false"] .dk-pl-sheet {
   transform: translateX(100%);
@@ -988,12 +1123,12 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 22px 64px 16px 20px;
+  gap: calc(10 * var(--pl-pt));
+  padding: calc(22 * var(--pl-pt)) calc(64 * var(--pl-pt)) calc(16 * var(--pl-pt)) calc(20 * var(--pl-pt));
 }
 .dk-pl-drawer-title {
   margin: 0;
-  font-size: 20px;
+  font-size: calc(20 * var(--pl-pt));
   font-weight: 700;
   letter-spacing: -0.015em;
   color: #fff;
@@ -1003,14 +1138,14 @@
 .dk-pl-season-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 18px;
+  gap: calc(8 * var(--pl-pt));
+  height: calc(44 * var(--pl-pt));
+  padding: 0 calc(18 * var(--pl-pt));
   border: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.14);
   color: #fff;
-  font-size: 16px;
+  font-size: calc(16 * var(--pl-pt));
   font-weight: 700;
   letter-spacing: -0.01em;
   transition: background-color 140ms ease;
@@ -1021,13 +1156,13 @@ button.dk-pl-season-pill:hover {
 .dk-pl-season-static {
   background: transparent;
   padding-left: 0;
-  font-size: 19px;
+  font-size: calc(19 * var(--pl-pt));
 }
 .dk-pl-head-icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: calc(38 * var(--pl-pt));
+  height: calc(38 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1049,13 +1184,13 @@ button.dk-pl-season-pill:hover {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 4px 20px 44px;
+  padding: calc(4 * var(--pl-pt)) calc(20 * var(--pl-pt)) calc(44 * var(--pl-pt));
   scrollbar-width: none;
 }
 .dk-pl-ep-list {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: calc(24 * var(--pl-pt));
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1067,20 +1202,20 @@ button.dk-pl-season-pill:hover {
 .dk-pl-ep-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10 * var(--pl-pt));
 }
 .dk-pl-ep-btn {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: calc(14 * var(--pl-pt));
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
-  border-radius: 8px;
+  border-radius: calc(8 * var(--pl-pt));
 }
 .dk-pl-ep-btn:disabled {
   opacity: 0.45;
@@ -1089,9 +1224,9 @@ button.dk-pl-season-pill:hover {
 .dk-pl-ep-thumb {
   position: relative;
   flex: none;
-  width: 136px;
+  width: calc(136 * var(--pl-pt));
   aspect-ratio: 16 / 9;
-  border-radius: 6px;
+  border-radius: calc(6 * var(--pl-pt));
   overflow: hidden;
   background: rgb(255 255 255 / 0.08);
 }
@@ -1116,6 +1251,10 @@ button.dk-pl-season-pill:hover {
   transform: scale(0.9);
   transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+.dk-pl-ep-play svg {
+  width: calc(34 * var(--pl-pt));
+  height: calc(34 * var(--pl-pt));
+}
 .dk-pl-ep-btn:not(:disabled):is(:hover, :focus-visible) .dk-pl-ep-play {
   opacity: 1;
   transform: scale(1);
@@ -1125,7 +1264,7 @@ button.dk-pl-season-pill:hover {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 3px;
+  height: calc(3 * var(--pl-pt));
   background: rgb(255 255 255 / 0.3);
 }
 .dk-pl-ep-bar > span {
@@ -1140,10 +1279,10 @@ button.dk-pl-season-pill:hover {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: calc(4 * var(--pl-pt));
 }
 .dk-pl-ep-title {
-  font-size: 14.5px;
+  font-size: calc(14.5 * var(--pl-pt));
   font-weight: 500;
   line-height: 1.28;
   color: rgb(255 255 255 / 0.88);
@@ -1157,15 +1296,15 @@ button.dk-pl-season-pill:hover {
   color: #fff;
 }
 .dk-pl-ep-meta {
-  font-size: 13px;
+  font-size: calc(13 * var(--pl-pt));
   color: rgb(255 255 255 / 0.48);
 }
 .dk-pl-ep-dl {
   flex: none;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: calc(36 * var(--pl-pt));
+  height: calc(36 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1173,13 +1312,17 @@ button.dk-pl-season-pill:hover {
   color: rgb(255 255 255 / 0.82);
   transition: background-color 140ms ease, color 140ms ease;
 }
+.dk-pl-ep-dl svg {
+  width: calc(20 * var(--pl-pt));
+  height: calc(20 * var(--pl-pt));
+}
 .dk-pl-ep-dl:hover {
   background: rgb(255 255 255 / 0.12);
   color: #fff;
 }
 .dk-pl-ep-overview {
-  margin: 10px 0 0;
-  font-size: 13px;
+  margin: calc(10 * var(--pl-pt)) 0 0;
+  font-size: calc(13 * var(--pl-pt));
   line-height: 1.44;
   color: rgb(255 255 255 / 0.68);
   display: -webkit-box;
@@ -1192,21 +1335,21 @@ button.dk-pl-season-pill:hover {
 .dk-pl-sources-head {
   flex-direction: column;
   align-items: stretch;
-  gap: 12px;
-  padding: 22px 20px 14px 20px;
+  gap: calc(12 * var(--pl-pt));
+  padding: calc(22 * var(--pl-pt)) calc(20 * var(--pl-pt)) calc(14 * var(--pl-pt)) calc(20 * var(--pl-pt));
   border-bottom: 1px solid rgb(255 255 255 / 0.07);
 }
 .dk-pl-sources-head .dk-pl-drawer-title {
-  padding-right: 44px;
+  padding-right: calc(44 * var(--pl-pt));
 }
 .dk-pl-sources-filters .srcf {
-  gap: 8px;
+  gap: calc(8 * var(--pl-pt));
   padding: 0;
 }
 .dk-pl-sources-filters .srcf-bar {
   flex-wrap: wrap;
-  row-gap: 8px;
-  column-gap: 8px;
+  row-gap: calc(8 * var(--pl-pt));
+  column-gap: calc(8 * var(--pl-pt));
   max-width: 100%;
 }
 .dk-pl-sources-filters .srcf-bar > .segmented {
@@ -1225,14 +1368,14 @@ button.dk-pl-season-pill:hover {
   margin-left: auto;
 }
 .dk-pl-sources-scroll {
-  padding-top: 10px;
+  padding-top: calc(10 * var(--pl-pt));
 }
 .dk-pl-src-wrap {
   position: relative;
   display: flex;
   align-items: center;
-  border-radius: 10px;
-  margin-bottom: 2px;
+  border-radius: calc(10 * var(--pl-pt));
+  margin-bottom: calc(2 * var(--pl-pt));
   transition: background-color 130ms ease;
 }
 .dk-pl-src-wrap:hover {
@@ -1249,8 +1392,8 @@ button.dk-pl-season-pill:hover {
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 11px 42px 11px 10px;
+  gap: calc(12 * var(--pl-pt));
+  padding: calc(11 * var(--pl-pt)) calc(42 * var(--pl-pt)) calc(11 * var(--pl-pt)) calc(10 * var(--pl-pt));
   border: 0;
   background: transparent;
   color: #fff;
@@ -1260,10 +1403,14 @@ button.dk-pl-season-pill:hover {
   flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
+  width: calc(20 * var(--pl-pt));
+  height: calc(20 * var(--pl-pt));
+  margin-top: calc(1 * var(--pl-pt));
   color: rgb(255 255 255 / 0.72);
+}
+.dk-pl-src-lead svg {
+  width: calc(17 * var(--pl-pt));
+  height: calc(17 * var(--pl-pt));
 }
 .dk-pl-src-wrap[data-selected] .dk-pl-src-lead {
   color: var(--dk-pl-accent);
@@ -1273,10 +1420,10 @@ button.dk-pl-season-pill:hover {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: calc(3 * var(--pl-pt));
 }
 .dk-pl-src-label {
-  font-size: 14.5px;
+  font-size: calc(14.5 * var(--pl-pt));
   font-weight: 500;
   line-height: 1.3;
   color: rgb(255 255 255 / 0.9);
@@ -1286,7 +1433,7 @@ button.dk-pl-season-pill:hover {
   color: #fff;
 }
 .dk-pl-src-detail {
-  font-size: 12px;
+  font-size: calc(12 * var(--pl-pt));
   line-height: 1.35;
   color: rgb(255 255 255 / 0.5);
   overflow: hidden;
@@ -1296,10 +1443,10 @@ button.dk-pl-season-pill:hover {
 .dk-pl-src-badge {
   flex: none;
   align-self: center;
-  padding: 2px 7px;
-  border-radius: 5px;
+  padding: calc(2 * var(--pl-pt)) calc(7 * var(--pl-pt));
+  border-radius: calc(5 * var(--pl-pt));
   background: rgb(255 255 255 / 0.12);
-  font-size: 11px;
+  font-size: calc(11 * var(--pl-pt));
   font-weight: 700;
   color: #fff;
 }
@@ -1313,13 +1460,13 @@ button.dk-pl-season-pill:hover {
 }
 .dk-pl-src-info {
   position: absolute;
-  right: 8px;
+  right: calc(8 * var(--pl-pt));
   top: 50%;
   transform: translateY(-50%);
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: calc(30 * var(--pl-pt));
+  height: calc(30 * var(--pl-pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1327,6 +1474,10 @@ button.dk-pl-season-pill:hover {
   color: rgb(255 255 255 / 0.55);
   opacity: 0;
   transition: opacity 130ms ease, background-color 130ms ease, color 130ms ease;
+}
+.dk-pl-src-info svg {
+  width: calc(18 * var(--pl-pt));
+  height: calc(18 * var(--pl-pt));
 }
 .dk-pl-src-wrap:is(:hover, :focus-within) .dk-pl-src-info {
   opacity: 1;
@@ -1338,16 +1489,16 @@ button.dk-pl-season-pill:hover {
 .dk-pl-show-more {
   display: flex;
   justify-content: center;
-  padding: 12px 0;
+  padding: calc(12 * var(--pl-pt)) 0;
 }
 .dk-pl-show-more button {
-  height: 36px;
-  padding: 0 16px;
+  height: calc(36 * var(--pl-pt));
+  padding: 0 calc(16 * var(--pl-pt));
   border: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.1);
   color: #fff;
-  font-size: 13px;
+  font-size: calc(13 * var(--pl-pt));
   font-weight: 600;
 }
 .dk-pl-show-more button:hover {
@@ -1358,16 +1509,16 @@ button.dk-pl-season-pill:hover {
 .dk-pl-simple-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(2 * var(--pl-pt));
 }
 .dk-pl-party-body {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: calc(20 * var(--pl-pt));
 }
 .dk-pl-party-heading {
-  margin: 0 0 10px;
-  font-size: 15px;
+  margin: 0 0 calc(10 * var(--pl-pt));
+  font-size: calc(15 * var(--pl-pt));
   font-weight: 700;
   color: rgb(255 255 255 / 0.85);
 }

@@ -53,7 +53,7 @@ export function ShortcutSettings() {
             <h3 className="shortcut-group-title">{g.label}</h3>
             <div className="settings-card">
               {actions.map((a) => (
-                <ShortcutRow key={a.id} action={a.id} label={a.label} when={a.when ?? g.when} />
+                <ShortcutRow key={a.id} action={a.id} label={a.label} />
               ))}
             </div>
           </div>
@@ -62,9 +62,7 @@ export function ShortcutSettings() {
       {GROUPS.every((g) => !ACTIONS.some((a) => a.group === g.id && matches(a))) && (
         <p className="settings-footer">No shortcuts match “{query.trim()}”.</p>
       )}
-      <p className="settings-footer">
-        Click a shortcut to change it, then press the new keys. Esc cancels; Backspace removes it.
-      </p>
+      <p className="settings-footer">Click to rebind. Esc cancels, Backspace clears.</p>
     </section>
   );
 }
@@ -86,7 +84,7 @@ function Keycaps({ combo }: { combo: string }) {
 const heldModifiers = (e: KeyboardEvent) =>
   [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Meta"].filter(Boolean) as string[];
 
-function ShortcutRow({ action, label, when }: { action: Action; label: string; when: string }) {
+function ShortcutRow({ action, label }: { action: Action; label: string }) {
   const bindings = useBindings();
   const combos = bindings[action];
   const [capturing, setCapturing] = useState<number | null>(null);
@@ -169,9 +167,11 @@ function ShortcutRow({ action, label, when }: { action: Action; label: string; w
           {label}
           {changed && <span className="shortcut-modified" title="Changed from the default" />}
         </span>
-        <span className="shortcut-when" data-note={note ? "" : undefined}>
-          {note ?? when}
-        </span>
+        {note && (
+          <span className="shortcut-when" data-note="">
+            {note}
+          </span>
+        )}
       </span>
 
       <span className="shortcut-keys">

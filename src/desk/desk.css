@@ -14,6 +14,11 @@
 
 :root[data-desk-ui] {
   --pt: clamp(1px, calc(100vw / 1194), 1.5px);
+  /* The point every px in the app's stylesheets is drawn in (scripts/pointScale.ts), and the rem with it, so shared
+     components (dialogs, overlays, settings) scale with the window like the shell's own rules. Read at the root,
+     it takes whichever --pt the root ends up with (the "nav" chrome's below); .dk-dlg and the player set their own. */
+  --ui-pt: var(--pt);
+  font-size: calc(16 * var(--ui-pt));
   --dk-accent: var(--accent, #5e5ce6);
   --dk-bar-h: calc(64 * var(--pt));
   --dk-gutter: calc(26 * var(--pt));
@@ -823,23 +828,47 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Over the card (which opens the title), only the round button in the middle plays. */
 .dk-cw-play {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   place-items: center;
+  border-radius: inherit;
   background: rgb(0 0 0 / 0.14);
   color: #fff;
-  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.55));
   pointer-events: none;
 }
-.dk-cw-play svg {
+.dk-cw-play-btn {
+  display: grid;
+  place-items: center;
   width: calc(44 * var(--pt));
   height: calc(44 * var(--pt));
-  padding: calc(10 * var(--pt));
+  padding: 0;
   border: 1.5px solid rgb(255 255 255 / 0.9);
   border-radius: 50%;
   background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.55));
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background-color 140ms ease, scale 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-cw-play-btn:hover {
+  background: rgb(0 0 0 / 0.65);
+  scale: 1.08;
+}
+.dk-cw-play-btn:active {
+  scale: 0.94;
+}
+.dk-cw-play-btn:focus-visible {
+  outline: 2px solid var(--dk-accent);
+  outline-offset: 2px;
+}
+.dk-cw-play svg {
+  width: calc(22 * var(--pt));
+  height: calc(22 * var(--pt));
 }
 .dk-cw-foot {
   position: absolute;
@@ -1237,6 +1266,7 @@
   --dk-pad: calc(24 * var(--pt));
   /* Best of Netflix Web + iPad: generous reading width with crisp proportions. */
   --pt: clamp(1px, calc(100vw / 1400), 1.24px);
+  --ui-pt: var(--pt);
   position: absolute;
   top: calc(16 * var(--pt));
   bottom: calc(16 * var(--pt));
@@ -1326,7 +1356,11 @@
   pointer-events: none;
 }
 
+/* The title's rhythm has two steps: tight inside a group (name → facts → scores), loose between groups (scores →
+   actions → about → tabs). Every gap on the page is one of them. */
 .dk-t {
+  --dk-t-tight: calc(8 * var(--pt));
+  --dk-t-loose: calc(22 * var(--pt));
   padding-bottom: calc(40 * var(--pt));
 }
 .dk-t-note {
@@ -1397,7 +1431,7 @@
 .dk-t-info {
   display: flex;
   flex-direction: column;
-  padding: calc(16 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
+  padding: var(--dk-t-tight) var(--dk-pad, calc(24 * var(--pt))) 0;
 }
 .dk-t-name {
   margin: 0;
@@ -1411,7 +1445,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: calc(4 * var(--pt)) calc(10 * var(--pt));
-  margin: calc(8 * var(--pt)) 0 0;
+  margin: var(--dk-t-tight) 0 0;
   font-size: calc(14.5 * var(--pt));
   color: var(--text-2);
 }
@@ -1426,10 +1460,10 @@
 }
 .dk-t-score {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 .dk-t-scores {
-  margin-top: calc(10 * var(--pt));
+  margin-top: var(--dk-t-tight);
 }
 .dk-t-scores .score-row {
   margin: 0;
@@ -1444,7 +1478,7 @@
   height: calc(17 * var(--pt));
 }
 .dk-t-scores .score-row-value {
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text);
 }
 /* Play/Download pills + compact utility actions share one tight horizontal bar (zero wasted vertical/right void). */
@@ -1454,7 +1488,7 @@
   align-items: center;
   justify-content: space-between;
   gap: calc(12 * var(--pt)) calc(18 * var(--pt));
-  margin-top: calc(16 * var(--pt));
+  margin-top: var(--dk-t-loose);
 }
 .dk-t-buttons {
   display: flex;
@@ -1470,9 +1504,9 @@
 .dk-t-meta-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  gap: calc(12 * var(--pt)) calc(32 * var(--pt));
+  gap: var(--dk-t-tight) calc(32 * var(--pt));
   align-items: start;
-  margin-top: calc(18 * var(--pt));
+  margin-top: var(--dk-t-loose);
 }
 .dk-t-meta-main,
 .dk-t-meta-side {
@@ -1481,13 +1515,37 @@
 .dk-t-meta-main .dk-t-synopsis {
   margin-top: 0;
 }
-.dk-t-meta-main .dk-t-resume + .dk-t-synopsis,
-.dk-t-meta-main .dk-t-ep + .dk-t-synopsis {
-  margin-top: calc(10 * var(--pt));
+/* What Play plays, under the show's own description. */
+.dk-t-next {
+  margin-top: var(--dk-t-loose);
 }
-.dk-t-meta-main .dk-t-resume,
-.dk-t-meta-main .dk-t-ep {
+.dk-t-next:first-child {
   margin-top: 0;
+}
+.dk-t-next p {
+  margin: 0;
+}
+.dk-t-next-kicker {
+  font-size: calc(10.5 * var(--pt));
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.dk-t-next-line {
+  margin-top: calc(4 * var(--pt)) !important;
+  font-size: calc(14 * var(--pt));
+  font-weight: 600;
+}
+.dk-t-next-text {
+  display: -webkit-box;
+  margin-top: calc(4 * var(--pt)) !important;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-2);
+  font-size: calc(13 * var(--pt));
+  line-height: 1.4;
 }
 .dk-t-meta-side .dk-t-credits {
   margin-top: 0;
@@ -1556,18 +1614,12 @@
 .dk-t-btn-grey:hover:not(:disabled) {
   background: rgb(var(--ink) / 0.28);
 }
-.dk-t-resume {
-  margin: calc(12 * var(--pt)) 0 0;
-}
-.dk-t-ep {
-  margin: calc(10 * var(--pt)) 0 calc(4 * var(--pt));
-  font-size: calc(14 * var(--pt));
-  font-weight: 700;
-}
+/* How far into it you are, in the Continue Watching block: the episode cards' white line, and the time left. */
 .dk-t-resume-bar {
   display: flex;
   align-items: center;
   gap: calc(12 * var(--pt));
+  margin-top: calc(6 * var(--pt));
   color: var(--text-2);
   font-size: calc(12 * var(--pt));
 }
@@ -1575,6 +1627,23 @@
   position: relative;
   flex: 1;
   border-radius: 2px;
+}
+.dk-t-resume-bar .dk-progress i {
+  background: var(--progress, #f5f5f7);
+}
+/* Play in the pinned bar: the same white pill, smaller. */
+.dk-t-play-sm {
+  flex: none;
+  width: auto;
+  height: calc(32 * var(--pt));
+  gap: calc(7 * var(--pt));
+  padding: 0 calc(16 * var(--pt));
+  font-size: calc(13.5 * var(--pt));
+  white-space: nowrap;
+}
+.dk-t-play-sm svg {
+  width: calc(15 * var(--pt));
+  height: calc(15 * var(--pt));
 }
 .dk-t-synopsis {
   display: -webkit-box;
@@ -1655,53 +1724,122 @@
   text-align: center;
 }
 
-/* Tabs: a 3.5 pt bar over the tab you're on, as wide as its name (Netflix's red; here the accent). */
+/* Tabs: plain words with a line under the one you're on, which slides to the next. Nothing boxed, so the episode
+   tools under them are the only controls with a tray. */
 .dk-t-tabs {
-  margin-top: calc(16 * var(--pt));
+  margin-top: var(--dk-t-loose);
 }
 .dk-t-tablist {
   position: relative;
+  isolation: isolate;
   display: flex;
-  gap: calc(25 * var(--pt));
-  padding: calc(12 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
+  align-items: stretch;
+  gap: calc(24 * var(--pt));
+  max-width: 100%;
+  height: calc(40 * var(--pt));
+  margin: 0 var(--dk-pad, calc(24 * var(--pt)));
+  padding: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
 .dk-t-tab-mark {
   position: absolute;
-  top: 0;
+  z-index: -1;
+  top: calc(var(--active-tab-top) + var(--active-tab-height) - 2px);
   left: var(--active-tab-left);
   width: var(--active-tab-width);
-  height: calc(3.5 * var(--pt));
-  min-height: 3px;
-  background: var(--dk-accent);
-  transition: left 0.3s cubic-bezier(0.32, 0.72, 0, 1), width 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+  transition:
+    left 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    width 0.32s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .dk-t-tab {
   flex: none;
-  padding: calc(10 * var(--pt)) 0 calc(12 * var(--pt));
+  padding: 0;
   border: 0;
   background: none;
-  color: rgb(var(--ink) / 0.5) !important;
-  font-size: calc(15.5 * var(--pt));
-  font-weight: 700;
-  transition: color 0.15s;
+  color: var(--text-3) !important;
+  font-size: calc(15 * var(--pt));
+  font-weight: 500;
+  transition: color 140ms ease;
 }
 .dk-t-tab:hover {
-  color: rgb(var(--ink) / 0.75) !important;
+  color: var(--text-2) !important;
 }
 .dk-t-tab[data-selected] {
   color: var(--text) !important;
 }
 .dk-t-tab:focus-visible {
   outline: 2px solid var(--dk-accent);
-  outline-offset: -2px;
-  border-radius: 6px;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .dk-t-panel {
-  padding-top: calc(12 * var(--pt));
+  padding-top: var(--dk-t-tight);
   outline: none;
   transition: opacity 0.2s;
+}
+/* The title's name and Play, pinned under the dialog's top edge once the real ones scroll away. A material bar:
+   the page scrolls under it, blurred, with no rule. */
+.dk-t-pin {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  height: 0;
+}
+.dk-t-pin-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--pt));
+  height: calc(64 * var(--pt));
+  padding: calc(8 * var(--pt)) calc(72 * var(--pt)) 0 var(--dk-pad, calc(24 * var(--pt)));
+  background: color-mix(in srgb, var(--dk-sheet) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 14px 22px -18px rgb(0 0 0 / 0.6);
+  opacity: 0;
+  translate: 0 calc(-8 * var(--pt));
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    translate 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-t-pin[data-shown] .dk-t-pin-bar {
+  opacity: 1;
+  translate: 0 0;
+  pointer-events: auto;
+}
+.dk-dlg[data-stack] .dk-t-pin-bar {
+  padding-left: calc(72 * var(--pt));
+}
+.dk-t-pin-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: calc(16 * var(--pt));
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dk-t-pin-bar {
+    translate: none;
+    transition: opacity 150ms ease;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .dk-t-pin-bar {
+    background: var(--dk-sheet);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 .dk-t-panel[data-starting-style] {
   opacity: 0;
@@ -1751,14 +1889,14 @@
   font-weight: 600;
 }
 
-/* Episodes: the season in Netflix's grey box (36 pt, square-ish corners), the layout switch at the far end, a rule. */
+/* Episodes: the season in Netflix's grey box (36 pt, square-ish corners), the episode tools at the far end. Space,
+   not a rule, sets the bar apart from the episodes. */
 .dk-eps-bar {
   display: flex;
   align-items: center;
   gap: calc(10 * var(--pt));
   margin: 0 var(--dk-pad, calc(24 * var(--pt)));
-  padding: calc(2 * var(--pt)) 0 calc(14 * var(--pt));
-  border-bottom: 1px solid rgb(var(--ink) / 0.14);
+  padding: var(--dk-t-tight, calc(8 * var(--pt))) 0 0;
 }
 .dk-season {
   display: inline-flex;
@@ -1767,7 +1905,8 @@
   height: calc(36 * var(--pt));
   padding: 0 calc(16 * var(--pt));
   border: 0;
-  border-radius: calc(2.5 * var(--pt));
+  /* The same corners as the tabs' tray and the tools beside it. */
+  border-radius: calc(10 * var(--pt));
   background: rgb(var(--ink) / 0.2);
   font-size: calc(15 * var(--pt));
   font-weight: 500;
@@ -1786,7 +1925,7 @@
 }
 .dk-season-name {
   font-size: calc(15 * var(--pt));
-  font-weight: 700;
+  font-weight: 600;
 }
 .dk-season-inline-count {
   font-weight: 500;
@@ -1881,11 +2020,13 @@
 :root[data-scheme="light"] .dk-season-pop:not(.dk-season-pop-player) .dk-season-opt-count {
   color: var(--text-2);
 }
+/* The episode tools scale with the page (--pt) and stand as tall as the season button beside them (36 pt). */
 .dk-eps-layout {
   display: inline-flex;
   align-items: center;
-  padding: 3px;
-  border-radius: 10px;
+  height: calc(36 * var(--pt));
+  padding: calc(3 * var(--pt));
+  border-radius: calc(10 * var(--pt));
   background: rgb(var(--ink) / 0.1);
 }
 .dk-eps-radios {
@@ -1895,18 +2036,22 @@
 .dk-eps-layout-sep {
   flex: none;
   width: 1px;
-  height: 16px;
-  margin: 0 3px;
+  height: calc(16 * var(--pt));
+  margin: 0 calc(3 * var(--pt));
   background: rgb(var(--ink) / 0.14);
+}
+.dk-eps-radios svg {
+  width: calc(20 * var(--pt));
+  height: calc(20 * var(--pt));
 }
 .dk-eps-radios button {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 28px;
+  width: calc(36 * var(--pt));
+  height: calc(30 * var(--pt));
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: calc(7 * var(--pt));
   background: none;
   color: var(--text-3) !important;
   transition: background-color 140ms ease, color 140ms ease;
@@ -1921,25 +2066,29 @@
 .dk-eps-search {
   display: flex;
   align-items: center;
-  width: 34px;
-  height: 28px;
-  border-radius: 7px;
+  width: calc(36 * var(--pt));
+  height: calc(30 * var(--pt));
+  border-radius: calc(7 * var(--pt));
   overflow: hidden;
   transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 160ms ease;
 }
 .dk-eps-search[data-open] {
-  width: clamp(148px, 24vw, 210px);
+  width: clamp(148px, 24vw, calc(210 * var(--pt)));
   background: rgb(var(--ink) / 0.1);
+}
+.dk-eps-search-btn svg {
+  width: calc(16 * var(--pt));
+  height: calc(16 * var(--pt));
 }
 .dk-eps-search-btn {
   flex: none;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 28px;
+  width: calc(36 * var(--pt));
+  height: calc(30 * var(--pt));
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: calc(7 * var(--pt));
   background: none;
   color: var(--text-3) !important;
   cursor: pointer;
@@ -1950,7 +2099,7 @@
   color: var(--text) !important;
 }
 .dk-eps-search[data-open] .dk-eps-search-btn {
-  width: 28px;
+  width: calc(30 * var(--pt));
   color: var(--text-2) !important;
 }
 .dk-eps-search-input {
@@ -1961,7 +2110,7 @@
   border: 0;
   background: none;
   color: var(--text);
-  font-size: 13px;
+  font-size: calc(13 * var(--pt));
   outline: none;
   opacity: 0;
   pointer-events: none;
@@ -1981,9 +2130,9 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  margin-right: 2px;
+  width: calc(24 * var(--pt));
+  height: calc(24 * var(--pt));
+  margin-right: calc(2 * var(--pt));
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1999,15 +2148,15 @@
 .dk-eps-ratings-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
+  gap: calc(6 * var(--pt));
+  height: calc(36 * var(--pt));
+  padding: 0 calc(13 * var(--pt));
   border: 0;
-  border-radius: 10px;
+  border-radius: calc(10 * var(--pt));
   background: rgb(var(--ink) / 0.1);
   color: var(--text-2) !important;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
@@ -2016,14 +2165,15 @@
   color: var(--text) !important;
 }
 .dk-eps-ratings-btn svg {
-  color: #f6c453;
+  width: calc(14 * var(--pt));
+  height: calc(14 * var(--pt));
 }
 
 /* Classic Polarity episode list & side-by-side cards: rounded 10px stills with outline, bottom-left ▶ 42m pill,
    full-row hover card with hairline dividers, number column, and circular right-aligned actions. */
 .dk-ep-list {
   margin: 0;
-  padding: calc(6 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) 0;
+  padding: var(--dk-t-tight, calc(8 * var(--pt))) var(--dk-pad, calc(24 * var(--pt))) 0;
   list-style: none;
 }
 .dk-ep {
@@ -2127,17 +2277,30 @@
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: calc(4 * var(--pt));
-  padding: calc(2.5 * var(--pt)) calc(7 * var(--pt));
-  border-radius: calc(6 * var(--pt));
-  background: rgb(10 10 14 / 0.72);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  gap: calc(5 * var(--pt));
   color: #fff;
-  font-size: calc(11 * var(--pt));
+  font-size: calc(12.5 * var(--pt));
   font-weight: 600;
   line-height: 1.2;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.75);
   pointer-events: none;
+}
+.dk-ep-runtime svg {
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.6));
+}
+/* No badge behind the time (as Polarity's episode cards drew it): a soft shade up from the still's bottom edge
+   keeps it readable on any frame. */
+:is(.dk-ep-still, .dk-ep-row-still):has(> .dk-ep-runtime)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.55), transparent 50%);
+  pointer-events: none;
+}
+:is(.dk-ep-still, .dk-ep-row-still) :is(.dk-progress, .dk-ep-play) {
+  z-index: 2;
 }
 .dk-ep-row-still[data-progress] .dk-ep-runtime,
 .dk-ep-still[data-progress] .dk-ep-runtime {
@@ -2236,15 +2399,17 @@
 .dk-ep-dl {
   color: var(--text) !important;
 }
+/* Cards come to rest on the page's gutter (scroll-padding = the padding), in line with the season button above. */
 .dk-ep-strip {
   display: flex;
   gap: calc(14 * var(--pt));
   margin: 0;
-  padding: calc(14 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) calc(6 * var(--pt));
+  padding: calc(12 * var(--pt)) var(--dk-pad, calc(24 * var(--pt))) calc(6 * var(--pt));
   overflow-x: auto;
   overscroll-behavior-x: contain;
   list-style: none;
   scroll-padding-inline: var(--dk-pad, calc(24 * var(--pt)));
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
 }
 .dk-ep-strip::-webkit-scrollbar {
@@ -2258,10 +2423,44 @@
   opacity: 1;
 }
 .dk-ep-card {
+  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
   width: calc(264 * var(--pt));
+  scroll-snap-align: start;
+}
+/* An episode's Download and Sources sit on its own still (top right), so they can't be read as the next card's. With
+   a mouse they show while the card is hovered or focused, or while that episode downloads or is downloaded. */
+.dk-ep-card-tools {
+  position: absolute;
+  z-index: 3;
+  top: calc(8 * var(--pt));
+  right: calc(8 * var(--pt));
+}
+.dk-ep-card .dk-ep-card-tools :is(button, a),
+.dk-ep-card .dk-ep-card-tools :is(button, a):hover {
+  width: calc(28 * var(--pt));
+  height: calc(28 * var(--pt));
+  border-radius: 50%;
+  background: rgb(12 12 14 / 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  color: #fff !important;
+}
+.dk-ep-card .dk-ep-card-tools :is(button, a):hover {
+  background: rgb(12 12 14 / 0.84);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-ep-card-tools {
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+  .dk-ep-card:is(:hover, :focus-within) .dk-ep-card-tools,
+  .dk-ep-card-tools:has([data-download]:not([data-download="none"])) {
+    opacity: 1;
+  }
 }
 .dk-ep-card .dk-ep-still {
   cursor: pointer;
@@ -2275,17 +2474,11 @@
 .dk-ep-card[data-up-next] .dk-ep-still {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
 }
-.dk-ep-kicker-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: calc(8 * var(--pt));
-  margin-top: calc(10 * var(--pt));
-  min-height: calc(26 * var(--pt));
-}
 .dk-ep-kicker {
+  display: block;
+  margin-top: calc(10 * var(--pt));
   font-size: calc(10.5 * var(--pt));
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--text-3);
 }
@@ -2380,7 +2573,7 @@
   margin-bottom: calc(16 * var(--pt));
 }
 .dk-sk-btn {
-  width: 100%;
+  width: calc(142 * var(--pt));
   height: calc(40 * var(--pt));
   margin-bottom: calc(10 * var(--pt));
   border-radius: 999px;
@@ -2910,6 +3103,19 @@
   background: #000;
   color: #fff !important;
 }
+/* The quieter second way in under the button (Import from Letterboxd). */
+.dk-my-empty-link {
+  margin-top: calc(-6 * var(--pt));
+  padding: calc(4 * var(--pt)) calc(8 * var(--pt));
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: calc(14 * var(--pt));
+  font-weight: 600;
+}
+.dk-my-empty-link:hover {
+  color: var(--text);
+}
 .dk-list-card {
   flex: none;
   display: flex;
@@ -3241,6 +3447,16 @@
 :root[data-desk-chrome="nav"] .dk-pushed-body {
   top: var(--dk-nav-h);
 }
+/* A page on a computer replaces the one it opened from (DeskApp's PushedPage): no edge shadow from a slide-over. */
+:root[data-desk-chrome="nav"] .dk-pushed {
+  box-shadow: none;
+}
+/* Library's pages head themselves (no page bar above): their heading starts under the top bar, on the rows' edge. */
+:root[data-desk-chrome="nav"] .dk-pushed[data-own-head] {
+  --nav-h: 0px;
+  --gutter: var(--dk-gutter);
+  --content-start: var(--dk-gutter);
+}
 :root[data-desk-chrome="nav"] .dk-screen-tab {
   --nav-h: var(--dk-nav-h);
 }
@@ -3257,6 +3473,11 @@
   padding: 0 0 0 max(calc(49 * var(--pt)), var(--traffic-lights, 0px));
 }
 .dk-strip .playlist-tile {
+  flex: none;
+  width: var(--dk-poster-w);
+}
+/* A playlist in My Polarity's row, wrapped so it can be picked (components/library/Trash.tsx). */
+.dk-strip > .dk-list-pick {
   flex: none;
   width: var(--dk-poster-w);
 }
@@ -3611,11 +3832,6 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .dk-main {
 }
 .dk-ep-dl-slot :is(button, a):active {
   transform: scale(0.92);
-}
-.dk-ep-kicker-row .dk-ep-dl-slot :is(button, a) {
-  width: calc(24 * var(--pt));
-  height: calc(24 * var(--pt));
-  background: none;
 }
 .dk-ep-head .dk-ep-dl-slot {
   margin-left: auto;
@@ -4784,7 +5000,8 @@ html[data-player="mpv"] .app[data-player-leaving="true"] .dk-main {
     opacity: 0;
     transition: opacity 0.18s, scale 0.2s;
   }
-  :is(.dk-ep-row-still, .dk-ep-still, .dk-t-trailer, .dk-cw-art):is(:hover, :focus-visible) :is(.dk-ep-play, .dk-cw-play) {
+  :is(.dk-ep-row-still, .dk-ep-still, .dk-t-trailer):is(:hover, :focus-visible) .dk-ep-play,
+  .dk-cw:is(:hover, :focus-within) .dk-cw-play {
     opacity: 1;
   }
 }

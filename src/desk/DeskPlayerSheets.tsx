@@ -2,10 +2,8 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEv
 import { DownloadButton } from "../components/DownloadButton";
 import { Info, Instant } from "../components/icons";
 import { Img } from "../components/Img";
-import { AudioSettings } from "../components/player/AudioSettings";
 import { isMpv, type MediaLike } from "../components/player/mpvMedia";
 import type { OptionColumn, OptionItem } from "../components/player/OptionsOverlay";
-import { SubtitleSettings } from "../components/player/SubtitleSettings";
 import { VideoBackdrop } from "../components/player/VideoBackdrop";
 import { SourceFilterBar } from "../components/SourceFilters";
 import { useSourceRowPress } from "../components/SourceInfo";
@@ -24,6 +22,7 @@ import {
   IconShuffle,
   IconTune,
 } from "./DeskPlayerIcons";
+import { DeskSoundSettings, DeskSubtitleStyle } from "./DeskSubtitleStyle";
 import { SeasonChooser, type SeasonOption } from "./SeasonChooser";
 
 export type DeskSheetKind = "speed" | "sleep" | "tracks" | "episodes" | "sources" | "party";
@@ -36,6 +35,68 @@ const FROST_SIZE = {
   right: [110, 220] as const,
   bottom: [240, 48] as const,
 };
+
+/**
+ * A rounded rectangle with Apple-style corner smoothing (Figma's "corner smoothing"): each corner is a true
+ * circular arc of radius `r`, joined to its two edges by curves that ease the curvature in over a longer stretch
+ * instead of the arc meeting the edge abruptly. `smoothing` (0–1) shortens the arc to 90°·(1 − smoothing) and
+ * spreads each join over (1 + smoothing)·r of the edge. Along an edge too short for that (half the edge is the
+ * most a corner may take), that side's smoothing is cut back to fit, as Figma does, while the other side keeps its
+ * own: a capsule (r = half the height) keeps half-circle ends and smooths only into its long flat edges.
+ */
+function smoothRect(w: number, h: number, r: number, smoothing: number, steps = 24): string {
+  r = Math.min(r, w / 2, h / 2);
+  // One corner's way from its top edge to its right edge, as distances in from those edges (dx from the right, dy
+  // down from the top); the other three corners are this one mirrored.
+  const join = (budget: number): [number, number][] => {
+    const s = Math.max(0, Math.min(smoothing, budget / r - 1));
+    const p = Math.min((1 + s) * r, budget);
+    const f = (Math.PI / 4) * s;
+    // Where the arc begins and its tangent there, which meets the edge at P2 (r·tan(f/2) back from the arc).
+    const p3: [number, number] = [r - r * Math.sin(f), r - r * Math.cos(f)];
+    const p2x = p3[0] + r * Math.tan(f / 2) * Math.cos(f);
+    const b = (p - p2x) / 3;
+    const p0: [number, number] = [p, 0];
+    const p1: [number, number] = [p - 2 * b, 0];
+    const p2: [number, number] = [p2x, 0];
+    const out: [number, number][] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      const k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+      out.push([
+        k[0] * p0[0] + k[1] * p1[0] + k[2] * p2[0] + k[3] * p3[0],
+        k[0] * p0[1] + k[1] * p1[1] + k[2] * p2[1] + k[3] * p3[1],
+      ]);
+    }
+    return out;
+  };
+  const along = join(w / 2);
+  const down = join(h / 2);
+  const f0 = Math.atan2(r - along[steps][0], r - along[steps][1]);
+  const f1 = Math.PI / 2 - Math.atan2(r - down[steps][0], r - down[steps][1]);
+  const arc: [number, number][] = [];
+  for (let i = 1; i < steps; i++) {
+    const a = f0 + (f1 - f0) * (i / steps);
+    arc.push([r - r * Math.sin(a), r - r * Math.cos(a)]);
+  }
+  const corner = [...along, ...arc, ...down.map(([x, y]) => [y, x] as [number, number]).reverse()];
+  const pts = [
+    ...corner.map(([dx, dy]) => [w - dx, dy]),
+    ...corner.map(([dx, dy]) => [w - dx, h - dy]).reverse(),
+    ...corner.map(([dx, dy]) => [dx, h - dy]),
+    ...corner.map(([dx, dy]) => [dx, dy]).reverse(),
+  ];
+  return `M${pts.map(([x, y]) => `${+x.toFixed(2)} ${+y.toFixed(2)}`).join("L")}Z`;
+}
+
+/**
+ * The speed slider's thumb, as Netflix draws theirs: a capsule 1.52 times as wide as it is tall, its ends true
+ * half-circles, with 60% corner smoothing carrying them into the flat top and bottom.
+ */
+const THUMB_W = 29;
+const THUMB_H = 19;
+const THUMB_PATH = smoothRect(THUMB_W, THUMB_H, THUMB_H / 2, 0.6);
 
 /**
  * Shared edge-sheet shell for the desk Netflix player:
@@ -232,7 +293,10 @@ function DeskSpeedSheet({
             <span className="dk-pl-speed-fill" style={{ transform: `scaleX(${frac})` }} />
           </span>
           <span className="dk-pl-speed-rider" style={{ left: `${frac * 100}%` }} aria-hidden>
-            <span className="dk-pl-speed-thumb" />
+            <svg className="dk-pl-speed-thumb" width={THUMB_W} height={THUMB_H} viewBox={`0 0 ${THUMB_W} ${THUMB_H}`}>
+              <path className="dk-pl-speed-thumb-ring" d={THUMB_PATH} />
+              <path className="dk-pl-speed-thumb-fill" d={THUMB_PATH} />
+            </svg>
           </span>
         </div>
         <div className="dk-pl-speed-stops" role="radiogroup" aria-label="Playback speed choices">
@@ -394,7 +458,7 @@ function DeskTracksSheet({
             </div>
             {audioSettingsOpen ? (
               <div key="audio-settings" className="dk-pl-tracks-scroll dk-pl-settings-body dk-pl-pane" data-turn={audioTurn}>
-                <AudioSettings delay={audioDelay} onDelay={onAudioDelay} />
+                <DeskSoundSettings delay={audioDelay} onDelay={onAudioDelay} />
               </div>
             ) : (
               <div key="audio-list" ref={audioListRef} className="dk-pl-tracks-scroll dk-pl-pane" data-turn={audioTurn} role="radiogroup" aria-label="Audio">
@@ -441,8 +505,8 @@ function DeskTracksSheet({
             </button>
           </div>
           {subSettingsOpen ? (
-            <div className="dk-pl-tracks-scroll dk-pl-settings-body dk-pl-sub-studio-host">
-              <SubtitleSettings
+            <div className="dk-pl-tracks-scroll dk-pl-settings-body">
+              <DeskSubtitleStyle
                 style={subStyle}
                 onChange={onSubStyleChange}
                 delay={subDelay}
@@ -450,7 +514,6 @@ function DeskTracksSheet({
                 onStepLine={onStepLine}
                 second={onSecondSubtitlesChange ? { on: secondSubtitles, onChange: onSecondSubtitlesChange } : undefined}
                 canPosition={canPosition}
-                look="studio"
               />
             </div>
           ) : (

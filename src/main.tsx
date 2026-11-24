@@ -10,13 +10,8 @@ import { AccountProvider, startAccountBackend } from "./lib/account";
 import { installKeepFieldInView, mirrorFormFactor } from "./lib/ui";
 import { inShell, os } from "./lib/platform";
 
-// Inter with weight + optical-size axes: large titles get the Display cut automatically.
+// Inter with weight + optical-size axes (Settings → Appearance → Font; files load when chosen).
 import "@fontsource-variable/inter/opsz.css";
-// The other app fonts (Settings → Appearance → Font): only @font-face rules here; a font's files load when it's chosen.
-import "@fontsource-variable/instrument-sans/wght.css";
-import "@fontsource-variable/hanken-grotesk/wght.css";
-import "@fontsource-variable/onest/wght.css";
-import "@fontsource-variable/mona-sans/wght.css";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/ui/button.css";
@@ -38,6 +33,7 @@ import "./styles/sheet.css";
 import "./styles/party.css";
 import "./styles/friends.css";
 import "./styles/open-files.css";
+import "./styles/import-playlist.css";
 import "./styles/pin.css";
 import "./styles/updates.css";
 import { installGamepad } from "./tv/gamepad";

@@ -296,7 +296,7 @@ export function TitleSheet({
             return (
               <div key={e.key} className="ps-page" data-entry={e.key} data-top={isTop || undefined} inert={!isTop || undefined}>
                 {r.name === "detail" && <TitleBody type={r.type} id={r.id} preview={r.preview} episode={r.episode} top={isTop && !leaving} onClose={onClose} onBack={back} />}
-                {r.name === "anime-detail" && <AnimeBody id={r.id} onClose={onClose} onBack={back} />}
+                {r.name === "anime-detail" && <AnimeBody id={r.id} preview={r.preview} top={isTop && !leaving} onClose={onClose} onBack={back} />}
               </div>
             );
           })}

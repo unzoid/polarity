@@ -7,8 +7,10 @@ import { cropsBars, resetPrefs, usePrefs } from "../../lib/settings";
 import { lookaheadStatus } from "../../lib/playback";
 import { Button } from "../../components/ui/Button";
 import { errorMessage, warnFailed } from "../../lib/errors";
-import { ActionRow, Card, ExpandRow, FormRow, PickRow, useExpanded, type Expandable } from "../../components/settings/rows";
+import { ActionRow, Card, ExpandRow, FormRow, PickRow, RowText, useExpanded, type Expandable } from "../../components/settings/rows";
+import { FamilyConfirmTray, FamilyWarningIcon, MoreDots } from "../../components/settings/FamilyTray";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { useFormFactor } from "../../lib/ui";
 import { appUpdates, buildChannel, isDesktop, os } from "../../lib/platform";
 import { databaseHost, devDatabase, removeDevDatabase, saveDevDatabase, useAccount } from "../../lib/account";
 import { LetterboxdImport } from "../../components/settings/LetterboxdImport";
@@ -25,7 +27,7 @@ export function AdvancedPage() {
     <>
       <Card
         title="Video"
-        footer={hasMpv === false ? "Most of these need mpv." : "Saved on this device. Changes apply straight away, even mid-video."}
+        footer={hasMpv === false ? "Most of these need mpv." : undefined}
       >
         <SettingRow id="hwdec" disabled={hasMpv === false} />
         {/* Windows and macOS hand mpv's HDR picture to the screen; elsewhere the system decides. */}
@@ -46,7 +48,6 @@ export function AdvancedPage() {
           <ActionRow
             setting="mpvConfigFolder"
             title="mpv folder"
-            caption="Where mpv.conf, input.conf, scripts/ and shaders/ go"
             label="Open Folder"
             onClick={() => void api.openMpvFolder().catch(warnFailed("mpv folder"))}
           />
@@ -137,6 +138,8 @@ function DatabaseCard() {
       ) : (
         <>
           <FormRow
+            title={db ? "Replace connection" : "Connect database"}
+            emptyValue={db ? "Replace" : "Paste code"}
             type="password"
             placeholder="Paste a connection code"
             aria-label="Connection code"
@@ -157,15 +160,47 @@ function DatabaseCard() {
 
 function ResetRow(props: Expandable) {
   const qc = useQueryClient();
+  const phone = useFormFactor().form === "phone";
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const reset = useMutation({
     mutationFn: api.resetSettings,
     onSuccess: (saved) => {
       qc.setQueryData(keys.settings, saved);
       resetPrefs();
       for (const k of [keys.streamsAll, keys.continue, keys.history]) qc.invalidateQueries({ queryKey: k });
-      props.onToggle();
+      if (phone) setConfirmOpen(false);
+      else props.onToggle();
     },
   });
+  if (phone) {
+    return (
+      <>
+        <button
+          type="button"
+          className="settings-row settings-row-button ft-choice-row"
+          aria-haspopup="dialog"
+          aria-expanded={confirmOpen}
+          onClick={() => setConfirmOpen(true)}
+        >
+          <FamilyWarningIcon size={21} className="settings-row-icon ft-warn-ico" />
+          <RowText title="Reset all settings" />
+          <span className="ft-choice-right">
+            <MoreDots size={16} className="ft-choice-dots" />
+          </span>
+        </button>
+        <FamilyConfirmTray
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          title="Reset all settings"
+          description="Your library, history, profiles, add-ons, keyboard shortcuts, and API keys stay as they are."
+          confirmLabel={reset.isPending ? "Resetting…" : "Reset Settings"}
+          pending={reset.isPending}
+          error={reset.isError ? errorMessage(reset.error) : null}
+          onConfirm={() => reset.mutate()}
+        />
+      </>
+    );
+  }
   return (
     <ExpandRow icon={Reset} title="Reset all settings" {...props}>
       <p className="settings-expand-text">

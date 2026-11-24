@@ -7,7 +7,7 @@ import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { BrandIcon } from "../components/BrandIcon";
 import { cardMenu } from "../components/CardMenu";
 import { DownloadButton } from "../components/DownloadButton";
-import { Star } from "../components/icons";
+import { Download } from "../components/icons";
 import { Img } from "../components/Img";
 import { preloadPlayerNow } from "../components/PlayerLayer";
 import { TitleLogo } from "../components/TitleLogo";
@@ -36,6 +36,7 @@ import { AnimatedSwap, EpisodeSearch, filterEpisodes } from "./EpisodeTools";
 import { DeskRatingsOverlay } from "./RatingsOverlay";
 import { Poster, ProgressLine as ProgressBar } from "./Rows";
 import { SeasonChooser } from "./SeasonChooser";
+import { CompactPlay, IconRatingsGrid, NextUp, PinnedBar, useCardStrip } from "./TitleParts";
 
 const AnimeTitleView = lazyNamed(() => import("./AnimeTitleView"), "AnimeTitleView");
 export const preloadAnimeTitleView = () => void AnimeTitleView.preload().catch(() => {});
@@ -83,6 +84,7 @@ export function AnimeView({
 
 function Outline({ preview, art: directArt }: { preview?: MetaPreview; art?: string }) {
   const art = directArt ?? detailBackdropUrl(preview?.background ?? preview?.poster);
+  if (preview) return <PreviewOutline preview={preview} art={art} />;
   return (
     <div className="dk-t" aria-busy>
       <div className="dk-t-media scheme-dark">{art && <Img className="dk-t-art" src={art} alt="" loading="eager" />}</div>
@@ -90,11 +92,112 @@ function Outline({ preview, art: directArt }: { preview?: MetaPreview; art?: str
         <span className="dk-sk dk-sk-title" />
         <span className="dk-sk dk-sk-line" />
         <span className="dk-sk dk-sk-btn" />
-        <span className="dk-sk dk-sk-btn" />
         <span className="dk-sk dk-sk-text" />
         <span className="dk-sk dk-sk-text dk-sk-short" />
       </div>
     </div>
+  );
+}
+
+/**
+ * The title before its details arrive, drawn from what the poster already knows, in the page's real layout: the art and
+ * its logo, the name and year, Play and Download, the tiles, the synopsis. Nothing in it moves when the details land;
+ * the controls are just not live yet (data-wait: full strength, not greyed, since nobody reaches them that fast).
+ */
+function PreviewOutline({ preview, art }: { preview: MetaPreview; art?: string }) {
+  const logo = preview.logo ? sizedArt(preview.logo, "w500") : undefined;
+  const series = preview.type === "series";
+  return (
+    <div className="dk-t" aria-busy>
+      <div className="dk-t-media scheme-dark">
+        {art && <Img className="dk-t-art" src={art} fallbacks={[sizedArt(preview.poster, "w780")]} alt="" loading="eager" fetchPriority="high" />}
+        {logo && (
+          <TitleLogo
+            key={logo}
+            className="dk-t-logo"
+            src={logo}
+            logos={preview.logos?.map((u) => sizedArt(u, "w500") ?? u)}
+            backdrop={art}
+            alt=""
+            loading="eager"
+            draggable={false}
+          />
+        )}
+      </div>
+      <div className="dk-t-info">
+        <h1 className={logo ? "dk-sr" : "dk-t-name"}>{preview.name}</h1>
+        <Facts item={preview} />
+        <div className="dk-t-action-row">
+          <div className="dk-t-buttons">
+            <button type="button" className="dk-t-btn dk-t-btn-white" disabled data-wait>
+              <IconPlay size={24} />
+              Play
+            </button>
+            <WaitDownload />
+          </div>
+          <div className="dk-t-actions">
+            <Action label="My List" disabled wait onClick={() => {}}>
+              <IconPlus size={28} stroke={1.5} />
+            </Action>
+            <Action label="Trailer" disabled wait onClick={() => {}}>
+              <IconTrailer size={27} />
+            </Action>
+            <Action label="Sources" disabled wait onClick={() => {}}>
+              <IconSources size={27} />
+            </Action>
+            {series && <WaitSeasonDownload />}
+          </div>
+        </div>
+        {preview.description && (
+          <div className="dk-t-meta-grid">
+            <div className="dk-t-meta-main">
+              <Synopsis text={preview.description} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Download, in its place before the episode it downloads is known. */
+function WaitDownload() {
+  return (
+    // DownloadButton's own idle markup, so going live swaps nothing you can see.
+    <button type="button" className="dk-t-btn dk-t-btn-grey" disabled data-wait>
+      <span className="btn-glyph-static">
+        <Download size={22} />
+      </span>
+      Download
+    </button>
+  );
+}
+
+/** Download Season, in its place before the season is known. */
+function WaitSeasonDownload() {
+  return (
+    <Action
+      label={
+        <>
+          Download
+          <br />
+          Season
+        </>
+      }
+      disabled
+      wait
+      onClick={() => {}}
+    >
+      <SeasonGlyph />
+    </Action>
+  );
+}
+
+function SeasonGlyph() {
+  return (
+    <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3.5v10.5M7.5 9.5l4.5 4.5 4.5-4.5M4 17.5h16M6.5 20.5h11" />
+    </svg>
   );
 }
 
@@ -119,8 +222,8 @@ function NetflixTitle({ type, id, preview, episode, top }: Props) {
   const { next, videoId, resumeAt } = usePlayTarget(item ?? { id, type, name: "" }, meta);
   useStreams(type, videoId);
   const { data: progress } = useProgress(id);
-  const { data: fileTrailer } = useFileTrailer(id);
-  const { data: ratings } = useRatings(type, id);
+  const { data: fileTrailer, isFetching: trailerFetching } = useFileTrailer(id);
+  const { data: ratings, isLoading: ratingsLoading } = useRatings(type, id);
 
   const tabs = useMemo((): { id: Tab; label: string }[] => {
     const list: { id: Tab; label: string }[] = [];
@@ -142,6 +245,9 @@ function NetflixTitle({ type, id, preview, episode, top }: Props) {
   const [logoFailed, setLogoFailed] = useState(false);
   const logoSrc = item?.logo ? sizedArt(item.logo, "w500") : undefined;
   useEffect(() => setLogoFailed(false), [logoSrc]);
+  const actionRow = useRef<HTMLDivElement>(null);
+  // The season the Episodes tab shows, so Download Season downloads that one.
+  const [shelf, setShelf] = useState<Shelf>();
 
   if (verdict === "hide") return <p className="dk-t-note">{LIMIT_NOTICE}</p>;
   if (!item) {
@@ -162,14 +268,24 @@ function NetflixTitle({ type, id, preview, episode, top }: Props) {
   const watched = series ? (video ? progress?.find((p) => p.videoId === video.id) : undefined) : progress?.find((p) => p.videoId === id);
   const resuming = !!resumeAt && !!watched?.duration;
   const playLabel = resumeAt ? "Resume" : series && next?.kind === "next" && video ? `Play ${shortCode(video)}` : "Play";
+  const play = () => request && picker.play(request);
+  const showNext = resuming || (series && next?.kind === "next" && !!video);
   const art = detailBackdropUrl(item.background ?? item.poster);
+  const logoShown = !!logoSrc && !logoFailed;
+  const seasonShelf = shelf ?? (meta && series ? defaultShelf(meta, video) : undefined);
+  // Still loading what Play, Download and Sources act on (the details, or where you are in the show).
+  const waiting = !meta || progress === undefined;
+  const trailerWaiting = !meta || trailerFetching;
 
   return (
     <div className="dk-t">
+      <PinnedBar anchor={actionRow} name={item.name}>
+        <CompactPlay label={playLabel} disabled={!request} onPlay={play} onPreload={preloadPlayerNow} />
+      </PinnedBar>
       <div className="dk-t-media scheme-dark">
         {art && <Img className="dk-t-art" src={art} fallbacks={[sizedArt(item.poster, "w780")]} alt="" loading="eager" fetchPriority="high" />}
         {trailer.node}
-        {logoSrc && !logoFailed && (
+        {logoShown && (
           <TitleLogo
             key={logoSrc}
             className="dk-t-logo"
@@ -194,47 +310,58 @@ function NetflixTitle({ type, id, preview, episode, top }: Props) {
         )}
       </div>
       <div className="dk-t-info">
-        <h1 className="dk-t-name">{item.name}</h1>
+        {/* The logo names the title on the art; the heading stays for screen readers. */}
+        <h1 className={logoShown ? "dk-sr" : "dk-t-name"}>{item.name}</h1>
         <Facts item={item} meta={meta} />
-        <TitleScores item={item} ratings={ratings} />
-        <div className="dk-t-action-row">
+        <TitleScores item={item} ratings={ratings} loading={ratingsLoading} />
+        <div className="dk-t-action-row" ref={actionRow}>
           <div className="dk-t-buttons">
             <button
               type="button"
               className="dk-t-btn dk-t-btn-white"
               disabled={!request}
+              data-wait={(!request && waiting) || undefined}
               onPointerEnter={preloadPlayerNow}
               onPointerDown={preloadPlayerNow}
-              onClick={() => request && picker.play(request)}
+              onClick={play}
             >
               <IconPlay size={24} />
               {playLabel}
             </button>
-            {(!series || video) && <DownloadButton item={item} video={video} className="dk-t-btn dk-t-btn-grey" size={22} text={video ? `Download ${shortCode(video)}` : "Download"} />}
+            {!series || video ? (
+              <DownloadButton item={item} video={video} className="dk-t-btn dk-t-btn-grey" size={22} text={video ? `Download ${shortCode(video)}` : "Download"} />
+            ) : (
+              waiting && <WaitDownload />
+            )}
           </div>
-          <Actions item={item} meta={meta} request={request} onSources={() => request && picker.choose(request)} fileTrailer={!!fileTrailer} />
+          <Actions
+            item={item}
+            meta={meta}
+            shelf={seasonShelf}
+            request={request}
+            onSources={() => request && picker.choose(request)}
+            fileTrailer={!!fileTrailer}
+            waiting={waiting}
+            trailerWaiting={trailerWaiting}
+          />
         </div>
         <div className="dk-t-meta-grid">
           <div className="dk-t-meta-main">
-            {resuming && watched && (
-              <div className="dk-t-resume">
-                {video && (
-                  <p className="dk-t-ep">
-                    {shortCode(video)} {video.title?.trim() || `Episode ${video.episode}`}
-                  </p>
+            <Synopsis text={item.description} />
+            {showNext && (
+              <NextUp
+                kicker={resuming ? "Continue watching" : "Up next"}
+                line={video ? `${shortCode(video)} · ${video.title?.trim() || `Episode ${video.episode}`}` : undefined}
+                overview={video?.overview}
+              >
+                {resuming && watched && (
+                  <div className="dk-t-resume-bar">
+                    <ProgressBar fraction={watched.position / watched.duration} />
+                    <span>{formatRemaining(watched.position, watched.duration)}</span>
+                  </div>
                 )}
-                <div className="dk-t-resume-bar">
-                  <ProgressBar fraction={watched.position / watched.duration} />
-                  <span>{formatRemaining(watched.position, watched.duration)}</span>
-                </div>
-              </div>
+              </NextUp>
             )}
-            {!resuming && series && next?.kind === "next" && video && (
-              <p className="dk-t-ep">
-                {shortCode(video)} {video.title?.trim() || `Episode ${video.episode}`}
-              </p>
-            )}
-            <Synopsis text={(resuming || next?.kind === "next") && video?.overview ? video.overview : item.description} />
           </div>
           <div className="dk-t-meta-side">
             <Credits meta={meta} series={series} genres={item.genres} />
@@ -252,7 +379,7 @@ function NetflixTitle({ type, id, preview, episode, top }: Props) {
         </TabsList>
         <TabsPanel value={shownTab} className="dk-t-panel">
           <AnimatedSwap activeKey={shownTab} dir={tabDir}>
-            {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} onSheet={onSheet} />}
+            {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} onSheet={onSheet} onShelf={setShelf} />}
             {shownTab === "collection" && meta?.details?.collection && <CollectionGrid id={meta.details.collection.id} current={meta.id} />}
             {shownTab === "more" && <MoreLikeThis type={type} id={id} />}
             {shownTab === "trailers" && <Trailers item={item} meta={meta} />}
@@ -265,6 +392,16 @@ function NetflixTitle({ type, id, preview, episode, top }: Props) {
 }
 
 const shortCode = (v: Video) => (v.season === 0 ? `Special ${v.episode}` : `S${v.season}:E${v.episode}`);
+
+/** A season as the Episodes tab shows it: what Download Season downloads. */
+type Shelf = { id: number; label: string; videos: Video[] };
+
+/** Before the Episodes tab has shown one: the season Play is in, else the first. */
+function defaultShelf(meta: Meta, video?: Video): Shelf | undefined {
+  const id = video?.season ?? seasonsOf(meta).find((s) => s > 0);
+  if (id === undefined) return undefined;
+  return { id, label: id === 0 ? "Specials" : `Season ${id}`, videos: meta.videos.filter((v) => v.season === id) };
+}
 
 /** Year, age rating, and runtime / season count. */
 function Facts({ item, meta }: { item: MetaPreview; meta?: Meta }) {
@@ -290,7 +427,7 @@ function Facts({ item, meta }: { item: MetaPreview; meta?: Meta }) {
 }
 
 /** Full MDBList/OMDb ScoreRow when available, or a crisp IMDb badge fallback from catalog metadata. */
-function TitleScores({ item, ratings }: { item: MetaPreview; ratings?: ExternalRatings | null }) {
+function TitleScores({ item, ratings, loading = false }: { item: MetaPreview; ratings?: ExternalRatings | null; loading?: boolean }) {
   const hasExternal =
     ratings &&
     (ratings.imdb != null ||
@@ -314,7 +451,20 @@ function TitleScores({ item, ratings }: { item: MetaPreview; ratings?: ExternalR
     );
   }
   const imdb = item.imdbRating?.trim();
-  if (!imdb) return null;
+  if (!imdb) {
+    if (!loading) return null;
+    // The scores are on their way: hold their row's height (an invisible row of the same type), so Play and
+    // everything under it don't step down when they arrive.
+    return (
+      <div className="dk-t-scores" aria-hidden>
+        <ul className="score-row t-callout tabular" style={{ visibility: "hidden" }}>
+          <li className="score-row-item">
+            <span className="score-row-value">0.0</span>
+          </li>
+        </ul>
+      </div>
+    );
+  }
   const href = imdbUrl(item.id);
   const body = (
     <>
@@ -376,87 +526,140 @@ function Credits({ meta, series, genres }: { meta?: Meta; series: boolean; genre
     });
   return (
     <div className="dk-t-credits">
+      {/* Label / value rows, as Family's Review Details card lists a transaction's facts. */}
       {cast.length > 0 && (
         <p>
-          <span className="dk-t-credit-label">Cast: </span>
-          {names(all ? cast : cast.slice(0, 5))}
-          {!all && cast.length > 5 && (
-            <button type="button" className="dk-t-more" onClick={() => setAll(true)}>
-              … more
-            </button>
-          )}
+          <span className="dk-t-credit-label">Cast</span>
+          <span>
+            {names(all ? cast : cast.slice(0, 5))}
+            {!all && cast.length > 5 && (
+              <button type="button" className="dk-t-more" onClick={() => setAll(true)}>
+                More
+              </button>
+            )}
+          </span>
         </p>
       )}
       {crew.length > 0 && (
         <p>
-          <span className="dk-t-credit-label">{series ? (crew.length > 1 ? "Creators: " : "Creator: ") : crew.length > 1 ? "Directors: " : "Director: "}</span>
-          {names(crew.slice(0, 3))}
+          <span className="dk-t-credit-label">{series ? (crew.length > 1 ? "Creators" : "Creator") : crew.length > 1 ? "Directors" : "Director"}</span>
+          <span>{names(crew.slice(0, 3))}</span>
         </p>
       )}
       {!!genres?.length && (
         <p>
-          <span className="dk-t-credit-label">Genres: </span>
-          {genres.slice(0, 4).join(", ")}
+          <span className="dk-t-credit-label">Genres</span>
+          <span>{genres.slice(0, 4).join(", ")}</span>
         </p>
       )}
     </div>
   );
 }
 
-function Actions({ item, meta, request, onSources, fileTrailer }: { item: MetaPreview; meta?: Meta; request: PlayRequest | null; onSources: () => void; fileTrailer: boolean }) {
+function Actions({
+  item,
+  meta,
+  shelf,
+  request,
+  onSources,
+  fileTrailer,
+  waiting,
+  trailerWaiting,
+}: {
+  item: MetaPreview;
+  meta?: Meta;
+  shelf?: Shelf;
+  request: PlayRequest | null;
+  onSources: () => void;
+  fileTrailer: boolean;
+  /** What Play, Sources and the season act on is still loading. */
+  waiting: boolean;
+  /** Whether there's a trailer isn't known yet. */
+  trailerWaiting: boolean;
+}) {
   const { inLibrary, toggle } = useLibraryToggle(item);
-  const season = useMemo(() => (meta && item.type === "series" ? seasonsOf(meta).find((s) => s > 0) : undefined), [meta, item.type]);
+  const trailer = !!(meta?.trailerYtId || fileTrailer);
+  // Every tile keeps its place from the first frame, so the row never re-lays itself out as things load: Trailer
+  // stays (unavailable) when there isn't one, rather than the others moving up when that turns out.
   return (
     <div className="dk-t-actions">
       <Action label="My List" pressed={inLibrary} onClick={toggle}>
         {inLibrary ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}
       </Action>
-      {(meta?.trailerYtId || fileTrailer) && (
-        <Action label="Trailer" onClick={() => openTrailer(trailerFor(item.name, item.id, meta))}>
-          <IconTrailer size={27} />
-        </Action>
-      )}
-      <Action label="Sources" disabled={!request} onClick={onSources}>
+      <Action label="Trailer" disabled={!trailer} wait={!trailer && trailerWaiting} onClick={() => openTrailer(trailerFor(item.name, item.id, meta))}>
+        <IconTrailer size={27} />
+      </Action>
+      <Action label="Sources" disabled={!request} wait={!request && waiting} onClick={onSources}>
         <IconSources size={27} />
       </Action>
-      {meta && season !== undefined && <SeasonDownload item={item} meta={meta} season={season} />}
+      {shelf ? <SeasonDownload item={item} shelf={shelf} /> : item.type === "series" && waiting && <WaitSeasonDownload />}
     </div>
   );
 }
 
-function Action({ label, onClick, pressed, disabled, children }: { label: ReactNode; onClick: () => void; pressed?: boolean; disabled?: boolean; children: ReactNode }) {
+/** `wait`: not live yet because what it acts on is still loading; drawn at full strength, not as unavailable. */
+function Action({
+  label,
+  onClick,
+  pressed,
+  disabled,
+  wait,
+  children,
+}: {
+  label: ReactNode;
+  onClick: () => void;
+  pressed?: boolean;
+  disabled?: boolean;
+  wait?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <button type="button" className="dk-t-action" aria-pressed={pressed} disabled={disabled} onClick={onClick}>
+    <button type="button" className="dk-t-action" aria-pressed={pressed} disabled={disabled} data-wait={wait || undefined} onClick={onClick}>
       <span className="dk-t-action-glyph">{children}</span>
       <span className="dk-t-action-label">{label}</span>
     </button>
   );
 }
 
-function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta; season: number }) {
-  const videos = useMemo(() => downloadableEpisodes(meta.videos.filter((v) => v.season === season)), [meta.videos, season]);
-  const d = useBatchDownload({ item, videos, season });
+/** Download Season: the season the Episodes tab is on (or Play's, before it has shown one). */
+function SeasonDownload({ item, shelf }: { item: MetaPreview; shelf: Shelf }) {
+  const videos = useMemo(() => downloadableEpisodes(shelf.videos), [shelf.videos]);
+  const d = useBatchDownload({ item, videos, season: shelf.id });
   return (
-    <Action label={
+    <Action
+      label={
         d.running ? (
           "Downloading"
         ) : (
           <>
             Download
             <br />
-            Season {season}
+            {shelf.label}
           </>
         )
-      } disabled={d.disabled && !d.running} onClick={d.start}>
-      <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M12 3.5v10.5M7.5 9.5l4.5 4.5 4.5-4.5M4 17.5h16M6.5 20.5h11" />
-      </svg>
+      }
+      disabled={d.disabled && !d.running}
+      onClick={d.start}
+    >
+      <SeasonGlyph />
     </Action>
   );
 }
 
 /** A show's episodes: the season (Netflix's grey button opening the list of seasons), the layout switch, then the episodes. */
-function Episodes({ meta, progress, episode, onSheet }: { meta: Meta; progress?: Progress[]; episode?: string; onSheet: (open: boolean) => void }) {
+function Episodes({
+  meta,
+  progress,
+  episode,
+  onSheet,
+  onShelf,
+}: {
+  meta: Meta;
+  progress?: Progress[];
+  episode?: string;
+  onSheet: (open: boolean) => void;
+  onShelf: (shelf: Shelf) => void;
+}) {
   const orders = useEpisodeOrders(meta);
   const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
@@ -481,6 +684,9 @@ function Episodes({ meta, progress, episode, onSheet }: { meta: Meta; progress?:
     [episodes, query, view],
   );
   const map = useMemo(() => progressMap(progress), [progress]);
+  useEffect(() => {
+    if (group) onShelf({ id: group.id, label: group.label, videos: group.videos });
+  }, [group, onShelf]);
   const request = (v: Video): PlayRequest => ({
     type: "series",
     metaId: meta.id,
@@ -529,8 +735,8 @@ function Episodes({ meta, progress, episode, onSheet }: { meta: Meta; progress?:
         <span className="dk-flex" />
         {ratingsGrid && (
           <button type="button" className="dk-eps-ratings-btn" onClick={() => setRatingsOpen(true)}>
-            <Star size={14} />
-            <span>Ratings</span>
+            <IconRatingsGrid />
+            <span>Episode ratings</span>
           </button>
         )}
         <div className="dk-eps-layout" role="group" aria-label="Episode tools">
@@ -672,9 +878,10 @@ function EpisodeStrip({
     measure();
     win.onScroll();
   }, [measure, win.onScroll]);
+  const { alignTo, page } = useCardStrip(strip);
   useLayoutEffect(() => {
     const el = strip.current?.querySelector<HTMLElement>("[data-up-next]");
-    if (el && strip.current) strip.current.scrollLeft = el.offsetLeft - 28;
+    if (el) alignTo(el);
     measure();
     // Only when the season opens: later progress mustn't move the row under the pointer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -687,11 +894,6 @@ function EpisodeStrip({
     ro.observe(s);
     return () => ro.disconnect();
   }, [measure, episodes]);
-  const page = (dir: 1 | -1) => {
-    const s = strip.current;
-    if (!s) return;
-    s.scrollBy({ left: dir * Math.max(264, s.clientWidth - 96), behavior: "smooth" });
-  };
   const runtime = compactRuntime(formatRuntime(meta.runtime));
   const visible = win.active ? episodes.slice(win.start, win.end) : episodes;
   return (
@@ -777,17 +979,16 @@ const EpisodeCard = memo(function EpisodeCard({
         )}
         {inProgress && <ProgressBar fraction={fraction} />}
       </button>
-      <div className="dk-ep-kicker-row">
-        <span className="dk-ep-kicker tabular">EPISODE {number}</span>
-        {on && (
-          <span className="dk-ep-dl-slot">
-            <DownloadButton item={meta} video={v} className="dk-ep-dl" size={16} />
-            <button type="button" className="dk-ep-src" aria-label={`Sources for episode ${number}`} title="Choose source" onClick={() => onSources(v)}>
-              <IconSources size={16} />
-            </button>
-          </span>
-        )}
-      </div>
+      {/* On the still, so they can only belong to this episode (not sit beside the next card's number). */}
+      {on && (
+        <span className="dk-ep-dl-slot dk-ep-card-tools">
+          <DownloadButton item={meta} video={v} className="dk-ep-dl" size={16} />
+          <button type="button" className="dk-ep-src" aria-label={`Sources for episode ${number}`} title="Choose source" onClick={() => onSources(v)}>
+            <IconSources size={16} />
+          </button>
+        </span>
+      )}
+      <span className="dk-ep-kicker tabular">EPISODE {number}</span>
       <strong className="dk-ep-card-title">{v.title?.trim() || `Episode ${v.episode}`}</strong>
       {v.overview && <p className="dk-ep-text">{v.overview}</p>}
       <span className="dk-ep-date tabular">

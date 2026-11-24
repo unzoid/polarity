@@ -20,18 +20,13 @@ import {
 } from "../../lib/updater";
 import { Button } from "../../components/ui/Button";
 import { ActionRow, Card, ExpandRow, LinkRow, PickRow, RowText, ToggleRow, useExpanded, type Expandable } from "../../components/settings/rows";
+import { FamilyConfirmTray, FamilyWarningIcon, MoreDots } from "../../components/settings/FamilyTray";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { useFormFactor } from "../../lib/ui";
 import { cachedBytes, clearCached, keys } from "../../lib/net";
 import { appName, appUpdates, buildChannel, buildCommit, buildLabel } from "../../lib/platform";
 import { errorMessage } from "../../lib/errors";
 import { forgetTracks, rememberedSources } from "../../lib/playback";
-
-/** Where this build's updates come from (lib/platform/build.ts, docs/dev-channel.md). */
-const FOOTER = {
-  release: "Updates are signed and come straight from Polarity's GitHub releases. Your library, settings and profiles are kept.",
-  dev: "A development build: it updates from Polarity's \u201cDev build\u201d pre-release only, never to or from a release. Your library, settings and profiles are kept.",
-  local: "Built on this computer, so it doesn't look for updates. Install a release or dev build to get them.",
-} as const;
 
 export function AboutPage() {
   const s = useUpdate();
@@ -58,24 +53,24 @@ export function AboutPage() {
       case "error":
         return s.message;
       default:
-        return "Checks automatically every few hours";
+        return undefined;
     }
   })();
 
   return (
     <>
-      <Card title={appName} footer={FOOTER[buildChannel]}>
-        <PickRow title="Version" caption={updates ? status : "Doesn't check for updates"}>
+      <Card title={appName}>
+        <PickRow title="Version" caption={updates ? status : "Local build"}>
           <span className="settings-row-value settings-version">{version ? buildLabel(buildChannel, version) : "…"}</span>
         </PickRow>
         {buildChannel === "release" && (
-          <PickRow title="Commit" caption="The last commit this build is from">
+          <PickRow title="Commit">
             <span className="settings-row-value settings-version">{buildCommit}</span>
           </PickRow>
         )}
         {updates && (
           <div className="settings-row">
-            <RowText title="Software update" caption={s.phase === "ready" ? "Takes a few seconds; Polarity reopens by itself" : undefined} />
+            <RowText title="Software update" />
             <div className="settings-expand-actions">
               {s.phase === "available" ? (
                 <Button variant="primary" onClick={() => void downloadUpdate()}>
@@ -107,7 +102,6 @@ export function AboutPage() {
         {dev && (
           <ToggleRow
             title="Pause updates"
-            caption="No newer dev build is offered on its own while this is on; Check for Updates still looks"
             checked={paused}
             onChange={setDevUpdatesPaused}
           />
@@ -123,7 +117,6 @@ export function AboutPage() {
         <LinkRow
           icon={Info}
           title={dev ? "Dev build notes" : "Release notes"}
-          caption={dev ? "The kept builds and the pull requests they came from" : "Every version and what changed"}
           onClick={() => void api.openExternal(releaseUrl())}
         />
       </Card>
@@ -144,7 +137,7 @@ function DevBuildsRow({ current, ...props }: Expandable & { current?: string }) 
   const { data, error, isPending } = useQuery({ queryKey: keys.devBuilds, queryFn: devBuilds, enabled: props.open, staleTime: 60_000 });
   const busy = s.phase === "downloading" || s.phase === "installing";
   return (
-    <ExpandRow icon={Reset} title="Earlier builds" caption="This dev build and the previous ones kept, to go back to" {...props}>
+    <ExpandRow icon={Reset} title="Earlier builds" {...props}>
       {isPending ? (
         <p className="settings-expand-text">Loading the kept builds…</p>
       ) : error ? (
@@ -178,9 +171,9 @@ function DevBuildsRow({ current, ...props }: Expandable & { current?: string }) 
  */
 function FeedbackCard({ version }: { version?: string }) {
   return (
-    <Card title="Send Feedback" footer={`No GitHub account? Write to ${FEEDBACK_EMAIL}. Nothing is sent from Polarity by itself.`}>
+    <Card title="Send Feedback" footer={`No GitHub account? Write to ${FEEDBACK_EMAIL}.`}>
       {FEEDBACK_KINDS.map((k) => (
-        <LinkRow key={k.id} icon={Feedback} title={k.label} caption={k.caption} onClick={() => void api.openExternal(feedbackUrl(k.id, feedbackContext(version)))} />
+        <LinkRow key={k.id} icon={Feedback} title={k.label} onClick={() => void api.openExternal(feedbackUrl(k.id, feedbackContext(version)))} />
       ))}
     </Card>
   );
@@ -204,7 +197,7 @@ function CreditsCard() {
         </span>
       }
     >
-      <ExpandRow icon={Info} title="Data sources" caption="Where titles, episodes, ratings and subtitles come from" {...expand("credits")}>
+      <ExpandRow icon={Info} title="Data sources" {...expand("credits")}>
         <ul className="settings-credits">
           {CREDITS.map((c) => (
             <li key={c.name}>
@@ -220,7 +213,7 @@ function CreditsCard() {
           ))}
         </ul>
       </ExpandRow>
-      <LinkRow icon={Lock} title="Privacy Policy" caption="What Polarity stores, where, and how to delete it" onClick={() => void api.openExternal(PRIVACY_URL)} />
+      <LinkRow icon={Lock} title="Privacy Policy" onClick={() => void api.openExternal(PRIVACY_URL)} />
       <LinkRow icon={Info} title="Terms of Use" onClick={() => void api.openExternal(TERMS_URL)} />
     </Card>
   );
@@ -229,6 +222,8 @@ function CreditsCard() {
 /** What the app keeps in its cache folder, and a way to empty it. */
 function CacheCard() {
   const qc = useQueryClient();
+  const phone = useFormFactor().form === "phone";
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const { data } = useQuery({ queryKey: keys.animeCache, queryFn: api.animeCache });
   // AniList's rows and pages, kept in this device's storage rather than the cache folder (#109).
   const [kept, setKept] = useState(cachedBytes);
@@ -239,17 +234,50 @@ function CacheCard() {
       await api.animeCacheClear();
     },
     onSuccess: () => {
+      setConfirmOpen(false);
       void qc.invalidateQueries({ queryKey: keys.animeCache });
       void qc.removeQueries({ queryKey: keys.anime.episodeFlagsAll });
     },
   });
   const bytes = data && data.bytes + kept;
-  const size = bytes === undefined ? "…" : !bytes ? "empty" : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`;
+  const size = bytes === undefined ? "…" : !bytes ? "Empty" : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`;
+  if (phone) {
+    return (
+      <Card title="Cache" footer={data ? data.path : undefined}>
+        <button
+          type="button"
+          className="settings-row settings-row-button ft-choice-row"
+          data-setting="animeCache"
+          disabled={!bytes}
+          aria-haspopup="dialog"
+          aria-expanded={confirmOpen}
+          onClick={() => setConfirmOpen(true)}
+        >
+          <FamilyWarningIcon size={21} className={`settings-row-icon${bytes ? " ft-warn-ico" : ""}`} />
+          <RowText title="Clear Anime Cache" />
+          <span className="ft-choice-right">
+            <span className="ft-choice-value">{size}</span>
+            {!!bytes && <MoreDots size={16} className="ft-choice-dots" />}
+          </span>
+        </button>
+        <FamilyConfirmTray
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          title="Clear Cache"
+          description={`Clearing this cache wipes ${size} of locally stored anime metadata and shelves. Polarity will re-fetch it as needed.`}
+          confirmLabel={clear.isPending ? "Clearing…" : "Clear Cache"}
+          pending={clear.isPending}
+          onConfirm={() => clear.mutate()}
+        />
+        <TracksRow />
+      </Card>
+    );
+  }
   return (
-    <Card title="Cache" footer={data ? <>Anime data is kept in {data.path}</> : undefined}>
+    <Card title="Cache" footer={data ? data.path : undefined}>
       <ActionRow
         title="Anime data"
-        caption={`AniList's shelves and pages, kept up to a day; filler and recap episodes, kept a day; the anime id list used when ani.zip is down, kept a week · ${size}`}
+        caption={size}
         label="Clear"
         glyph={<Trash size={15} />}
         disabled={!bytes}
@@ -263,13 +291,48 @@ function CacheCard() {
 
 /** The audio, subtitles and subtitle delay picked for each source (#418), kept on this device. */
 function TracksRow() {
+  const phone = useFormFactor().form === "phone";
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [sources, setSources] = useState(rememberedSources);
+  const label = sources === 1 ? "1 source" : sources ? `${sources} sources` : "Empty";
+  if (phone) {
+    return (
+      <>
+        <button
+          type="button"
+          className="settings-row settings-row-button ft-choice-row"
+          data-setting="pickedTracks"
+          disabled={!sources}
+          aria-haspopup="dialog"
+          aria-expanded={confirmOpen}
+          onClick={() => setConfirmOpen(true)}
+        >
+          <FamilyWarningIcon size={21} className={`settings-row-icon${sources ? " ft-warn-ico" : ""}`} />
+          <RowText title="Clear Picked Tracks" />
+          <span className="ft-choice-right">
+            <span className="ft-choice-value">{label}</span>
+            {!!sources && <MoreDots size={16} className="ft-choice-dots" />}
+          </span>
+        </button>
+        <FamilyConfirmTray
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          title="Clear Picked Tracks"
+          description="Forgets remembered audio tracks, subtitle choices, and subtitle timing saved per source on this device."
+          confirmLabel="Clear Tracks"
+          onConfirm={() => {
+            forgetTracks();
+            setSources(0);
+            setConfirmOpen(false);
+          }}
+        />
+      </>
+    );
+  }
   return (
     <ActionRow
       title="Picked tracks"
-      caption={`The audio, subtitles and subtitle delay you picked for each source, chosen again when it plays again; the 500 most recent · ${
-        sources === 1 ? "1 source" : sources ? `${sources} sources` : "empty"
-      }`}
+      caption={sources === 1 ? "1 source" : sources ? `${sources} sources` : "empty"}
       label="Clear"
       glyph={<Trash size={15} />}
       disabled={!sources}

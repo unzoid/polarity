@@ -2051,6 +2051,22 @@ test("notifications: New episodes switched on, a new episode is one note, and it
   expect(await notes()).toHaveLength(0);
 });
 
+test("a refused sign-in code empties the cells and says so until the next one is typed", async ({ app }) => {
+  await app.goto("/fake.html?account=signed-out");
+  await app.getByRole("button", { name: "Continue with Email" }).click();
+  await app.getByRole("textbox", { name: "Email address" }).fill("someone@example.com");
+  await app.getByRole("button", { name: "Continue", exact: true }).click();
+  const code = app.getByRole("textbox", { name: "Verification code" });
+  // The fake account refuses 000000.
+  await code.pressSequentially("000000");
+  await expect(app.getByText("Oops! That’s incorrect.")).toBeVisible();
+  await expect(code).toHaveValue("");
+  await expect(app.locator(".code-input")).toHaveAttribute("data-wrong", "true");
+  await code.pressSequentially("1");
+  await expect(app.getByText("Oops! That’s incorrect.")).toHaveCount(0);
+  await expect(app.locator(".code-input")).not.toHaveAttribute("data-wrong");
+});
+
 test.describe("signing in with another device (#133)", () => {
   test("signed out: the code waits for approval, then the app opens on the account", async ({ app }) => {
     await app.goto("/fake.html?account=signed-out");

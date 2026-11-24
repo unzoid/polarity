@@ -45,7 +45,7 @@ import { useDeskUi } from "./desk/mode";
 import { useQuery } from "@tanstack/react-query";
 import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
-import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "./lib/theme";
+import { applyAccent, resolveAccent, resolveScheme, useSystemPrefersLight } from "./lib/theme";
 
 // Each platform shell and off-boot screen lives in its own chunk so Desk, Phone, Classic Desktop
 // and TV never download each other's JS or CSS on cold start.
@@ -205,7 +205,7 @@ function SettingsRoute({ page }: { page?: string }) {
 
 /**
  * Sign-in and profile picking come before the app itself; sign-out may stop to ask over any of them.
- * Theme, colour scheme, font, card size, spoiler flags and reduced motion sync onto `<html>` before
+ * Accent, colour scheme, font, card size, spoiler flags and reduced motion sync onto `<html>` before
  * paint so AuthScreen, OnboardingScreen, ProfilesScreen, SignOutDialog, PinHost and portalled menus
  * all receive the user's preferences on frame 0.
  */
@@ -238,7 +238,7 @@ export function App() {
   useLayoutEffect(() => {
     if (!settings) return;
     const root = document.documentElement;
-    applyTheme(resolveTheme(settings), scheme, root);
+    applyAccent(resolveAccent(settings), scheme, root);
     root.dataset.cardSize = settings.cardSize ?? "medium";
     root.dataset.reduceMotion = settings.reduceMotion ?? "system";
     root.dataset.hideThumbs = String(!!settings.hideEpisodeThumbs);

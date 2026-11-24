@@ -28,6 +28,16 @@
   --nav-h: calc(56px + var(--safe-top));
   background: var(--bg);
 }
+/* On iOS the sections are iOS's own tab bar (components/NativeTabs.tsx, Liquid Glass on iOS 26): it's part of the
+   bottom safe area, so the pages pad by that alone and this shell's bar isn't drawn. */
+:root[data-phone-ui][data-native-tabs] {
+  --ph-bar-h: 0px;
+  --ph-bar-bottom: var(--safe-bottom);
+  --tabbar-h: var(--safe-bottom);
+}
+:root[data-native-tabs] .ph-bar {
+  display: none;
+}
 /* Drawn on artwork (`scheme-dark` in the markup: the featured card, posters, stills, a title's picture): the phone's
    own colours as dark mode has them, whatever the scheme. */
 :root[data-phone-ui] .scheme-dark {
@@ -1462,9 +1472,6 @@
   display: flex;
   gap: 13px;
 }
-.ps-anime .ps-media-buttons {
-  top: calc(10px + var(--safe-top) * 0);
-}
 .ps-flex {
   flex: 1;
 }
@@ -2088,11 +2095,109 @@
 .ps-sk-short {
   width: 70%;
 }
-.ps-anime {
-  overflow: hidden;
+/* --- An anime in the sheet (phone/AnimeTitle.tsx): a show's layout, plus what only anime has. */
+.ps-subtitle {
+  margin: -2px 0 8px;
+  color: var(--ph-text-3);
+  font-size: 14px;
 }
-.ps-anime > .ps-media-buttons {
-  position: absolute;
+.ps-airing {
+  margin: -2px 0 12px;
+  color: var(--ph-text-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-anime-link {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 4px !important;
+}
+.ps-anime-link button {
+  color: var(--ph-fg) !important;
+  font-weight: 600;
+}
+/* The season of a franchise: its name as a button that opens the chooser. */
+.ps-season-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 19px;
+  background: rgb(var(--ink) / 0.1);
+  color: var(--ph-fg);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ps-season-btn span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ps-season-btn svg,
+.ps-chip svg {
+  flex: none;
+}
+.ps-season-btn:active,
+.ps-chip:active {
+  background: rgb(var(--ink) / 0.16);
+}
+/* A long season's range and Hide recaps, under the season. */
+.ps-ep-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 14px;
+}
+.ps-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: rgb(var(--ink) / 0.08);
+  color: var(--ph-text-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-chip[aria-pressed="true"] {
+  background: rgb(var(--ink) / 0.16);
+  color: var(--ph-fg);
+}
+.ps-ep-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.12);
+  color: var(--ph-text-2);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 2px;
+}
+.ps-anime-details {
+  padding: 4px 12px 24px;
+}
+.ph-poster-name {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* --- Netflix's full-screen chooser (Categories, seasons). */

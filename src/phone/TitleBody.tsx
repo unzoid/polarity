@@ -1,7 +1,7 @@
 import "../styles/anime.css";
 import "../styles/title/episode-ratings.css";
 import { useQuery } from "@tanstack/react-query";
-import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBatchDownload } from "../components/BatchDownload";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
@@ -26,9 +26,11 @@ import { trailerFor, useFileTrailer, usePlayTarget, type PlayRequest } from "../
 import type { ContentType, Extra, Meta, MetaPreview, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
 import { useHorizontalWindow, useVerticalWindow } from "../lib/ui/windowing";
-import { LazyAnimeDetail } from "../screens/lazyScreens";
-import { IconBack, IconCheck, IconClose, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
+import type { AnimeCard } from "../lib/anime";
+import { AnimeTitle } from "./AnimeTitle";
+import { IconCheck, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
 import { ListOverlay } from "./ListOverlay";
+import { Action, MediaButtons, SeasonDownloadGlyph, Synopsis } from "./titleParts";
 import { Poster } from "./Rows";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 
@@ -50,37 +52,14 @@ type Props = {
  */
 export function TitleBody(props: Props) {
   const { data: page } = useQuery(titlePageQuery(props.type, props.id, props.preview));
-  if (page?.kind === "anime") return <AnimeBody id={page.anilist} episode={props.episode} onClose={props.onClose} onBack={props.onBack} />;
+  if (page?.kind === "anime") return <AnimeBody id={page.anilist} episode={props.episode} top={props.top} onClose={props.onClose} onBack={props.onBack} />;
   if (!page) return <BodySkeleton {...props} />;
   return <NetflixTitle {...props} />;
 }
 
-/** An anime's own page (by AniList id) in the sheet, under the sheet's Close and Back. */
-export function AnimeBody({ id, episode, onClose, onBack }: { id: number; episode?: string; onClose: () => void; onBack?: () => void }) {
-  return (
-    <div className="ps-body ps-anime">
-      <MediaButtons onClose={onClose} onBack={onBack} />
-      <Suspense fallback={null}>
-        <LazyAnimeDetail id={id} episode={episode} />
-      </Suspense>
-    </div>
-  );
-}
-
-function MediaButtons({ onClose, onBack }: { onClose: () => void; onBack?: () => void }) {
-  return (
-    <div className="ps-media-buttons scheme-dark">
-      {onBack && (
-        <button type="button" className="ps-round" aria-label="Back" onClick={onBack}>
-          <IconBack size={24} stroke={2.2} />
-        </button>
-      )}
-      <span className="ps-flex" />
-      <button type="button" className="ps-round" aria-label="Close" onClick={onClose}>
-        <IconClose size={26} stroke={1.8} />
-      </button>
-    </div>
-  );
+/** An anime's own page (by AniList id) in the sheet: the same layout as a show's (AnimeTitle.tsx). */
+export function AnimeBody({ id, preview, episode, top = true, onClose, onBack }: { id: number; preview?: AnimeCard; episode?: string; top?: boolean; onClose: () => void; onBack?: () => void }) {
+  return <AnimeTitle id={id} preview={preview} episode={episode} top={top} onClose={onClose} onBack={onBack} />;
 }
 
 function BodySkeleton({ preview, onClose, onBack }: Props) {
@@ -281,17 +260,6 @@ function Facts({ item, meta, scored }: { item: MetaPreview; meta?: Meta; scored?
   );
 }
 
-/** Three lines of what it's about; "more" opens the rest. */
-function Synopsis({ text }: { text?: string }) {
-  const [open, setOpen] = useState(false);
-  if (!text) return null;
-  return (
-    <p className="ps-synopsis" data-open={open || undefined} onClick={() => setOpen(true)}>
-      {text}
-    </p>
-  );
-}
-
 /**
  * Who's in it and who made it, two quiet lines: "Cast:" (cut short with "… more" until tapped) and "Director:" or
  * "Creators:". A name with a page of its own opens it.
@@ -362,15 +330,6 @@ function Actions({ item, meta, request, onSources, fileTrailer }: { item: MetaPr
   );
 }
 
-function Action({ label, onClick, pressed, disabled, children }: { label: ReactNode; onClick: () => void; pressed?: boolean; disabled?: boolean; children: ReactNode }) {
-  return (
-    <button type="button" className="ps-action" aria-pressed={pressed} disabled={disabled} onClick={onClick}>
-      <span className="ps-action-glyph">{children}</span>
-      <span className="ps-action-label">{label}</span>
-    </button>
-  );
-}
-
 function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta; season: number }) {
   const videos = useMemo(() => downloadableEpisodes(meta.videos.filter((v) => v.season === season)), [meta.videos, season]);
   const d = useBatchDownload({ item, videos, season });
@@ -390,9 +349,7 @@ function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta;
       disabled={d.disabled && !d.running}
       onClick={d.start}
     >
-      <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M12 3.5v10.5M7.5 9.5l4.5 4.5 4.5-4.5M4 17.5h16M6.5 20.5h11" />
-      </svg>
+      <SeasonDownloadGlyph />
     </Action>
   );
 }

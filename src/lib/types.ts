@@ -9,7 +9,7 @@ export type ContentType = "movie" | "series";
 export type SecretsPlace = "keychain" | "file" | "unreadable";
 
 /** The app's font (Settings → Appearance). See lib/settings/fonts.ts. */
-export type UiFont = "inter" | "instrument" | "hanken" | "onest" | "mona" | "system" | "opendyslexic";
+export type UiFont = "polarity" | "inter" | "system" | "testsans";
 
 export interface MetaPreview {
   id: string;
@@ -49,6 +49,19 @@ export interface EpisodeRating {
   rating: number;
   /** How many people rated it, when IMDb says. */
   votes?: number | null;
+}
+
+/** A public Letterboxd list read from its link (src-tauri/src/letterboxd.rs), its films in the list's order. */
+export interface LetterboxdList {
+  name: string;
+  films: LetterboxdListFilm[];
+  /** Longer than a playlist holds: only the first 500 films were read. */
+  truncated: boolean;
+}
+
+export interface LetterboxdListFilm {
+  name: string;
+  year?: number;
 }
 
 export interface Meta extends MetaPreview {
@@ -404,7 +417,7 @@ export interface Settings {
   ratingColors?: boolean;
   /** A season's episodes as a horizontal shelf or a vertical list. */
   episodeLayout: EpisodeLayout;
-  /** "inter" (bundled), "system" (Segoe UI Variable on Windows) or "opendyslexic" (bundled, for dyslexia). */
+  /** "polarity" (bundled Polarity Sans, default), "inter" (bundled) or "system" (Segoe UI Variable on Windows). */
   uiFont: UiFont;
   subtitleStyle: SubtitleStyle;
   metadataSource?: string;

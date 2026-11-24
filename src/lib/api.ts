@@ -7,6 +7,7 @@ import type {
   Imported,
   ContentType,
   EpisodeRating,
+  LetterboxdList,
   ExternalRatings,
   InstalledAddon,
   LibraryItem,
@@ -123,6 +124,8 @@ export const api = {
   ratings: (type: ContentType, id: string) => call<ExternalRatings>("ratings", { ty: type, id }),
   /** A show's IMDb rating for each episode (Episode Ratings); none known is an empty list. */
   episodeRatings: (imdbId: string) => call<EpisodeRating[]>("episode_ratings", { imdbId }),
+  /** A public Letterboxd list read from its link (Import Playlist): its name and films in order. */
+  letterboxdList: (url: string) => call<LetterboxdList>("letterboxd_list", { url }),
 
   addons: () => call<InstalledAddon[]>("addons_list"),
   /** The add-ons the app installs itself, by manifest URL. */

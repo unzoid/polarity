@@ -1,0 +1,407 @@
+/* Select and delete (components/library/Trash.tsx): checks on tiles, the floating selection bar, and the confirm
+   view with its glass bin. */
+
+/* --- A tile that can be picked ------------------------------------------------------------------- */
+.selectable {
+  position: relative;
+  min-width: 0;
+  transition: opacity 220ms var(--ease-out);
+}
+.selectable-body {
+  display: contents;
+}
+/* A card is a button, which shrinks to its caption on its own: it fills the tile, as it filled the cell. */
+.selectable-body > .card {
+  width: 100%;
+}
+.selectable .card-frame {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    scale 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+/* A picked tile sinks back a little under its check, as a pressed key does. */
+.selectable[data-selected] .card-frame {
+  scale: 0.94;
+}
+/* On its way to (or in) the bin: the flying copy stands in for it. Ones past the third fade where they are. */
+.selectable[data-trash-away] {
+  opacity: 0;
+}
+.selectable[data-trash-away=""] {
+  transition: none;
+}
+.selectable-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-card);
+  background: none;
+  cursor: pointer;
+}
+.selectable-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.select-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.28);
+  box-shadow:
+    inset 0 0 0 1.5px rgb(255 255 255 / 0.92),
+    0 1px 4px rgb(0 0 0 / 0.35);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  animation: select-check-in 260ms var(--ease-out) both;
+  transition: background-color 160ms var(--ease-out);
+}
+.select-check[data-on] {
+  background: var(--accent);
+}
+.select-check svg {
+  scale: 0;
+  transition: scale 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.select-check[data-on] svg {
+  scale: 1;
+}
+@keyframes select-check-in {
+  from {
+    opacity: 0;
+    scale: 0.5;
+  }
+}
+
+/* --- The selection bar, as Family's: a frosted tray at the foot of the window holding three keys, each a glyph over
+       its word in a soft rounded square. */
+.select-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(20px, calc(env(safe-area-inset-bottom) + 10px));
+  z-index: 950;
+  display: flex;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  box-shadow:
+    inset 0 0 0 0.5px rgb(var(--ink) / 0.1),
+    0 8px 28px rgb(0 0 0 / 0.22);
+  backdrop-filter: blur(24px) saturate(1.4);
+  translate: -50% 0;
+  animation: select-bar-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  transition:
+    opacity 200ms var(--ease-out),
+    filter 200ms var(--ease-out);
+}
+.select-bar-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.select-key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 96px;
+  height: 62px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 16px;
+  background: rgb(var(--ink) / 0.06);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    scale 140ms var(--ease-out),
+    opacity 140ms var(--ease-out);
+}
+.select-key svg {
+  flex: none;
+}
+.select-key[aria-pressed="true"] {
+  color: var(--text);
+}
+.select-key:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+@media (hover: hover) {
+  .select-key:not(:disabled):hover {
+    background: rgb(var(--ink) / 0.1);
+    color: var(--text);
+  }
+}
+.select-key:not(:disabled):active {
+  scale: 0.95;
+}
+.select-key:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* How many are picked, on the bin's corner; it pops each time the number changes (it's keyed on it). */
+.select-key-glyph {
+  position: relative;
+  display: grid;
+}
+.select-key-count {
+  position: absolute;
+  top: -5px;
+  left: calc(100% - 7px);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg) 90%, transparent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  animation: select-count-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes select-count-pop {
+  from {
+    scale: 0.6;
+  }
+}
+.select-bar[data-paused] {
+  opacity: 0;
+  filter: blur(6px);
+  pointer-events: none;
+}
+@keyframes select-bar-in {
+  from {
+    opacity: 0;
+    translate: -50% 18px;
+    scale: 0.96;
+  }
+}
+@media (max-width: 420px) {
+  .select-key {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+/* --- The confirm view -------------------------------------------------------------------------------
+   No stacking context on the sheet: the bin's back (z 2), the flying cards (z 3) and the bin's front (z 4) all
+   stack in the root's, so the cards drop in between the bin's two faces. */
+.trash-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  color: var(--text);
+  font-family: var(--font);
+  /* The bin (Trash.tsx's BinBack/BinFront) on a dark page: smoked frosted glass with a bright lip. */
+  --bin-body: rgb(228 232 242 / 0.14);
+  --bin-light: rgb(255 255 255 / 0.16);
+  --bin-clear: rgb(255 255 255 / 0);
+  --bin-side: rgb(0 0 0 / 0.26);
+  --bin-under-lip: rgb(0 0 0 / 0.3);
+  --bin-foot: rgb(0 0 0 / 0.22);
+  --bin-edge: rgb(255 255 255 / 0.12);
+  --bin-lip: rgb(255 255 255 / 0.62);
+  --bin-in-far: rgb(255 255 255 / 0.04);
+  --bin-in-near: rgb(255 255 255 / 0.13);
+  --bin-floor: rgb(0 0 0 / 0.7);
+}
+/* On a light page, Family's own: milky white plastic, grey at the sides. */
+:root[data-scheme="light"] .trash-root {
+  --bin-body: rgb(255 255 255 / 0.72);
+  --bin-light: rgb(255 255 255 / 0.85);
+  --bin-side: rgb(150 160 180 / 0.3);
+  --bin-under-lip: rgb(130 140 160 / 0.22);
+  --bin-foot: rgb(150 160 180 / 0.2);
+  --bin-edge: rgb(140 150 170 / 0.18);
+  --bin-lip: #fff;
+  --bin-in-far: rgb(150 160 178 / 0.55);
+  --bin-in-near: rgb(222 226 234 / 0.6);
+  --bin-floor: rgb(70 80 100 / 0.28);
+}
+.trash-root[data-busy] .trash-actions {
+  pointer-events: none;
+}
+.trash-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  backdrop-filter: blur(30px) saturate(1.1);
+}
+.trash-sheet {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px 88px;
+  text-align: center;
+}
+.trash-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 340px;
+}
+.trash-icon {
+  margin-bottom: 4px;
+  color: var(--danger);
+}
+.trash-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+.trash-body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+/* Room above the rim for the stack. */
+.trash-stage {
+  position: relative;
+  flex: none;
+  width: 176px;
+  height: 196px;
+  margin: 92px 0 36px;
+}
+.trash-bin-back,
+.trash-bin-front {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+.trash-bin-back {
+  z-index: 2;
+  overflow: visible;
+}
+/* Frosted: what's inside shows through softly. Its clip is the drawn front face (BIN_FRONT, set inline). */
+.trash-bin-front {
+  z-index: 4;
+  width: 176px;
+  height: 196px;
+  backdrop-filter: blur(9px) saturate(1.2);
+}
+.trash-bin-front svg {
+  display: block;
+}
+.trash-cards {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.trash-card {
+  position: absolute;
+  transform-origin: 50% 50%;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.25),
+    0 10px 24px rgb(0 0 0 / 0.3);
+  will-change: transform;
+}
+/* The artwork clipped to the card's corners; the tile's check (copied, positioned inline) rides on top. */
+.trash-card-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.trash-card-art > .card-frame {
+  margin: 0;
+}
+.trash-card > .select-check {
+  margin: 0;
+}
+.trash-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(320px, 100%);
+}
+.trash-go,
+.trash-cancel {
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    scale 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+.trash-go {
+  height: 48px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 16px;
+}
+.trash-cancel {
+  height: 44px;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  font-size: 15px;
+}
+@media (hover: hover) {
+  .trash-go:hover {
+    background: color-mix(in srgb, var(--danger) 88%, #fff);
+  }
+  .trash-cancel:hover {
+    color: var(--text);
+  }
+}
+.trash-go:active,
+.trash-cancel:active {
+  scale: 0.97;
+}
+.trash-actions :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.trash-note {
+  position: absolute;
+  bottom: max(28px, calc(env(safe-area-inset-bottom) + 12px));
+  left: 50%;
+  width: min(340px, calc(100% - 32px));
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+  translate: -50% 0;
+}
+/* Short windows: less air around the bin rather than the buttons pushed off. (Not a scale: that would make the
+   stage a stacking context and lift the cards over the bin's front.) */
+@media (max-height: 640px) {
+  .trash-sheet {
+    padding-bottom: 56px;
+  }
+  .trash-stage {
+    margin: 78px 0 16px;
+  }
+}

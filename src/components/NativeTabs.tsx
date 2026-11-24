@@ -15,9 +15,10 @@ import { resolveScheme, useSystemPrefersLight } from "../lib/theme";
  * (lib/navTabs.ts): Search and the Calendar stay buttons in the top bar. The web-drawn tabs hide (shell.css).
  * Elsewhere nothing.
  */
-export function useNativeTabs(links: NavLink[]) {
+export function useNativeTabs(links: NavLink[], sheetOpen = false) {
   const { stack, tab } = useRouter();
-  const settingsOpen = useSettingsOverlay().open;
+  // `sheetOpen`: the phone shell's title sheet, which covers the bar as Settings does.
+  const settingsOpen = useSettingsOverlay().open || sheetOpen;
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
   // Drawn in the app's scheme: on a light page iOS's dark bar stood out (it would follow the system's otherwise).
   const { data: settings } = useSettings();

@@ -1,14 +1,14 @@
 import { setPrefs, usePrefs } from "../../lib/settings";
 import { Card, NumberRow } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
-import { ThemePicker } from "../../components/settings/ThemePicker";
+import { AccentPicker } from "../../components/settings/AccentPicker";
 
 export function AppearancePage() {
   const prefs = usePrefs();
 
   return (
     <>
-      <ThemePicker />
+      <AccentPicker />
 
       <Card title="Title Pages">
         <SettingRow id="pageBackdrop" />
@@ -19,7 +19,6 @@ export function AppearancePage() {
         <NumberRow
           setting="uiScale"
           title="Interface size"
-          caption="On this device."
           value={Math.round((prefs.uiScale > 0 ? prefs.uiScale : 1) * 100)}
           min={70}
           max={175}

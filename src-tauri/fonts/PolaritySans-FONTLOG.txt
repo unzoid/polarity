@@ -1,0 +1,36 @@
+FONTLOG for Polarity Sans
+
+Basic font information
+----------------------
+Polarity Sans is a modified version of TikTok Sans, released under the SIL Open Font License 1.1. Its proportions, widths and spacing were fitted to measurements of typefaces the requester chose. Every outline comes from the open base. No outline, point or kerning pair was taken from any other font.
+
+Use: ui. Scripts: latin.
+
+Files: ttf/PolaritySans-Regular.ttf, webfonts/PolaritySans-Regular.woff2, ttf/PolaritySans-Medium.ttf, webfonts/PolaritySans-Medium.woff2, ttf/PolaritySans-SemiBold.ttf, webfonts/PolaritySans-SemiBold.woff2, ttf/PolaritySans-Bold.ttf, webfonts/PolaritySans-Bold.woff2, ttf/PolaritySans-ExtraBold.ttf, webfonts/PolaritySans-ExtraBold.woff2, OFL.txt, FONTLOG.txt, fonts.css, README.md
+
+ChangeLog
+---------
+2026-11-23 (version 1.000)
+  1. Base: TikTokSans[opsz,slnt,wdth,wght].ttf, axes {'opsz': (12.0, 36.0, 36.0), 'wdth': (75.0, 100.0, 150.0), 'wght': (300.0, 300.0, 900.0), 'slnt': (-6.0, 0.0, 0.0)}.
+  2. Regular: y coordinates from {'opsz': 18.0, 'wght': 423.63}; x per width class from its own location, factors {'lc_straight': 0.9756, 'lc_bowl': 0.9886, 'lc_round': 0.9918, 'lc_diagonal': 0.9846, 'lc_narrow': 0.9909, 'uc_straight': 0.9792, 'uc_round': 1.0002, 'uc_diagonal': 0.9869, 'uc_wide': 0.9853, 'uc_narrow': 0.9743, 'figures': 0.9985}.
+     Width fit: 3 pass(es), error % by class {'lc_straight': 0.025, 'lc_bowl': -0.026, 'lc_round': 0.002, 'lc_diagonal': 0.072, 'lc_narrow': 0.148, 'uc_straight': -0.005, 'uc_round': -0.037, 'uc_diagonal': -0.042, 'uc_wide': -0.011, 'uc_narrow': -0.002, 'figures': -0.064}.
+  3. Medium: y coordinates from {'opsz': 18.0, 'wght': 504.49}; x per width class from its own location, factors {'lc_straight': 0.9759, 'lc_bowl': 0.9886, 'lc_round': 0.992, 'lc_diagonal': 0.9841, 'lc_narrow': 0.99, 'uc_straight': 0.9798, 'uc_round': 1.0018, 'uc_diagonal': 0.9876, 'uc_wide': 0.985, 'uc_narrow': 0.9744, 'figures': 0.9988}.
+     Width fit: 4 pass(es), error % by class {'lc_straight': 0.042, 'lc_bowl': 0.063, 'lc_round': -0.001, 'lc_diagonal': 0.002, 'lc_narrow': 0.055, 'uc_straight': -0.016, 'uc_round': -0.03, 'uc_diagonal': -0.001, 'uc_wide': -0.001, 'uc_narrow': -0.002, 'figures': -0.088}.
+  4. SemiBold: y coordinates from {'opsz': 18.0, 'wght': 594.73}; x per width class from its own location, factors {'lc_straight': 0.9788, 'lc_bowl': 0.9893, 'lc_round': 0.9939, 'lc_diagonal': 0.9847, 'lc_narrow': 0.9742, 'uc_straight': 0.9801, 'uc_round': 1.0012, 'uc_diagonal': 0.9876, 'uc_wide': 0.9848, 'uc_narrow': 0.9734, 'figures': 0.9997}.
+     Width fit: 5 pass(es), error % by class {'lc_straight': -0.028, 'lc_bowl': -0.092, 'lc_round': -0.02, 'lc_diagonal': -0.0, 'lc_narrow': 0.067, 'uc_straight': -0.002, 'uc_round': 0.004, 'uc_diagonal': -0.007, 'uc_wide': -0.04, 'uc_narrow': -0.096, 'figures': -0.016}.
+  5. Bold: y coordinates from {'opsz': 18.0, 'wght': 684.96}; x per width class from its own location, factors {'lc_straight': 0.98, 'lc_bowl': 0.9897, 'lc_round': 0.9951, 'lc_diagonal': 0.9894, 'lc_narrow': 0.9707, 'uc_straight': 0.9819, 'uc_round': 1.0012, 'uc_diagonal': 0.9883, 'uc_wide': 0.9855, 'uc_narrow': 0.978, 'figures': 1.0006}.
+     Width fit: 3 pass(es), error % by class {'lc_straight': 0.015, 'lc_bowl': 0.02, 'lc_round': -0.041, 'lc_diagonal': -0.036, 'lc_narrow': 0.08, 'uc_straight': -0.019, 'uc_round': 0.022, 'uc_diagonal': 0.034, 'uc_wide': -0.001, 'uc_narrow': 0.002, 'figures': -0.073}.
+  6. ExtraBold: y coordinates from {'opsz': 18.0, 'wght': 775.2}; x per width class from its own location, factors {'lc_straight': 0.982, 'lc_bowl': 0.9911, 'lc_round': 0.9948, 'lc_diagonal': 0.9908, 'lc_narrow': 0.9733, 'uc_straight': 0.9848, 'uc_round': 1.0013, 'uc_diagonal': 0.9912, 'uc_wide': 0.9883, 'uc_narrow': 0.9797, 'figures': 1.0009}.
+     Width fit: 3 pass(es), error % by class {'lc_straight': 0.025, 'lc_bowl': 0.021, 'lc_round': 0.017, 'lc_diagonal': 0.015, 'lc_narrow': 0.08, 'uc_straight': 0.101, 'uc_round': 0.145, 'uc_diagonal': -0.001, 'uc_wide': 0.06, 'uc_narrow': 0.073, 'figures': 0.104}.
+  7. Spacing (PolaritySans-Regular.fit.ttf): side moves {'lc': {'S': 0.1, 'R': 0.8, 'O': 0.4}, 'uc': {'S': 0.2, 'R': 0.0, 'O': 0.1}}, track 0, 0 pairs opened by the collision guard.
+  8. Spacing (PolaritySans-Medium.fit.ttf): side moves {'lc': {'S': -0.2, 'R': 0.9, 'O': 0.3}, 'uc': {'S': -0.1, 'R': 0.7, 'O': 0.3}}, track 0, 0 pairs opened by the collision guard.
+  9. Spacing (PolaritySans-SemiBold.fit.ttf): side moves {'lc': {'S': 0.1, 'R': 0.4, 'O': 0.2}, 'uc': {'S': -0.2, 'R': 0.5, 'O': 0.1}}, track 0, 0 pairs opened by the collision guard.
+  10. Spacing (PolaritySans-Bold.fit.ttf): side moves {'lc': {'S': -0.2, 'R': -0.4, 'O': -0.3}, 'uc': {'S': 0.1, 'R': 1.0, 'O': 0.5}}, track 0, 0 pairs opened by the collision guard.
+  11. Spacing (PolaritySans-ExtraBold.fit.ttf): side moves {'lc': {'S': 0.5, 'R': -0.3, 'O': 0.1}, 'uc': {'S': 0.1, 'R': 0.0, 'O': 0.0}}, track 0, 0 pairs opened by the collision guard.
+  12. Renamed to Polarity Sans, trademark record removed, OFL notice set, overlaps removed, variation tables removed, spacing accents classed as base glyphs in GDEF.
+
+Acknowledgements
+----------------
+Original design: see the copyright line.
+Original copyright: Copyright 2024 TikTok Inc. (https://github.com/tiktok/TikTokSans)
+Modifications: Polarity Authors.

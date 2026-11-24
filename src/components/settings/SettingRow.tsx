@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { choicesOf, shownNumber, storedNumber, useSetting, type Value } from "../../lib/settings/catalog";
+import { useFormFactor } from "../../lib/ui";
 import { Dropdown } from "../Dropdown";
-import { NumberRow, PickRow, ToggleRow } from "./rows";
+import { FamilyPickerTray, MoreDots } from "./FamilyTray";
+import { NumberRow, PickRow, RowText, ToggleRow } from "./rows";
 
 /**
  * A desktop row drawn from the settings schema (lib/settings/schema.ts): a switch, a dropdown
@@ -25,6 +28,8 @@ export function SettingRow({
   omit?: Value[];
 }) {
   const { def, value, set } = useSetting(id);
+  const phone = useFormFactor().form === "phone";
+  const [trayOpen, setTrayOpen] = useState(false);
   if (value === undefined || !def.control) return null;
   const change = (v: Value) => {
     set(v);
@@ -52,6 +57,36 @@ export function SettingRow({
     case "choice": {
       // Dropdown values are strings: each choice goes by its index.
       const choices = choicesOf(control, value).filter((c) => c.value === value || !omit?.includes(c.value));
+      if (phone) {
+        const current = choices.find((c) => c.value === value)?.label ?? String(value);
+        return (
+          <>
+            <button
+              type="button"
+              className="settings-row settings-row-button ft-choice-row"
+              data-setting={def.id}
+              disabled={disabled}
+              aria-haspopup="dialog"
+              aria-expanded={trayOpen}
+              onClick={() => setTrayOpen(true)}
+            >
+              <RowText title={def.title} caption={caption ?? def.caption} />
+              <span className="ft-choice-right">
+                <span className="ft-choice-value">{current}</span>
+                <MoreDots size={16} className="ft-choice-dots" />
+              </span>
+            </button>
+            <FamilyPickerTray
+              open={trayOpen}
+              onClose={() => setTrayOpen(false)}
+              title={def.controlLabel ?? def.title}
+              value={value}
+              options={choices}
+              onPick={change}
+            />
+          </>
+        );
+      }
       return (
         <PickRow {...shared}>
           <Dropdown

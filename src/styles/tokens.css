@@ -232,9 +232,9 @@
 
 :root {
   /* "Twemoji Country Flags" first: it covers only flag emoji, and only exists where the system draws
-     none (Windows, main.tsx); every other character skips it. Instrument Sans is the app's font; the
-     others are a setting away (base.css, data-font). */
-  --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, "Segoe UI Variable Text", sans-serif;
+     none (Windows, main.tsx); every other character skips it. Polarity Sans is the app's default font;
+     Inter and System are a setting away (base.css, data-font). */
+  --font: "Twemoji Country Flags", "Polarity Sans", system-ui, "Segoe UI Variable Text", sans-serif;
 
   /* A poster or still's frame before its picture is in: the page's own surface (the frame itself is
      dark-styled, for what's drawn on the picture, so it can't use --surface-1). */

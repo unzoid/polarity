@@ -17,6 +17,7 @@ import { TraktSignIn } from "../../components/settings/TraktSignIn";
 import { SimklImport } from "../../components/settings/SimklImport";
 import { SimklSignIn } from "../../components/settings/SimklSignIn";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { useFormFactor } from "../../lib/ui";
 import {
   anilistAuthorizeUrl,
   linkAniList,
@@ -86,7 +87,7 @@ function RatingsRow(props: Expandable) {
     <ExpandRow
       icon={Star}
       title="Critic and audience scores"
-      caption="Rotten Tomatoes, Metacritic and Letterboxd scores on title pages, with a free key"
+      caption="MDBList / OMDb"
       value={on ? "On" : "Off"}
       {...props}
     >
@@ -163,7 +164,6 @@ function AniListRow(props: Expandable) {
       icon={AniListIcon}
       title="AniList"
       setting="anilist"
-      caption="Episodes you watch update this profile's AniList list, and you can change it from an anime's page"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -253,7 +253,6 @@ function MalRow(props: Expandable) {
       icon={MalIcon}
       title="MyAnimeList"
       setting="mal"
-      caption="Episodes you watch update this profile's MyAnimeList list, and you can change it from an anime's page"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -330,7 +329,6 @@ function TraktRow(props: Expandable) {
       icon={TraktIcon}
       title="Trakt"
       setting="trakt"
-      caption="What you watch goes to this profile's Trakt history, with its watchlist and ratings kept in step"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -385,7 +383,6 @@ function SimklRow(props: Expandable) {
       icon={SimklIcon}
       title="Simkl"
       setting="simkl"
-      caption="What you watch goes to this profile's Simkl lists, films, shows and anime alike"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -449,7 +446,7 @@ function ArtworkRow(props: Expandable) {
     <ExpandRow
       icon={Picture}
       title="Artwork and episode info"
-      caption="Adds logos, sharper posters and episode details using your free TMDB key"
+      caption="TMDB"
       value={on ? "On" : "Off"}
       {...props}
     >
@@ -476,6 +473,7 @@ function ArtworkRow(props: Expandable) {
 /** Seek-bar thumbnails from Seekr. */
 function PreviewsRow(props: Expandable) {
   const qc = useQueryClient();
+  const phone = useFormFactor().form === "phone";
   const { data } = useSettings();
   const [key, setKey] = useState("");
   useEffect(() => setKey(data?.seekrKey ?? ""), [data?.seekrKey]);
@@ -496,15 +494,23 @@ function PreviewsRow(props: Expandable) {
           ? "Couldn't reach Seekr. Check your connection."
           : null;
 
+  const toggle = (
+    <label className="settings-expand-toggle">
+      <span>Show previews</span>
+      <Switch checked={hasKey && data.seekPreviews} disabled={!hasKey} onChange={(on) => save.mutate({ seekPreviews: on })} />
+    </label>
+  );
+
   return (
     <ExpandRow
       icon={Grid}
       title="Timeline previews"
-      caption="Small preview pictures when you hover over the seek bar, from Seekr"
+      caption="Seekr"
       value={hasKey && data.seekPreviews ? "On" : "Off"}
       {...props}
     >
       <p className="settings-expand-text">Key from seekr.tv.</p>
+      {phone && hasKey && toggle}
       <form
         className="settings-expand-form"
         onSubmit={(e) => {
@@ -535,10 +541,7 @@ function PreviewsRow(props: Expandable) {
           {status}
         </p>
       )}
-      <label className="settings-expand-toggle">
-        <span>Show previews</span>
-        <Switch checked={hasKey && data.seekPreviews} disabled={!hasKey} onChange={(on) => save.mutate({ seekPreviews: on })} />
-      </label>
+      {!phone && toggle}
     </ExpandRow>
   );
 }

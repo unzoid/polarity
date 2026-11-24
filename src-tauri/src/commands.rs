@@ -825,6 +825,12 @@ pub async fn episode_ratings(imdb_id: String) -> Vec<crate::episode_ratings::Epi
     crate::episode_ratings::get(&imdb_id).await
 }
 
+/// A public Letterboxd list's name and films, from a pasted link (Import Playlist).
+#[tauri::command]
+pub async fn letterboxd_list(url: String) -> Result<crate::letterboxd::LetterboxdList> {
+    crate::letterboxd::read_list(&url).await
+}
+
 // --- External links ------------------------------------------------------
 
 /// A title's trailer as a playable file (IMDb), or none.

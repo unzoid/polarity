@@ -13,7 +13,7 @@ import { keys } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import type { MetaPreview, Progress } from "../lib/types";
 import { cardArtUrl } from "../lib/ui";
-import { IconChevronRight, IconInfo, IconPlay } from "../phone/icons";
+import { IconChevronRight, IconPlay } from "../phone/icons";
 
 /**
  * A poster in a row or grid: the title's art and nothing else, 4 pt corners, as Netflix's iPad app draws it. A click
@@ -138,6 +138,7 @@ export const Row = memo(function Row({
   className,
   onMore,
   count,
+  action,
   children,
 }: {
   title: ReactNode;
@@ -146,6 +147,8 @@ export const Row = memo(function Row({
   className?: string;
   onMore?: () => void;
   count?: number;
+  /** At the heading's far end (a `.dk-text-btn`). */
+  action?: ReactNode;
   children?: ReactNode;
 }) {
   if (items && !items.length && !children) return null;
@@ -167,6 +170,7 @@ export const Row = memo(function Row({
         ) : (
           head
         )}
+        {action}
       </h2>
       <Strip className={wide ? "dk-strip dk-strip-wide" : "dk-strip"} itemCount={items?.length}>
         {children ??
@@ -312,8 +316,8 @@ function ContinueCard({ entry: cw }: { entry: ContinueEntry }) {
       <button
         type="button"
         className="dk-cw-art"
-        aria-label={upNext ? `Play next episode of ${item.name}` : `Resume ${item.name}`}
-        onClick={resume}
+        aria-label={`About ${item.name}`}
+        onClick={open}
       >
         {!failed && artChain.length > 0 ? (
           <Img
@@ -333,9 +337,6 @@ function ContinueCard({ entry: cw }: { entry: ContinueEntry }) {
         <div className="dk-cw-brand" aria-hidden>
           <ArtTitle name={item.name} logo={entry ? undefined : logo} pending={!entry && meta.isLoading} />
         </div>
-        <span className="dk-cw-play" aria-hidden>
-          <IconPlay size={22} />
-        </span>
         <div className="dk-cw-foot" aria-hidden>
           {!upNext && p.duration > 0 && (
             <span className="dk-cw-track">
@@ -345,19 +346,19 @@ function ContinueCard({ entry: cw }: { entry: ContinueEntry }) {
           {footText && <span className="dk-cw-label tabular">{footText}</span>}
         </div>
       </button>
-      <div className="dk-cw-tools">
+      {/* The card opens the title; only the play button in its middle plays. */}
+      <span className="dk-cw-play">
         <button
           type="button"
-          className="dk-cw-tool"
-          aria-label={`About ${item.name}`}
-          title={`About ${item.name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            open();
-          }}
+          className="dk-cw-play-btn"
+          aria-label={upNext ? `Play next episode of ${item.name}` : `Resume ${item.name}`}
+          title={upNext ? "Play next episode" : "Resume"}
+          onClick={resume}
         >
-          <IconInfo size={16} />
+          <IconPlay size={22} />
         </button>
+      </span>
+      <div className="dk-cw-tools">
         <button
           type="button"
           className="dk-cw-tool"

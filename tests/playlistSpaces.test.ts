@@ -145,3 +145,37 @@ describe("the playlist limit (critique H4)", () => {
     pl.setPlaylistSpace(null);
   });
 });
+
+describe("a playlist made with its titles (Import Playlist)", () => {
+  test("keeps their order, each title once", () => {
+    const made = pl.createPlaylistOf("Imported", [title("tt3"), title("tt1"), title("tt3"), title("tt2")]);
+    expect(made?.items.map((i) => i.id)).toEqual(["tt3", "tt1", "tt2"]);
+    expect(made?.name).toBe("Imported");
+  });
+});
+
+describe("select and delete", () => {
+  test("several titles leave a playlist as one change, the rest keeping their order", () => {
+    pl.setPlaylistSpace(null);
+    const p = pl.createPlaylistOf("Picked", [title("tt1"), title("tt2"), title("tt3"), title("tt4")])!;
+    pl.removeManyFromPlaylist(p.id, ["tt3", "tt1", "tt9"]);
+    const after = saved("local").playlists.find((x: { id: string }) => x.id === p.id);
+    expect(after.items.map((i: { id: string }) => i.id)).toEqual(["tt2", "tt4"]);
+    expect(saved("local").dirty).toContain(p.id);
+  });
+
+  test("removing nothing changes nothing", () => {
+    const p = pl.createPlaylistOf("Same", [title("tt1")])!;
+    const before = saved("local").playlists.find((x: { id: string }) => x.id === p.id).updatedAt;
+    pl.removeManyFromPlaylist(p.id, ["tt9"]);
+    expect(saved("local").playlists.find((x: { id: string }) => x.id === p.id).updatedAt).toBe(before);
+  });
+
+  test("several playlists deleted at once stay as tombstones", () => {
+    const a = pl.createPlaylist("A")!;
+    const b = pl.createPlaylist("B")!;
+    pl.deletePlaylists([a.id, b.id]);
+    const kept = saved("local").playlists.filter((x: { id: string }) => x.id === a.id || x.id === b.id);
+    expect(kept.map((x: { deleted?: boolean }) => x.deleted)).toEqual([true, true]);
+  });
+});

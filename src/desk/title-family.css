@@ -1,0 +1,536 @@
+/* A title, drawn the way Family (family.co) draws its detail pages and trays (benji.org/family-values):
+   - the page is the darkest thing on screen; what you act on sits on it in rounded, filled cards and pills;
+   - the art you clicked becomes a card inset at the top of the page (Family's wallet card), its name on it;
+   - the close button is a round, filled glyph at the top left, Back beside it, never bare text;
+   - primary actions are full-width pills (white on dark), the secondary one a grey pill of the same size,
+     side by side when there's room and one above the other when there isn't;
+   - quieter actions are filled tiles of one size in a row (Family's amount and option tiles);
+   - facts about the thing are label / value rows in one filled card (Family's Review Details);
+   - tabs are plain words, the one you're on white, the rest grey, no underline.
+   Everything here is scoped under the dialog, so it lays over desk.css's Netflix-measured title. */
+
+.dk-dlg {
+  --fam-page: #000;
+  --fam-card: #141416;
+  --fam-fill: #1d1d20;
+  --fam-fill-hover: #28282c;
+  --fam-line: rgb(255 255 255 / 0.07);
+  --fam-text-2: rgb(235 235 245 / 0.6);
+  --fam-text-3: rgb(235 235 245 / 0.36);
+  --fam-r-page: calc(28 * var(--pt));
+  --fam-r-tile: calc(18 * var(--pt));
+  --dk-sheet: var(--fam-page);
+  --dk-pad: calc(24 * var(--pt));
+  container: dk-title / inline-size;
+  border-radius: var(--fam-r-page);
+  background: var(--fam-page);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 40px 120px rgb(0 0 0 / 0.7);
+}
+:root[data-scheme="light"] .dk-dlg {
+  --fam-page: #fff;
+  --fam-card: #f4f4f6;
+  --fam-fill: #ededf0;
+  --fam-fill-hover: #e2e2e6;
+  --fam-line: rgb(0 0 0 / 0.06);
+  --fam-text-2: rgb(60 60 67 / 0.62);
+  --fam-text-3: rgb(60 60 67 / 0.38);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.06),
+    0 40px 120px rgb(0 0 0 / 0.28);
+}
+
+/* The page behind: blurred and dimmed, never scaled (Family's detail pages blur what they leave). */
+.dk-layer .dk-scrim {
+  background: rgb(0 0 0 / 0.5);
+  -webkit-backdrop-filter: blur(28px) saturate(120%);
+  backdrop-filter: blur(28px) saturate(120%);
+}
+:root[data-scheme="light"] .dk-layer .dk-scrim {
+  background: rgb(0 0 0 / 0.28);
+}
+
+/* Close (and Back): round, filled, at the top left, floating on the art (filled, so they read on any picture and
+   on the page once it scrolls under them). */
+.dk-dlg .dk-dlg-buttons {
+  top: calc(16 * var(--pt));
+  left: calc(16 * var(--pt));
+  right: calc(16 * var(--pt));
+  gap: calc(8 * var(--pt));
+}
+.dk-dlg .dk-dlg-buttons .dk-round {
+  width: calc(36 * var(--pt));
+  height: calc(36 * var(--pt));
+  background: rgb(36 36 40 / 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  color: #fff;
+  filter: none;
+  transition: background-color 140ms ease, scale 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-dlg .dk-dlg-buttons .dk-round svg {
+  width: calc(20 * var(--pt));
+  height: calc(20 * var(--pt));
+}
+.dk-dlg .dk-dlg-buttons .dk-round:hover {
+  background: rgb(58 58 64 / 0.85);
+}
+.dk-dlg .dk-dlg-buttons .dk-round:active {
+  scale: 0.92;
+}
+:root[data-scheme="light"] .dk-dlg .dk-dlg-buttons .dk-round {
+  background: rgb(236 236 240 / 0.82);
+  color: #000;
+}
+:root[data-scheme="light"] .dk-dlg .dk-dlg-buttons .dk-round:hover {
+  background: rgb(222 222 228 / 0.92);
+}
+
+.dk-dlg .dk-t {
+  --dk-t-tight: calc(10 * var(--pt));
+  --dk-t-loose: calc(24 * var(--pt));
+  padding-bottom: calc(36 * var(--pt));
+}
+
+/* The art: as wide as the dialog, under the buttons, its top corners the dialog's own; it runs down into the page
+   so the logo has its ground and nothing draws a line between picture and page. */
+.dk-dlg .dk-t-media {
+  margin: 0;
+  border-radius: var(--fam-r-page) var(--fam-r-page) 0 0;
+  background: var(--fam-card);
+  isolation: isolate;
+}
+.dk-dlg .dk-t-media::after {
+  inset: 40% -2px -2px -2px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--fam-page) 30%, transparent) 40%,
+    color-mix(in srgb, var(--fam-page) 82%, transparent) 75%,
+    var(--fam-page) 96%
+  );
+}
+.dk-dlg .dk-t-art,
+.dk-dlg .dk-t-media video,
+.dk-dlg .dk-t-media iframe {
+  inset: 0;
+  height: 100%;
+}
+.dk-dlg .dk-t-logo {
+  left: var(--dk-pad);
+  bottom: calc(14 * var(--pt));
+  max-width: min(46%, calc(320 * var(--pt)));
+  max-height: calc(100 * var(--pt));
+}
+/* The trailer's sound: a small filled round button on the art, level with the logo. */
+.dk-dlg .dk-t-mute {
+  right: var(--dk-pad);
+  bottom: calc(18 * var(--pt));
+  width: calc(34 * var(--pt));
+  height: calc(34 * var(--pt));
+  background: rgb(0 0 0 / 0.42);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.dk-dlg .dk-t-info {
+  padding: calc(8 * var(--pt)) var(--dk-pad) 0;
+}
+.dk-dlg .dk-t-name {
+  font-size: calc(28 * var(--pt));
+  letter-spacing: -0.025em;
+}
+.dk-dlg .dk-t-facts {
+  margin-top: 0;
+  gap: calc(4 * var(--pt)) calc(10 * var(--pt));
+  font-size: calc(14.5 * var(--pt));
+  font-weight: 500;
+  color: var(--fam-text-2);
+}
+.dk-dlg .dk-t-name + .dk-t-facts {
+  margin-top: var(--dk-t-tight);
+}
+.dk-dlg .dk-t-age {
+  border-width: 1px;
+  border-radius: calc(6 * var(--pt));
+  color: var(--fam-text-2);
+}
+.dk-dlg .dk-t-scores {
+  margin-top: calc(10 * var(--pt));
+}
+
+/* Play and Download: Family's full-width pills, 50 pt tall, as wide as the page between them. */
+.dk-dlg .dk-t-action-row {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: calc(12 * var(--pt));
+  margin-top: calc(20 * var(--pt));
+}
+.dk-dlg .dk-t-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(10 * var(--pt));
+}
+.dk-dlg .dk-t-buttons:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dk-dlg .dk-t-buttons .dk-t-btn {
+  min-width: 0;
+  height: calc(50 * var(--pt));
+  padding: 0 calc(18 * var(--pt));
+  font-size: calc(16.5 * var(--pt));
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.dk-dlg .dk-t-btn {
+  transition: background-color 150ms ease, scale 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-dlg .dk-t-btn:active:not(:disabled) {
+  transform: none;
+  scale: 0.97;
+}
+.dk-dlg .dk-t-btn-white:hover:not(:disabled) {
+  background: #e6e6ea;
+}
+:root[data-scheme="light"] .dk-dlg .dk-t-btn-white:hover:not(:disabled) {
+  background: #222;
+}
+.dk-dlg .dk-t-btn-grey {
+  background: var(--fam-fill);
+}
+.dk-dlg .dk-t-btn-grey:hover:not(:disabled) {
+  background: var(--fam-fill-hover);
+}
+
+/* Waiting on the title's details (TitleView's data-wait): in place and at full strength, just not live yet. Greying
+   them for the 200 ms nobody could reach them in only makes them flash. */
+.dk-dlg :is(.dk-t-btn, .dk-t-action)[data-wait]:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* My List, Trailer, Sources, Download Season: filled tiles of one size, the glyph over its name. */
+.dk-dlg .dk-t-actions {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  align-items: stretch;
+  gap: calc(10 * var(--pt));
+}
+.dk-dlg .dk-t-action {
+  justify-content: center;
+  gap: calc(7 * var(--pt));
+  min-width: 0;
+  min-height: calc(76 * var(--pt));
+  padding: calc(12 * var(--pt)) calc(8 * var(--pt));
+  border-radius: var(--fam-r-tile);
+  background: var(--fam-fill);
+  transition: background-color 150ms ease, scale 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dk-dlg .dk-t-action:hover:not(:disabled) {
+  background: var(--fam-fill-hover);
+}
+.dk-dlg .dk-t-action:active:not(:disabled) {
+  scale: 0.96;
+}
+.dk-dlg .dk-t-action-glyph {
+  display: grid;
+  place-items: center;
+  height: calc(24 * var(--pt));
+}
+.dk-dlg .dk-t-action-glyph svg {
+  width: calc(23 * var(--pt));
+  height: calc(23 * var(--pt));
+}
+/* Added to My List: the plus turns into the check on the same tile, in the accent. */
+.dk-dlg .dk-t-action[aria-pressed="true"] .dk-t-action-glyph {
+  color: var(--dk-accent);
+  animation: fam-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes fam-pop {
+  from {
+    scale: 0.4;
+    opacity: 0;
+  }
+}
+.dk-dlg .dk-t-action-label {
+  max-width: none;
+  font-size: calc(12.5 * var(--pt));
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* About it: the description on the left, the facts in one filled card on the right. */
+.dk-dlg .dk-t-meta-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: calc(16 * var(--pt)) calc(20 * var(--pt));
+  margin-top: calc(24 * var(--pt));
+}
+.dk-dlg .dk-t-synopsis {
+  margin: 0;
+  font-size: calc(14.5 * var(--pt));
+  line-height: 1.5;
+  color: rgb(var(--ink) / 0.86);
+}
+/* Up next / Continue watching: its own small card. */
+.dk-dlg .dk-t-next {
+  margin-top: calc(14 * var(--pt));
+  padding: calc(14 * var(--pt)) calc(16 * var(--pt));
+  border-radius: calc(20 * var(--pt));
+  background: var(--fam-card);
+}
+.dk-dlg .dk-t-next:first-child {
+  margin-top: 0;
+}
+.dk-dlg .dk-t-next-kicker {
+  font-size: calc(11.5 * var(--pt));
+  letter-spacing: 0.04em;
+  color: var(--fam-text-2);
+}
+.dk-dlg .dk-t-next-line {
+  font-size: calc(14.5 * var(--pt));
+}
+.dk-dlg .dk-t-meta-side .dk-t-credits {
+  padding: calc(6 * var(--pt)) calc(16 * var(--pt));
+  border-radius: calc(20 * var(--pt));
+  background: var(--fam-card);
+  color: var(--text);
+  font-size: calc(13.5 * var(--pt));
+  line-height: 1.45;
+}
+.dk-dlg .dk-t-credits p {
+  padding: calc(10 * var(--pt)) 0;
+}
+.dk-dlg .dk-t-credits p:has(> .dk-t-credit-label) {
+  display: grid;
+  grid-template-columns: calc(64 * var(--pt)) minmax(0, 1fr);
+  gap: calc(12 * var(--pt));
+}
+.dk-dlg .dk-t-credits:empty {
+  display: none;
+}
+.dk-dlg .dk-t-meta-side .dk-t-credits p + p {
+  margin-top: 0;
+  border-top: 1px solid var(--fam-line);
+}
+.dk-dlg .dk-t-credit-label {
+  color: var(--fam-text-2);
+}
+.dk-dlg .dk-t-more {
+  margin-left: calc(4 * var(--pt));
+  color: var(--fam-text-2) !important;
+  font-weight: 600;
+}
+
+/* Tabs: plain words, the one you're on white and the rest grey; no underline (Family's Tokens / Collectibles). */
+.dk-dlg .dk-t-tabs {
+  margin-top: calc(30 * var(--pt));
+}
+.dk-dlg .dk-t-tablist {
+  gap: calc(22 * var(--pt));
+  height: calc(40 * var(--pt));
+}
+.dk-dlg .dk-t-tab-mark {
+  display: none;
+}
+.dk-dlg .dk-t-tab {
+  font-size: calc(17 * var(--pt));
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--fam-text-3) !important;
+}
+.dk-dlg .dk-t-tab:hover {
+  color: var(--fam-text-2) !important;
+}
+.dk-dlg .dk-t-tab[data-selected] {
+  color: var(--text) !important;
+}
+
+/* The episode tools: pills, as Family draws Options and Use Max. */
+.dk-dlg .dk-eps-bar {
+  gap: calc(8 * var(--pt));
+  padding-top: calc(12 * var(--pt));
+}
+.dk-dlg .dk-season,
+.dk-dlg .dk-eps-ratings-btn,
+.dk-dlg .dk-eps-layout {
+  height: calc(36 * var(--pt));
+  border-radius: 999px;
+  background: var(--fam-fill);
+}
+.dk-dlg .dk-season {
+  gap: calc(10 * var(--pt));
+  padding: 0 calc(14 * var(--pt)) 0 calc(16 * var(--pt));
+  font-weight: 600;
+}
+.dk-dlg .dk-season:hover,
+.dk-dlg .dk-eps-ratings-btn:hover {
+  background: var(--fam-fill-hover);
+}
+.dk-dlg .dk-eps-ratings-btn {
+  padding: 0 calc(14 * var(--pt));
+  font-weight: 600;
+}
+.dk-dlg .dk-eps-radios button,
+.dk-dlg .dk-eps-search,
+.dk-dlg .dk-eps-search-btn {
+  border-radius: 999px;
+}
+.dk-dlg .dk-eps-radios button[aria-checked="true"] {
+  background: var(--fam-fill-hover);
+}
+:root[data-scheme="light"] .dk-dlg .dk-eps-radios button[aria-checked="true"] {
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+.dk-dlg .dk-eps-search[data-open] {
+  background: var(--fam-fill-hover);
+}
+
+/* Episodes: rows with rounded stills and a filled press state, no rules between them. */
+.dk-dlg .dk-ep {
+  border-bottom: 0;
+}
+.dk-dlg .dk-ep-main {
+  border-radius: calc(20 * var(--pt));
+}
+.dk-dlg .dk-ep[data-up-next] .dk-ep-main {
+  background: var(--fam-card);
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dk-dlg .dk-ep:not([data-unreleased]) .dk-ep-main:hover {
+    background: var(--fam-card);
+    box-shadow: none;
+  }
+}
+.dk-dlg .dk-ep-row-still,
+.dk-dlg .dk-ep-still {
+  border-radius: calc(14 * var(--pt));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+}
+.dk-dlg .dk-t-trailer-still {
+  border-radius: calc(16 * var(--pt));
+}
+
+/* The pinned bar clears the round buttons: Close at the left, or Back left and Close right. */
+.dk-dlg .dk-t-pin-bar {
+  height: calc(68 * var(--pt));
+  padding: 0 var(--dk-pad) 0 calc(64 * var(--pt));
+}
+.dk-dlg[data-stack] .dk-t-pin-bar {
+  padding: 0 calc(64 * var(--pt));
+}
+
+/* While the poster's art is flying to it, the card itself waits (TitleDialog shows it as the art lands). */
+.dk-dlg[data-flying] .dk-t-media {
+  opacity: 0;
+}
+
+/* Wide (a PC window): Play and Download as pills at the left, the four actions as compact tiles at the right of the
+   same row, so the page's first screen holds the art, what it is, and everything you can do with it. */
+@container dk-title (min-width: 700px) {
+  /* The same two columns as the synopsis and the details card under it (.dk-t-meta-grid), so the tiles span
+     exactly the card's width, both edges lined up, however many tiles there are. */
+  .dk-dlg .dk-t-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    align-items: center;
+    gap: calc(16 * var(--pt)) calc(20 * var(--pt));
+  }
+  .dk-dlg .dk-t-buttons,
+  .dk-dlg .dk-t-buttons:has(> :only-child) {
+    display: flex;
+    flex: none;
+    gap: calc(10 * var(--pt));
+  }
+  .dk-dlg .dk-t-buttons .dk-t-btn {
+    width: auto;
+    min-width: calc(148 * var(--pt));
+    height: calc(46 * var(--pt));
+    padding: 0 calc(24 * var(--pt));
+  }
+  .dk-dlg .dk-t-actions {
+    grid-auto-columns: minmax(0, 1fr);
+    gap: calc(8 * var(--pt));
+  }
+  .dk-dlg .dk-t-action {
+    gap: calc(5 * var(--pt));
+    min-height: calc(64 * var(--pt));
+    padding: calc(9 * var(--pt)) calc(4 * var(--pt));
+    border-radius: calc(16 * var(--pt));
+  }
+  .dk-dlg .dk-t-action-glyph svg {
+    width: calc(21 * var(--pt));
+    height: calc(21 * var(--pt));
+  }
+  .dk-dlg .dk-t-action-label {
+    font-size: calc(11.5 * var(--pt));
+  }
+}
+
+/* Narrow (a small window, a phone-sized tablet split): Play full width, Download full width under it, the tiles in
+   two rows, the description over the facts. */
+@container dk-title (max-width: 600px) {
+  .dk-dlg .dk-t-buttons {
+    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dk-dlg .dk-t-meta-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dk-dlg .dk-t-media {
+    aspect-ratio: 16 / 10;
+  }
+}
+@container dk-title (max-width: 420px) {
+  .dk-dlg .dk-t-actions {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* The art in flight between the poster and the card (TitleDialog): above the page, below nothing. */
+.dk-fam-ghost {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform, width, height;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+}
+.dk-fam-ghost img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* The title's logo, carried by the art in flight at its place on the card (.dk-t-logo). */
+.dk-fam-ghost .dk-fam-ghost-logo {
+  position: absolute;
+  z-index: 1;
+  inset: auto;
+  /* Its size and place are set as fractions of the art (TitleDialog), never the art's whole box as the pictures are. */
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 4px 18px rgb(0 0 0 / 0.72));
+}
+/* The same fade into the page the title's art has (.dk-t-media::after), carried by the art in flight. */
+.dk-fam-ghost-shade {
+  position: absolute;
+  inset: 40% -2px -2px -2px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--ghost-page) 30%, transparent) 40%,
+    color-mix(in srgb, var(--ghost-page) 82%, transparent) 75%,
+    var(--ghost-page) 96%
+  );
+}

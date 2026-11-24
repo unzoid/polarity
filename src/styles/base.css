@@ -16,6 +16,13 @@ body,
   margin: 0;
 }
 
+/* Icons sized by number (phone/icons.tsx) are drawn in the desktop shell's points, as every px in the stylesheets
+   is (scripts/pointScale.ts); 1px each where no point is set. No specificity, so a stylesheet's own size wins. */
+:where(svg[data-pt-icon]) {
+  width: calc(var(--icon-size) * var(--ui-pt, 1px));
+  height: calc(var(--icon-size) * var(--ui-pt, 1px));
+}
+
 /* Shared base primitives used before account.css loads (navbar/tab avatars and Gate loading shell). */
 .avatar {
   display: grid;
@@ -58,12 +65,52 @@ body {
 :root[data-touch="true"] :is(button, a, img) {
   -webkit-touch-callout: none;
 }
-/* Windows draws web fonts unhinted with grayscale anti-aliasing, so light text
-   on a dark background comes out thin and soft. A little more weight evens it
-   out (Inter is variable, so 450 is a real weight, not a jump to medium). */
-:root[data-os="windows"] body {
-  font-weight: 450;
+/* Polarity Sans (the default, tokens.css): bundled in five static weights (400–800), SIL Open Font License 1.1
+   (assets/fonts/PolaritySans-OFL.txt, PolaritySans-FONTLOG.txt). */
+@font-face {
+  font-family: "Polarity Sans";
+  src: url("../assets/fonts/PolaritySans-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
 }
+@font-face {
+  font-family: "Polarity Sans";
+  src: url("../assets/fonts/PolaritySans-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Polarity Sans";
+  src: url("../assets/fonts/PolaritySans-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Polarity Sans";
+  src: url("../assets/fonts/PolaritySans-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Polarity Sans";
+  src: url("../assets/fonts/PolaritySans-ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+}
+:root[data-font="polarity"] {
+  --font: "Twemoji Country Flags", "Polarity Sans", system-ui, "Segoe UI Variable Text", sans-serif;
+}
+:root:not([data-font]) body,
+:root[data-font="polarity"] body {
+  font-weight: 400;
+  font-feature-settings: normal;
+}
+
 /* "System" font: Segoe UI Variable is hinted for Windows' own text rendering,
    so it's the crispest option there; elsewhere it falls back to the OS font. */
 :root[data-font="system"] {
@@ -78,36 +125,36 @@ body {
 }
 
 /* Inter, bundled with its optical sizes. Its own features: l with tail (cv05) and serifed I (cv08) so Il1
-   never blur together; round quotes (ss03). */
+   never blur together; round quotes (ss03). On Windows, bump weight slightly to 450 (Inter is variable,
+   so 450 is a real weight, not a jump to medium) to counter unhinted grayscale rendering on dark backgrounds. */
 :root[data-font="inter"] {
   --font: "Twemoji Country Flags", "Inter Variable", "Inter", system-ui, "Segoe UI Variable Text", sans-serif;
 }
 :root[data-font="inter"] body {
   font-feature-settings: "cv05", "cv08", "ss03";
 }
+:root[data-os="windows"][data-font="inter"] body {
+  font-weight: 450;
+}
 
-/* Instrument Sans (the default, tokens.css) and the other app fonts, all variable (weight axis) so every
-   weight the app uses is a real one. */
-:root[data-font="instrument"] {
-  --font: "Twemoji Country Flags", "Instrument Sans Variable", system-ui, sans-serif;
+/* Local-only comparison option (git-excluded in .git/info/exclude; do not commit). */
+@font-face {
+  font-family: "TestSans";
+  src: url("../assets/fonts/TestSans-vendor-test.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
-:root[data-font="hanken"] {
-  --font: "Twemoji Country Flags", "Hanken Grotesk Variable", system-ui, sans-serif;
+:root[data-font="testsans"] {
+  --font: "Twemoji Country Flags", "TestSans", system-ui, "Segoe UI Variable Text", sans-serif;
 }
-:root[data-font="onest"] {
-  --font: "Twemoji Country Flags", "Onest Variable", system-ui, sans-serif;
-}
-:root[data-font="mona"] {
-  --font: "Twemoji Country Flags", "Mona Sans Variable", system-ui, sans-serif;
-}
-:root:is([data-font="instrument"], [data-font="hanken"], [data-font="onest"], [data-font="mona"]) body {
+:root[data-font="testsans"] body {
+  font-weight: 400;
   font-feature-settings: normal;
 }
 
-/* OpenDyslexic: heavier letter bottoms and distinct shapes (b/d, p/q) for
-   readers with dyslexia. The app font option, and a subtitle font (mpv gets
-   the .otf files from src-tauri/fonts). Unmodified official files, SIL Open
-   Font License: assets/fonts/OFL.txt. It has a regular and a bold weight. */
+/* OpenDyslexic: bundled subtitle font (mpv gets the .otf files from src-tauri/fonts; the CSS preview uses
+   these .woff2 files). Unmodified official files, SIL Open Font License: assets/fonts/OFL.txt. */
 @font-face {
   font-family: "OpenDyslexic";
   src: url("../assets/fonts/OpenDyslexic-Regular.woff2") format("woff2");
@@ -128,13 +175,6 @@ body {
   font-weight: 400;
   font-style: italic;
   font-display: swap;
-}
-:root[data-font="opendyslexic"] {
-  --font: "Twemoji Country Flags", "OpenDyslexic", "Segoe UI Variable Text", system-ui, sans-serif;
-}
-:root[data-font="opendyslexic"] body {
-  font-weight: 400;
-  font-feature-settings: normal;
 }
 
 img {
@@ -251,17 +291,6 @@ input {
   color: var(--text-3);
 }
 .tabular {
-  font-variant-numeric: tabular-nums;
-}
-/* Instrument Sans draws its tabular figures as a separate, wider design (a footed 1, looser spacing), so a
-   static number in them reads as another font. Its own figures everywhere, then; only numbers that tick
-   (clocks, timers, progress, steppers) keep the steady widths, so they don't jitter. */
-:root:not([data-font]) .tabular,
-:root[data-font="instrument"] .tabular {
-  font-variant-numeric: normal;
-}
-:root:not([data-font]) :is(.scrubber-time, .player-remaining, .player-sleep, .player-frame-label, .player-hold-speed, .player-step-time, .tv-clock, .sub-stepper-value, .download-row-line, .batch-download-status, .navbar-update, .skip-num),
-:root[data-font="instrument"] :is(.scrubber-time, .player-remaining, .player-sleep, .player-frame-label, .player-hold-speed, .player-step-time, .tv-clock, .sub-stepper-value, .download-row-line, .batch-download-status, .navbar-update, .skip-num) {
   font-variant-numeric: tabular-nums;
 }
 

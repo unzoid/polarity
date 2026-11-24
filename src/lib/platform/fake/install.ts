@@ -6,6 +6,8 @@ import { SAGA_FILLER } from "./longAnime";
 import { fakeAccount, startSignedOut } from "./account";
 import type { Download } from "../../library/downloads";
 import type { NativeDialog } from "../nativeDialogs";
+import type { NativeTabsState } from "../nativeTabs";
+import { showFakeTabBar } from "./tabBar";
 import type { AnimeLink } from "../../library/identity";
 import type { LibraryItem, MetaPreview, Progress, Settings } from "../../types";
 
@@ -30,6 +32,7 @@ let downloads: Download[] = seeded?.downloads ?? [];
 // `fake.html?theme=black` and the like start with that setting changed.
 const params = new URLSearchParams(location.search);
 params.delete("worst"); // fixtures.ts's worst-case switch, not a setting
+params.delete("phone"); // dev-only phone emulation switch, not a setting
 params.delete("films"); // and its README-screenshot switch
 params.delete("downloads"); // and #15's many-downloads switch
 params.delete("logos"); // and #437's every-title-has-a-logo switch
@@ -112,6 +115,12 @@ const commands: Record<string, (a: Args) => unknown> = {
       : { rottenTomatoes: 91, audience: 87, metacritic: 78, letterboxd: 3.9, trakt: 84, tmdb: 81, imdb: 8.2 },
   // None: the chart shows the fixtures' own episode ratings.
   episode_ratings: () => [],
+  // Import Playlist: any list link reads as the fixtures' first films, then one the catalog doesn't have.
+  letterboxd_list: () => ({
+    name: "A Made-Up List",
+    films: [...fx.movies.slice(0, 6).map((m) => ({ name: m.name, year: Number(m.releaseInfo) || undefined })), { name: "A Film Nobody Lists", year: 1990 }],
+    truncated: false,
+  }),
   trailer: () => null,
   addons_list: () => addons,
   // No TVs on the network and no other players installed here.
@@ -138,7 +147,10 @@ const commands: Record<string, (a: Args) => unknown> = {
   // Open Stremio links in Polarity (#163): each change is kept for browser tests to read.
   stremio_links_set: (a) => void ((window as { __stremioLinks?: boolean[] }).__stremioLinks ??= []).push(!!a.on),
   // What iOS's tab bar was last told to show (components/NativeTabs.tsx).
-  native_tabs: (a) => void ((window as { __nativeTabs?: unknown }).__nativeTabs = a.tabs),
+  native_tabs: (a) => {
+    (window as { __nativeTabs?: unknown }).__nativeTabs = a.tabs;
+    showFakeTabBar(a.tabs as NativeTabsState);
+  },
   addon_catalog: (a) => fx.addonCatalog(String(a.addon), String(a.ty), String(a.id), a.extra as [string, string][]),
   addons_bundled: () => [],
   library_list: () => library,
