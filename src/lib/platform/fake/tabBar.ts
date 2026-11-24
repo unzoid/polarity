@@ -68,7 +68,9 @@ export function showFakeTabBar(state: NativeTabsState) {
     document.head.append(style);
     bar = document.createElement("nav");
     bar.className = "fake-ios-tabbar";
-    bar.setAttribute("aria-label", "Tab bar (iOS stand-in)");
+    // Named as the phone shell's own bar is, so the same steps (and browser tests) find whichever bar is showing.
+    bar.setAttribute("aria-label", "Sections");
+    bar.dataset.fakeNative = "";
     document.body.append(bar);
   }
   root.dataset.fakeNativeBar = "";

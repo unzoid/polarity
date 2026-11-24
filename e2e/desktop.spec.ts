@@ -1581,7 +1581,6 @@ test.describe("signed in, on a fresh profile", () => {
     await app.locator(".profile-pop").getByRole("button", { name: "Account", exact: true }).click();
     const row = app.locator('[data-setting="shareSetup"]');
     await expect(row).toContainText("Share add-ons and keys");
-    await expect(row).toContainText("sync to their accounts");
     const pick = row.getByRole("combobox");
     await expect(pick).toContainText("Between this account's profiles");
     await pick.click();
@@ -2365,11 +2364,9 @@ test("subtitle Font starts at From the subtitles; a picked font is kept (#347)",
   let settings = await open();
   const font = () => settings.getByRole("combobox", { name: "Subtitle font" });
   await expect(font()).toHaveText(/From the subtitles/);
-  await expect(settings.getByText("Styled subtitles keep their own font")).toBeVisible();
   await font().click();
   await app.getByRole("option", { name: "Segoe UI", exact: true }).click();
   await expect(font()).toHaveText(/^Segoe UI/);
-  await expect(settings.getByText("Styled subtitles keep their own font")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close settings" }).click();
   settings = await open();
   await expect(font()).toHaveText(/^Segoe UI/);

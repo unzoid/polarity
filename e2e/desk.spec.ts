@@ -117,7 +117,7 @@ test("desk player uses Netflix chrome and edge sheets (Episodes, Audio & Subtitl
   await expect(player.locator(".dk-pl-bottom")).toHaveCSS("opacity", "1");
   await tracksSheet.getByRole("button", { name: "Subtitle settings" }).click();
   await expect(tracksSheet.locator(".dk-pl-style")).toBeVisible();
-  await expect(tracksSheet.getByRole("radiogroup", { name: "Outline" })).toBeVisible();
+  await expect(tracksSheet.getByRole("radiogroup", { name: "Outline", exact: true })).toBeVisible();
   await expect(player.locator(".sub-preview")).toHaveCount(0);
   await app.keyboard.press("Escape");
   await expect(tracksSheet).toBeHidden();

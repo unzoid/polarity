@@ -144,6 +144,8 @@ function flyArt(
   return { el, done: Promise.all(anims.map((x) => x.finished)).then(() => undefined), cancel: () => (anims.forEach((x) => x.cancel()), el.remove()) };
 }
 
+const noop = () => {};
+
 const rectOf = (el: Element): Rect => {
   const r = el.getBoundingClientRect();
   return { x: r.left, y: r.top, w: r.width, h: r.height };
@@ -206,7 +208,8 @@ export function TitleDialog({
     };
   };
   const pageColor = () => (box.current ? getComputedStyle(box.current).getPropertyValue("--fam-page").trim() : "") || "#000";
-  const anim = (a: Animation | undefined) => (a ? { cancel: () => a.cancel(), done: a.finished.then(() => undefined) } : undefined);
+  // `done` settles when the animation ends either way: one cancelled (closed mid-opening) is no error.
+  const anim = (a: Animation | undefined) => (a ? { cancel: () => a.cancel(), done: a.finished.then(noop, noop) } : undefined);
 
   useLayoutEffect(() => {
     const el = box.current;
