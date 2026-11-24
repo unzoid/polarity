@@ -48,8 +48,8 @@ test("a restricted profile asks for the guardian's PIN once, then not again for 
   expect(manageGranted("kid")).toBe(true);
   expect(await guardManage(ctx(kid, [parent, kid]))).toBe(true);
   expect(asked).toHaveLength(1);
-  // A PIN hashed with fewer rounds is hashed again.
-  for (let i = 0; i < 100 && !locks.length; i++) await Bun.sleep(20);
+  // A PIN hashed with fewer rounds is hashed again, in the background (up to 10 s on a slow CI runner).
+  for (let i = 0; i < 500 && !locks.length; i++) await Bun.sleep(20);
   expect(locks[0]?.[0]).toBe("parent");
 });
 
@@ -88,14 +88,16 @@ test("a forgotten PIN, confirmed through the account, is removed", async () => {
 test("changing a profile's PIN asks for its current one; a new PIN is stored hashed", async () => {
   answers = [{ profile: "parent", pin: "4321" }, { pin: "0007" }];
   expect(await guardLockChange(parent, ctx(parent, [parent, kid]))).toBe(true);
-  // The typed PIN's rehash (fewer rounds than this version's) lands first.
-  for (let i = 0; i < 100 && !locks.length; i++) await Bun.sleep(20);
-  const before = locks.length;
   expect(await setNewPin(parent, ctx(parent, [parent, kid]))).toBe(true);
   expect(asked[1]).toMatchObject({ kind: "new" });
-  const stored = locks[before][1].pin!;
+  // The typed PIN's rehash (fewer rounds than this version's) is written in the background and can land before or
+  // after the new PIN on a slow machine: the new PIN is whichever stored PIN "0007" opens. Each is checked as a
+  // profile of its own, so a miss doesn't count as a wrong try against the parent.
+  const pins = locks.map(([, lock]) => lock.pin).filter((p): p is string => !!p);
+  const opens = await Promise.all(pins.map((pin, i) => checkPin({ ...parent, id: `stored-${i}`, lock: { ...parent.lock!, pin } }, "0007")));
+  const stored = pins[opens.findIndex((r) => r.ok)];
+  expect(stored).toBeDefined();
   expect(stored).not.toContain("0007");
-  expect((await checkPin({ ...parent, lock: { ...parent.lock!, pin: stored } }, "0007")).ok).toBe(true);
 });
 
 test("checking: wrong PINs back off on the device, and nothing is checked while waiting", async () => {
