@@ -113,31 +113,9 @@ export function useLogoChoice(src: string | undefined, logos?: string[], backdro
   useEffect(() => {
     if (!candidates.length || choices.has(id)) return;
     let live = true;
-    const behind = backdrop && spot ? measureBackdrop(backdrop, spot, scheme) : Promise.resolve(pageLuminance(spot, scheme));
-    (async () => {
-      const [lum, first] = await Promise.all([behind, measureLogo(candidates[0])]);
-      if (candidates.length === 1) return chooseLogo(candidates, [first.ink], lum, [first.shape], lightPage);
-      // Fast-path: when the primary logo already reads cleanly as-is on the measured backdrop, skip downloading & scanning fallback logos 1..5.
-      if (lum !== null) {
-        const fast = chooseLogo([candidates[0]], [first.ink], lum, [first.shape], lightPage);
-        if (typeof fast === "object" && fast.look === "as-is") return fast;
-      }
-      const rest = await Promise.all(candidates.slice(1).map(measureLogo));
-      const measured = [first, ...rest];
-      return chooseLogo(
-        candidates,
-        measured.map((m) => m.ink),
-        lum,
-        measured.map((m) => m.shape),
-        lightPage,
-      );
-    })()
-      // Whatever goes wrong measuring, the name shows rather than an error escaping.
-      .catch((): Choice => "unsure")
-      .then((c) => {
-        lruSet(choices, id, c);
-        if (live) setMeasured((n) => n + 1);
-      });
+    void measureChoice(id, candidates, lightPage, backdrop, spot, scheme).then(() => {
+      if (live) setMeasured((n) => n + 1);
+    });
     return () => {
       live = false;
     };
@@ -145,6 +123,62 @@ export function useLogoChoice(src: string | undefined, logos?: string[], backdro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   return candidates.length ? choice : undefined;
+}
+
+/**
+ * Makes {@link TitleLogo}'s choice ahead of it, for a logo on a dark page with no spot (a title's art), and loads the
+ * chosen picture: the pointer resting on a poster, so the title opening from it has its logo with its art.
+ */
+export function warmLogo(src: string | undefined, logos?: string[]) {
+  if (!src) return;
+  const { candidates, lightPage, id } = choiceId(src, logos);
+  const done = lruGet(choices, id);
+  void (done !== undefined ? Promise.resolve(done) : measureChoice(id, candidates, lightPage)).then((c) => {
+    if (typeof c === "object") preloadChosen(c.src);
+  });
+}
+
+const preloadedChosen = new Set<string>();
+function preloadChosen(src: string) {
+  if (preloadedChosen.has(src) || imageLoaded(src)) return;
+  preloadedChosen.add(src);
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+}
+
+/** Measures a choice once at a time per id (a warm-up and the logo on screen share it) and keeps it in the cache. */
+function measureChoice(id: string, candidates: string[], lightPage: boolean, backdrop?: string, spot?: LogoSpot, scheme: LogoScheme = currentLogoScheme()): Promise<Choice> {
+  const running = measuring.get(id);
+  if (running) return running;
+  const behind = backdrop && spot ? measureBackdrop(backdrop, spot, scheme) : Promise.resolve(pageLuminance(spot, scheme));
+  const p = (async () => {
+    const [lum, first] = await Promise.all([behind, measureLogo(candidates[0])]);
+    if (candidates.length === 1) return chooseLogo(candidates, [first.ink], lum, [first.shape], lightPage);
+    // Fast-path: when the primary logo already reads cleanly as-is on the measured backdrop, skip downloading & scanning fallback logos 1..5.
+    if (lum !== null) {
+      const fast = chooseLogo([candidates[0]], [first.ink], lum, [first.shape], lightPage);
+      if (typeof fast === "object" && fast.look === "as-is") return fast;
+    }
+    const rest = await Promise.all(candidates.slice(1).map(measureLogo));
+    const measured = [first, ...rest];
+    return chooseLogo(
+      candidates,
+      measured.map((m) => m.ink),
+      lum,
+      measured.map((m) => m.shape),
+      lightPage,
+    );
+  })()
+    // Whatever goes wrong measuring, the name shows rather than an error escaping.
+    .catch((): Choice => "unsure")
+    .then((c) => {
+      lruSet(choices, id, c);
+      measuring.delete(id);
+      return c;
+    });
+  measuring.set(id, p);
+  return p;
 }
 
 /** The logo to show and how, "none" when no candidate is shaped like a logo, or "unsure" when nothing could be measured. */
@@ -155,6 +189,7 @@ const MAX_CANDIDATES = 6;
 
 const MAX = 300;
 const choices = new Map<string, Choice>();
+const measuring = new Map<string, Promise<Choice>>();
 const logos = new Map<string, Promise<MeasuredLogo>>();
 const behinds = new Map<string, Promise<number | null>>();
 const readables = new Map<string, Promise<HTMLImageElement | null>>();

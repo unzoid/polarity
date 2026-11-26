@@ -3,7 +3,7 @@ import { api } from "../../lib/api";
 import { formatDate, formatRuntime } from "../../lib/format";
 import { BROWSE_GENRES, personIds, usePersonPhoto } from "../../lib/catalog";
 import { useQuery } from "@tanstack/react-query";
-import { keys, useRatings, useStreams } from "../../lib/net";
+import { keys, useRatings, useSettings, useStreams } from "../../lib/net";
 import { isFresh, metacriticTone } from "../../lib/ui";
 import type { ContentType, ExternalRatings, Meta } from "../../lib/types";
 import { letterboxdUrl } from "../CardMenu";
@@ -236,22 +236,25 @@ const initials = (name: string) =>
  * no key is set or nothing is known.
  */
 export function ScoreRow({ ratings: r }: { ratings?: ExternalRatings }) {
+  const { data: settings } = useSettings();
   if (!r) return null;
+  const p = settings?.ratingsProviders;
   const links = r.links ?? {};
   const scores: { key: keyof typeof links; site: string; icon: ReactNode; value: string; tone?: string }[] = [];
-  if (r.imdb != null) scores.push({ key: "imdb", site: "IMDb", icon: <BrandIcon site="imdb" />, value: r.imdb.toFixed(1) });
-  if (r.tmdb != null) scores.push({ key: "tmdb", site: "TMDB", icon: <BrandIcon site="tmdb" />, value: String(r.tmdb) });
-  if (r.trakt != null) scores.push({ key: "trakt", site: "Trakt", icon: <BrandIcon site="trakt" />, value: String(r.trakt) });
-  if (r.letterboxd != null) scores.push({ key: "letterboxd", site: "Letterboxd", icon: <LetterboxdDots />, value: r.letterboxd.toFixed(1) });
-  if (r.rottenTomatoes != null) {
+  if (r.imdb != null && (p?.imdb ?? true)) scores.push({ key: "imdb", site: "IMDb", icon: <BrandIcon site="imdb" />, value: r.imdb.toFixed(1) });
+  if (r.tmdb != null && (p?.tmdb ?? true)) scores.push({ key: "tmdb", site: "TMDB", icon: <BrandIcon site="tmdb" />, value: String(r.tmdb) });
+  if (r.trakt != null && (p?.trakt ?? true)) scores.push({ key: "trakt", site: "Trakt", icon: <BrandIcon site="trakt" />, value: String(r.trakt) });
+  if (r.letterboxd != null && (p?.letterboxd ?? true)) scores.push({ key: "letterboxd", site: "Letterboxd", icon: <LetterboxdDots />, value: r.letterboxd.toFixed(1) });
+  if (r.rottenTomatoes != null && (p?.rottenTomatoes ?? true)) {
     const fresh = isFresh(r.rottenTomatoes);
     scores.push({ key: "rottenTomatoes", site: `Rotten Tomatoes (${fresh ? "Fresh" : "Rotten"})`, icon: fresh ? <Tomato /> : <Splat />, value: `${r.rottenTomatoes}%`, tone: fresh ? "fresh" : "rotten" });
   }
-  if (r.audience != null) {
+  if (r.audience != null && (p?.audience ?? true)) {
     const fresh = isFresh(r.audience);
     scores.push({ key: "audience", site: "Rotten Tomatoes audience", icon: <Popcorn spilled={!fresh} />, value: `${r.audience}%`, tone: fresh ? "fresh" : "rotten" });
   }
-  if (r.metacritic != null) scores.push({ key: "metacritic", site: "Metacritic", icon: <BrandIcon site="metacritic" />, value: String(r.metacritic), tone: metacriticTone(r.metacritic) });
+  if (r.metacritic != null && (p?.metacritic ?? true)) scores.push({ key: "metacritic", site: "Metacritic", icon: <BrandIcon site="metacritic" />, value: String(r.metacritic), tone: metacriticTone(r.metacritic) });
+  if (r.mal != null && (p?.mal ?? true)) scores.push({ key: "mal", site: "MyAnimeList", icon: <BrandIcon site="myanimelist" />, value: r.mal.toFixed(1) });
   if (!scores.length) return null;
   return (
     <ul className="score-row t-callout tabular" aria-label="Scores">
@@ -266,7 +269,14 @@ export function ScoreRow({ ratings: r }: { ratings?: ExternalRatings }) {
         return (
           <li key={s.key} className="score-row-item" data-site={s.key} data-tone={s.tone} title={href ? `${s.site}: open the page` : s.site}>
             {href ? (
-              <button className="score-row-link" onClick={() => void api.openExternal(href)} aria-label={`${s.site} ${s.value}, open on the site`}>
+              <button
+                className="score-row-link"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void api.openExternal(href);
+                }}
+                aria-label={`${s.site} ${s.value}, open on the site`}
+              >
                 {body}
               </button>
             ) : (

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
+import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import "../styles/phone.css";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { Avatar } from "../components/Avatar";
@@ -85,7 +85,11 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     if (!canPreloadChunks()) return;
     let cancelIdle: (() => void) | undefined;
     const t = window.setTimeout(() => {
-      cancelIdle = whenIdle(() => void TitleSheet.preload().catch(() => {}), 3000);
+      cancelIdle = whenIdle(() => {
+        void TitleSheet.preload().catch(() => {});
+        void PhoneSearch.preload().catch(() => {});
+        void PhoneMy.preload().catch(() => {});
+      }, 3000);
     }, 3500);
     return () => {
       window.clearTimeout(t);
@@ -138,9 +142,6 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     },
     () => undefined,
   );
-  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  useNativeSwipe(!!playing || layers > 0 || stack.length > 1);
-
   // Kept tab pages, in key order (moving one would reset its scroll); the current one shown.
   const tabs = useMemo(() => [...new Map([...kept, root].map((e) => [e.key, e])).values()].sort((a, b) => a.key - b.key), [kept, root]);
   const stage = useRef<HTMLDivElement>(null);
@@ -149,6 +150,8 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     if (fadeFrom.current.key === root.key) return;
     const from = fadeFrom.current;
     fadeFrom.current = root;
+    // iOS's native tab bar already animates tab selection; switch pages immediately without a second 320ms slide.
+    if (document.documentElement.dataset.nativeTabs === "true") return;
     const el = stage.current?.querySelector<HTMLElement>(`:scope > [data-tab-key="${root.key}"]`);
     const old = stage.current?.querySelector<HTMLElement>(`:scope > [data-tab-key="${from.key}"]`);
     if (!el || reduced()) return;
@@ -157,8 +160,8 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     const dir = Math.sign(tabIndex(root.route) - tabIndex(from.route)) || 1;
     const ease = "cubic-bezier(0.2, 0.8, 0.2, 1)";
     old?.setAttribute("data-fading", "");
-    const out = old?.animate([{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: `${-dir * 36}px 0` }], { duration: 220, easing: ease, fill: "forwards" });
-    const a = el.animate([{ opacity: 0, translate: `${dir * 48}px 0` }, { opacity: 1, translate: "0 0" }], { duration: 320, easing: ease });
+    const out = old?.animate([{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: `${-dir * 36}px 0` }], { duration: 180, easing: ease, fill: "forwards" });
+    const a = el.animate([{ opacity: 0, translate: `${dir * 36}px 0` }, { opacity: 1, translate: "0 0" }], { duration: 240, easing: ease });
     void a.finished.finally(() => {
       out?.cancel();
       old?.removeAttribute("data-fading");
@@ -173,8 +176,10 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
       data-card-ratings={settings?.showCardRatings ?? false}
       data-rating-position={settings?.cardRatingPosition ?? "poster"}
       data-rating-colors={settings?.ratingColors ?? false}
+      data-playing={playing ? "" : undefined}
       data-player-leaving={playerLeaving}
     >
+      <PhoneNativeSwipe active={!!playing || stack.length > 1} />
       <div
         className="ph-main"
         data-settings-open={standaloneSettings || undefined}
@@ -203,7 +208,7 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
             return (
               <ErrorBoundary key={r.key} where="title sheet">
                 <Suspense fallback={null}>
-                  <TitleSheet entries={r.entries} leaving={!!r.leaving} origin={origins.current.get(r.key)} z={z} onGone={() => finish(r.key)} onClose={close} onBack={back} />
+                  <TitleSheet entries={r.entries} leaving={!!r.leaving} playing={!!playing} origin={origins.current.get(r.key)} z={z} onGone={() => finish(r.key)} onClose={close} onBack={back} />
                 </Suspense>
               </ErrorBoundary>
             );
@@ -255,7 +260,14 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
   );
 }
 
-function TabPage({
+/** Keeps iOS's edge-back swipe synchronized without forcing PhoneApp to re-render when any tray/menu opens. */
+function PhoneNativeSwipe({ active }: { active: boolean }) {
+  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
+  useNativeSwipe(active || layers > 0);
+  return null;
+}
+
+const TabPage = memo(function TabPage({
   route,
   active,
   homeView,
@@ -292,7 +304,7 @@ function TabPage({
       </div>
     </div>
   );
-}
+});
 
 /** The bar's three places. My Polarity's glyph is the profile's picture, as My Netflix's is. */
 function TabBar({ root, z, covered, onTop }: { root: Entry; z: number; covered: boolean; onTop: (key: number) => void }) {
@@ -530,7 +542,7 @@ function AnimeTab({ Screen, route }: { Screen: ComponentType<{ route: Route }>; 
       ref={page}
       onScrollCapture={(e) => {
         const c = Math.min(1, Math.max(0, (e.target as HTMLElement).scrollTop / 56));
-        page.current?.style.setProperty("--c", c.toFixed(3));
+        page.current?.querySelector<HTMLElement>(":scope > .ph-head")?.style.setProperty("--c", c.toFixed(3));
       }}
     >
       <TabHeader scroller={none}>

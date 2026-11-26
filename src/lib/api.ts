@@ -3,6 +3,13 @@ import { noteSaveFailure } from "./errors";
 import { playContext } from "./anime/playContext";
 import { isKitsuId, kitsuMeta } from "./anime/kitsu";
 import type {
+  AnimeBrowsePage,
+  AnimeBrowseQuery,
+  AnimeCharacter,
+  AnimeHomeCatalog,
+  AnimeItem,
+  AnimeRichDetails,
+  AnimeShowInfo,
   CacheInfo,
   Imported,
   ContentType,
@@ -59,9 +66,24 @@ function changed<T>(value: T): T {
 export const api = {
   /** Opens an https page in the default browser. */
   openExternal: (url: string) => call<void>("open_external", { url }),
-  /** The anime cache folder (fillers.json, anime-list-mini.json) and their size. */
+  /** The anime cache folder (fillers.json, anime-list-mini.json, anime-catalog) and their size. */
   animeCache: () => call<CacheInfo>("anime_cache"),
   animeCacheClear: () => call<void>("anime_cache_clear"),
+  /** Show-first anime home shelves (TMDB Discover + Jikan seasonal, hydrated in Rust). */
+  animeHome: () => call<AnimeHomeCatalog>("anime_home"),
+  /** One anime shelf or genre shelf, paged. */
+  animeShelf: (shelf: string, genre?: string, page = 1) => call<AnimeBrowsePage>("anime_shelf", { shelf, genre: genre ?? null, page }),
+  /** Airing schedule for a weekday ("monday".."sunday") or all days when omitted. */
+  animeSchedule: (day?: string) => call<AnimeItem[]>("anime_schedule", { day: day ?? null }),
+  /** Filterable/searchable anime browse grid. */
+  animeBrowse: (query: AnimeBrowseQuery) => call<AnimeBrowsePage>("anime_browse", { query }),
+  /** Instant 0ms local lookup of anime cross-IDs and season mappings for any tt/kitsu/mal id. */
+  animeShowInfo: (id: string) => call<AnimeShowInfo>("anime_show_info", { id }),
+  /** Lazy-loaded characters & voice actors for an anime (cached 7 days on disk). */
+  animeCharacters: (malId: number) => call<AnimeCharacter[]>("anime_characters", { malId }),
+  /** Lazy-loaded rich anime details (rankings, studios, facts, tags, official links & characters) in one request. */
+  animeDetails: (anilistId?: number, malId?: number) =>
+    call<AnimeRichDetails>("anime_details", { anilistId: anilistId ?? null, malId: malId ?? null }),
   /** `bound`: an age limit's highest film rating, which TMDB's discover lists apply (lib/catalog/viewingLimit.ts catalogBound). */
   catalog: (type: ContentType, id: string, skip = 0, genre?: string, bound?: { certCountry: string; certMax: string }) =>
     call<MetaPreview[]>("catalog", { ty: type, id, skip, genre, ...bound }),
@@ -72,11 +94,12 @@ export const api = {
   search: (query: string) => call<SearchResults>("search", { query }),
   /** Films only, released in `year` where the catalog can narrow it (TMDB); Cinemeta answers the plain search. */
   searchMovies: (query: string, year?: number) => call<MetaPreview[]>("search_movies", { query, year: year ?? null }),
-  // Anime with no IMDb page carry a Kitsu id; no metadata addon serves those, so they're built from AniList.
-  meta: (type: ContentType, id: string) => (isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta", { ty: type, id })),
+  // Rust resolves tt, kitsu:, and mal: directly (Fribb -> TMDB/Cinemeta, else Jikan); kitsuMeta stays as web fallback.
+  meta: (type: ContentType, id: string) =>
+    call<Meta>("meta", { ty: type, id }).catch((e) => (isKitsuId(id) ? kitsuMeta(type, id) : Promise.reject(e))),
   /** Lightweight `MetaMask::Display` projection (name/poster/backdrop only, skipping episodes & Cinemeta renumbering). */
   metaDisplay: (type: ContentType, id: string) =>
-    isKitsuId(id) ? kitsuMeta(type, id) : call<Meta>("meta_display", { ty: type, id }),
+    call<Meta>("meta_display", { ty: type, id }).catch((e) => (isKitsuId(id) ? kitsuMeta(type, id) : Promise.reject(e))),
   /** The IMDb id of a TMDB title (a TMDB page opened in Polarity, #208); null without a TMDB key or when TMDB lists none. */
   imdbForTmdb: (type: ContentType, id: number) => call<string | null>("imdb_for_tmdb", { ty: type, id }),
   /** The orders a show can be watched in besides as aired (TMDB's episode groups); empty without a TMDB key. */

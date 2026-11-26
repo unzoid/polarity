@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type R
 import { createPortal } from "react-dom";
 import { Check, ChevronLeft, Close, Reset } from "../icons";
 import { prefersReducedMotion, project, rubberband, springs, useDismiss } from "../../lib/ui";
-import { useAppleCorners } from "../../lib/ui/cornerSmoothing";
+import { maskStyle, useAppleCorners } from "../../lib/ui/cornerSmoothing";
 
 /** Crisp rounded outline warning triangle matching Family's Clear Cache / destructive icon. */
 export function FamilyWarningIcon({ size = 34, className }: { size?: number; className?: string }) {
@@ -95,9 +95,37 @@ export function FamilyTray({
 
   // Apple 60% corner smoothing matching Family's iOS continuous tray curve (~31px flat tangent, ~8.6px corner inset).
   // Set borderRadius: 0 whenever clipPath is active so circular border-radius never cuts inside the squircle.
-  const corners = useAppleCorners(trayRef, 54, 60, open);
+  // 34 at 60% smoothing: the corner reaches 54 along each edge, as the tray's always has.
+  const corners = useAppleCorners(trayRef, 34, 60, open);
   const drag = useTrayDragDown(onClose);
   const stepShift = reduced ? 0 : direction === "forward" ? 14 : -14;
+
+  // Lift the tray cleanly above the on-screen keyboard if visualViewport shrinks without resizing the layout viewport.
+  const backdropRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const syncKb = () => {
+      const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      const el = backdropRef.current;
+      if (!el) return;
+      if (kb > 40) {
+        el.style.setProperty("--ft-kb", `${kb}px`);
+        el.dataset.kbOpen = "";
+      } else {
+        el.style.removeProperty("--ft-kb");
+        delete el.dataset.kbOpen;
+      }
+    };
+    syncKb();
+    vv.addEventListener("resize", syncKb);
+    vv.addEventListener("scroll", syncKb);
+    return () => {
+      vv.removeEventListener("resize", syncKb);
+      vv.removeEventListener("scroll", syncKb);
+    };
+  }, [open]);
 
   if (typeof document === "undefined") return null;
 
@@ -105,6 +133,7 @@ export function FamilyTray({
     <AnimatePresence>
       {open && (
         <motion.div
+          ref={backdropRef}
           className="ft-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -128,7 +157,7 @@ export function FamilyTray({
               role="dialog"
               aria-modal="true"
               aria-label={title}
-              style={corners.clipPath ? { clipPath: corners.clipPath, borderRadius: 0 } : undefined}
+              style={maskStyle(corners.mask)}
             >
               <motion.div
                 className="ft-viewport"
@@ -141,10 +170,10 @@ export function FamilyTray({
                       key={stepKey}
                       className="ft-step"
                       custom={stepShift}
-                      initial={reduced ? { opacity: 0 } : { opacity: 0, x: stepShift, scale: 0.975, filter: "blur(3px)" }}
-                      animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }}
-                      exit={reduced ? { opacity: 0 } : { opacity: 0, x: -stepShift, scale: 0.975, filter: "blur(3px)" }}
-                      transition={reduced ? { duration: 0.08 } : { duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                      initial={reduced ? { opacity: 0 } : { opacity: 0, x: stepShift, scale: 0.985 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={reduced ? { opacity: 0 } : { opacity: 0, x: -stepShift, scale: 0.985 }}
+                      transition={reduced ? { duration: 0.08 } : { duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
                     >
                       {heroIcon ? (
                         <>
@@ -185,17 +214,6 @@ export function FamilyTray({
                   </AnimatePresence>
                 </div>
               </motion.div>
-              {corners.active && (
-                <svg
-                  className="ft-smooth-rim"
-                  width={corners.width}
-                  height={corners.height}
-                  viewBox={`0 0 ${corners.width} ${corners.height}`}
-                  aria-hidden
-                >
-                  <path d={corners.strokePath(0.5)} fill="none" stroke="var(--ft-rim)" strokeWidth="1" />
-                </svg>
-              )}
             </div>
           </motion.div>
         </motion.div>

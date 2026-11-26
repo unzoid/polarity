@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 
 use super::{CacheInfo, CmdError, Imported, Playable, SearchResults, SettingsView, StreamsResult, SubtitleOption};
 use crate::downloads::{Download, DownloadState};
-use crate::store::{CustomTheme, InstalledAddon, Settings, SubtitleStyle};
+use crate::store::{CustomTheme, InstalledAddon, RatingsProviders, Settings, SubtitleStyle};
 use crate::sync::LocalChanges;
 
 fn keys<T: Serialize>(value: &T) -> Value {
@@ -39,6 +39,8 @@ fn field_names_match_contract() {
     let mut add = |name: &str, keys: Value| types.insert(name.into(), keys);
     // What settings_get/settings_set/settings_reset return: the stored settings and the metadata source.
     add("Settings", keys(&SettingsView { settings: Settings::default(), metadata_source: "cinemeta" }));
+    add("TmdbModules", keys(&polar_index::TmdbModules::default()));
+    add("RatingsProviders", keys(&RatingsProviders::default()));
     add("SubtitleStyle", keys(&SubtitleStyle::default()));
     add("CustomTheme", keys(&CustomTheme::default()));
     let manifest = Manifest {
@@ -168,6 +170,7 @@ fn field_names_match_contract() {
         genres: vec![],
         certification: None,
     };
+    let role = polar_index::Role { id: "tt0000001".into(), list: "acting".into(), name: s("Nora"), episodes: Some(1) };
     add(
         "PersonPage",
         keys(&polar_index::PersonPage {
@@ -182,8 +185,10 @@ fn field_names_match_contract() {
             acting: vec![preview.clone()],
             directing: vec![preview.clone()],
             writing: vec![preview],
+            roles: vec![role.clone()],
         }),
     );
+    add("PersonRole", keys(&role));
 
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../contract/app.json");
     let actual = Value::Object(types);

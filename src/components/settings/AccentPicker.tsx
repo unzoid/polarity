@@ -12,7 +12,7 @@ import {
 import { Brightness, Desktop, Moon, PaintBrush } from "../icons";
 import { Swatches } from "../player/SubtitleSettings";
 import { useFormFactor } from "../../lib/ui";
-import { useAppleCorners } from "../../lib/ui/cornerSmoothing";
+import { appleCornerOffsetPath, maskStyle, useAppleCorners } from "../../lib/ui/cornerSmoothing";
 import { FamilyTray, MoreDots } from "./FamilyTray";
 import { Card, PickRow, RowText } from "./rows";
 
@@ -177,34 +177,54 @@ function AccentGrid({ value, onPick }: { value: string; onPick: (hex: string) =>
   );
 }
 
+/** How far the chosen tile's ring sits outside it, and how wide it is: a 3pt gap, then 3pt of ring (Family). */
+const RING_OUT = 6;
+const RING_W = 3;
+/** 14 at 60% smoothing: the corner reaches 22 along each edge (cornerSmoothing.ts). */
+const TILE_RADIUS = 14;
+
 function SmoothSchemeTile({ selected, label, icon: Icon, onClick }: { selected: boolean; label: string; icon: typeof Moon; onClick: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   // Apple 60% squircle tile, concentric with the tray's corners and padding.
-  const corners = useAppleCorners(ref, 28, 60);
+  const corners = useAppleCorners(ref, TILE_RADIUS, 60);
   return (
-    <button
-      ref={ref}
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      className={`ft-scheme-tile${selected ? " is-selected" : ""}`}
-      style={corners.clipPath ? { clipPath: corners.clipPath, borderRadius: 0 } : undefined}
-      onClick={onClick}
-    >
-      <Icon size={22} />
-      <span>{label}</span>
-      {corners.active && (
-        <svg className="ft-smooth-stroke" width={corners.width} height={corners.height} viewBox={`0 0 ${corners.width} ${corners.height}`} aria-hidden>
-          <path
-            d={corners.strokePath(0.85)}
-            fill="none"
-            stroke={selected ? "var(--ft-fg)" : "var(--ft-tile-rim)"}
-            strokeWidth={selected ? 1.7 : 1.25}
-          />
-        </svg>
-      )}
-    </button>
+    <span className="ft-scheme-slot">
+      <button
+        ref={ref}
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        className={`ft-scheme-tile${selected ? " is-selected" : ""}`}
+        style={maskStyle(corners.mask)}
+        onClick={onClick}
+      >
+        <Icon size={28} />
+        <span>{label}</span>
+        {corners.active && !selected && (
+          <svg className="ft-smooth-stroke" width={corners.width} height={corners.height} viewBox={`0 0 ${corners.width} ${corners.height}`} aria-hidden>
+            <path d={corners.strokePath(0.85)} fill="none" stroke="var(--ft-tile-rim)" strokeWidth={1.25} />
+          </svg>
+        )}
+      </button>
+      {/* Every tile has its ring; the chosen one's shows, so a new choice fades in as the last fades out. */}
+      {corners.active && <SelectedRing width={corners.width} height={corners.height} on={selected} />}
+    </span>
   );
+}
+
+/**
+ * The ring around the chosen tile, 3pt out and 3pt wide: a light that runs round it once a second (Family's
+ * Appearance tray). It's the tile's own outline moved out (a parallel curve), not a bigger squircle, so the gap
+ * between them stays even round the corners: concentric. The ring's shape is a mask; what shows through it is a
+ * turning conic gradient (`.ft-scheme-ring`).
+ */
+function SelectedRing({ width, height, on }: { width: number; height: number; on: boolean }) {
+  const w = width + RING_OUT * 2;
+  const h = height + RING_OUT * 2;
+  const d = appleCornerOffsetPath({ width, height, radius: TILE_RADIUS, smoothing: 60, offset: RING_OUT - RING_W / 2, shift: RING_OUT });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${d}" fill="none" stroke="#000" stroke-width="${RING_W}"/></svg>`;
+  const mask = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  return <span className="ft-scheme-ring" data-on={on || undefined} aria-hidden style={{ maskImage: mask, WebkitMaskImage: mask, inset: -RING_OUT }} />;
 }
 
 /** A radio group of tiles: one tab stop, arrows move through the grid (by rows too) and choose as they go. */

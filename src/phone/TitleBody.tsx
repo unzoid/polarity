@@ -1,6 +1,5 @@
 import "../styles/anime.css";
 import "../styles/title/episode-ratings.css";
-import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBatchDownload } from "../components/BatchDownload";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
@@ -14,7 +13,6 @@ import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker"
 import { AgeRatingBadge, ScoreRow } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
 import { EmptyState } from "../components/ui/EmptyState";
-import { titlePageQuery } from "../lib/anime";
 import { extraKind, extraStills, LIMIT_NOTICE, useBrowseVisible, useListable, useTitleVerdict } from "../lib/catalog";
 import { errorMessage } from "../lib/errors";
 import { episodeCode, formatRemaining, formatRuntime } from "../lib/format";
@@ -39,6 +37,7 @@ type Props = {
   id: string;
   preview?: MetaPreview;
   episode?: string;
+  season?: number;
   /** This title is the one showing in its sheet (not one under a title opened from it). */
   top: boolean;
   onClose: () => void;
@@ -47,13 +46,10 @@ type Props = {
 };
 
 /**
- * One title in the sheet. Which page a title gets is settled first (an anime reached by any id opens as the anime,
- * App.tsx TitleRoute), with the sheet's own outline meanwhile, never one page swapped for the other.
+ * Unified show-first title sheet: movies, shows, and anime all open directly in NetflixTitle
+ * with zero AniList redirect waterfall.
  */
 export function TitleBody(props: Props) {
-  const { data: page } = useQuery(titlePageQuery(props.type, props.id, props.preview));
-  if (page?.kind === "anime") return <AnimeBody id={page.anilist} episode={props.episode} top={props.top} onClose={props.onClose} onBack={props.onBack} />;
-  if (!page) return <BodySkeleton {...props} />;
   return <NetflixTitle {...props} />;
 }
 
@@ -93,7 +89,7 @@ type Tab = "episodes" | "collection" | "more" | "trailers";
  * are, what it's about, who's in it, a row of actions, then tabs: Episodes, Collection, More Like This, Trailers &
  * More.
  */
-function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Props) {
+function NetflixTitle({ type, id, preview, episode, season, top, onClose, onBack }: Props) {
   const { data: meta, isError, error } = useMeta(type, id);
   const verdict = useTitleVerdict(meta ?? preview, !!meta || isError);
   const item: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
@@ -225,7 +221,7 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
           ))}
         </nav>
         <div className="ps-tab-body">
-          {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} onSheet={onSheet} />}
+          {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} initialSeason={season} onSheet={onSheet} />}
           {shownTab === "collection" && meta?.details?.collection && <CollectionGrid id={meta.details.collection.id} current={meta.id} />}
           {shownTab === "more" && <MoreLikeThis type={type} id={id} />}
           {shownTab === "trailers" && <Trailers item={item} meta={meta} />}
@@ -355,20 +351,32 @@ function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta;
 }
 
 /** A show's episodes: the season (a chooser when there's more than one, else its name and ⓘ), then the list. */
-function Episodes({ meta, progress, episode, onSheet }: { meta: Meta; progress?: Progress[]; episode?: string; onSheet: (open: boolean) => void }) {
+function Episodes({
+  meta,
+  progress,
+  episode,
+  initialSeason,
+  onSheet,
+}: {
+  meta: Meta;
+  progress?: Progress[];
+  episode?: string;
+  initialSeason?: number;
+  onSheet: (open: boolean) => void;
+}) {
   const orders = useEpisodeOrders(meta);
   const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
   const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
   const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
   const linked = episode ? meta.videos.find((v) => v.id === episode) : undefined;
-  const [season, setSeason] = useState<number | undefined>(linked && shelfGroupOf(linked, view));
+  const [season, setSeason] = useState<number | undefined>(() => (linked ? shelfGroupOf(linked, view) : initialSeason));
   const [choosing, setChoosing] = useState(false);
   const [layout, setLayout] = useEpisodeLayout();
   const picker = useSourcePicker(onSheet);
   useEffect(() => {
-    if (season === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
-  }, [next.video, season, progress, view]);
+    if (season === undefined && initialSeason === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
+  }, [next.video, season, initialSeason, progress, view]);
   const current = groups.some((g) => g.id === season) ? season! : (groups[0]?.id ?? seasons[0]);
   const group = groups.find((g) => g.id === current);
   const episodes = group?.videos ?? [];

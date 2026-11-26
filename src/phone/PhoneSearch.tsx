@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Img } from "../components/Img";
 import { useIntent } from "../components/PosterCard";
-import { retryTitle, useAnimeAliases, useAnimeResults, withoutAnime, type AnimeCard } from "../lib/anime";
+import { animeItemName, animeItemToPreview, useAnimeSearchCatalog, withoutAnimeItems } from "../lib/anime";
+import type { AnimeItem } from "../lib/types";
 import { addRecentSearch, searchMinLength, setSearchText, useBrowseFeatured, useFeatured, useSearchText } from "../lib/catalog";
 import { useSearch } from "../lib/net";
 import { useNavigation } from "../lib/router";
@@ -180,10 +181,9 @@ function Results({ text }: { text: string }) {
   const deferred = useDeferredValue(query);
   const { animeEnabled } = usePrefs();
   const { data, isError, refetch } = useSearch(deferred);
-  const anime = useAnimeResults(animeEnabled ? deferred : "", retryTitle(data?.series ?? [], data?.movies ?? []));
-  const aliases = useAnimeAliases();
-  const movies = withoutAnime(data?.movies, anime.all, aliases);
-  const series = withoutAnime(data?.series, anime.all, aliases);
+  const anime = useAnimeSearchCatalog(animeEnabled ? deferred : "");
+  const movies = withoutAnimeItems(data?.movies, anime.items);
+  const series = withoutAnimeItems(data?.series, anime.items);
   const top = useMemo(() => interleave(series ?? [], movies ?? []).slice(0, 12), [series, movies]);
 
   if (isError)
@@ -230,14 +230,20 @@ const interleave = <T,>(a: readonly T[], b: readonly T[]) => {
   return out;
 };
 
-/** An anime found by AniList, as a poster; it opens in the title sheet like any other. */
-function AnimePoster({ card }: { card: AnimeCard }) {
+/** An anime result as a poster; opens directly in the unified title sheet. */
+function AnimePoster({ card }: { card: AnimeItem }) {
   const { navigate } = useNavigation();
-  const name = card.title.english ?? card.title.romaji ?? card.title.native ?? "Anime";
-  const art = card.coverImage.large ?? card.coverImage.extraLarge ?? undefined;
+  const { animeTitles } = usePrefs();
+  const name = animeItemName(card, animeTitles);
   return (
-    <button type="button" className="ph-poster" data-origin="4" aria-label={name} onClick={() => navigate({ name: "anime-detail", id: card.id, preview: card })}>
-      {art ? <Img src={art} alt="" loading="lazy" decoding="async" /> : <span className="ph-poster-name">{name}</span>}
+    <button
+      type="button"
+      className="ph-poster"
+      data-origin="4"
+      aria-label={name}
+      onClick={() => navigate({ name: "detail", type: card.type, id: card.id, preview: animeItemToPreview(card, animeTitles), season: card.seasonHint })}
+    >
+      {card.poster ? <Img src={card.poster} alt="" loading="lazy" decoding="async" /> : <span className="ph-poster-name">{name}</span>}
     </button>
   );
 }

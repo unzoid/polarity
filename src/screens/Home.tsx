@@ -6,7 +6,7 @@ import { HeroGlow } from "../components/HeroGlow";
 import { ChevronLeft, ChevronRight, Play, Shuffle } from "../components/icons";
 import { Img } from "../components/Img";
 import { TitleHeading } from "../components/title/TitleHeading";
-import { AgeRatingBadge } from "../components/title/TitleDetails";
+import { AgeRatingBadge, ScoreRow } from "../components/title/TitleDetails";
 import { LandscapeCard, PosterCard, useIntent } from "../components/PosterCard";
 import { ArtTitle, Card, ProgressBar } from "../components/title/Card";
 import { Shelf } from "../components/title/Shelf";
@@ -19,6 +19,7 @@ import {
   preloadImage,
   useCatalog,
   useContinueWatching,
+  useRatings,
   useRecommend,
   useSettings,
   useWatchHistory,
@@ -521,6 +522,8 @@ function HeroPeek({ item, side, onClick }: { item: MetaPreview; side: "prev" | "
 
 function HeroContent({ item }: { item: MetaPreview }) {
   const { navigate } = useNavigation();
+  const { data: settings } = useSettings();
+  const { data: ratings } = useRatings(item.type, item.id, !!settings?.ratingsOnHero);
   const intent = useIntent(item);
   const open = () => navigate({ name: "detail", type: item.type, id: item.id, preview: item });
   // A phone's card is Netflix's: Watch Now and Save side by side, each half the width (cards.css).
@@ -551,6 +554,7 @@ function HeroContent({ item }: { item: MetaPreview }) {
         )}
         {!phone && <AgeRatingBadge certification={item.certification} />}
       </p>
+      {settings?.ratingsOnHero && ratings && <ScoreRow ratings={ratings} />}
       <p className="hero-description t-body">{item.description}</p>
       <div className="hero-actions">
         <Button variant="primary" onClick={open} {...intent}>

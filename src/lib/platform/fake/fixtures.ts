@@ -260,6 +260,9 @@ export function person(id: number): PersonPage | null {
   const name = k === 50 ? "Ines Marchetti" : cast[k];
   if (!name) return null;
   const directs = k === 50;
+  const acting = directs ? [] : [...movies.slice(k, k + 8), ...series.slice(k, k + 4)];
+  const directing = directs ? movies.slice(0, 6) : k === 0 ? movies.slice(10, 12) : [];
+  const characters = ["Nora", "Elias", "Captain Rhee", "Mateo", "Clara", "The Ferryman", "Ines (voice)", "Young Ada"];
   return {
     id,
     name,
@@ -268,8 +271,17 @@ export function person(id: number): PersonPage | null {
     born: `19${70 + k % 20}-0${1 + (k % 9)}-14`,
     birthplace: "Example Town",
     knownFor: directs ? "Directing" : "Acting",
-    acting: directs ? [] : [...movies.slice(k, k + 8), ...series.slice(k, k + 4)],
-    directing: directs ? movies.slice(0, 6) : k === 0 ? movies.slice(10, 12) : [],
+    acting,
+    directing,
+    roles: [
+      ...acting.map((t, i) => ({
+        id: t.id,
+        list: "acting" as const,
+        name: characters[i % characters.length],
+        episodes: t.type === "series" ? [24, 2, 9, 1][i % 4] : undefined,
+      })),
+      ...directing.map((t) => ({ id: t.id, list: "directing" as const, name: "Director" })),
+    ],
   };
 }
 
@@ -523,6 +535,19 @@ export function streams(): StreamsResult {
 
 export const settings: Settings = {
   tmdbKey: null,
+  tmdbAnimeCatalogs: true,
+  tmdbModules: {
+    trailers: true,
+    artwork: true,
+    basicInfo: true,
+    details: true,
+    credits: true,
+    productions: true,
+    networks: true,
+    episodes: true,
+    moreLikeThis: true,
+    collections: true,
+  },
   language: "en-US",
   autoplayNext: true,
   seekrKey: null,
@@ -566,6 +591,17 @@ export const settings: Settings = {
   sourceFiltersHide: false,
   mdblistKey: null,
   omdbKey: null,
+  ratingsOnHero: false,
+  ratingsProviders: {
+    imdb: true,
+    tmdb: true,
+    rottenTomatoes: true,
+    metacritic: true,
+    trakt: true,
+    letterboxd: true,
+    audience: true,
+    mal: true,
+  },
   subtitleMode: "always",
   accentColor: "#0A84FF",
   theme: "polar",

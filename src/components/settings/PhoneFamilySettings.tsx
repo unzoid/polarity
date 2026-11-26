@@ -1,5 +1,5 @@
 import { AnimatePresence, animate, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Avatar } from "../Avatar";
 import { ChevronRight, Reset, Search, SignOut } from "../icons";
@@ -18,7 +18,8 @@ import {
   useSettingsOverlay,
 } from "../../lib/settings";
 import { searchSettings, type SettingEntry } from "../../lib/settings/catalog";
-import { dismissDepth, isTextField, onDismissDepth, prefersReducedMotion, project, useFormFactor } from "../../lib/ui";
+import { dismissDepth, isTextField, prefersReducedMotion, project, useFormFactor } from "../../lib/ui";
+import { useSmoothCorners } from "../../lib/ui/cornerSmoothing";
 import { tvModeAvailable } from "../../tv/tvMode";
 import { SettingsPageBody } from "../../screens/settings/SettingsPageBody";
 import type { SettingsHead } from "../SettingsOverlay";
@@ -41,6 +42,9 @@ const PHONE_MOVED: Record<string, { page: PageId; section: string }> = {
 };
 
 const TV_ONLY = new Set(["tvMode", "showTvButton"]);
+/** The cards that get smoothed corners, and their radius (`--fms-r-card`). */
+const SMOOTH_CARDS = ".fms-list, .fms-results, .ft-account-hero, .settings-card";
+const CARD_RADIUS = 24;
 const ROW_LABELS = ".settings-row-title, .settings-group-title, .sub-setting-label, .shortcut-label";
 const ROW_BOXES = ".settings-row, .settings-group-title, .sub-setting, .shortcut-row";
 
@@ -120,6 +124,9 @@ export function PhoneFamilySettings({
   const pageLayerRef = useRef<HTMLDivElement>(null);
   const sectionLayerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // The cards' corners: Apple's continuous curve (60% smoothing), not a CSS circle.
+  const stackRef = useRef<HTMLDivElement>(null);
+  useSmoothCorners(stackRef, SMOOTH_CARDS, CARD_RADIUS, 60, visible);
 
   const [below, setBelow] = useState(0);
   useEffect(() => {
@@ -182,7 +189,6 @@ export function PhoneFamilySettings({
   }, [onHead, onExit, view, current.label, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Escape / Android system back: yields to open trays/menus (dismissDepth > below).
-  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
   useEffect(() => {
     if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
@@ -196,7 +202,7 @@ export function PhoneFamilySettings({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [visible, view, section, searchOpen, below, onExit, layers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, view, section, searchOpen, below, onExit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reveal search hit once its target layer mounts.
   useEffect(() => {
@@ -343,7 +349,7 @@ export function PhoneFamilySettings({
         </header>
       )}
 
-      <div className="fms-stack" {...swipe}>
+      <div className="fms-stack" ref={stackRef} {...swipe}>
         {/* Layer 0: Root Settings list */}
         <motion.div
           ref={listLayerRef}
@@ -376,7 +382,7 @@ export function PhoneFamilySettings({
                     const s = sectionFor(entry);
                     return (
                       <button key={entry.id} type="button" className="fms-result" onClick={() => pick(entry)}>
-                        <p.icon size={20} className="fms-row-ico" />
+                        <p.icon size={26} className="fms-row-ico" />
                         <span className="fms-result-text">
                           <span className="fms-result-title">{entry.title}</span>
                           <span className="fms-result-path">{s ? `${p.label} › ${s.label}` : p.label}</span>
@@ -396,7 +402,7 @@ export function PhoneFamilySettings({
                     {account.status === "guest" ? (
                       <button type="button" className="ft-account-hero" onClick={account.showSignIn}>
                         <span className="ft-account-hero-icon" aria-hidden>
-                          <SignOut size={20} style={{ transform: "scaleX(-1)" }} />
+                          <SignOut size={22} style={{ transform: "scaleX(-1)" }} />
                         </span>
                         <span className="ft-account-hero-text">
                           <span className="ft-account-hero-title">Sign in</span>
@@ -423,7 +429,8 @@ export function PhoneFamilySettings({
                     <div className="fms-group" role="group" aria-label={g.heading} key={g.heading ?? gi}>
                       {g.heading && <h3 className="fms-eyebrow">{g.heading}</h3>}
                       <div className="fms-list">
-                        {items.map((p) => (
+                        {items.map((p) => {
+                          return (
                           <button
                             key={p.id}
                             type="button"
@@ -432,7 +439,7 @@ export function PhoneFamilySettings({
                             aria-label={p.label}
                             onClick={() => openPage(p.id)}
                           >
-                            <p.icon size={22} className="fms-row-ico" />
+                            <p.icon size={26} className="fms-row-ico" />
                             <span className="fms-row-label">{p.label}</span>
                             {p.id === "appearance" && (
                               <span className="fms-row-val" aria-hidden>
@@ -441,7 +448,8 @@ export function PhoneFamilySettings({
                             )}
                             <ChevronRight size={17} className="fms-row-chev" aria-hidden />
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -451,7 +459,7 @@ export function PhoneFamilySettings({
                   <div className="fms-group">
                     <div className="fms-list">
                       <button type="button" className="fms-row" onClick={() => openPage("advanced")}>
-                        <SignOut size={20} className="fms-row-ico" style={{ transform: "scaleX(-1)" }} />
+                        <SignOut size={26} className="fms-row-ico" style={{ transform: "scaleX(-1)" }} />
                         <span className="fms-row-label">Connect a database</span>
                         <ChevronRight size={16} className="fms-row-chev" aria-hidden />
                       </button>
@@ -467,7 +475,7 @@ export function PhoneFamilySettings({
                         className="fms-row fms-row-danger"
                         onClick={() => setResetTrayOpen(true)}
                       >
-                        <Reset size={20} className="fms-row-ico" />
+                        <Reset size={26} className="fms-row-ico" />
                         <span className="fms-row-label">Restore device defaults</span>
                       </button>
                     </div>

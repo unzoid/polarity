@@ -36,7 +36,7 @@ import { useNavigation } from "../lib/router";
 import { TvBrowse, TvCard, TvContinueRail, TvItemsRail, TvRail, TvShelfRail, type RailRow } from "./TvRails";
 import { TvKeyboard } from "./TvKeyboard";
 import { TvAnimeRail } from "./TvAnime";
-import { useAnimeAliases, useAnimeResults, withoutAnime } from "../lib/anime";
+import { useAnimeSearchCatalog, withoutAnimeItems } from "../lib/anime";
 import { usePrefs } from "../lib/settings";
 import { Img } from "../components/Img";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -279,12 +279,11 @@ export function TvSearch() {
   }, [text]);
 
   const searching = query.length >= searchMinLength(query);
-  // Anime from AniList, as on desktop; a show that's anime shows once, as the anime.
+  // Anime from the show-first Rust backend; a show already in Anime shows once.
   const { animeEnabled } = usePrefs();
-  const anime = useAnimeResults(animeEnabled && searching ? query : "");
-  const aliases = useAnimeAliases();
-  const movies = withoutAnime(data?.movies, anime.items, aliases);
-  const series = withoutAnime(data?.series, anime.items, aliases);
+  const anime = useAnimeSearchCatalog(animeEnabled && searching ? query : "");
+  const movies = withoutAnimeItems(data?.movies, anime.items);
+  const series = withoutAnimeItems(data?.series, anime.items);
   const people = data?.people ?? [];
   const fromAddons = useAddonSearches(searching ? query : "");
   const addonsQuiet = fromAddons.every((r) => r.failed || (r.items && !r.items.length));

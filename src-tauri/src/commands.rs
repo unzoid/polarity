@@ -180,12 +180,126 @@ pub async fn meta(state: State<'_, AppState>, ty: String, id: String) -> Result<
     if id.starts_with("tt") {
         return Ok(state.indexer().meta(&ty, &id).await?);
     }
+    if let Some(mal_str) = id.strip_prefix("mal:") {
+        if let Ok(mal_id) = mal_str.parse::<u32>() {
+            if let Some(m) = state.anime_lists.find(&polar_anime::AnimeKey::Mal(mal_id)).await {
+                if let Some(imdb) = m.imdb_id.filter(|s| s.starts_with("tt")) {
+                    if let Ok(meta) = state.indexer().meta(&ty, &imdb).await {
+                        return Ok(meta);
+                    }
+                }
+            }
+            return mal_fallback_meta(&state, mal_id, None).await;
+        }
+    }
+    if let Some(al_str) = id.strip_prefix("anilist:") {
+        if let Ok(al_id) = al_str.parse::<u32>() {
+            if let Some(m) = state.anime_lists.find(&polar_anime::AnimeKey::Anilist(al_id)).await {
+                if let Some(imdb) = m.imdb_id.filter(|s| s.starts_with("tt")) {
+                    if let Ok(meta) = state.indexer().meta(&ty, &imdb).await {
+                        return Ok(meta);
+                    }
+                }
+            }
+            return anilist_fallback_meta(&state, al_id).await;
+        }
+    }
+    if let Some(kitsu_str) = id.strip_prefix("kitsu:") {
+        if let Ok(kitsu_id) = kitsu_str.parse::<u32>() {
+            if let Some(m) = state.anime_lists.find(&polar_anime::AnimeKey::Kitsu(kitsu_id)).await {
+                if let Some(imdb) = m.imdb_id.filter(|s| s.starts_with("tt")) {
+                    if let Ok(meta) = state.indexer().meta(&ty, &imdb).await {
+                        return Ok(meta);
+                    }
+                }
+                if let Some(mal_id) = m.mal_id {
+                    return mal_fallback_meta(&state, mal_id, Some(kitsu_id)).await;
+                }
+            }
+        }
+    }
     // Non-IMDb ids belong to whichever installed addon claims them.
     let addon = active(&state)
         .into_iter()
         .find(|a| a.manifest.serves("meta", &ty, &id))
         .ok_or_else(|| CmdError::Unsupported(format!("no addon provides metadata for {id}")))?;
     Ok(state.addons.meta(&addon.manifest_url, &ty, &id).await?)
+}
+
+async fn mal_fallback_meta(state: &AppState, mal_id: u32, kitsu: Option<u32>) -> Result<Meta> {
+    let (item, eps) = state.anime_catalog.mal_entry(mal_id, &state.anime_lists).await.map_err(CmdError::Upstream)?;
+    Ok(anime_item_to_fallback_meta(item, eps, kitsu, format!("mal:{mal_id}")))
+}
+
+async fn anilist_fallback_meta(state: &AppState, anilist_id: u32) -> Result<Meta> {
+    let (item, eps) =
+        state.anime_catalog.anilist_entry(anilist_id, &state.anime_lists).await.map_err(CmdError::Upstream)?;
+    Ok(anime_item_to_fallback_meta(item, eps, None, format!("anilist:{anilist_id}")))
+}
+
+fn anime_item_to_fallback_meta(
+    item: polar_anime::AnimeItem,
+    eps: Vec<polar_anime::JikanEpisode>,
+    kitsu: Option<u32>,
+    fallback_prefix: String,
+) -> Meta {
+    let kitsu = kitsu.or(item.kitsu_id);
+    let prefix = kitsu.map(|k| format!("kitsu:{k}")).unwrap_or(fallback_prefix);
+    let videos: Vec<polar_addon::Video> = if item.ty == "movie" {
+        Vec::new()
+    } else if !eps.is_empty() {
+        eps.into_iter()
+            .map(|e| polar_addon::Video {
+                id: format!("{prefix}:{}", e.number),
+                title: e.title,
+                season: 1,
+                episode: e.number,
+                released: e.aired,
+                thumbnail: item.background.clone().or_else(|| item.poster.clone()),
+                overview: None,
+                rating: None,
+            })
+            .collect()
+    } else {
+        (1..=item.episodes.unwrap_or(0))
+            .map(|n| polar_addon::Video {
+                id: format!("{prefix}:{n}"),
+                title: format!("Episode {n}"),
+                season: 1,
+                episode: n,
+                released: None,
+                thumbnail: item.background.clone().or_else(|| item.poster.clone()),
+                overview: None,
+                rating: None,
+            })
+            .collect()
+    };
+    Meta {
+        preview: MetaPreview {
+            id: item.id,
+            ty: item.ty,
+            name: item.name,
+            poster: item.poster,
+            background: item.background,
+            logo: item.logo,
+            logos: item.logos,
+            description: item.description,
+            release_info: item.year.map(|y| y.to_string()),
+            imdb_rating: item.score.map(|s| format!("{s:.1}")),
+            genres: item.genres,
+            certification: item.certification,
+        },
+        runtime: item.duration.map(|d| format!("{d} min")),
+        cast: Vec::new(),
+        director: Vec::new(),
+        trailer_yt_id: None,
+        trailer_source: None,
+        videos,
+        people: Vec::new(),
+        details: polar_addon::MetaDetails::default(),
+        crew: Vec::new(),
+        extras: Vec::new(),
+    }
 }
 
 /// Lightweight metadata projection for background library hydration (`fillUntitled`): skips
@@ -646,7 +760,9 @@ pub fn settings_set(state: State<'_, AppState>, mut settings: Settings) -> Resul
     settings.bound_custom_themes();
     let rebuild = {
         let store = state.store.locked();
-        store.data.settings.tmdb_key != settings.tmdb_key || store.data.settings.language != settings.language
+        store.data.settings.tmdb_key != settings.tmdb_key
+            || store.data.settings.language != settings.language
+            || store.data.settings.tmdb_modules != settings.tmdb_modules
     };
     if rebuild {
         *state.indexer.writing() = Arc::new(Indexer::new(crate::index_config(&settings)));
@@ -811,12 +927,46 @@ pub async fn mal_token(state: State<'_, AppState>, form: Vec<(String, String)>) 
 /// ratings services have a key in Settings → Services. Empty without one.
 #[tauri::command]
 pub async fn ratings(state: State<'_, AppState>, ty: String, id: String) -> Result<crate::ratings::Ratings> {
-    let (mdblist, omdb) = {
+    let (mdblist, omdb, providers) = {
         let s = &state.store.locked().data.settings;
         let key = |k: &Option<String>| k.as_deref().map(str::trim).filter(|k| !k.is_empty()).map(str::to_owned);
-        (key(&s.mdblist_key), key(&s.omdb_key))
+        (key(&s.mdblist_key), key(&s.omdb_key), s.ratings_providers.clone())
     };
-    Ok(state.ratings.get(&id, &ty, mdblist.as_deref(), omdb.as_deref()).await)
+    let mut r = state.ratings.get(&id, &ty, mdblist.as_deref(), omdb.as_deref()).await;
+    if !providers.imdb {
+        r.imdb = None;
+        r.imdb_votes = None;
+        r.links.remove("imdb");
+    }
+    if !providers.tmdb {
+        r.tmdb = None;
+        r.links.remove("tmdb");
+    }
+    if !providers.rotten_tomatoes {
+        r.rotten_tomatoes = None;
+        r.links.remove("rottenTomatoes");
+    }
+    if !providers.audience {
+        r.audience = None;
+        r.links.remove("audience");
+    }
+    if !providers.metacritic {
+        r.metacritic = None;
+        r.links.remove("metacritic");
+    }
+    if !providers.trakt {
+        r.trakt = None;
+        r.links.remove("trakt");
+    }
+    if !providers.letterboxd {
+        r.letterboxd = None;
+        r.links.remove("letterboxd");
+    }
+    if !providers.mal {
+        r.mal = None;
+        r.links.remove("mal");
+    }
+    Ok(r)
 }
 
 /// A show's IMDb rating for each episode (the Episode Ratings chart), or none known.
@@ -881,7 +1031,10 @@ pub struct CacheInfo {
 #[tauri::command]
 pub async fn anime_cache(state: State<'_, AppState>) -> Result<CacheInfo> {
     let dir = state.fillers.path().parent().map(|d| d.display().to_string()).unwrap_or_default();
-    Ok(CacheInfo { path: dir, bytes: state.fillers.size().await + state.anime_lists.size().await })
+    Ok(CacheInfo {
+        path: dir,
+        bytes: state.fillers.size().await + state.anime_lists.size().await + state.anime_catalog.size().await,
+    })
 }
 
 /// Deletes the anime cache files; they are fetched again when next needed.
@@ -889,7 +1042,299 @@ pub async fn anime_cache(state: State<'_, AppState>) -> Result<CacheInfo> {
 pub async fn anime_cache_clear(state: State<'_, AppState>) -> Result<()> {
     state.fillers.clear().await;
     state.anime_lists.clear().await;
+    state.anime_catalog.clear().await;
     Ok(())
+}
+
+// --- Show-First Anime Catalog (TMDB Discover + Jikan + Local Fribb) --------
+
+async fn hydrate_anime_items(
+    indexer: &polar_index::Indexer,
+    items: Vec<polar_anime::AnimeItem>,
+) -> Vec<polar_anime::AnimeItem> {
+    use futures::stream::{self, StreamExt};
+    use std::collections::HashSet;
+
+    if !indexer.has_tmdb() {
+        return items;
+    }
+    let hydrated: Vec<polar_anime::AnimeItem> = stream::iter(items)
+        .map(|mut item| async move {
+            let imdb = item.id.starts_with("tt").then_some(item.id.as_str());
+            if let Some(art) = indexer.anime_art(&item.ty, item.tmdb_id.map(u64::from), imdb).await {
+                if let Some(tt) = art.imdb_id.filter(|s| s.starts_with("tt")) {
+                    item.id = tt;
+                }
+                item.tmdb_id = Some(art.tmdb_id as u32);
+                if let Some(bg) = art.background {
+                    item.background = Some(bg);
+                }
+                if let Some(poster) = art.poster {
+                    item.poster = Some(poster);
+                }
+                if !art.logos.is_empty() {
+                    item.logo = art.logo.or_else(|| art.logos.first().cloned());
+                    item.logos = art.logos;
+                }
+                if art.certification.is_some() {
+                    item.certification = art.certification;
+                }
+            }
+            item
+        })
+        .buffered(12)
+        .collect()
+        .await;
+
+    let mut seen = HashSet::new();
+    hydrated.into_iter().filter(|i| seen.insert(i.id.clone())).collect()
+}
+
+async fn previews_to_anime_items(
+    previews: Vec<MetaPreview>,
+    lists: &polar_anime::AnimeLists,
+) -> Vec<polar_anime::AnimeItem> {
+    let mut out = Vec::with_capacity(previews.len());
+    for p in previews {
+        let mapped =
+            if p.id.starts_with("tt") { lists.find(&polar_anime::AnimeKey::Imdb(p.id.clone())).await } else { None };
+        let year = p.release_info.as_deref().and_then(|s| s.get(..4)).and_then(|y| y.parse::<u16>().ok());
+        let score = p.imdb_rating.as_deref().and_then(|s| s.parse::<f32>().ok());
+        let format = Some(if p.ty == "movie" { "MOVIE" } else { "TV" }.to_owned());
+        out.push(polar_anime::AnimeItem {
+            id: p.id,
+            ty: p.ty,
+            titles: polar_anime::AnimeTitle { english: Some(p.name.clone()), romaji: None, native: None },
+            name: p.name,
+            poster: p.poster,
+            background: p.background,
+            logo: p.logo,
+            logos: p.logos,
+            description: p.description,
+            year,
+            score,
+            genres: p.genres,
+            format,
+            status: None,
+            episodes: None,
+            duration: None,
+            certification: p.certification,
+            season_hint: None,
+            season_label: None,
+            airing: None,
+            mal_id: mapped.as_ref().and_then(|m| m.mal_id),
+            anilist_id: mapped.as_ref().and_then(|m| m.anilist_id),
+            kitsu_id: mapped.as_ref().and_then(|m| m.kitsu_id),
+            tmdb_id: mapped.as_ref().and_then(|m| m.themoviedb_id),
+            start_date: None,
+            mature: false,
+        });
+    }
+    out
+}
+
+async fn resolve_evergreen_shelf(
+    state: &AppState,
+    indexer: &polar_index::Indexer,
+    use_tmdb: bool,
+    shelf: &str,
+    genre: Option<&str>,
+    page: u32,
+) -> Result<polar_anime::AnimeBrowsePage> {
+    if use_tmdb {
+        if let Ok((previews, has_next_page)) = indexer.anime_discover(shelf, genre, page).await {
+            let items = previews_to_anime_items(previews, &state.anime_lists).await;
+            return Ok(polar_anime::AnimeBrowsePage { items, has_next_page });
+        }
+    }
+    let page =
+        state.anime_catalog.catalog_shelf(shelf, genre, page, &state.anime_lists).await.map_err(CmdError::Upstream)?;
+    let items = hydrate_anime_items(indexer, page.items).await;
+    Ok(polar_anime::AnimeBrowsePage { items, has_next_page: page.has_next_page })
+}
+
+/// All primary shelves for the Anime tab in one fast parallel Rust call (TMDB Discover for
+/// evergreen shelves when enabled + single batched AniList query for seasonal shelves, hydrated
+/// with 16:9 art & logos). Without TMDB, all 6 shelves come from one single batched AniList POST.
+#[tauri::command]
+pub async fn anime_home(state: State<'_, AppState>) -> Result<polar_anime::AnimeHome> {
+    let indexer = state.indexer();
+    let use_tmdb = indexer.has_tmdb() && state.store.locked().data.settings.tmdb_anime_catalogs;
+
+    if !use_tmdb {
+        let home = state.anime_catalog.home(&state.anime_lists, true).await.map_err(|e| {
+            tracing::warn!("anime_home batch failed: {e}");
+            CmdError::Upstream(e)
+        })?;
+        // When a TMDB key is set (just with TMDB anime catalogs toggled off), still hydrate 16:9 art & logos.
+        if indexer.has_tmdb() {
+            let (season, upcoming, trending, top, popular, movies) = tokio::join!(
+                hydrate_anime_items(&indexer, home.season),
+                hydrate_anime_items(&indexer, home.upcoming),
+                hydrate_anime_items(&indexer, home.trending),
+                hydrate_anime_items(&indexer, home.top),
+                hydrate_anime_items(&indexer, home.popular),
+                hydrate_anime_items(&indexer, home.movies),
+            );
+            return Ok(polar_anime::AnimeHome { season, trending, upcoming, top, popular, movies });
+        }
+        return Ok(home);
+    }
+
+    let (seasonal, trending, top, popular, movies) = tokio::join!(
+        async {
+            match state.anime_catalog.home(&state.anime_lists, false).await {
+                Ok(h) => {
+                    let (season, upcoming) = tokio::join!(
+                        hydrate_anime_items(&indexer, h.season),
+                        hydrate_anime_items(&indexer, h.upcoming),
+                    );
+                    (season, upcoming)
+                }
+                Err(e) => {
+                    tracing::warn!("anime_home seasonal failed: {e}");
+                    (Vec::new(), Vec::new())
+                }
+            }
+        },
+        resolve_evergreen_shelf(&state, &indexer, true, "trending", None, 1),
+        resolve_evergreen_shelf(&state, &indexer, true, "top", None, 1),
+        resolve_evergreen_shelf(&state, &indexer, true, "popular", None, 1),
+        resolve_evergreen_shelf(&state, &indexer, true, "movies", None, 1),
+    );
+
+    let (season, upcoming) = seasonal;
+    let trending = trending.map(|p| p.items).unwrap_or_default();
+    let top = top.map(|p| p.items).unwrap_or_default();
+    let popular = popular.map(|p| p.items).unwrap_or_default();
+    let movies = movies.map(|p| p.items).unwrap_or_default();
+
+    if season.is_empty() && trending.is_empty() && top.is_empty() && popular.is_empty() {
+        return Err(CmdError::Upstream("Could not load anime catalogs".into()));
+    }
+
+    Ok(polar_anime::AnimeHome { season, trending, upcoming, top, popular, movies })
+}
+
+/// One anime shelf or genre shelf, paged.
+#[tauri::command]
+pub async fn anime_shelf(
+    state: State<'_, AppState>,
+    shelf: String,
+    genre: Option<String>,
+    page: Option<u32>,
+) -> Result<polar_anime::AnimeBrowsePage> {
+    let indexer = state.indexer();
+    let use_tmdb = indexer.has_tmdb() && state.store.locked().data.settings.tmdb_anime_catalogs;
+    resolve_evergreen_shelf(&state, &indexer, use_tmdb, &shelf, genre.as_deref(), page.unwrap_or(1)).await
+}
+
+/// Airing schedule for one weekday (`"monday"`..`"sunday"`) or all days when omitted.
+#[tauri::command]
+pub async fn anime_schedule(state: State<'_, AppState>, day: Option<String>) -> Result<Vec<polar_anime::AnimeItem>> {
+    let indexer = state.indexer();
+    let raw = state.anime_catalog.schedule(day.as_deref(), &state.anime_lists).await.map_err(CmdError::Upstream)?;
+    Ok(hydrate_anime_items(&indexer, raw).await)
+}
+
+/// Filterable/searchable anime browse grid.
+#[tauri::command]
+pub async fn anime_browse(
+    state: State<'_, AppState>,
+    query: polar_anime::AnimeBrowseQuery,
+) -> Result<polar_anime::AnimeBrowsePage> {
+    let indexer = state.indexer();
+    let page = state.anime_catalog.browse(&query, &state.anime_lists).await.map_err(CmdError::Upstream)?;
+    let items = hydrate_anime_items(&indexer, page.items).await;
+    Ok(polar_anime::AnimeBrowsePage { items, has_next_page: page.has_next_page })
+}
+
+/// Instant 0ms local lookup returning anime cross-IDs and season mappings for any `tt…`, `kitsu:…`, or `mal:…` id.
+#[tauri::command]
+pub async fn anime_show_info(state: State<'_, AppState>, id: String) -> Result<polar_anime::AnimeShowInfo> {
+    use polar_anime::AnimeKey;
+    if id.starts_with("tt") {
+        let seasons = state.anime_lists.find_all_for_imdb(&id).await;
+        if let Some(first) = seasons.first() {
+            return Ok(polar_anime::AnimeShowInfo {
+                is_anime: true,
+                mal_id: first.mal_id,
+                anilist_id: first.anilist_id,
+                kitsu_id: first.kitsu_id,
+                imdb_id: Some(id),
+                seasons,
+            });
+        }
+        return Ok(polar_anime::AnimeShowInfo::default());
+    }
+    if let Some(kitsu) = id.strip_prefix("kitsu:").and_then(|s| s.parse::<u32>().ok()) {
+        if let Some(m) = state.anime_lists.find(&AnimeKey::Kitsu(kitsu)).await {
+            let seasons = match &m.imdb_id {
+                Some(imdb) => state.anime_lists.find_all_for_imdb(imdb).await,
+                None => vec![m.clone()],
+            };
+            return Ok(polar_anime::AnimeShowInfo {
+                is_anime: true,
+                mal_id: m.mal_id,
+                anilist_id: m.anilist_id,
+                kitsu_id: Some(kitsu),
+                imdb_id: m.imdb_id,
+                seasons,
+            });
+        }
+        return Ok(polar_anime::AnimeShowInfo { is_anime: true, kitsu_id: Some(kitsu), ..Default::default() });
+    }
+    if let Some(mal) = id.strip_prefix("mal:").and_then(|s| s.parse::<u32>().ok()) {
+        if let Some(m) = state.anime_lists.find(&AnimeKey::Mal(mal)).await {
+            let seasons = match &m.imdb_id {
+                Some(imdb) => state.anime_lists.find_all_for_imdb(imdb).await,
+                None => vec![m.clone()],
+            };
+            return Ok(polar_anime::AnimeShowInfo {
+                is_anime: true,
+                mal_id: Some(mal),
+                anilist_id: m.anilist_id,
+                kitsu_id: m.kitsu_id,
+                imdb_id: m.imdb_id,
+                seasons,
+            });
+        }
+        return Ok(polar_anime::AnimeShowInfo { is_anime: true, mal_id: Some(mal), ..Default::default() });
+    }
+    if let Some(al) = id.strip_prefix("anilist:").and_then(|s| s.parse::<u32>().ok()) {
+        if let Some(m) = state.anime_lists.find(&AnimeKey::Anilist(al)).await {
+            let seasons = match &m.imdb_id {
+                Some(imdb) => state.anime_lists.find_all_for_imdb(imdb).await,
+                None => vec![m.clone()],
+            };
+            return Ok(polar_anime::AnimeShowInfo {
+                is_anime: true,
+                mal_id: m.mal_id,
+                anilist_id: Some(al),
+                kitsu_id: m.kitsu_id,
+                imdb_id: m.imdb_id,
+                seasons,
+            });
+        }
+        return Ok(polar_anime::AnimeShowInfo { is_anime: true, anilist_id: Some(al), ..Default::default() });
+    }
+    Ok(polar_anime::AnimeShowInfo::default())
+}
+
+/// Lazy-loaded characters & voice actors for an anime (cached 7 days on disk).
+#[tauri::command]
+pub async fn anime_characters(state: State<'_, AppState>, mal_id: u32) -> Result<Vec<polar_anime::AnimeCharacter>> {
+    state.anime_catalog.characters(mal_id).await.map_err(CmdError::Upstream)
+}
+
+/// Lazy-loaded rich anime details (rankings, studios, facts, tags, official links & characters) in one request.
+#[tauri::command]
+pub async fn anime_details(
+    state: State<'_, AppState>,
+    anilist_id: Option<u32>,
+    mal_id: Option<u32>,
+) -> Result<polar_anime::AnimeRichDetails> {
+    state.anime_catalog.details(anilist_id, mal_id).await.map_err(CmdError::Upstream)
 }
 
 /// Opens a web page (e.g. a title on IMDb) in the default browser. Only

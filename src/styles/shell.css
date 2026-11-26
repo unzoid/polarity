@@ -1555,7 +1555,7 @@ html[data-os="mac"] {
        size the bar keeps clear of them and its row stays centred on them. In
        fullscreen macOS hides them, and nothing makes room. */
 html[data-os="mac"] {
-  --traffic-lights: calc(88px / var(--ui-zoom, 1));
+  --traffic-lights: calc(96px / var(--ui-zoom, 1));
 }
 html[data-os="mac"][data-fullscreen] {
   --traffic-lights: 0px;
@@ -1566,7 +1566,8 @@ html[data-os="mac"]:not([data-fullscreen]) {
   --mac-row: max(calc(76px / var(--ui-zoom, 1)), 44px);
   --back-top: calc((var(--mac-row) - var(--back-box)) / 2);
 }
-html[data-os="mac"]:not([data-fullscreen]) .navbar {
+html[data-os="mac"]:not([data-fullscreen]) .navbar,
+html[data-os="mac"]:not([data-fullscreen]) .account-bar {
   height: var(--mac-row);
 }
 /* The window is transparent (mpv draws under the page), which costs it the
@@ -1589,10 +1590,19 @@ html[data-os="mac"] .account-bar {
 }
 html[data-os="mac"] .player-top {
   --bar-left: var(--traffic-lights);
-}html[data-os="mac"] .options-close {
-  left: var(--traffic-lights);
 }
-/* TV mode is fullscreen: square, edge to edge. */
+html[data-os="mac"] .player-yt-bar {
+  padding-left: max(0.75rem, var(--traffic-lights));
+}
+html[data-os="mac"]:not([data-fullscreen]) .player-yt-bar:not([data-shown="false"]) {
+  height: var(--mac-row);
+}
+html[data-os="mac"] .options-close {
+  left: max(1rem, var(--traffic-lights));
+}
+/* Fullscreen and TV mode are edge to edge: no rounded corners or rim. */
+html[data-os="mac"][data-fullscreen] body,
+html[data-os="mac"][data-fullscreen] body::after,
 html[data-os="mac"]:has(.app.tv) body,
 html[data-os="mac"]:has(.app.tv) body::after {
   border-radius: 0;

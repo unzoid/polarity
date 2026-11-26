@@ -21,10 +21,12 @@ test("hairlines, other units, urls and strings stay as written", () => {
   expect(scaleValue("#12px")).toBe("#12px");
 });
 
-test("the point variables themselves keep their px", () => {
+test("the point variables and macOS traffic-light clearances keep their px", () => {
   expect(keepsPx("--pt")).toBe(true);
   expect(keepsPx("--pl-pt")).toBe(true);
   expect(keepsPx("--ui-pt")).toBe(true);
+  expect(keepsPx("--traffic-lights")).toBe(true);
+  expect(keepsPx("--mac-row")).toBe(true);
   expect(keepsPx("--hit")).toBe(false);
   expect(keepsPx("width")).toBe(false);
 });

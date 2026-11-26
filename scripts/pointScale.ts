@@ -33,8 +33,10 @@ function scalePlain(text: string): string {
   return text.replace(PX, (whole, n: string) => (Math.abs(Number(n)) <= 1 ? whole : `calc(${n} * var(--ui-pt, 1px))`));
 }
 
-/** Declarations whose value stays as written. */
-export const keepsPx = (prop: string) => /^--(?:ui-|pl-)?pt$/.test(prop);
+/** Declarations whose value stays as written: point scales themselves, and macOS traffic-light clearances
+ *  which correspond to fixed AppKit screen coordinates (scaled only by `--ui-zoom`, never `--ui-pt`). */
+export const keepsPx = (prop: string) =>
+  /^--(?:ui-|pl-)?pt$/.test(prop) || prop === "--traffic-lights" || prop === "--mac-row";
 
 /** Stylesheets never loaded by the desktop shell. */
 const SKIPPED_FILES = /[\\/]src[\\/]styles[\\/](phone|tv)\.css$/;

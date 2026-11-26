@@ -3,6 +3,7 @@ import { useArtFocus } from "../components/DetailArt";
 import { Img } from "../components/Img";
 import { useIntent } from "../components/PosterCard";
 import { useLibraryToggle } from "../components/title/LibraryButton";
+import { ScoreRow } from "../components/title/TitleDetails";
 import {
   ALL_GENRES,
   BROWSE_GENRES,
@@ -16,7 +17,7 @@ import {
   type AddonCatalog,
   type Shelf,
 } from "../lib/catalog";
-import { useProgress } from "../lib/net";
+import { useProgress, useRatings, useSettings } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import type { ContentType, MetaPreview } from "../lib/types";
 import { heroBackdropUrl, lazyNamed, prefersReducedMotion, sizedArt, useNearViewport, useOffscreenMark } from "../lib/ui";
@@ -305,6 +306,8 @@ function BillboardArt({ item, entering, under }: { item: MetaPreview; entering?:
 
 /** Logo, a line of what it is, three lines of what it's about, and Play beside My List, each 236 pt wide. */
 function BillboardBody({ item, kicker }: { item: MetaPreview; kicker?: string }) {
+  const { data: settings } = useSettings();
+  const { data: ratings } = useRatings(item.type, item.id, !!settings?.ratingsOnHero);
   const { data: progress } = useProgress(item.id);
   const { inLibrary, toggle } = useLibraryToggle(item);
   const [playing, setPlaying] = useState(false);
@@ -333,6 +336,11 @@ function BillboardBody({ item, kicker }: { item: MetaPreview; kicker?: string })
           </>
         )}
       </p>
+      {settings?.ratingsOnHero && ratings && (
+        <div className="dk-bb-scores">
+          <ScoreRow ratings={ratings} />
+        </div>
+      )}
       {item.description && <p className="dk-bb-desc">{item.description}</p>}
       <div className="dk-bb-actions">
         <button

@@ -98,9 +98,11 @@ export function useCardStrip(strip: RefObject<HTMLElement | null>) {
     (dir: 1 | -1) => {
       const m = metrics();
       if (!m) return;
+      const max = Math.max(0, m.s.scrollWidth - m.s.clientWidth);
       const per = Math.max(1, Math.floor((m.s.clientWidth - m.pad * 2 + m.gap) / m.size));
       const at = Math.round(m.s.scrollLeft / m.size);
-      m.s.scrollTo({ left: Math.max(0, (at + dir * per) * m.size), behavior: reduced() ? "auto" : "smooth" });
+      const target = Math.min(max, Math.max(0, (at + dir * per) * m.size));
+      m.s.scrollTo({ left: target, behavior: reduced() ? "auto" : "smooth" });
     },
     [metrics],
   );

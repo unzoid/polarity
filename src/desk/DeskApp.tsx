@@ -212,7 +212,8 @@ export function DeskApp({ Screen, Settings }: { Screen: ComponentType<{ route: R
     syncNavScroll(scroller?.scrollTop ?? 0);
   }, [chrome, root.key, hasPushed]);
 
-  const firstDialog = shown.findIndex((r) => r.kind === "dialog" && !r.leaving);
+  // The bar goes under the first dialog, or the first page laid over the window (a person's, PushedPage `overlay`).
+  const firstDialog = shown.findIndex((r) => (r.kind === "dialog" || r.entries[0]?.route.name === "person") && !r.leaving);
   const barZ = firstDialog >= 0 ? 19 + firstDialog * 2 : 500;
 
   return (
@@ -371,6 +372,9 @@ function ScreenTab({ route, Screen, chrome }: { route: Route; Screen: ComponentT
 function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: { entry: Entry; leaving: boolean; z: number; top: boolean; onGone: () => void; onBack: () => void; Screen: ComponentType<{ route: Route }>; chrome: Chrome }) {
   const el = useRef<HTMLElement>(null);
   const under = useRef<HTMLElement | null>(null);
+  // A person's page lies over the one it came from, dark and blurred, as Sources does: it fades in and out on the
+  // spot, the page under it seen through it and left where it is.
+  const overlay = entry.route.name === "person";
   useLayoutEffect(() => {
     let below = el.current?.previousElementSibling as HTMLElement | null;
     while (below && (below.classList.contains("dk-tabs-layer") || below.classList.contains("dk-nav"))) below = below.previousElementSibling as HTMLElement | null;
@@ -379,8 +383,8 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
     if (reduced()) return clearUnder;
     // On a computer it's a page like any website's: it takes the window's place under the bar, the page it left
     // staying put underneath (no slide, no shove), with only a quick fade so the swap doesn't flash.
-    if (chrome === "nav") {
-      el.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+    if (chrome === "nav" || overlay) {
+      el.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: overlay ? 200 : 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
       return clearUnder;
     }
     const frames = samples(OPEN_OMEGA, OPEN_MS);
@@ -402,8 +406,8 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
       onGone();
     };
     if (reduced() || !el.current) return settle();
-    if (chrome === "nav") {
-      void el.current.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-out", fill: "forwards" }).finished.finally(settle);
+    if (chrome === "nav" || overlay) {
+      void el.current.animate([{ opacity: 1 }, { opacity: 0 }], { duration: overlay ? 160 : 120, easing: "ease-out", fill: "forwards" }).finished.finally(settle);
       return;
     }
     const ease = { duration: 320, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "forwards" } as const;
@@ -419,12 +423,19 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
   return (
     <section
       ref={el}
-      className="page dk-pushed"
+      className={overlay ? "page dk-pushed dk-overlay scheme-dark" : "page dk-pushed"}
       style={{ zIndex: z }}
       data-active={top && !leaving}
       data-page-key={entry.key}
       data-own-head={ownHead || undefined}
+      data-route={entry.route.name}
       inert={!top || leaving || undefined}
+      // A person's page heads itself with their name: the bar takes it once that has scrolled away.
+      onScrollCapture={
+        entry.route.name === "person"
+          ? (e) => el.current?.toggleAttribute("data-scrolled", (e.target as HTMLElement).scrollTop > 160)
+          : undefined
+      }
     >
       <div className="dk-pushed-body">
         {entry.route.name === "discover" ? (

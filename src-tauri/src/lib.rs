@@ -64,8 +64,10 @@ pub struct AppState {
     pub ratings: ratings::RatingsClient,
     /// Filler and recap episodes, cached in the app's cache folder.
     pub fillers: polar_anime::Fillers,
-    /// Anime id mappings for when ani.zip is down, in the same folder.
+    /// Local O(1) cross-id and franchise index (Fribb/anime-lists), in the same folder.
     pub anime_lists: polar_anime::AnimeLists,
+    /// Show-first anime catalog, seasonal feeds, schedules and characters (Jikan + disk cache).
+    pub anime_catalog: polar_anime::AnimeCatalog,
     /// Logos and backdrops fetched for measuring where CORS refuses them (#354).
     pub pictures: polar_addon::pictures::Pictures,
 }
@@ -137,6 +139,7 @@ pub fn index_config(settings: &store::Settings) -> IndexConfig {
     IndexConfig {
         tmdb_key: settings.tmdb_key.clone().or_else(|| std::env::var("TMDB_API_KEY").ok()),
         language: Some(settings.language.clone()),
+        tmdb_modules: settings.tmdb_modules.clone(),
     }
 }
 
@@ -266,8 +269,14 @@ pub fn run() {
                 mal: mal::Mal::default(),
                 ratings: ratings::RatingsClient::with_client(http.clone()),
                 fillers: polar_anime::Fillers::with_client(cache.clone(), http.clone()),
-                anime_lists: polar_anime::AnimeLists::with_client(cache.clone(), http),
+                anime_lists: polar_anime::AnimeLists::with_client(cache.clone(), http.clone()),
+                anime_catalog: polar_anime::AnimeCatalog::with_client(cache.clone(), http),
                 pictures: polar_addon::pictures::Pictures::default(),
+            });
+            // Warm the local anime id/franchise index off the UI thread so the first Anime visit is instant.
+            let warm_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                warm_handle.state::<AppState>().anime_lists.warm().await;
             });
             #[cfg(not(target_os = "ios"))]
             torrent::manage(app.handle(), cache);
@@ -345,6 +354,13 @@ pub fn run() {
             commands::window_can_pin,
             commands::anime_episode_flags,
             commands::anime_ids,
+            commands::anime_home,
+            commands::anime_shelf,
+            commands::anime_schedule,
+            commands::anime_browse,
+            commands::anime_show_info,
+            commands::anime_characters,
+            commands::anime_details,
             commands::anime_cache,
             commands::anime_cache_clear,
             commands::trailer,

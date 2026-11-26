@@ -121,6 +121,18 @@ export interface PersonPage {
   acting?: MetaPreview[];
   directing?: MetaPreview[];
   writing?: MetaPreview[];
+  /** What they did on each of those titles. */
+  roles?: PersonRole[];
+}
+
+/** A person's part in one title on their page: the character they play, or the job. */
+export interface PersonRole {
+  /** The title's id, as in the lists. */
+  id: string;
+  list: "acting" | "directing" | "writing";
+  name?: string;
+  /** Episodes of a show they're credited in. */
+  episodes?: number;
 }
 
 export interface CollectionInfo {
@@ -165,8 +177,10 @@ export interface ExternalRatings {
   imdbVotes?: number | null;
   /** TMDB user score, percent. */
   tmdb?: number | null;
+  /** MyAnimeList user score, out of 10. */
+  mal?: number | null;
   /** The title's page on each site that has a score, keyed like the scores above. */
-  links?: Partial<Record<"rottenTomatoes" | "audience" | "metacritic" | "letterboxd" | "trakt" | "tmdb" | "imdb", string>>;
+  links?: Partial<Record<"rottenTomatoes" | "audience" | "metacritic" | "letterboxd" | "trakt" | "tmdb" | "imdb" | "mal", string>>;
   awards?: string | null;
   rated?: string | null;
 }
@@ -273,6 +287,157 @@ export interface TorrentLink {
 export interface CacheInfo {
   path: string;
   bytes: number;
+}
+
+export interface AnimeItemTitle {
+  english?: string;
+  romaji?: string;
+  native?: string;
+}
+
+export interface AnimeItemAiring {
+  airingAt: number;
+  label?: string;
+  episode?: number;
+}
+
+/** Render-ready, show-grouped anime item returned by the Rust backend (zero per-card network calls). */
+export interface AnimeItem {
+  id: string;
+  type: ContentType;
+  name: string;
+  titles: AnimeItemTitle;
+  poster?: string;
+  background?: string;
+  logo?: string;
+  logos?: string[];
+  description?: string;
+  year?: number;
+  score?: number;
+  genres?: string[];
+  format?: string;
+  status?: string;
+  episodes?: number;
+  duration?: number;
+  certification?: string;
+  seasonHint?: number;
+  seasonLabel?: string;
+  airing?: AnimeItemAiring;
+  malId?: number;
+  anilistId?: number;
+  kitsuId?: number;
+  tmdbId?: number;
+  startDate?: string;
+  mature?: boolean;
+}
+
+export interface AnimeHomeCatalog {
+  season: AnimeItem[];
+  trending: AnimeItem[];
+  upcoming: AnimeItem[];
+  top: AnimeItem[];
+  popular: AnimeItem[];
+  movies: AnimeItem[];
+}
+
+export interface AnimeBrowseQuery {
+  search?: string;
+  genre?: string;
+  tag?: string;
+  season?: string;
+  year?: number;
+  format?: string;
+  status?: string;
+  sort?: string;
+  page?: number;
+}
+
+export interface AnimeBrowsePage {
+  items: AnimeItem[];
+  hasNextPage: boolean;
+}
+
+export interface AnimeVoiceActor {
+  id: number;
+  name: string;
+  image?: string;
+}
+
+export interface AnimeCharacter {
+  id: number;
+  name: string;
+  image?: string;
+  role: string;
+  voiceJa?: AnimeVoiceActor;
+  voiceEn?: AnimeVoiceActor;
+}
+
+export interface AnimeRanking {
+  rank: number;
+  context: string;
+  allTime: boolean;
+  year?: number;
+  season?: string;
+}
+
+export interface AnimeTag {
+  name: string;
+  rank: number;
+  description?: string;
+  spoiler: boolean;
+}
+
+export interface AnimeExternalLink {
+  site: string;
+  url: string;
+  icon?: string;
+  color?: string;
+  language?: string;
+}
+
+export interface AnimeRichDetails {
+  anilistId: number;
+  malId?: number;
+  format?: string;
+  episodes?: number;
+  duration?: number;
+  status?: string;
+  season?: string;
+  seasonYear?: number;
+  startDate?: string;
+  endDate?: string;
+  source?: string;
+  averageScore?: number;
+  favourites?: number;
+  studios?: string[];
+  producers?: string[];
+  synonyms?: string[];
+  rankings?: AnimeRanking[];
+  tags?: AnimeTag[];
+  streamingLinks?: AnimeExternalLink[];
+  characters?: AnimeCharacter[];
+}
+
+export interface AnimeSeasonMapping {
+  type?: string;
+  anilist_id?: number;
+  mal_id?: number;
+  kitsu_id?: number;
+  anidb_id?: number;
+  imdb_id?: string;
+  themoviedb_id?: number;
+  thetvdb_id?: number;
+  season?: { tvdb?: number; tmdb?: number };
+  episode_offset?: { tvdb?: number; tmdb?: number };
+}
+
+export interface AnimeShowInfo {
+  isAnime: boolean;
+  malId?: number;
+  anilistId?: number;
+  kitsuId?: number;
+  imdbId?: string;
+  seasons?: AnimeSeasonMapping[];
 }
 
 export type Playable =
@@ -386,8 +551,38 @@ export interface InstalledAddon {
 
 export type EpisodeLayout = "row" | "list";
 
+/** Per-feature toggles for TMDB metadata when a TMDB API key is set. */
+export interface TmdbModules {
+  trailers: boolean;
+  artwork: boolean;
+  basicInfo: boolean;
+  details: boolean;
+  credits: boolean;
+  productions: boolean;
+  networks: boolean;
+  episodes: boolean;
+  moreLikeThis: boolean;
+  collections: boolean;
+}
+
+/** Which external ratings providers (MDBList / OMDb) are shown. */
+export interface RatingsProviders {
+  imdb: boolean;
+  tmdb: boolean;
+  rottenTomatoes: boolean;
+  metacritic: boolean;
+  trakt: boolean;
+  letterboxd: boolean;
+  audience: boolean;
+  mal: boolean;
+}
+
 export interface Settings {
   tmdbKey?: string | null;
+  /** Use TMDB Discover for evergreen anime shelves when a TMDB key is set; off uses AniList. */
+  tmdbAnimeCatalogs: boolean;
+  /** Per-feature TMDB metadata module switches. */
+  tmdbModules: TmdbModules;
   language: string;
   autoplayNext: boolean;
   /** Seekr (seekr.tv) API key — enables seek-bar thumbnails. */
@@ -463,6 +658,10 @@ export interface Settings {
   // Services
   mdblistKey?: string | null;
   omdbKey?: string | null;
+  /** Show external ratings (MDBList / OMDb) on the home hero billboard. */
+  ratingsOnHero: boolean;
+  /** Which external ratings providers to display. */
+  ratingsProviders: RatingsProviders;
 
   // Subtitles
   subtitleMode: "always" | "foreign";

@@ -865,6 +865,55 @@
   font-weight: 500;
 }
 
+/* Sub-sections inside expanded service panels (TMDB Localization / Modules, MDBList Providers). */
+.settings-subhead {
+  margin: 0.5rem 0 -0.25rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3, var(--text-2));
+}
+.settings-subcard {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgb(var(--ink) / 0.03);
+  overflow: hidden;
+}
+.settings-subcard-pad {
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+}
+.settings-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
+.settings-subrow + .settings-subrow {
+  border-top: 1px solid var(--border);
+}
+.settings-subrow-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.settings-subrow-title {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text);
+}
+.settings-subrow-caption {
+  font-size: var(--fs-sm, 12.5px);
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
 /* Subtitle sample on the Subtitles page: a small screen set inside the card,
    inset on three sides with its own concentric corners, rather than a band
    bleeding to the card's edges. */

@@ -426,11 +426,6 @@
   padding: 0 calc(64 * var(--pt));
 }
 
-/* While the poster's art is flying to it, the card itself waits (TitleDialog shows it as the art lands). */
-.dk-dlg[data-flying] .dk-t-media {
-  opacity: 0;
-}
-
 /* Wide (a PC window): Play and Download as pills at the left, the four actions as compact tiles at the right of the
    same row, so the page's first screen holds the art, what it is, and everything you can do with it. */
 @container dk-title (min-width: 700px) {
@@ -494,43 +489,269 @@
   }
 }
 
-/* The art in flight between the poster and the card (TitleDialog): above the page, below nothing. */
-.dk-fam-ghost {
-  position: absolute;
-  z-index: 5;
-  top: 0;
-  left: 0;
-  overflow: hidden;
-  pointer-events: none;
-  will-change: transform, width, height;
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+/* --- Anime Details tab (Family-native cards: Characters & VAs, Info, Tags, Official Links) --- */
+.dk-ad {
+  display: flex;
+  flex-direction: column;
+  gap: calc(22 * var(--pt));
+  padding: calc(14 * var(--pt)) var(--dk-pad) 0;
 }
-.dk-fam-ghost img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.dk-ad-ranks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8 * var(--pt));
+}
+.dk-ad-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(5 * var(--pt));
+  padding: calc(6 * var(--pt)) calc(12 * var(--pt));
+  border-radius: 999px;
+  background: var(--fam-fill);
+  font-size: calc(12.5 * var(--pt));
+  color: var(--fam-text-2);
+}
+.dk-ad-rank strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.dk-ad-section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10 * var(--pt));
+}
+.dk-ad-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12 * var(--pt));
+}
+.dk-ad-label {
+  margin: 0;
+  font-size: calc(12.5 * var(--pt));
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--fam-text-2);
+}
+.dk-ad-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--fam-fill);
+}
+.dk-ad-seg button {
+  padding: calc(4 * var(--pt)) calc(11 * var(--pt));
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fam-text-2);
+  font-size: calc(12 * var(--pt));
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.dk-ad-seg button[aria-checked="true"] {
+  background: var(--fam-fill-hover);
+  color: var(--text);
+}
+:root[data-scheme="light"] .dk-ad-seg button[aria-checked="true"] {
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+.dk-ad-cast {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(10 * var(--pt));
+}
+.dk-ad-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: calc(8 * var(--pt));
+  padding: calc(8 * var(--pt));
+  border-radius: calc(16 * var(--pt));
+  background: var(--fam-card);
+  border: 1px solid var(--fam-line);
+}
+.dk-ad-side {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--pt));
+  min-width: 0;
+}
+.dk-ad-va {
+  justify-content: flex-end;
+  text-align: right;
+}
+.dk-ad-photo {
+  flex: none;
+  display: block;
+  width: calc(44 * var(--pt));
+  height: calc(58 * var(--pt));
+  border-radius: calc(10 * var(--pt));
   object-fit: cover;
+  object-position: center top;
+  background: var(--fam-fill);
 }
-/* The title's logo, carried by the art in flight at its place on the card (.dk-t-logo). */
-.dk-fam-ghost .dk-fam-ghost-logo {
-  position: absolute;
-  z-index: 1;
-  inset: auto;
-  /* Its size and place are set as fractions of the art (TitleDialog), never the art's whole box as the pictures are. */
+.dk-ad-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dk-ad-name {
+  font-size: calc(13 * var(--pt));
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.dk-ad-sub {
+  font-size: calc(11.5 * var(--pt));
+  color: var(--fam-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dk-ad-more {
+  align-self: flex-start;
+  padding: calc(7 * var(--pt)) calc(14 * var(--pt));
+  border: 0;
+  border-radius: 999px;
+  background: var(--fam-fill);
+  color: var(--text);
+  font-size: calc(12.5 * var(--pt));
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.dk-ad-more:hover {
+  background: var(--fam-fill-hover);
+}
+.dk-ad-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(12 * var(--pt)) calc(24 * var(--pt));
+  margin: 0;
+  padding: calc(16 * var(--pt)) calc(18 * var(--pt));
+  border-radius: calc(20 * var(--pt));
+  background: var(--fam-card);
+  border: 1px solid var(--fam-line);
+}
+.dk-ad-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.dk-ad-fact dt {
+  font-size: calc(11.5 * var(--pt));
+  font-weight: 500;
+  color: var(--fam-text-2);
+}
+.dk-ad-fact dd {
+  margin: 0;
+  font-size: calc(13.5 * var(--pt));
+  font-weight: 600;
+  line-height: 1.38;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.dk-ad-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(7 * var(--pt));
+}
+.dk-ad-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--pt));
+  padding: calc(6 * var(--pt)) calc(11 * var(--pt));
+  border-radius: 999px;
+  background: var(--fam-fill);
+  font-size: calc(12.5 * var(--pt));
+  font-weight: 500;
+  color: var(--text);
+}
+.dk-ad-tag[data-spoiler] {
+  box-shadow: inset 0 0 0 1px rgb(255 159 10 / 0.35);
+}
+.dk-ad-tag-pct {
+  font-size: calc(11.5 * var(--pt));
+  color: var(--fam-text-2);
+}
+.dk-ad-tag-btn {
+  border: 0;
+  cursor: pointer;
+  color: var(--fam-text-2);
+  font-weight: 600;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.dk-ad-tag-btn:hover {
+  background: var(--fam-fill-hover);
+  color: var(--text);
+}
+.dk-ad-text-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fam-text-2);
+  font-size: calc(12 * var(--pt));
+  font-weight: 600;
+  cursor: pointer;
+}
+.dk-ad-text-btn:hover {
+  color: var(--text);
+}
+.dk-ad-links-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(18 * var(--pt)) calc(28 * var(--pt));
+}
+.dk-ad-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8 * var(--pt));
+}
+.dk-ad-link {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(7 * var(--pt));
+  padding: calc(8 * var(--pt)) calc(13 * var(--pt));
+  border: 1px solid var(--fam-line);
+  border-radius: 999px;
+  background: var(--fam-card);
+  color: var(--text);
+  font-size: calc(13 * var(--pt));
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.dk-ad-link:hover {
+  background: var(--fam-fill-hover);
+}
+.dk-ad-link-ico {
+  width: calc(15 * var(--pt));
+  height: calc(15 * var(--pt));
+  border-radius: 3px;
   object-fit: contain;
-  object-position: left bottom;
-  filter: drop-shadow(0 4px 18px rgb(0 0 0 / 0.72));
 }
-/* The same fade into the page the title's art has (.dk-t-media::after), carried by the art in flight. */
-.dk-fam-ghost-shade {
-  position: absolute;
-  inset: 40% -2px -2px -2px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    color-mix(in srgb, var(--ghost-page) 30%, transparent) 40%,
-    color-mix(in srgb, var(--ghost-page) 82%, transparent) 75%,
-    var(--ghost-page) 96%
-  );
+.dk-ad-link-lang {
+  color: var(--fam-text-2);
+  font-weight: 500;
+}
+@container dk-title (max-width: 640px) {
+  .dk-ad-cast {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container dk-title (max-width: 460px) {
+  .dk-ad-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

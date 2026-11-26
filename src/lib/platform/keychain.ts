@@ -32,6 +32,8 @@ export interface KeychainDeps {
 
 export function createKeychainStorage({ call, local, shell }: KeychainDeps): KeyStorage {
   const known = new Map<string, string | null>();
+  // Deduplicate concurrent reads for the same key so a slow OS prompt never triggers a queue of identical dialogs.
+  const inflight = new Map<string, Promise<string | null>>();
   // Writes to one name reach the keychain in the order they were made.
   const queued = new Map<string, Promise<void>>();
   const inTurn = (key: string, write: () => Promise<void>) => {
@@ -69,31 +71,42 @@ export function createKeychainStorage({ call, local, shell }: KeychainDeps): Key
   return {
     async getItem(key) {
       if (known.has(key)) return known.get(key) ?? null;
-      const here = local.getItem(key);
-      let value = here;
-      if (here !== null) {
-        known.set(key, here);
-        if (usable) await inTurn(key, () => keep(key, here));
-      } else if (usable) {
-        try {
-          value = await native<string | null>("keychain_get", { name: key });
-        } catch {
-          value = null;
+      const pending = inflight.get(key);
+      if (pending) return pending;
+      const run = (async (): Promise<string | null> => {
+        const here = local.getItem(key);
+        let value = here;
+        if (here !== null) {
+          known.set(key, here);
+          if (usable) await inTurn(key, () => keep(key, here));
+        } else if (usable) {
+          try {
+            value = await native<string | null>("keychain_get", { name: key });
+          } catch {
+            value = null;
+          }
         }
+        // A write made while the keychain was asked is the newer value.
+        if (!known.has(key)) known.set(key, value);
+        return known.get(key) ?? null;
+      })();
+      inflight.set(key, run);
+      try {
+        return await run;
+      } finally {
+        if (inflight.get(key) === run) inflight.delete(key);
       }
-      // A write made while the keychain was asked is the newer value.
-      if (!known.has(key)) known.set(key, value);
-      return known.get(key) ?? null;
     },
     setItem(key, value) {
       known.set(key, value);
       return inTurn(key, () => keep(key, value));
     },
     removeItem(key) {
+      const wasAbsent = known.has(key) && known.get(key) === null && local.getItem(key) === null;
       known.set(key, null);
       return inTurn(key, async () => {
         local.removeItem(key);
-        if (usable) await native("keychain_delete", { name: key }).catch(() => undefined);
+        if (usable && !wasAbsent) await native("keychain_delete", { name: key }).catch(() => undefined);
       });
     },
     peek: (key) => known.get(key),

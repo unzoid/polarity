@@ -1075,12 +1075,30 @@ function AnimeEpStrip({
         })}
       </ol>
       {!ends.start && (
-        <button type="button" className="dk-pager dk-pager-back" aria-label="Scroll episodes back" tabIndex={-1} onClick={() => page(-1)}>
+        <button
+          type="button"
+          className="dk-pager dk-pager-back"
+          aria-label="Scroll episodes back"
+          tabIndex={-1}
+          onClick={(e) => {
+            e.stopPropagation();
+            page(-1);
+          }}
+        >
           <IconChevronRight size={22} stroke={2.4} />
         </button>
       )}
       {!ends.end && (
-        <button type="button" className="dk-pager" aria-label="Scroll episodes forward" tabIndex={-1} onClick={() => page(1)}>
+        <button
+          type="button"
+          className="dk-pager"
+          aria-label="Scroll episodes forward"
+          tabIndex={-1}
+          onClick={(e) => {
+            e.stopPropagation();
+            page(1);
+          }}
+        >
           <IconChevronRight size={22} stroke={2.4} />
         </button>
       )}

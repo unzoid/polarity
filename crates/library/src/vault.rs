@@ -48,6 +48,11 @@ impl Secrets {
 
     /// What `file` (the data file as JSON) holds.
     pub fn of(file: &Value) -> Self {
+        Self::of_excluding(file, &[])
+    }
+
+    /// What `file` holds, leaving out add-ons whose URLs are public and bundled with the app.
+    pub fn of_excluding(file: &Value, public_addons: &[&str]) -> Self {
         let mut secrets = Secrets::default();
         for field in KEY_FIELDS {
             if let Some(key) = file.pointer(&format!("/settings/{field}")).and_then(Value::as_str) {
@@ -57,7 +62,7 @@ impl Secrets {
             }
         }
         for_each_addon(file, |slot, url| {
-            if !url.is_empty() {
+            if !url.is_empty() && !public_addons.contains(&url) {
                 secrets.addons.insert(slot, url.into());
             }
         });
@@ -94,8 +99,8 @@ fn for_each_addon(file: &Value, mut f: impl FnMut(String, &str)) {
     }
 }
 
-/// Empties every secret field of `file` and sets its flag.
-fn strip(file: &mut Value) {
+/// Empties every secret field of `file` (keeping public bundled add-on URLs) and sets its flag.
+fn strip(file: &mut Value, public_addons: &[&str]) {
     if let Some(settings) = file.get_mut("settings").and_then(Value::as_object_mut) {
         for field in KEY_FIELDS {
             if settings.contains_key(field) {
@@ -106,7 +111,10 @@ fn strip(file: &mut Value) {
     if let Some(addons) = file.get_mut("addons").and_then(Value::as_array_mut) {
         for addon in addons {
             if let Some(addon) = addon.as_object_mut() {
-                addon.insert("manifestUrl".into(), Value::String(String::new()));
+                let url = addon.get("manifestUrl").and_then(Value::as_str).unwrap_or("");
+                if !public_addons.contains(&url) {
+                    addon.insert("manifestUrl".into(), Value::String(String::new()));
+                }
             }
         }
     }
@@ -136,16 +144,24 @@ pub struct Vault<S> {
     place: Place,
     /// The secrets last put in the keychain, or last refused by it; `None` = try at the next save.
     last: Option<Secrets>,
+    /// Public bundled add-on URLs that stay in the data file rather than triggering keychain writes.
+    public_addons: &'static [&'static str],
 }
 
 impl<S: SecretStore> Vault<S> {
     /// Reads the keychain when the file's flag says to and returns what to fill in: the keychain's
     /// secrets the file doesn't have itself. `file` is the data file as read.
     pub fn open(keys: Chunked<S>, file: &Value) -> (Self, Secrets) {
-        let in_file = Secrets::of(file);
+        Self::open_with_public(keys, file, &[])
+    }
+
+    /// Like [`Vault::open`], keeping `public_addons` out of the keychain so a fresh install with
+    /// only bundled public add-ons never touches the system keychain.
+    pub fn open_with_public(keys: Chunked<S>, file: &Value, public_addons: &'static [&'static str]) -> (Self, Secrets) {
+        let in_file = Secrets::of_excluding(file, public_addons);
         let flagged = file.get(FLAG).and_then(Value::as_bool).unwrap_or(false);
         if !flagged {
-            return (Vault { keys, place: Place::File, last: None }, Secrets::default());
+            return (Vault { keys, place: Place::File, last: None, public_addons }, Secrets::default());
         }
         match read(&keys) {
             Ok(stored) => {
@@ -163,9 +179,9 @@ impl<S: SecretStore> Vault<S> {
                 }
                 // Secrets the file still holds aren't in the keychain yet: the next save writes them.
                 let last = in_file.is_empty().then_some(stored);
-                (Vault { keys, place: Place::Keychain, last }, missing)
+                (Vault { keys, place: Place::Keychain, last, public_addons }, missing)
             }
-            Err(_) => (Vault { keys, place: Place::Unreadable, last: None }, Secrets::default()),
+            Err(_) => (Vault { keys, place: Place::Unreadable, last: None, public_addons }, Secrets::default()),
         }
     }
 
@@ -182,7 +198,7 @@ impl<S: SecretStore> Vault<S> {
             set_flag(file, true);
             return Ok(());
         }
-        let secrets = Secrets::of(file);
+        let secrets = Secrets::of_excluding(file, self.public_addons);
         // Nobody with nothing to keep is asked for the keychain.
         if self.place == Place::File && secrets.is_empty() {
             set_flag(file, false);
@@ -199,7 +215,7 @@ impl<S: SecretStore> Vault<S> {
             self.place = Place::Keychain;
         }
         match self.place {
-            Place::Keychain => strip(file),
+            Place::Keychain => strip(file, self.public_addons),
             _ => set_flag(file, false),
         }
         Ok(())
@@ -417,5 +433,29 @@ mod tests {
         let f = file(None, &[("a", "https://one.example.com/"), ("a", "https://two.example.com/")]);
         let s = Secrets::of(&f);
         assert_eq!(s.addon("a#1"), Some("https://two.example.com/"));
+    }
+
+    #[test]
+    fn bundled_public_addons_never_touch_the_keychain_and_stay_in_the_file() {
+        const PUBLIC: &[&str] = &["https://public.example.org/manifest.json"];
+        let mem = Memory::default();
+        let mut f = file(None, &[("org.example.sub", PUBLIC[0])]);
+        let (mut vault, _) = Vault::open_with_public(Chunked::new(mem.clone(), 1 << 20), &f, PUBLIC);
+        vault.take(&mut f).unwrap();
+        assert_eq!(mem.calls.get(), 0);
+        assert_eq!(f[FLAG], false);
+        assert_eq!(f["addons"][0]["manifestUrl"], PUBLIC[0]);
+
+        // Adding a real user secret moves only the secret into the keychain; the public add-on stays readable in the file.
+        let mut with_key = file(Some("KEY"), &[("org.example.sub", PUBLIC[0]), ("org.example.user", LINK)]);
+        vault.take(&mut with_key).unwrap();
+        assert_eq!(with_key[FLAG], true);
+        assert_eq!(with_key["settings"]["tmdbKey"], Value::Null);
+        assert_eq!(with_key["addons"][0]["manifestUrl"], PUBLIC[0]);
+        assert_eq!(with_key["addons"][1]["manifestUrl"], "");
+        let stored = mem.vault().unwrap();
+        assert_eq!(stored.key("tmdbKey"), Some("KEY"));
+        assert_eq!(stored.addon("org.example.sub#0"), None);
+        assert_eq!(stored.addon("org.example.user#0"), Some(LINK));
     }
 }

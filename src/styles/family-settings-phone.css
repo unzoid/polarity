@@ -6,11 +6,10 @@
 /* --- Page → Settings / Profiles full-screen vertical push transition (1:1 Family Wallet, no drawer, no darkening) --- */
 :root[data-form="phone"] .ph-main {
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
 }
 :root[data-form="phone"] .ph-main[data-settings-open],
 :root[data-form="phone"][data-profiles-open] .ph-main {
-  transform: translateY(100dvh);
+  transform: translateY(100%);
 }
 
 /* --- Root Palette & Full-Screen Frame ---
@@ -18,17 +17,26 @@
  * same elements at the same specificity (`:root[data-form="phone"] .t3s …`), and which stylesheet loads last
  * changes with lazy loading. The doubled class makes these win either way. */
 :root[data-form="phone"] .fms-root {
+  /* Family's contrast steps (iPhone 15 Pro), on a black page in neutral greys rather than Family's violet ones: the
+     page, its cards, the lines between rows, an icon, a section's heading, a chevron. */
   --fms-bg: #000000;
+  --fms-card: #1c1c1e;
   --fms-fg: #ffffff;
-  --fms-sub: #7e7e86;
-  --fms-eyebrow: #787880;
-  --fms-icon: #7a7a82;
-  --fms-chev: #58585f;
-  --fms-dots: #6c6c74;
-  --fms-hairline: rgb(255 255 255 / 0.08);
-  --fms-press: rgb(255 255 255 / 0.06);
-  --fms-search-bg: #161618;
+  --fms-sub: #86868b;
+  --fms-eyebrow: #6e6e73;
+  --fms-icon: #8e8e93;
+  --fms-chev: #7a7a7e;
+  --fms-dots: #7a7a7e;
+  --fms-hairline: #2a2a2c;
+  --fms-press: #2c2c2e;
+  --fms-search-bg: var(--fms-card);
+  --fms-danger: #ec5850;
   --fms-dim: rgb(0 0 0 / 0.38);
+  /* A card's corners, rows and insets. */
+  --fms-r-card: 24px;
+  --fms-gutter: 20px;
+  --fms-row-h: 69px;
+  --fms-row-pad: 20px;
 
   --t3-bg: var(--fms-bg);
   --t3-card: transparent;
@@ -46,16 +54,17 @@
 }
 
 :root[data-form="phone"][data-scheme="light"] .fms-root {
-  --fms-bg: #ffffff;
-  --fms-fg: #111113;
-  --fms-sub: #8e8e93;
-  --fms-eyebrow: #8e8e93;
-  --fms-icon: #7c7c84;
-  --fms-chev: #c7c7cc;
-  --fms-dots: #aeaeb2;
-  --fms-hairline: rgb(0 0 0 / 0.075);
-  --fms-press: rgb(0 0 0 / 0.04);
-  --fms-search-bg: #f2f2f6;
+  --fms-bg: #f2f2f2;
+  --fms-card: #ffffff;
+  --fms-fg: #111111;
+  --fms-sub: #8a8a8a;
+  --fms-eyebrow: #8e8e8e;
+  --fms-icon: #7a7a7a;
+  --fms-chev: #a3a3a3;
+  --fms-dots: #a3a3a3;
+  --fms-hairline: #ececec;
+  --fms-press: #ececec;
+  --fms-danger: #e5443b;
   --fms-dim: rgb(0 0 0 / 0.14);
 }
 
@@ -64,8 +73,8 @@
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-modal, 100) + 5);
-  width: 100vw;
-  height: 100dvh;
+  width: 100%;
+  height: auto;
   margin: 0;
   padding: 0;
   border: 0;
@@ -78,16 +87,12 @@
 }
 
 :root[data-form="phone"] .t3s.fms-root[data-embedded] {
-  --fms-bg: #000000;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   padding: 0;
   background: var(--fms-bg);
-}
-:root[data-form="phone"][data-scheme="light"] .t3s.fms-root[data-embedded] {
-  --fms-bg: #ffffff;
 }
 :root[data-form="phone"] .t3s.fms-root[data-embedded] .fms-layer-pushed {
   background: var(--fms-bg);
@@ -101,14 +106,16 @@
   -webkit-touch-callout: none;
 }
 
-/* --- 1:1 Family Header Bar (bare × / <, centered title, no borders, no circles) --- */
+/* --- Family's header: 44pt round buttons 24pt in from the sides, 4pt under the status bar, the title centred
+   between them (21pt semibold). --- */
 .fms-header {
   flex: none;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
-  min-height: calc(var(--safe-top, 0px) + 54px);
-  padding: calc(var(--safe-top, 0px) + 4px) 10px 4px;
+  gap: 8px;
+  min-height: calc(var(--safe-top, 0px) + 56px);
+  padding: calc(var(--safe-top, 0px) + 4px) 24px 8px;
   background: var(--fms-bg);
   position: relative;
   z-index: 6;
@@ -118,13 +125,25 @@
   height: 44px;
   border: 0;
   border-radius: 999px;
-  background: transparent;
+  background: linear-gradient(180deg, #464648, #363638);
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.14),
+    0 6px 16px rgb(0 0 0 / 0.36);
   color: var(--fms-fg);
   display: grid;
   place-items: center;
   cursor: pointer;
   padding: 0;
   transition: transform 130ms var(--ease-out), opacity 130ms var(--ease-out);
+}
+:root[data-form="phone"][data-scheme="light"] .fms-head-btn {
+  background: linear-gradient(180deg, #ffffff, #f4f4f6);
+  box-shadow:
+    inset 0 0 0 0.5px rgb(0 0 0 / 0.06),
+    0 6px 16px rgb(0 0 0 / 0.1);
+}
+.fms-head-btn:focus:not(:focus-visible) {
+  outline: none;
 }
 .fms-head-btn:active {
   transform: scale(0.86);
@@ -139,9 +158,9 @@
 }
 .fms-head-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 21px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   color: var(--fms-fg);
   white-space: nowrap;
   overflow: hidden;
@@ -196,7 +215,6 @@
   display: flex;
   flex-direction: column;
   background: var(--fms-bg);
-  will-change: transform, opacity;
 }
 .fms-layer-list {
   z-index: 1;
@@ -227,70 +245,66 @@
   display: none;
 }
 
-/* Collapsible Family pill search */
+/* Search: a field the cards' colour and width, at the top of the list. */
 .fms-search-holder {
   overflow: hidden;
-  padding: 2px 22px 10px;
+  padding: 4px var(--fms-gutter) 0;
 }
 :root[data-form="phone"] .fms-root.fms-root .fms-search {
-  height: 40px;
-  padding: 0 14px;
+  height: 44px;
+  padding: 0 16px;
   border: 0;
   border-radius: 999px;
   background: var(--fms-search-bg);
   box-shadow: none;
 }
 :root[data-form="phone"] .fms-root.fms-root .fms-search input {
-  font-size: 16px;
+  font-size: 17px;
 }
 :root[data-form="phone"] .fms-root.fms-root .fms-search .search-field-kbd {
   display: none;
 }
 
-/* --- Account Hero Row (1:1 to Family IMG_3010 & 14-30-52) --- */
+/* --- The signed-in profile: a card of its own above the settings --- */
 .fms-hero-wrap {
   position: relative;
+  margin-top: 20px;
+  padding: 0 var(--fms-gutter);
+}
+.fms-scroll > .fms-hero-wrap:first-child {
+  margin-top: 8px;
 }
 .ft-account-hero {
   position: relative;
   width: 100%;
-  padding: 12px 22px 16px;
+  min-height: 80px;
+  padding: 0 18px 0 16px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
+  border-radius: var(--fms-r-card);
+  background: var(--fms-card);
   color: var(--fms-fg);
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 16px;
   text-align: left;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out);
-}
-.ft-account-hero::after {
-  content: "";
-  position: absolute;
-  left: 81px;
-  right: 22px;
-  bottom: 0;
-  height: 1px;
-  background: var(--fms-hairline);
-  pointer-events: none;
 }
 .ft-account-hero:active {
   background: var(--fms-press);
 }
 .ft-account-hero .avatar {
-  width: 44px !important;
-  height: 44px !important;
+  width: 48px !important;
+  height: 48px !important;
   border-radius: 999px !important;
   flex: none;
 }
 .ft-account-hero-icon {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
-  background: var(--fms-search-bg);
-  color: var(--fms-fg);
+  background: var(--fms-press);
+  color: var(--fms-icon);
   display: grid;
   place-items: center;
   flex: none;
@@ -303,63 +317,81 @@
   gap: 2px;
 }
 .ft-account-hero-title {
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
-  letter-spacing: -0.016em;
-  line-height: 1.25;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 .ft-account-hero-sub {
-  font-size: 14.5px;
+  font-size: 15px;
   color: var(--fms-sub);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* --- Root Settings List Rows (1:1 to Family IMG_3010 & 14-30-52) --- */
+/* --- The settings list: Family's grouped cards (IMG_3026). A heading 13pt in from the card's edge, 20pt above it;
+   cards 20pt from the sides with Apple's continuous corners (24pt at 60% smoothing, useSmoothCorners); rows 69pt
+   with the icon 24pt in, the label (20pt semibold) 70pt in, a chevron 25pt from the right edge, and lines between
+   rows inset 20pt both sides. --- */
 .fms-group {
-  margin-top: 22px;
+  margin-top: 43px;
+}
+.fms-scroll > .fms-group:first-child {
+  margin-top: 31px;
 }
 .fms-eyebrow {
   margin: 0;
-  padding: 0 22px 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
+  padding: 0 0 17px calc(var(--fms-gutter) + 13px);
+  font-size: 17px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   color: var(--fms-eyebrow);
 }
-.fms-list {
+.fms-list,
+.fms-results {
   display: flex;
   flex-direction: column;
+  margin: 0 var(--fms-gutter);
+  border-radius: var(--fms-r-card);
+  background: var(--fms-card);
+  overflow: hidden;
+  isolation: isolate;
+}
+.fms-results {
+  margin-top: 20px;
 }
 .fms-row {
   position: relative;
   width: 100%;
-  min-height: 58px;
-  padding: 0 22px;
+  min-height: var(--fms-row-h);
+  /* 2px more below than above: the label's capitals sit on the row's middle, as Family's do. */
+  padding: 0 18px 2px 22px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--fms-fg);
   display: flex;
   align-items: center;
-  gap: 17px;
+  gap: 20px;
   text-align: left;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out);
 }
-.fms-row + .fms-row::before {
+.fms-row + .fms-row::before,
+.fms-result + .fms-result::before {
   content: "";
   position: absolute;
   top: 0;
-  left: 61px;
-  right: 22px;
-  height: 1px;
+  left: var(--fms-row-pad);
+  right: var(--fms-row-pad);
+  height: 0.67px;
   background: var(--fms-hairline);
   pointer-events: none;
 }
-.fms-row:active {
+.fms-row:active,
+.fms-result:active {
   background: var(--fms-press);
 }
 .fms-row-ico {
@@ -369,56 +401,48 @@
 .fms-row-label {
   flex: 1;
   min-width: 0;
-  font-size: 16.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .fms-row-val {
-  font-size: 16px;
-  font-weight: 500;
+  margin-right: -10px;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--fms-fg);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 .fms-row-chev {
   flex: none;
+  width: 22px;
+  height: 22px;
   color: var(--fms-chev);
 }
 .fms-row-danger,
 .fms-row-danger .fms-row-ico {
-  color: var(--danger, #ff3b30);
+  color: var(--fms-danger);
 }
 
-/* Search results */
-.fms-results {
-  display: flex;
-  flex-direction: column;
-}
+/* Search results: the same card, a result's page under its title. */
 .fms-result {
   position: relative;
   width: 100%;
-  min-height: 56px;
-  padding: 10px 20px;
+  min-height: var(--fms-row-h);
+  padding: 12px 18px 12px 22px;
   border: 0;
   background: transparent;
   color: var(--fms-fg);
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   text-align: left;
   cursor: pointer;
-}
-.fms-result + .fms-result::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 54px;
-  right: 20px;
-  height: 1px;
-  background: var(--fms-hairline);
-}
-.fms-result:active {
-  background: var(--fms-press);
+  transition: background-color 120ms var(--ease-out);
 }
 .fms-result-text {
   flex: 1;
@@ -428,40 +452,62 @@
   gap: 2px;
 }
 .fms-result-title {
-  font-size: 15.5px;
-  font-weight: 550;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 .fms-result-path {
-  font-size: 12.5px;
+  font-size: 15px;
+  color: var(--fms-sub);
+}
+:root[data-form="phone"] .fms-root.fms-root .t3s-empty {
+  padding: 24px calc(var(--fms-gutter) + 13px);
+  font-size: 17px;
   color: var(--fms-sub);
 }
 
-/* --- Sub-pages Inside Pushed Layers (Edge-to-Edge Borderless Family Rows) --- */
+/* --- A page's settings: the same cards as the list (IMG_3026, IMG_3029). A row without an icon starts its title
+   20pt in (Advanced's "Clear Cache"); a caption sits under the title in grey. --- */
 :root[data-form="phone"] .fms-root.fms-root .fms-page {
-  gap: 22px;
-  padding: 8px 0 32px;
+  gap: 43px;
+  padding: 31px 0 32px;
+}
+/* A card without a heading: closer to what's above it, as Family's Advanced card under its note. */
+:root[data-form="phone"] .fms-root.fms-root .fms-page > .settings-group:not(:has(> .settings-group-title)) {
+  margin-top: -19px;
+}
+:root[data-form="phone"] .fms-root.fms-root .fms-page > .settings-group:first-child:not(:has(> .settings-group-title)) {
+  margin-top: -7px;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-group {
   gap: 0;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-group-title {
-  padding: 0 22px 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
+  margin: 0;
+  padding: 0 0 17px calc(var(--fms-gutter) + 13px);
+  font-size: 17px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--fms-eyebrow);
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-footer,
 :root[data-form="phone"] .fms-root.fms-root .settings-error {
-  padding: 8px 22px 0;
+  padding: 12px calc(var(--fms-gutter) + 13px) 0;
+  font-size: 15px;
+  line-height: 1.35;
   color: var(--fms-sub);
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-card {
+  margin: 0 var(--fms-gutter);
   border: 0;
-  border-radius: 0;
-  background: transparent;
+  border-radius: var(--fms-r-card);
+  background: var(--fms-card);
   box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-card > :first-child,
 :root[data-form="phone"] .fms-root.fms-root .settings-card > :last-child {
@@ -475,12 +521,18 @@
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-row {
   position: relative;
-  min-height: 58px;
-  padding: 13px 22px;
+  min-height: var(--fms-row-h);
+  padding: 12px var(--fms-row-pad) 14px;
   border-radius: 0;
   box-shadow: none;
-  gap: 15px;
+  gap: 18px;
   transition: background-color 120ms var(--ease-out);
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row:has(> .settings-row-icon) {
+  padding-left: 22px;
+}
+:root[data-form="phone"] .fms-root.fms-root .settings-row:has(> .settings-chevron) {
+  padding-right: 18px;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-row:disabled {
   opacity: 0.45;
@@ -490,56 +542,56 @@
   content: "";
   position: absolute;
   top: 0;
-  left: 22px;
-  right: 22px;
-  height: 1px;
+  left: var(--fms-row-pad);
+  right: var(--fms-row-pad);
+  height: 0.67px;
   background: var(--fms-hairline);
   pointer-events: none;
-}
-:root[data-form="phone"] .fms-root.fms-root .settings-row:has(> .settings-row-icon) + .settings-row::before,
-:root[data-form="phone"] .fms-root.fms-root .settings-expand + .settings-expand::before,
-:root[data-form="phone"] .fms-root.fms-root .addon-item + .addon-item::before {
-  left: 59px;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-row-button:active,
 :root[data-form="phone"] .fms-root.fms-root label.settings-row:active {
   background: var(--fms-press);
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-row-title {
-  font-size: 16.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.3;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--fms-fg);
   overflow-wrap: anywhere;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-row-caption {
-  font-size: 13.5px;
-  line-height: 1.4;
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 1.3;
   color: var(--fms-sub);
   overflow-wrap: anywhere;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-expand-body {
-  padding: 0 22px 14px;
+  padding: 0 var(--fms-row-pad) 16px;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-expand-text {
   overflow-wrap: anywhere;
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-card-pad {
-  padding: 12px 22px;
+  padding: 16px var(--fms-row-pad);
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-row-icon {
-  width: 22px;
-  height: 22px;
+  flex: none;
+  width: 24px;
+  height: 24px;
   color: var(--fms-icon);
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-chevron {
+  flex: none;
+  width: 22px;
+  height: 22px;
   color: var(--fms-chev);
 }
 :root[data-form="phone"] .fms-root.fms-root .settings-sub-sample {
   height: 132px;
-  margin: 0 22px;
-  border-radius: 18px;
+  margin: 0 var(--fms-gutter);
+  border-radius: 24px;
   box-shadow: none;
 }
 
@@ -559,7 +611,7 @@
 :root[data-form="phone"] .fms-root.fms-root .sub-stepper button {
   width: 32px;
   height: 32px;
-  background: var(--fms-search-bg);
+  background: var(--fms-press);
   color: var(--fms-fg);
 }
 :root[data-form="phone"] .fms-root.fms-root .sub-stepper button:active:not(:disabled) {
@@ -606,8 +658,9 @@
   max-width: 52%;
 }
 :root[data-form="phone"] .fms-root.fms-root .ft-choice-value {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--fms-fg);
   white-space: nowrap;
   overflow: hidden;
@@ -686,8 +739,11 @@
   padding:
     calc(var(--safe-top, 0px) + 14px)
     calc(var(--safe-right, 0px) + 14px)
-    calc(var(--safe-bottom, 0px) + 14px)
+    max(14px, calc(var(--safe-bottom, 0px) - 14px))
     calc(var(--safe-left, 0px) + 14px);
+}
+.ft-backdrop[data-kb-open] {
+  padding-bottom: calc(10px + var(--ft-kb, 0px));
 }
 :root[data-scheme="light"] .ft-backdrop {
   background: rgb(0 0 0 / 0.30);
@@ -696,21 +752,20 @@
 .ft-tray-wrap {
   width: 100%;
   max-width: 420px;
-  will-change: transform, opacity;
-  filter: drop-shadow(0 20px 36px rgb(0 0 0 / 0.52));
+  border-radius: 34px;
+  box-shadow: 0 20px 36px rgb(0 0 0 / 0.52);
 }
 :root[data-scheme="light"] .ft-tray-wrap {
-  filter: drop-shadow(0 14px 32px rgb(0 0 0 / 0.16));
+  box-shadow: 0 14px 32px rgb(0 0 0 / 0.16);
 }
 
 .ft-tray {
   --ft-bg: #1c1c1e;
-  --ft-row: #28282c;
-  --ft-row-press: #323237;
+  --ft-row: #2a2a2c;
+  --ft-row-press: #343436;
   --ft-fg: #ffffff;
   --ft-muted: #8e8e93;
-  --ft-rim: rgb(255 255 255 / 0.08);
-  --ft-tile-rim: rgb(255 255 255 / 0.07);
+  --ft-tile-rim: rgb(255 255 255 / 0.11);
   --ft-swatch-rim: rgb(255 255 255 / 0.14);
   --ft-cta-bg: #ffffff;
   --ft-cta-fg: #0a0a0b;
@@ -730,7 +785,6 @@
   --ft-row-press: #ebebf0;
   --ft-fg: #111113;
   --ft-muted: #8e8e93;
-  --ft-rim: transparent;
   --ft-tile-rim: rgb(0 0 0 / 0.06);
   --ft-swatch-rim: rgb(0 0 0 / 0.08);
   --ft-cta-bg: var(--accent);
@@ -738,7 +792,6 @@
   --ft-sec-bg: #f2f2f6;
   --ft-sec-fg: #111113;
 }
-.ft-smooth-rim,
 .ft-smooth-stroke {
   position: absolute;
   inset: 0;
@@ -1189,8 +1242,8 @@
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-modal, 100) + 4);
-  width: 100vw;
-  height: 100dvh;
+  width: 100%;
+  height: auto;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -1356,6 +1409,12 @@
 }
 .fpe-hero-avatar:active {
   transform: scale(0.93);
+}
+/* The picture alone, shared with the grid card's (layoutId): it morphs between the two sizes as one. */
+.fpe-hero-avatar-art,
+.fmp-card-avatar-art {
+  display: inline-flex;
+  border-radius: 999px;
 }
 .fpe-hero-avatar .avatar {
   width: 54px !important;
@@ -1665,24 +1724,29 @@
   padding: 12px 20px calc(var(--safe-bottom, 0px) + 32px);
 }
 
-/* 1:1 Family Appearance 3-tile squircle grid (concentric 25px Apple 60% corner smoothing) */
+/* The colour scheme's tiles (AccentPicker): portrait, 99 × 118 as Family's and Aave's are, 22px smoothed corners,
+   16px apart so the chosen one's ring (6px out) has room. Unchosen: the tray's own colour inside a hairline. */
 .ft-scheme-tiles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 16px;
+  padding: 6px;
+  margin: -6px;
 }
 .ft-scheme-tile {
   position: relative;
+  aspect-ratio: 99 / 118;
   border: 0;
-  border-radius: 25px;
-  padding: 20px 8px 16px;
-  background: var(--ft-row);
+  border-radius: 22px;
+  padding: 0 8px;
+  background: transparent;
   color: var(--ft-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  font: 600 14px/1 inherit;
+  justify-content: center;
+  gap: 14px;
+  font: 600 15px/1 inherit;
   cursor: pointer;
   touch-action: manipulation;
   transition:
@@ -1693,9 +1757,72 @@
 .ft-scheme-tile:active {
   transform: scale(0.95);
 }
+/* The chosen tile (Family's Appearance tray, measured off the recording): filled a grey step up from the tray, a 3pt
+   gap, then a 3pt ring in the accent with a light running round it clockwise, once a second. */
+.ft-scheme-slot {
+  position: relative;
+  display: grid;
+}
 .ft-scheme-tile.is-selected {
-  background: var(--ft-bg);
+  background: var(--ft-row);
   color: var(--ft-fg);
+}
+@property --ft-ring-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 90deg;
+}
+.ft-scheme-ring {
+  /* The light's middle is lifted towards white, so it shows with a dark accent (Indigo) as Family's lavender does. */
+  --ft-ring-lit: color-mix(in srgb, var(--accent) 55%, #ffffff);
+  --ft-ring-mid: color-mix(in srgb, var(--accent) 85%, #ffffff);
+  --ft-ring-dim: color-mix(in srgb, var(--accent) 40%, var(--ft-bg));
+  position: absolute;
+  pointer-events: none;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  /* The light's middle is at --ft-ring-turn (0 = top, clockwise), fading to the ring's dim colour opposite it. */
+  background: conic-gradient(
+    from calc(var(--ft-ring-turn) - 180deg),
+    var(--ft-ring-dim),
+    var(--ft-ring-mid) 25%,
+    var(--ft-ring-lit) 50%,
+    var(--ft-ring-mid) 75%,
+    var(--ft-ring-dim)
+  );
+  /* Hidden on the tiles not chosen: a new choice's ring fades and settles in while the last one's fades out. */
+  opacity: 0;
+  scale: 0.97;
+  transition:
+    opacity 280ms var(--ease-out),
+    scale 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: ft-ring-turn 1s linear infinite;
+}
+.ft-scheme-ring[data-on] {
+  opacity: 1;
+  scale: 1;
+}
+:root[data-scheme="light"] .ft-scheme-ring {
+  --ft-ring-lit: var(--accent);
+  --ft-ring-mid: color-mix(in srgb, var(--accent) 70%, var(--ft-bg));
+  --ft-ring-dim: color-mix(in srgb, var(--accent) 30%, var(--ft-bg));
+}
+@keyframes ft-ring-turn {
+  from {
+    --ft-ring-turn: 90deg;
+  }
+  to {
+    --ft-ring-turn: 450deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion="off"]) .ft-scheme-ring {
+    animation: none;
+    scale: 1;
+    transition: opacity 120ms linear;
+  }
 }
 
 /* Accent colour tray (AccentPicker): a dot per accent with its name, then "Custom" with the system's picker. */

@@ -25,7 +25,7 @@ import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
 import { canPreloadChunks, lazyNamed, prefersReducedMotion, useDismiss, useFormFactor, whenIdle } from "../lib/ui";
-import { useAppleCorners } from "../lib/ui/cornerSmoothing";
+import { maskStyle, useAppleCorners } from "../lib/ui/cornerSmoothing";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { useGuard } from "./profileLock/useGuard";
@@ -698,21 +698,30 @@ function SmoothProfileCard({ hiddenForMorph, veil, ...props }: SmoothProfileCard
 
 function SmoothProfileCardBody({ profileId, active, locked, managing, name, sub, avatarNode, onClick, onEditClick }: Omit<SmoothProfileCardProps, "hiddenForMorph">) {
   const ref = useRef<HTMLDivElement>(null);
-  const corners = useAppleCorners(ref, 28, 60);
+  // 18 at 60% smoothing: the corner reaches 29 along each edge (cornerSmoothing.ts).
+  const corners = useAppleCorners(ref, 18, 60);
   const interactive = !!onClick;
+  // The picture shares its layoutId with the profile page's hero picture (ProfileEditSheet): one picture that moves.
+  const picture = profileId ? (
+    <motion.span className="fmp-card-avatar-art" layoutId={`profile-avatar-${profileId}`} transition={PROFILE_CARD_SPRING}>
+      {avatarNode}
+    </motion.span>
+  ) : (
+    avatarNode
+  );
   return (
     <motion.div
       ref={ref}
       layoutId={profileId ? `profile-card-${profileId}` : undefined}
       transition={PROFILE_CARD_SPRING}
       className={`fmp-card${active ? " is-active" : ""}${managing ? " is-managing" : ""}`}
-      style={corners.clipPath ? { clipPath: corners.clipPath, borderRadius: 0 } : undefined}
+      style={maskStyle(corners.mask)}
     >
       {interactive ? (
         <button type="button" className="fmp-card-hit" aria-label={managing ? `Edit ${name}` : name} onClick={onClick}>
           <div className="fmp-card-top">
             <span className="fmp-card-avatar">
-              {avatarNode}
+              {picture}
               {locked && (
                 <span className="fmp-card-lock" aria-hidden>
                   <Lock size={10} />
@@ -738,7 +747,7 @@ function SmoothProfileCardBody({ profileId, active, locked, managing, name, sub,
         <div className="fmp-card-inner">
           <div className="fmp-card-top">
             <span className="fmp-card-avatar">
-              {avatarNode}
+              {picture}
               {locked && (
                 <span className="fmp-card-lock" aria-hidden>
                   <Lock size={10} />

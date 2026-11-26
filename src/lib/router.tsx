@@ -20,8 +20,9 @@ export type Route =
   /**
    * `entry`: TV mode with seasons as separate shows (#22), the AniList entry whose episodes the page shows.
    * `episode`: a link to one episode (#163): the page opens on its season with its sources listed.
+   * `season`: auto-select this season number inside the unified show view (e.g. when opened from a seasonal anime shelf).
    */
-  | { name: "detail"; type: ContentType; id: string; preview?: MetaPreview; entry?: number; episode?: string }
+  | { name: "detail"; type: ContentType; id: string; preview?: MetaPreview; entry?: number; episode?: string; season?: number }
   /** An anime's own page, by AniList id. */
   | { name: "anime-detail"; id: number; preview?: AnimeCard }
   | { name: "anime-schedule" }

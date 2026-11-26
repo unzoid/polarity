@@ -26,6 +26,7 @@ installed by the user.
 | QR code on the TV's sign-in screen (#133): `uqr` 0.1.2, a QR encoder with no dependencies of its own (Anthony Fu, after Project Nayuki's QR Code generator) | MIT | `uqr` in `package.json`, pinned; its `LICENSE` has both copyright lines. Used by `src/screens/account/TvSignInQr.tsx`, which draws the SVG itself |
 | Progressive blur (`src/components/EdgeBlur.tsx`): the layered, banded backdrop-blur technique and its gradient-stop arithmetic, adapted from motion-primitives' ProgressiveBlur (ibelick) | MIT | `src/components/EdgeBlur.LICENSE-motion-primitives.txt` (motion-primitives' licence, unchanged); no package is installed |
 | Dialogs, popovers and tabs of the computer and tablet layout (`src/desk`): `@ui-sdk/core` and `@ui-sdk/react` 0.1.0-beta.13 (Vercel), behaviour only, no styles | Apache-2.0 | `@ui-sdk/core`, `@ui-sdk/react` in `package.json`, pinned; each package's `LICENSE` has the licence text (neither ships a NOTICE file) |
+| Switches of the desktop Settings window (`src/components/settings/GlassSwitch.tsx`): `@glass-sdk/liquid-glass` 0.0.3-beta.5 (Glass HQ), its `GlassSwitch` and `GlassScene`, a WebGL2 renderer in a worker | MIT | `@glass-sdk/liquid-glass` in `package.json`, pinned; its `LICENSE` has the licence text. Loaded with Settings only (`src/components/SettingsOverlay.tsx`) |
 | npm and Rust dependencies | Each package's own | `bun.lock`, `Cargo.lock` |
 
 Third-party logos (TMDB's in Settings → About → Credits) are shown only as credits and links to

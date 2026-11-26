@@ -6,7 +6,7 @@ import { hasPin } from "../lib/account/profileRules";
 import { errorMessage } from "../lib/errors";
 import { openSettings } from "../lib/settings";
 import { prefersReducedMotion } from "../lib/ui";
-import { useAppleCorners } from "../lib/ui/cornerSmoothing";
+import { maskStyle, useAppleCorners } from "../lib/ui/cornerSmoothing";
 import { IconPicker } from "../screens/account/ProfilesScreen";
 import { Avatar } from "./Avatar";
 import { Captions, ChevronRight, Lock, Play, Trash } from "./icons";
@@ -41,7 +41,8 @@ export function ProfileEditSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const heroRef = useRef<HTMLDivElement>(null);
-  const heroCorners = useAppleCorners(heroRef, 36, 60, !picking);
+  // 22 at 60% smoothing: the corner reaches 35 along each edge (cornerSmoothing.ts).
+  const heroCorners = useAppleCorners(heroRef, 22, 60, !picking);
   const reduced = prefersReducedMotion();
 
   useEffect(() => {
@@ -98,7 +99,7 @@ export function ProfileEditSheet({
         layoutId={`profile-card-${profile.id}`}
         transition={reduced ? { duration: 0.08 } : HERO_SPRING}
         className={`fpe-hero-card${inUse ? " is-active" : ""}`}
-        style={heroCorners.clipPath ? { clipPath: heroCorners.clipPath, borderRadius: 0 } : undefined}
+        style={maskStyle(heroCorners.mask)}
       >
         <div className="fpe-hero-top">
           <button
@@ -107,7 +108,11 @@ export function ProfileEditSheet({
             aria-label="Change profile icon"
             onClick={() => setPicking(true)}
           >
-            <Avatar id={profile.avatar} />
+            {/* Shares its layoutId with the grid card's picture, so it moves and scales as one picture with the
+                card instead of two cross-fading (which dipped it to half-transparent mid-way). */}
+            <motion.span className="fpe-hero-avatar-art" layoutId={`profile-avatar-${profile.id}`} transition={reduced ? { duration: 0.08 } : HERO_SPRING}>
+              <Avatar id={profile.avatar} />
+            </motion.span>
             {locked && (
               <span className="fmp-card-lock" aria-hidden>
                 <Lock size={11} />

@@ -187,6 +187,13 @@ const commands: Record<string, (a: Args) => unknown> = {
   },
   unlink_anime: (a) => animeLinks.delete((a as { anilist: number }).anilist),
   anime_ids: () => null,
+  anime_show_info: () => ({ isAnime: false }),
+  anime_characters: () => [],
+  anime_details: () => ({ anilistId: 0 }),
+  anime_home: () => ({ season: [], trending: [], upcoming: [], top: [], popular: [], movies: [] }),
+  anime_shelf: () => ({ items: [], hasNextPage: false }),
+  anime_schedule: () => [],
+  anime_browse: () => ({ items: [], hasNextPage: false }),
   // The invented two-series franchise's long series has filler (its tab's toolbar has Skip filler, #426).
   anime_episode_flags: (a) => ((a as { malId?: number }).malId === SAGA_FILLER.mal ? { filler: SAGA_FILLER.filler, recap: [] } : { filler: [], recap: [] }),
   anime_cache: () => ({ path: "~/.cache/polar/anime", bytes: 1_843_200 }),

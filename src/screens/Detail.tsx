@@ -49,7 +49,19 @@ import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
  * seasons/episodes peek in below. Scrolling down blurs the art into an
  * ambient backdrop (scroll-driven CSS — no JS on scroll).
  */
-export function Detail({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
+export function Detail({
+  type,
+  id,
+  preview,
+  episode,
+  season,
+}: {
+  type: ContentType;
+  id: string;
+  preview?: MetaPreview;
+  episode?: string;
+  season?: number;
+}) {
   useEffect(() => preloadPlayerNow(), []);
   const { data: meta, isError, error } = useMeta(type, id);
   // Over the profile's viewing limit: nothing of the title shows; with a limit, nothing until its rating is known.
@@ -148,7 +160,7 @@ export function Detail({ type, id, preview, episode }: { type: ContentType; id: 
             {hero}
           </>
         )}
-        {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} />}
+        {type === "series" && meta && <SeriesBody meta={meta} onSheet={onSheet} episode={episode} initialSeason={season} />}
         {meta && <ExtrasShelf meta={meta} />}
         {meta?.details?.collection && <CollectionShelf collection={meta.details.collection} currentId={meta.id} />}
         {meta && <MoreLikeThisShelf type={type} id={meta.id} />}
@@ -295,10 +307,10 @@ function DetailHero({
 }
 
 /** A show below the fold: its episodes, then everything else about it, as a movie's About. */
-function SeriesBody({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boolean) => void; episode?: string }) {
+function SeriesBody({ meta, onSheet, episode, initialSeason }: { meta: Meta; onSheet: (open: boolean) => void; episode?: string; initialSeason?: number }) {
   return (
     <>
-      <Seasons meta={meta} onSheet={onSheet} episode={episode} />
+      <Seasons meta={meta} onSheet={onSheet} episode={episode} initialSeason={initialSeason} />
       <section className="about about-series">
         <h2 className="t-title2">About</h2>
         <TitleDetails meta={meta} />
@@ -307,16 +319,16 @@ function SeriesBody({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: bo
   );
 }
 
-function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boolean) => void; episode?: string }) {
+function Seasons({ meta, onSheet, episode, initialSeason }: { meta: Meta; onSheet: (open: boolean) => void; episode?: string; initialSeason?: number }) {
   const { data: progress } = useProgress(meta.id);
   const orders = useEpisodeOrders(meta);
   const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
   const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
   const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
-  // A link to one episode (#163) opens on its season, with its sources listed (nothing plays by itself).
+  // A link to one episode (#163) opens on its season; a seasonal anime card opens directly on that season.
   const linked = episode ? meta.videos.find((v) => v.id === episode) : undefined;
-  const [season, setSeason] = useState<number | undefined>(linked && shelfGroupOf(linked, view));
+  const [season, setSeason] = useState<number | undefined>(() => (linked ? shelfGroupOf(linked, view) : initialSeason));
   const picker = useSourcePicker(onSheet);
 
   // Another episode order lists other groups: open on the one up next is in.
@@ -327,11 +339,10 @@ function Seasons({ meta, onSheet, episode }: { meta: Meta; onSheet: (open: boole
     setSeason(undefined);
   }, [view]);
 
-  // Open on the season you're actually in, not always season 1 — so wait
-  // for watch progress before choosing.
+  // Open on the season you're actually in, not always season 1 — unless a specific season was requested.
   useEffect(() => {
-    if (season === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
-  }, [next.video, season, progress, view]);
+    if (season === undefined && initialSeason === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
+  }, [next.video, season, initialSeason, progress, view]);
 
   const current = groups.some((g) => g.id === season) ? season! : (groups[0]?.id ?? seasons[0]);
   const episodes = groups.find((g) => g.id === current)?.videos ?? [];

@@ -740,3 +740,42 @@ test("the error screen on a phone keeps clear of the controls, and a panel opene
   await expect(shade).toBeVisible();
   expect(await shade.evaluate((e) => getComputedStyle(e).backdropFilter || getComputedStyle(e).getPropertyValue("-webkit-backdrop-filter"))).toContain("blur");
 });
+
+test("playing a title hides the phone shell and clears page backgrounds for native mpv playback", async ({ app }) => {
+  await openPlayer(app);
+  const state = await app.evaluate(() => {
+    document.documentElement.dataset.player = "mpv";
+    const ph = document.querySelector<HTMLElement>(".ph")!;
+    const main = document.querySelector<HTMLElement>(".ph-main")!;
+    const sheetClose = document.querySelector<HTMLElement>(".ps-media-buttons .ps-round");
+    return {
+      playingAttr: ph.hasAttribute("data-playing"),
+      mainVisibility: getComputedStyle(main).visibility,
+      closeVisibility: sheetClose ? getComputedStyle(sheetClose).visibility : "none",
+      htmlBg: getComputedStyle(document.documentElement).backgroundColor,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      phBg: getComputedStyle(ph).backgroundColor,
+    };
+  });
+  expect(state.playingAttr).toBe(true);
+  expect(state.mainVisibility).toBe("hidden");
+  expect(state.closeVisibility).toBe("hidden");
+  expect(state.htmlBg).toBe("rgba(0, 0, 0, 0)");
+  expect(state.bodyBg).toBe("rgba(0, 0, 0, 0)");
+  expect(state.phBg).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("floating settings trays sit near the bottom of the screen even with a home indicator inset", async ({ app }) => {
+  await insets(app, { top: 59, right: 0, bottom: 34, left: 0 });
+  const settings = await openSettingsPage(app, "Advanced");
+  await settings.getByRole("button", { name: /^Crop/ }).tap();
+  const tray = app.locator(".ft-tray");
+  await expect(tray).toBeVisible();
+  // Wait for entrance spring to settle.
+  await app.waitForTimeout(350);
+  const box = (await tray.boundingBox())!;
+  const height = app.viewportSize()!.height;
+  // Floating card sits ~20px above the screen bottom on a 34px home-indicator iPhone (never lifted ~100px by a hidden tab bar).
+  expect(height - (box.y + box.height)).toBeLessThanOrEqual(28);
+  expect(height - (box.y + box.height)).toBeGreaterThanOrEqual(12);
+});

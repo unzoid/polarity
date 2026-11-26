@@ -10,6 +10,8 @@
 //! How a value is split to fit is `polar_library::keychain`; this file only talks to the
 //! `keyring` crate on desktops, to `src/ios/keys.m` on iOS and to `PolarKeys` over JNI on Android.
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -52,9 +54,46 @@ static LOCK: Mutex<()> = Mutex::new(());
 
 pub struct System;
 
+/// Once the OS keychain is known to be unavailable or denied for this process run, stop asking it
+/// so concurrent or follow-up reads never queue up a loop of system password modals.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+/// Ad-hoc signed macOS builds change CDHash on every install/update, causing macOS's legacy login
+/// keychain to pop up a blocking password prompt on every item. Skip the keychain until the build
+/// carries a stable signing identity (Developer ID / Apple Development with a team identifier).
+#[cfg(target_os = "macos")]
+fn macos_keychain_allowed() -> bool {
+    use std::sync::OnceLock;
+    extern "C" {
+        fn polar_macos_has_stable_signature() -> std::ffi::c_int;
+    }
+    static ALLOWED: OnceLock<bool> = OnceLock::new();
+    *ALLOWED.get_or_init(|| {
+        let ok = unsafe { polar_macos_has_stable_signature() } != 0;
+        if !ok {
+            tracing::info!("macOS build is ad-hoc signed: keeping secrets in local storage instead of login Keychain");
+        }
+        ok
+    })
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl System {
+    fn check_available() -> std::result::Result<(), StoreError> {
+        if UNAVAILABLE.load(Ordering::Relaxed) {
+            return Err(StoreError::Unavailable("keychain unavailable for this run".into()));
+        }
+        #[cfg(target_os = "macos")]
+        if !macos_keychain_allowed() {
+            UNAVAILABLE.store(true, Ordering::Relaxed);
+            return Err(StoreError::Unavailable("macOS build is ad-hoc signed".into()));
+        }
+        Ok(())
+    }
+
     fn entry(name: &str) -> std::result::Result<keyring::Entry, StoreError> {
+        Self::check_available()?;
         keyring::Entry::new(SERVICE, name).map_err(to_store_error)
     }
 }
@@ -62,14 +101,18 @@ impl System {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn to_store_error(e: keyring::Error) -> StoreError {
     use keyring::Error;
-    match e {
+    let err = match e {
         Error::NoDefaultStore | Error::NotSupportedByStore(_) | Error::NoStorageAccess(_) => {
             StoreError::Unavailable(e.to_string())
         }
-        // Linux without a running Secret Service fails here, at the first call.
+        // Linux without a running Secret Service (or macOS user clicking Deny / Cancel) fails here.
         Error::PlatformFailure(_) => StoreError::Unavailable(e.to_string()),
         other => StoreError::Failed(other.to_string()),
+    };
+    if matches!(err, StoreError::Unavailable(_)) {
+        UNAVAILABLE.store(true, Ordering::Relaxed);
     }
+    err
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -249,7 +292,7 @@ pub type Vault = vault::Vault<System>;
 pub fn open_vault(data: &crate::store::Data) -> (Vault, Secrets) {
     let file = serde_json::to_value(data).unwrap_or_default();
     let _one = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (vault, fill) = Vault::open(Chunked::new(System, MAX_ENTRY), &file);
+    let (vault, fill) = Vault::open_with_public(Chunked::new(System, MAX_ENTRY), &file, crate::BUNDLED_ADDONS);
     match vault.place() {
         Place::Unreadable => {
             tracing::warn!("the keychain couldn't be read: keys and add-on links kept there aren't loaded")

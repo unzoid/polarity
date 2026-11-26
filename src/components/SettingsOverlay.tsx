@@ -4,7 +4,16 @@ import "../styles/family-settings-phone.css";
 import "../styles/marketplace.css";
 import { Dialog } from "@base-ui/react/dialog";
 import { animate } from "motion/react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { Avatar } from "./Avatar";
 import { ChevronLeft, ChevronRight, Close, Reset, SignOut } from "./icons";
 import { iconButtonClass } from "./ui/Button";
@@ -28,6 +37,33 @@ import { searchSettings, type SettingEntry } from "../lib/settings/catalog";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PhoneFamilySettings } from "./settings/PhoneFamilySettings";
 import { PAGES } from "./settings/pages";
+import { GlassScene } from "@glass-sdk/liquid-glass/react";
+import { SettingsGlassSwitch } from "./settings/GlassSwitch";
+import { SwitchProvider } from "./ui/Switch";
+
+/** The app's colour scheme (`data-scheme`, lib/theme/apply.ts), which the glass is drawn for. */
+const onScheme = (change: () => void) => {
+  const watch = new MutationObserver(change);
+  watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-scheme"] });
+  return () => watch.disconnect();
+};
+const scheme = () => (document.documentElement.dataset.scheme === "light" ? "light" : "dark");
+
+/**
+ * Liquid Glass draws with WebGL2 (in a worker). Where there's none (an old webview, a test's DOM, where its
+ * engine would throw as it hands the worker its canvas), the window keeps its checkbox switches.
+ */
+const glassAvailable = typeof WebGL2RenderingContext !== "undefined";
+
+/** The page pane: a Liquid Glass scene, what its switches' lenses refract (settings/GlassSwitch.tsx). */
+function Pane({ appearance, children }: { appearance: "light" | "dark"; children: ReactNode }) {
+  if (!glassAvailable) return <div className="t3s-main">{children}</div>;
+  return (
+    <GlassScene className="t3s-main" appearance={appearance}>
+      <SwitchProvider value={SettingsGlassSwitch}>{children}</SwitchProvider>
+    </GlassScene>
+  );
+}
 
 /**
  * Sidebar groups, T3 Code style: an unlabelled first group, then headed ones. Account isn't listed: the profile
@@ -142,6 +178,7 @@ function DesktopSettingsOverlay({
   };
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const appearance = useSyncExternalStore(onScheme, scheme, () => "dark" as const);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
   const backButton = useRef<HTMLButtonElement>(null);
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
@@ -428,7 +465,7 @@ function DesktopSettingsOverlay({
         )}
       </nav>
 
-      <div className="t3s-main">
+      <Pane appearance={appearance}>
         {!embedded && (
           <header className="t3s-header">
             {phone && (
@@ -492,7 +529,7 @@ function DesktopSettingsOverlay({
             </div>
           )}
         </div>
-      </div>
+      </Pane>
     </>
   );
 

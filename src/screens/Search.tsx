@@ -2,12 +2,11 @@ import "../styles/screens.css";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cardArtUrl } from "../lib/ui";
-import { AnimeCard } from "../components/anime/AnimeCard";
 import { Img } from "../components/Img";
 import { PosterCard } from "../components/PosterCard";
 import { Segmented } from "../components/Segmented";
 import { Shelf } from "../components/title/Shelf";
-import { type AnimeCard as Card, retryTitle, useAnimeAliases, useAnimeGenreArt, useAnimeResults, withoutAnime } from "../lib/anime";
+import { animeItemToPreview, useAnimeGenreArt, useAnimeSearchCatalog, withoutAnimeItems } from "../lib/anime";
 import { api } from "../lib/api";
 import {
   addRecentSearch,
@@ -38,7 +37,7 @@ import { usePrefs } from "../lib/settings";
 import { useRouter, useNavigation } from "../lib/router";
 import { useFormFactor, useTogether } from "../lib/ui";
 import { keys, useSearch } from "../lib/net";
-import type { ContentType, MetaPreview, PersonHit } from "../lib/types";
+import type { AnimeItem, ContentType, MetaPreview, PersonHit } from "../lib/types";
 import { EmptyState } from "../components/ui/EmptyState";
 import { SearchField } from "../components/ui/SearchField";
 import { Search as SearchIcon } from "../components/icons";
@@ -279,21 +278,19 @@ const ResultsBody = memo(function ResultsBody({ query: deferred, typing }: { que
   const { data, isPlaceholderData, isError, refetch } = useSearch(effectiveQuery);
   const hasQuery = deferred.length >= searchMinLength(deferred);
   const genre = hasQuery ? (genreOf(deferred) ?? activeGenreChip) : undefined;
-  // What the catalogs found (they forgive typos): what AniList is asked for when the typed words find nothing.
-  const anime = useAnimeResults(animeEnabled && hasQuery ? effectiveQuery : "", retryTitle(data?.series ?? [], data?.movies ?? []));
-  const aliases = useAnimeAliases();
+  // Show-first anime search backed by Rust/Jikan (zero AniList calls).
+  const anime = useAnimeSearchCatalog(animeEnabled && hasQuery ? effectiveQuery : "");
   const fromAddons = useAddonSearches(hasQuery ? effectiveQuery : "");
   const viewing = useViewingLimit();
 
-  // An anime shows once, as the anime (AniList), not again as a series or movie.
-  // Against every entry found, not one per franchise: a later part Cinemeta lists as its own show goes too.
+  // An anime shows once, in the Anime row, not duplicated in Movies or Series.
   const movies = useMemo(
-    () => applySmartFilters(withoutAnime(data?.movies, anime.all, aliases), parsed, dismissedChips),
-    [data?.movies, anime.all, aliases, parsed, dismissedChips],
+    () => applySmartFilters(withoutAnimeItems(data?.movies, anime.items), parsed, dismissedChips),
+    [data?.movies, anime.items, parsed, dismissedChips],
   );
   const series = useMemo(
-    () => applySmartFilters(withoutAnime(data?.series, anime.all, aliases), parsed, dismissedChips),
-    [data?.series, anime.all, aliases, parsed, dismissedChips],
+    () => applySmartFilters(withoutAnimeItems(data?.series, anime.items), parsed, dismissedChips),
+    [data?.series, anime.items, parsed, dismissedChips],
   );
   const people = data?.people ?? [];
   const waiting = !hasQuery || (!data && !isError);
@@ -485,13 +482,14 @@ function AnimeRow({
   onOpen,
 }: {
   title: string;
-  items?: Card[];
+  items?: AnimeItem[];
   loading: boolean;
   failed: boolean;
   retry: () => void;
   onOpen?: () => void;
 }) {
-  const kept = useRef<Card[]>(undefined);
+  const { animeTitles } = usePrefs();
+  const kept = useRef<AnimeItem[]>(undefined);
   if (items) kept.current = items;
   const shown = items ?? (loading ? kept.current : undefined);
   // A failed search isn't "no anime": it says so, with a way to try again (test report 1, item 28).
@@ -505,5 +503,12 @@ function AnimeRow({
       </section>
     );
   if (!loading && !shown?.length) return null;
-  return <Shelf title={title} onOpen={onOpen} items={shown} card={(a) => <AnimeCard key={a.id} item={a} />} />;
+  return (
+    <Shelf
+      title={title}
+      onOpen={onOpen}
+      items={shown}
+      card={(a) => <PosterCard key={a.id} item={animeItemToPreview(a, animeTitles)} />}
+    />
+  );
 }

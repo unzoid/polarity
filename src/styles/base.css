@@ -19,8 +19,14 @@ body,
 /* Icons sized by number (phone/icons.tsx) are drawn in the desktop shell's points, as every px in the stylesheets
    is (scripts/pointScale.ts); 1px each where no point is set. No specificity, so a stylesheet's own size wins. */
 :where(svg[data-pt-icon]) {
+  display: block;
   width: calc(var(--icon-size) * var(--ui-pt, 1px));
   height: calc(var(--icon-size) * var(--ui-pt, 1px));
+}
+/* Prevent inline SVG baseline descent from nudging icons vertically inside buttons and icon wrappers. */
+:where(button, a) > svg,
+:where(.btn-glyph, .btn-glyph-static) > svg {
+  display: block;
 }
 
 /* Shared base primitives used before account.css loads (navbar/tab avatars and Gate loading shell). */
@@ -64,6 +70,9 @@ body {
 /* A long press on a poster or a button opens the app's own menu, not iOS's image preview. */
 :root[data-touch="true"] :is(button, a, img) {
   -webkit-touch-callout: none;
+}
+:root[data-form="phone"] body {
+  text-rendering: auto;
 }
 /* Polarity Sans (the default, tokens.css): bundled in five static weights (400–800), SIL Open Font License 1.1
    (assets/fonts/PolaritySans-OFL.txt, PolaritySans-FONTLOG.txt). */
@@ -109,6 +118,13 @@ body {
 :root[data-font="polarity"] body {
   font-weight: 400;
   font-feature-settings: normal;
+}
+
+/* Light ↔ dark (lib/theme/apply.ts): the old screen and the new one cross-fade, briefly. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* "System" font: Segoe UI Variable is hinted for Windows' own text rendering,

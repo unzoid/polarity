@@ -36,7 +36,7 @@ pub enum AnimeKey {
 
 /// One anime's ids, named as ani.zip names them in its `mappings`, so the
 /// app can use either answer the same way.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AnimeMapping {
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub ty: Option<String>,
@@ -150,6 +150,12 @@ struct Index {
     mal: HashMap<u32, usize>,
     kitsu: HashMap<u32, usize>,
     imdb: HashMap<String, usize>,
+    /// All entries sharing an IMDb id, sorted by [`rank`] (TV seasons in order first).
+    imdb_all: HashMap<String, Vec<usize>>,
+    /// All TV entries sharing a TMDB TV id, sorted by [`rank`].
+    tmdb_tv_all: HashMap<u32, Vec<usize>>,
+    /// All movie entries sharing a TMDB movie id, sorted by [`rank`].
+    tmdb_movie_all: HashMap<u32, Vec<usize>>,
     /// Entries that didn't parse.
     skipped: usize,
 }
@@ -224,6 +230,9 @@ impl Index {
             mal: HashMap::with_capacity(cap),
             kitsu: HashMap::with_capacity(cap),
             imdb: HashMap::with_capacity(cap / 2),
+            imdb_all: HashMap::with_capacity(cap / 2),
+            tmdb_tv_all: HashMap::with_capacity(cap / 3),
+            tmdb_movie_all: HashMap::with_capacity(cap / 6),
             skipped: 0,
         };
         for elem in slices {
@@ -235,6 +244,8 @@ impl Index {
                     continue;
                 }
             };
+            let is_movie = raw.ty.as_deref() == Some("MOVIE")
+                || raw.themoviedb_id.as_ref().is_some_and(|t| t.tv.is_none() && t.movie.is_some());
             let m = AnimeMapping::from(raw);
             let i = index.entries.len();
             for (map, id) in
@@ -252,8 +263,26 @@ impl Index {
                 if better {
                     index.imdb.insert(imdb.clone(), i);
                 }
+                index.imdb_all.entry(imdb.clone()).or_default().push(i);
+            }
+            if let Some(tmdb) = m.themoviedb_id {
+                if is_movie {
+                    index.tmdb_movie_all.entry(tmdb).or_default().push(i);
+                } else {
+                    index.tmdb_tv_all.entry(tmdb).or_default().push(i);
+                }
             }
             index.entries.push(m);
+        }
+        let entries = &index.entries;
+        for group in index.imdb_all.values_mut() {
+            group.sort_by_key(|&i| rank(&entries[i]));
+        }
+        for group in index.tmdb_tv_all.values_mut() {
+            group.sort_by_key(|&i| rank(&entries[i]));
+        }
+        for group in index.tmdb_movie_all.values_mut() {
+            group.sort_by_key(|&i| rank(&entries[i]));
         }
         if index.skipped > 0 {
             tracing::warn!("anime lists: {} entries skipped", index.skipped);
@@ -269,6 +298,24 @@ impl Index {
             AnimeKey::Imdb(id) => self.imdb.get(id),
         }?;
         self.entries.get(*i)
+    }
+
+    fn find_all_for_imdb(&self, imdb_id: &str) -> Vec<AnimeMapping> {
+        self.imdb_all
+            .get(imdb_id)
+            .map(|idxs| idxs.iter().filter_map(|&i| self.entries.get(i).cloned()).collect())
+            .unwrap_or_default()
+    }
+
+    fn find_all_for_tmdb(&self, ty: &str, tmdb_id: u32) -> Vec<AnimeMapping> {
+        let map = if ty == "movie" { &self.tmdb_movie_all } else { &self.tmdb_tv_all };
+        map.get(&tmdb_id)
+            .map(|idxs| idxs.iter().filter_map(|&i| self.entries.get(i).cloned()).collect())
+            .unwrap_or_default()
+    }
+
+    fn is_anime_imdb(&self, imdb_id: &str) -> bool {
+        self.imdb_all.contains_key(imdb_id)
     }
 }
 
@@ -337,11 +384,42 @@ impl AnimeLists {
         self.find_at(key, SystemTime::now()).await
     }
 
-    async fn find_at(&self, key: &AnimeKey, now: SystemTime) -> Option<AnimeMapping> {
-        // Held throughout, so two lookups never download the file twice.
+    /// Ensures the local index is loaded/downloaded so subsequent lookups are instant.
+    pub async fn warm(&self) {
         let mut state = self.state.lock().await;
+        self.ensure_loaded(&mut state, SystemTime::now()).await;
+    }
+
+    /// All entries (seasons, cours, movies) sharing an IMDb id, sorted by rank (TV seasons in order first).
+    pub async fn find_all_for_imdb(&self, imdb_id: &str) -> Vec<AnimeMapping> {
+        let mut state = self.state.lock().await;
+        self.ensure_loaded(&mut state, SystemTime::now()).await;
+        state.index.as_ref().map(|idx| idx.find_all_for_imdb(imdb_id)).unwrap_or_default()
+    }
+
+    /// All entries sharing a TMDB id (`"series"` or `"movie"`).
+    pub async fn find_all_for_tmdb(&self, ty: &str, tmdb_id: u32) -> Vec<AnimeMapping> {
+        let mut state = self.state.lock().await;
+        self.ensure_loaded(&mut state, SystemTime::now()).await;
+        state.index.as_ref().map(|idx| idx.find_all_for_tmdb(ty, tmdb_id)).unwrap_or_default()
+    }
+
+    /// Whether an IMDb id is known as an anime in the local index.
+    pub async fn is_anime_imdb(&self, imdb_id: &str) -> bool {
+        let mut state = self.state.lock().await;
+        self.ensure_loaded(&mut state, SystemTime::now()).await;
+        state.index.as_ref().is_some_and(|idx| idx.is_anime_imdb(imdb_id))
+    }
+
+    /// Best mapping for a specific TMDB/TVDB season of an IMDb show (for fillers, AniSkip, MAL/AniList sync).
+    pub async fn find_for_season(&self, imdb_id: &str, season: u32) -> Option<AnimeMapping> {
+        let all = self.find_all_for_imdb(imdb_id).await;
+        all.iter().find(|m| m.season.and_then(|s| s.tmdb.or(s.tvdb)) == Some(season)).or_else(|| all.first()).cloned()
+    }
+
+    async fn ensure_loaded(&self, state: &mut State, now: SystemTime) {
         if state.index.is_none() {
-            self.load(&mut state).await;
+            self.load(state).await;
         }
         let stale = state.fetched.is_none_or(|t| age(now, t) >= TTL);
         let may_try = state.tried.is_none_or(|t| age(now, t) >= RETRY);
@@ -351,6 +429,12 @@ impl AnimeLists {
                 *state = State { index: Some(index), fetched: Some(now), tried: Some(now) };
             }
         }
+    }
+
+    async fn find_at(&self, key: &AnimeKey, now: SystemTime) -> Option<AnimeMapping> {
+        // Held throughout, so two lookups never download the file twice.
+        let mut state = self.state.lock().await;
+        self.ensure_loaded(&mut state, now).await;
         state.index.as_ref()?.find(key).cloned()
     }
 
@@ -465,6 +549,17 @@ mod tests {
         assert_eq!(index.find(&AnimeKey::Imdb("tt0000109".into())).unwrap().anilist_id, Some(20623));
         assert_eq!(index.find(&AnimeKey::Anilist(1)).unwrap().themoviedb_id, Some(9));
         assert!(Index::parse(b"{}").is_none() && Index::parse(b"[]").is_none());
+
+        // 1-to-many franchise lookups return all seasons in rank order (TV seasons first).
+        let group = index.find_all_for_imdb("tt0000109");
+        assert_eq!(group.len(), 3);
+        assert_eq!(group[0].anilist_id, Some(20623)); // TV season 1
+        assert_eq!(group[1].anilist_id, Some(21087)); // TV season 2
+        assert_eq!(group[2].anilist_id, Some(1)); // MOVIE
+        assert!(index.is_anime_imdb("tt0000109"));
+        assert!(!index.is_anime_imdb("tt9999999"));
+        assert_eq!(index.find_all_for_tmdb("series", 65844).len(), 2);
+        assert_eq!(index.find_all_for_tmdb("movie", 9).len(), 1);
     }
 
     /// Entries in the shape the live file has them: a film's TMDB id is a

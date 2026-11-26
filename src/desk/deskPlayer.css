@@ -186,6 +186,16 @@
 .dk-pl-close {
   margin-left: calc(-6 * var(--pl-pt));
 }
+/* macOS windowed: keep the player's close button, title and top track sheet clear of the native traffic lights. */
+html[data-os="mac"]:not([data-fullscreen]) .dk-pl-top {
+  padding-left: max(calc(20 * var(--pl-pt) + var(--safe-left)), var(--traffic-lights, 0px));
+}
+html[data-os="mac"]:not([data-fullscreen]) .dk-pl-close {
+  margin-left: 0;
+}
+html[data-os="mac"]:not([data-fullscreen]) .dk-pl-sheet[data-side="top"] {
+  padding-left: max(clamp(36px, 8.5vw, calc(128 * var(--pl-pt))), var(--traffic-lights, 0px));
+}
 
 /* Top-center circular rating pills (IMG_3251) */
 .dk-pl-ratings {

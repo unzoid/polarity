@@ -8,13 +8,28 @@ import { accentForeground, baseFor, DARK_BASE, type ColorScheme } from "./themes
  * light mode (the player, TV mode).
  */
 export function applyAccent(accent: string, scheme: ColorScheme, root: HTMLElement = document.documentElement): void {
-  root.style.setProperty("--accent", accent);
-  root.style.setProperty("--accent-fg", accentForeground(accent));
-  root.style.setProperty("--theme-base", baseFor(scheme));
-  root.style.setProperty("--theme-base-dark", DARK_BASE);
-  root.style.setProperty("--theme-tint", "0%");
-  root.dataset.scheme = scheme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", baseFor(scheme));
+  const apply = () => {
+    root.style.setProperty("--accent", accent);
+    root.style.setProperty("--accent-fg", accentForeground(accent));
+    root.style.setProperty("--theme-base", baseFor(scheme));
+    root.style.setProperty("--theme-base-dark", DARK_BASE);
+    root.style.setProperty("--theme-tint", "0%");
+    root.dataset.scheme = scheme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", baseFor(scheme));
+  };
+  // Light ↔ dark cross-fades the whole screen (a view transition; styles/base.css sets its length) instead of
+  // snapping. The first paint, an accent change, and Reduce motion apply at once.
+  const switching = !!root.dataset.scheme && root.dataset.scheme !== scheme && root === document.documentElement;
+  const start = (document as Document & { startViewTransition?: (update: () => void) => unknown }).startViewTransition;
+  if (switching && start && !reducedMotion(root)) start.call(document, apply);
+  else apply();
+}
+
+function reducedMotion(root: HTMLElement) {
+  const setting = root.dataset.reduceMotion;
+  if (setting === "on") return true;
+  if (setting === "off") return false;
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /** Style for an element drawn in a scheme other than the page's (Appearance's Light / Dark tiles). */
