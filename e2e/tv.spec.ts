@@ -1,8 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, labelShowsWhole, partySurfaces, TALL_LABELS, test } from "./fixtures";
-import { mediaAnswer } from "./anilistMock";
 import { png } from "./media";
-import { FRANCHISE, franchiseMedia, franchiseZip, longAnimeMedia, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
+import { FRANCHISE, SHORT_ANIME } from "../src/lib/platform/fake/longAnime";
 
 // TV mode at 1920×1080, driven only by the arrow keys, Enter and Backspace (a remote's Back).
 test.use({ tv: true });
@@ -357,29 +356,31 @@ test("Continue Watching cards show the name where a title has no logo (#437)", a
 });
 
 test("the Anime stage shows a later entry's franchise art and logo, as desktop does, never its own banner or name (#431)", async ({ app }) => {
-  // The invented franchise's film (after its series) is the only card; its own banner differs from the series' art.
+  // The show-first backend hands the stage the franchise's art and logo directly (never the entry's own banner).
   const own = "https://art.example/banner/film.png";
   const fanart = "https://art.example/fanart/series.png";
   const logo = "https://art.example/clearlogo/series.png";
-  const film = { ...franchiseMedia(FRANCHISE.film.anilist)!, bannerImage: own };
-  const empty = { media: [], pageInfo: { hasNextPage: false } };
-  await app.route("https://graphql.anilist.co/**", async (route) => {
-    const body = route.request().postData() ?? "{}";
-    const { query = "" } = JSON.parse(body) as { query?: string };
-    if (query.includes("trending:")) {
-      const home = Object.fromEntries(["trending", "upcoming", "top", "popular", "movies"].map((k) => [k, empty]));
-      return route.fulfill({ json: { data: { ...home, season: { media: [film], pageInfo: { hasNextPage: false } } } } });
-    }
-    const data = mediaAnswer(body, (id) => (id === FRANCHISE.film.anilist ? film : franchiseMedia(id)));
-    await route.fulfill({ json: { data: data ?? { Page: empty } } });
-  });
-  await app.route("https://api.ani.zip/**", (route) => {
-    const id = Number(new URL(route.request().url()).searchParams.get("anilist_id"));
-    const zip = franchiseZip(id);
-    if (!zip) return route.fulfill({ status: 404, json: {} });
-    const images = id === FRANCHISE.show.anilist ? [{ coverType: "Fanart", url: fanart }, { coverType: "Clearlogo", url: logo }] : [];
-    return route.fulfill({ json: { ...zip, images } });
-  });
+  await app.evaluate(
+    ({ item }) => {
+      (window as { __polarFakeAnime?: { home?: () => unknown } }).__polarFakeAnime = {
+        home: () => ({ season: [item], trending: [], upcoming: [], top: [], popular: [], movies: [] }),
+      };
+    },
+    {
+      item: {
+        id: FRANCHISE.show.imdb,
+        type: "series",
+        name: FRANCHISE.film.name,
+        titles: { english: FRANCHISE.film.name },
+        background: fanart,
+        logo,
+        logos: [logo],
+        poster: own,
+        anilistId: FRANCHISE.film.anilist,
+        format: "MOVIE",
+      },
+    },
+  );
   // A dark backdrop, and a wide logo of white letters on clear ground.
   const dark = png(64, 36, () => [20, 24, 32, 255]);
   const letters = png(400, 100, (x, y) => (y > 25 && y < 75 && x % 40 < 28 ? [255, 255, 255, 255] : [0, 0, 0, 0]));
@@ -395,12 +396,15 @@ test("the Anime stage shows a later entry's franchise art and logo, as desktop d
 });
 
 test("a typed genre's rows come in desktop's order: its popular movies and series, its anime, then titles named like it (#338, #431)", async ({ app }) => {
-  // AniList answers a genre or kind of show with an invented show, a title search with nothing.
-  await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { genre?: string; tag?: string } };
-    const media = variables?.genre || variables?.tag ? [longAnimeMedia(SHORT_ANIME)] : [];
-    await route.fulfill({ json: { data: { Page: { media, pageInfo: { hasNextPage: false } } } } });
-  });
+  // The show-first anime catalog answers a genre or tag query with an invented show, a title search with nothing.
+  await app.evaluate((show) => {
+    (window as { __polarFakeAnime?: { browse?: (q: { genre?: string; tag?: string }) => unknown } }).__polarFakeAnime = {
+      browse: (q) => ({
+        items: q.genre || q.tag ? [{ id: show.imdb, type: "series", name: show.name, titles: { english: show.name }, anilistId: show.anilist, format: "TV" }] : [],
+        hasNextPage: false,
+      }),
+    };
+  }, SHORT_ANIME);
   await app.getByRole("button", { name: "Search", exact: true }).click();
   await app.keyboard.type("Action");
   const titles = app.locator(".tv-search-results .tv-rail-title");

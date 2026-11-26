@@ -705,8 +705,12 @@ test("each tab's bar sits right under the status bar, its page right under it, w
       expect(gap, `${tab}, inset ${top}`).toBeLessThanOrEqual(12);
     }
   }
-  // Anime with AniList not answering: its message stays clear of the bar too.
-  await app.route("https://graphql.anilist.co/**", (route) => route.fulfill({ status: 503, body: "" }));
+  // Anime when the catalog backend isn't answering: its message stays clear of the bar too.
+  await app.evaluate(() => {
+    (window as { __polarFakeAnime?: { home?: () => unknown } }).__polarFakeAnime = {
+      home: () => Promise.reject({ code: "upstream", message: "offline" }),
+    };
+  });
   await bar(app).getByRole("button", { name: "Anime", exact: true }).tap();
   const note = app.locator(".anime-unreachable");
   await expect(note).toBeVisible({ timeout: 15_000 });

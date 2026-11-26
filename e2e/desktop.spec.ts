@@ -40,9 +40,14 @@ test("each section opens", async ({ app }) => {
     await nav.getByRole("button", { name: section, exact: true }).click();
     await expect(app.getByRole("heading", { level: 1, name: section })).toBeVisible();
   }
-  // Anime asks AniList from the page; with every outside host refused it says so and offers to try again.
+  // When the anime catalog backend fails to load, the Anime tab says so and offers to try again.
+  await app.evaluate(() => {
+    (window as { __polarFakeAnime?: { home?: () => unknown } }).__polarFakeAnime = {
+      home: () => Promise.reject({ code: "upstream", message: "offline" }),
+    };
+  });
   await nav.getByRole("button", { name: "Anime", exact: true }).click();
-  await expect(app.getByText("AniList didn't answer")).toBeVisible();
+  await expect(app.getByText("Couldn't load anime catalogs. Check your connection and try again.")).toBeVisible();
   await expect(app.getByRole("button", { name: "Try again" })).toBeVisible();
   await nav.getByRole("button", { name: "Movies", exact: true }).click();
   await app.getByRole("radio", { name: "Top Rated" }).click();
@@ -80,12 +85,15 @@ test("search finds movies and series", async ({ app }) => {
 });
 
 test("an anime genre leads with its anime; a shared genre's anime sits with the genre rows; a title search is unchanged (#338)", async ({ app }) => {
-  // AniList answers a genre or kind of show with an invented show, a title search with nothing.
-  await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { genre?: string; tag?: string } };
-    const media = variables?.genre || variables?.tag ? [longAnimeMedia(SHORT_ANIME)] : [];
-    await route.fulfill({ json: { data: { Page: { media, pageInfo: { hasNextPage: false } } } } });
-  });
+  // The show-first anime catalog answers a genre or tag query with an invented show, a title search with nothing.
+  await app.evaluate((show) => {
+    (window as { __polarFakeAnime?: { browse?: (q: { genre?: string; tag?: string }) => unknown } }).__polarFakeAnime = {
+      browse: (q) => ({
+        items: q.genre || q.tag ? [{ id: show.imdb, type: "series", name: show.name, titles: { english: show.name }, anilistId: show.anilist, format: "TV" }] : [],
+        hasNextPage: false,
+      }),
+    };
+  }, SHORT_ANIME);
   const titles = app.locator(".search-rows .row-title");
   await app.getByRole("button", { name: "Search", exact: true }).click();
   await app.locator(".search-suggest").getByRole("button", { name: "Slice of Life", exact: true }).click();
