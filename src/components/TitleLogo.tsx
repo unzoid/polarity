@@ -151,9 +151,11 @@ function preloadChosen(src: string) {
 function measureChoice(id: string, candidates: string[], lightPage: boolean, backdrop?: string, spot?: LogoSpot, scheme: LogoScheme = currentLogoScheme()): Promise<Choice> {
   const running = measuring.get(id);
   if (running) return running;
+  const gen = generation;
   const behind = backdrop && spot ? measureBackdrop(backdrop, spot, scheme) : Promise.resolve(pageLuminance(spot, scheme));
   const p = (async () => {
     const [lum, first] = await Promise.all([behind, measureLogo(candidates[0])]);
+    if (gen !== generation) return "unsure" as Choice;
     if (candidates.length === 1) return chooseLogo(candidates, [first.ink], lum, [first.shape], lightPage);
     // Fast-path: when the primary logo already reads cleanly as-is on the measured backdrop, skip downloading & scanning fallback logos 1..5.
     if (lum !== null) {
@@ -161,6 +163,7 @@ function measureChoice(id: string, candidates: string[], lightPage: boolean, bac
       if (typeof fast === "object" && fast.look === "as-is") return fast;
     }
     const rest = await Promise.all(candidates.slice(1).map(measureLogo));
+    if (gen !== generation) return "unsure" as Choice;
     const measured = [first, ...rest];
     return chooseLogo(
       candidates,
@@ -173,8 +176,10 @@ function measureChoice(id: string, candidates: string[], lightPage: boolean, bac
     // Whatever goes wrong measuring, the name shows rather than an error escaping.
     .catch((): Choice => "unsure")
     .then((c) => {
-      lruSet(choices, id, c);
-      measuring.delete(id);
+      if (gen === generation) {
+        lruSet(choices, id, c);
+        measuring.delete(id);
+      }
       return c;
     });
   measuring.set(id, p);
@@ -193,6 +198,21 @@ const measuring = new Map<string, Promise<Choice>>();
 const logos = new Map<string, Promise<MeasuredLogo>>();
 const behinds = new Map<string, Promise<number | null>>();
 const readables = new Map<string, Promise<HTMLImageElement | null>>();
+const pendingLoads = new Set<() => void>();
+let generation = 0;
+
+/** Cancels in-flight logo probes and clears module caches between DOM tests so timers don't leak across tests. */
+export function resetTitleLogoForTests() {
+  generation++;
+  for (const cancel of Array.from(pendingLoads)) cancel();
+  pendingLoads.clear();
+  choices.clear();
+  measuring.clear();
+  logos.clear();
+  behinds.clear();
+  readables.clear();
+  preloadedChosen.clear();
+}
 
 function lruGet<K, V>(map: Map<K, V>, key: K): V | undefined {
   if (!map.has(key)) return undefined;
@@ -223,8 +243,13 @@ export function loadReadable(src: string): Promise<HTMLImageElement | null> {
   const key = toneUrl(src);
   let pending = lruGet(readables, key);
   if (!pending) {
-    pending = (async () => (await load(src)) ?? (await loadThroughApp(src)))().then((img) => {
-      if (!img) readables.delete(key);
+    const gen = generation;
+    pending = (async () => {
+      const direct = await load(src);
+      if (gen !== generation) return null;
+      return direct ?? (await loadThroughApp(src));
+    })().then((img) => {
+      if (gen === generation && !img) readables.delete(key);
       return img;
     });
     lruSet(readables, key, pending);
@@ -269,17 +294,23 @@ function noteUnmeasured(what: string, src: string) {
 function load(src: string, plain = false): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
-    const timer = setTimeout(() => resolve(null), LOAD_TIMEOUT);
+    let settled = false;
+    const finish = (value: HTMLImageElement | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      pendingLoads.delete(cancel);
+      img.onload = null;
+      img.onerror = null;
+      resolve(value);
+    };
+    const cancel = () => finish(null);
+    const timer = setTimeout(cancel, LOAD_TIMEOUT);
+    pendingLoads.add(cancel);
     if (!plain) img.crossOrigin = "anonymous";
     img.decoding = "async";
-    img.onload = () => {
-      clearTimeout(timer);
-      resolve(img);
-    };
-    img.onerror = () => {
-      clearTimeout(timer);
-      resolve(null);
-    };
+    img.onload = () => finish(img);
+    img.onerror = () => finish(null);
     img.src = plain ? src : toneUrl(src);
   });
 }
@@ -318,10 +349,13 @@ function measureLogo(src: string) {
   let measured = lruGet(logos, src);
   // Wide enough that thin bright detail (a ring, small letters, an outline) survives the downscale (#11).
   if (!measured) {
+    const gen = generation;
     measured = loadReadable(src).then(async (img) => {
+      if (gen !== generation) return { ink: null, shape: null };
       const px = img && pixelsOf(img, 128);
       if (!px) noteUnmeasured("logo", src);
       const sized = img ?? (await load(src, true));
+      if (gen !== generation) return { ink: null, shape: null };
       const shape = sized && sized.naturalWidth ? { width: sized.naturalWidth, height: sized.naturalHeight, clear: px ? clearShare(px) : null } : null;
       return { ink: px ? measureInk(px) : null, shape };
     }).catch(() => ({ ink: null, shape: null }));
@@ -336,7 +370,9 @@ function measureBackdrop(src: string, spot: LogoSpot, scheme: LogoScheme = curre
   const key = `${src} ${spot.x0} ${spot.y0} ${spot.x1} ${spot.y1} ${spot.scrim} ${level}`;
   let lum = lruGet(behinds, key);
   if (!lum) {
+    const gen = generation;
     lum = loadReadable(src).then((img) => {
+      if (gen !== generation) return null;
       const px = img && pixelsOf(img, 48, spot);
       if (!px) noteUnmeasured("backdrop", src);
       return px ? backdropLuminance(px, spot.scrim, level) : null;
