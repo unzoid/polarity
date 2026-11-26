@@ -1,6 +1,9 @@
 import { useContext, useState, type ReactNode } from "react";
 import { AccountContext, secretsState, setSecretsPassphrase, sync } from "../../lib/account";
+import { useFormFactor } from "../../lib/ui";
 import { Button } from "../ui/Button";
+import { TextField } from "../ui/TextField";
+import { FamilyTray, FamilyWarningIcon } from "./FamilyTray";
 import { FormRow } from "./rows";
 import { showWhereStored } from "./secretsNote";
 
@@ -11,6 +14,12 @@ const HEADLINE: Record<KeyKind, string> = {
   key: "This key will be stored on your account unencrypted.",
   keys: "These keys will be stored on your account unencrypted.",
   link: "This add-on link contains a key. It will be stored on your account unencrypted.",
+};
+
+const TRAY_TITLE: Record<KeyKind, string> = {
+  key: "Unencrypted Key",
+  keys: "Unencrypted Keys",
+  link: "Unencrypted Link",
 };
 
 /** True while a signed-in profile's keys and add-on links sync readable (no passphrase). */
@@ -67,8 +76,89 @@ function KeyWarning({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const phone = useFormFactor().form === "phone";
   const [typing, setTyping] = useState(false);
+  const [dir, setDir] = useState<"forward" | "back">("forward");
   const [phrase, setPhrase] = useState("");
+
+  if (phone) {
+    return (
+      <FamilyTray
+        open
+        onClose={onCancel}
+        title={typing ? "Set a Passphrase" : TRAY_TITLE[kind]}
+        heroIcon={typing ? undefined : <FamilyWarningIcon size={36} className="ft-warn-ico" />}
+        stepKey={typing ? "passphrase" : `warn-${kind}`}
+        direction={dir}
+        onBack={
+          typing
+            ? () => {
+                setDir("back");
+                setTyping(false);
+              }
+            : undefined
+        }
+      >
+        {typing ? (
+          <form
+            className="ft-input-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (phrase) onPassphrase(phrase);
+            }}
+          >
+            <p className="ft-desc">
+              Each of your devices asks for it once. Nobody can get it back if it's forgotten; then you'd enter your keys and add-ons again.
+            </p>
+            <TextField
+              type="password"
+              placeholder="Passphrase"
+              aria-label="Passphrase"
+              autoComplete="new-password"
+              autoFocus
+              value={phrase}
+              onChange={setPhrase}
+            />
+            <div className="ft-actions">
+              <button type="submit" className="ft-pill ft-pill-cta" disabled={!phrase}>
+                Set and Save
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="ft-key-warn" role="alert" data-kind={kind}>
+            <p className="ft-desc">
+              {HEADLINE[kind]} Anyone with access to the account server could read it.{" "}
+              <button type="button" className="ft-inline-link" onClick={showWhereStored}>
+                What's stored where
+              </button>
+            </p>
+            <div className="ft-key-warn-actions">
+              <button
+                type="button"
+                className="ft-pill ft-pill-cta"
+                onClick={() => {
+                  setDir("forward");
+                  setTyping(true);
+                }}
+              >
+                Set a Passphrase
+              </button>
+              <div className="ft-actions">
+                <button type="button" className="ft-pill ft-pill-secondary" onClick={onCancel}>
+                  Cancel
+                </button>
+                <button type="button" className="ft-pill ft-pill-danger" onClick={onSave}>
+                  Save Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </FamilyTray>
+    );
+  }
+
   return (
     <div className="settings-key-warning" role="alert" data-kind={kind}>
       <p className="settings-expand-text">

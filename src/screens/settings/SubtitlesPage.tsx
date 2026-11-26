@@ -6,12 +6,15 @@ import { Card, SectionList, type SectionProps } from "../../components/settings/
 import { SettingRow } from "../../components/settings/SettingRow";
 import { isDesktop, isTvDevice, os } from "../../lib/platform";
 import { usePrefs } from "../../lib/settings";
+import { useFormFactor } from "../../lib/ui";
+import { PhoneSubtitleStyle } from "../../components/settings/PhoneSubtitleStyle";
 
 /** Its sections (PAGE_SECTIONS.subtitles): Languages, Subtitle Style, Sound. */
 export function SubtitlesPage({ section, openSection }: SectionProps) {
   const { data } = useSettings();
   const update = useUpdateSettings();
   const { secondSubtitles } = usePrefs();
+  const phone = useFormFactor().form === "phone";
   const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   if (!data) return null;
   const style = data.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE;
@@ -30,6 +33,8 @@ export function SubtitlesPage({ section, openSection }: SectionProps) {
         </Card>
       );
     case "style":
+      if (phone)
+        return <PhoneSubtitleStyle style={style} onChange={(patch) => update.mutate({ subtitleStyle: { ...style, ...patch } })} canPosition />;
       return (
         <Card>
           <div className="settings-sub-sample" data-setting="subtitleStyle" style={subtitleCueVars(style)} aria-hidden>
@@ -55,13 +60,7 @@ export function SubtitlesPage({ section, openSection }: SectionProps) {
 function SoundCard() {
   const { data: hasMpv } = useQuery({ queryKey: keys.mpv, queryFn: api.mpvAvailable, staleTime: Infinity });
   return (
-    <Card
-      footer={
-        hasMpv === false
-          ? "These need mpv, which plays most files. Install mpv to use them."
-          : "Saved on this device, so headphones and a home cinema can each have their own."
-      }
-    >
+    <Card footer={hasMpv === false ? "Needs mpv." : undefined}>
       <SettingRow id="dialogueBoost" disabled={hasMpv === false} />
       <SettingRow id="volumeLeveling" disabled={hasMpv === false} />
       <SettingRow id="drcProfile" disabled={hasMpv === false} />

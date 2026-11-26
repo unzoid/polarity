@@ -1,122 +1,216 @@
 import "../styles/anime.css";
-import { useQueries } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AnimeCard, AnimeLandscapeCard, useAnimeHandlers, useOpenAnime } from "../components/anime/AnimeCard";
+import { menuPoint, openCardMenu } from "../components/CardMenu";
 import { Dropdown } from "../components/Dropdown";
-import { Calendar, Close, Filters, Grid, Play } from "../components/icons";
+import { Calendar, Close, Filters, Grid, Play, Star, Warning } from "../components/icons";
 import { Img } from "../components/Img";
-import { TitleHeading } from "../components/title/TitleHeading";
-import { LibraryButton } from "../components/title/LibraryButton";
-import { joinFacts } from "../lib/format";
-import { Shelf } from "../components/title/Shelf";
-import { PosterGrid } from "../components/title/PosterGrid";
 import { Sheet } from "../components/Sheet";
+import { ArtTitle, Card } from "../components/title/Card";
+import { LibraryButton } from "../components/title/LibraryButton";
+import { PosterGrid } from "../components/title/PosterGrid";
+import { Shelf } from "../components/title/Shelf";
+import { TitleHeading } from "../components/title/TitleHeading";
+import { Button } from "../components/ui/Button";
+import { Chip } from "../components/ui/Chip";
+import { EmptyState } from "../components/ui/EmptyState";
+import { SearchField } from "../components/ui/SearchField";
+import { Skeleton } from "../components/ui/Skeleton";
 import {
   ANIME_GENRES,
   ANIME_TAGS,
+  FORMAT_LABEL,
+  SEASON_LABEL,
+  STATUS_LABEL,
+  animeItemName,
+  animeItemToPreview,
+  countdown,
+  formatAnimeItemScore,
   nextSeason,
   seasonOf,
-  useAiringSchedule,
-  useAiringToday,
-  useAnimeBrowse,
-  useAnimeGenre,
-  useAniListBusy,
-  rowPriority,
-  reprioritiseAniList,
-  useAnimeHome,
-  type AiringSlot,
-  type AnimeCard as Card,
+  untilAiring,
+  useAnimeBrowseCatalog,
+  useAnimeGenreShelf,
+  useAnimeHomeCatalog,
+  useAnimeSchedule,
+  useAnimeToday,
+  useShelfVisible,
+  type AnimeShelfId,
   type BrowseFilters,
   type MediaFormat,
   type MediaSeason,
   type MediaStatus,
 } from "../lib/anime";
-import {
-  animePreview,
-  type AnimeShelfId,
-  type AniZip,
-  aniZipQuery,
-  countdown,
-  FORMAT_LABEL,
-  SEASON_LABEL,
-  STATUS_LABEL,
-  untilAiring,
-  useAniZip,
-  useCardsShown,
-  useAnimeTitle,
-  useLinkedImdb,
-  slidesReady,
-  useFranchiseBanners,
-  useShelfVisible,
-} from "../lib/anime";
-import { PRIORITY } from "../lib/net";
-import { useFormFactor, useViewportPlace } from "../lib/ui";
+import { useMatureContent } from "../lib/catalog";
+import { joinFacts } from "../lib/format";
+import { metaQuery } from "../lib/net";
+import { useNavigation, useRouter, type Route } from "../lib/router";
 import { usePrefs } from "../lib/settings";
-import { useRouter, type Route, useNavigation } from "../lib/router";
-import type { MetaPreview } from "../lib/types";
+import type { AnimeItem, MetaPreview } from "../lib/types";
+import { useCardIntent, useFormFactor, useNearViewport } from "../lib/ui";
 import { HeroCarousel } from "./Home";
-import { Button } from "../components/ui/Button";
-import { Chip } from "../components/ui/Chip";
-import { SearchField } from "../components/ui/SearchField";
-import { EmptyState } from "../components/ui/EmptyState";
-import { Skeleton } from "../components/ui/Skeleton";
 
 type Shape = "poster" | "landscape";
 
+const HERO_COUNT = 6;
+const INTENT_DELAY = 150;
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+
+function useOpenItem(item: AnimeItem) {
+  const { navigate } = useNavigation();
+  const { animeTitles } = usePrefs();
+  const qc = useQueryClient();
+  const preview = useMemo(() => animeItemToPreview(item, animeTitles), [item, animeTitles]);
+  const open = useCallback(
+    () => navigate({ name: "detail", type: item.type, id: item.id, preview, season: item.seasonHint }),
+    [navigate, item.type, item.id, preview, item.seasonHint],
+  );
+  const intent = useCardIntent(() => void qc.prefetchQuery(metaQuery(item.type, item.id)), INTENT_DELAY);
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      e.preventDefault();
+      openCardMenu(preview, menuPoint(e), open);
+    },
+    [preview, open],
+  );
+  return { onClick: open, onContextMenu, preview, ...intent };
+}
+
+function MatureCover() {
+  return (
+    <span className="card-mature" title="Mature content" aria-label="Mature content">
+      <Warning size={24} />
+      <span className="card-mature-label">18+</span>
+    </span>
+  );
+}
+
+function ShowAnimeCard({ item, shape, label }: { item: AnimeItem; shape: Shape; label?: string }) {
+  const { animeTitles, animeCardScores, animeScoreFormat, animeCardCountdown } = usePrefs();
+  const matureContent = useMatureContent();
+  const open = useOpenItem(item);
+  if (matureContent === "hide" && item.mature) return null;
+
+  const title = animeItemName(item, animeTitles);
+  const score = animeCardScores ? formatAnimeItemScore(item.score, animeScoreFormat) : undefined;
+  const airing = animeCardCountdown ? item.airing : undefined;
+  const detail =
+    label ??
+    item.seasonLabel ??
+    (airing
+      ? [item.format && FORMAT_LABEL[item.format as MediaFormat], `in ${countdown(untilAiring(airing.airingAt))}`].filter(Boolean).join(" · ")
+      : [item.year, item.format && FORMAT_LABEL[item.format as MediaFormat]].filter(Boolean).join(" · "));
+
+  const [art, ...artFallbacks] =
+    shape === "landscape"
+      ? [item.background, item.poster].filter((u, i, all): u is string => !!u && all.indexOf(u) === i)
+      : [item.poster, item.background].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
+
+  return (
+    <Card
+      shape={shape}
+      className="anime-card"
+      frameClass="anime-card-frame"
+      art={art}
+      artFallbacks={artFallbacks}
+      title={title}
+      detail={detail}
+      onClick={open.onClick}
+      onContextMenu={open.onContextMenu}
+      onPointerEnter={open.onPointerEnter}
+      onPointerLeave={open.onPointerLeave}
+      onFocus={open.onFocus}
+      onBlur={open.onBlur}
+    >
+      {shape === "landscape" && <ArtTitle name={title} logo={item.logo} logos={item.logos} decorative />}
+      {matureContent === "blur" && item.mature && <MatureCover />}
+      {shape === "poster" && score && (
+        <span className="card-score card-score-art anime-card-score tabular" title="Score">
+          <Star size={11} />
+          {score}
+        </span>
+      )}
+    </Card>
+  );
+}
+
 /**
- * The Anime tab, laid out like Home: the featured carousel on its widescreen
- * art, then shelves, in posters and banners. The week's schedule and the full
- * browser are pages of their own, opened from the top shelf's header.
+ * Classic desktop & mobile Anime screen: powered by the show-first Rust backend (zero AniList calls).
  */
 export function Anime() {
-  const { data, isError, refetch } = useAnimeHome();
+  const { data, isError, refetch } = useAnimeHomeCatalog();
+  const { animeTitles } = usePrefs();
   const visible = useShelfVisible();
   const hasHero = visible("hero");
-  const hero = useAnimeHero(hasHero ? data?.trending : undefined);
-  const today = useAiringToday(visible("today"));
-  const todayNote = useWaitNote(!today.slots);
+  const today = useAnimeToday(visible("today"));
   const now = seasonOf();
   const next = nextSeason(now);
-  const handlers = useAnimeHandlers();
   const { navigate } = useNavigation();
-  const heroHandlers = useCallback(
-    (item: MetaPreview) => {
-      const card = hero.cards.find((a) => item.id === animePreviewId(a));
-      return card ? handlers(card) : { onClick: () => {}, onContextMenu: (e: React.MouseEvent<HTMLElement>) => e.preventDefault() };
-    },
-    [hero.cards, handlers],
+
+  const heroItems = useMemo(() => {
+    if (!hasHero || !data) return [] as AnimeItem[];
+    const pool = [...(data.trending ?? []), ...(data.season ?? [])];
+    const seen = new Set<string>();
+    const withArt: AnimeItem[] = [];
+    for (const item of pool) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      if (item.background) withArt.push(item);
+      if (withArt.length >= HERO_COUNT) break;
+    }
+    return withArt.length ? withArt : pool.slice(0, HERO_COUNT);
+  }, [hasHero, data]);
+
+  const heroPreviews = useMemo(
+    () => (heroItems.length ? heroItems.map((i) => animeItemToPreview(i, animeTitles)) : undefined),
+    [heroItems, animeTitles],
   );
-  const heroContent = useCallback(
-    (item: MetaPreview) => {
-      const i = hero.cards.findIndex((a) => item.id === animePreviewId(a));
-      return i >= 0 && <AnimeHeroContent card={hero.cards[i]} item={item} part={hero.parts[i]} />;
+
+  const heroHandlers = useCallback(
+    (preview: MetaPreview) => {
+      const found = heroItems.find((a) => a.id === preview.id);
+      return {
+        onClick: () => navigate({ name: "detail", type: preview.type, id: preview.id, preview, season: found?.seasonHint }),
+        onContextMenu: (e: React.MouseEvent<HTMLElement>) => {
+          e.preventDefault();
+          openCardMenu(preview, menuPoint(e), () =>
+            navigate({ name: "detail", type: preview.type, id: preview.id, preview, season: found?.seasonHint }),
+          );
+        },
+      };
     },
-    [hero.cards, hero.parts],
+    [heroItems, navigate],
+  );
+
+  const heroContent = useCallback(
+    (preview: MetaPreview) => {
+      const found = heroItems.find((a) => a.id === preview.id);
+      return found ? <AnimeHeroContent item={found} preview={preview} /> : null;
+    },
+    [heroItems],
   );
 
   if (isError && !data) {
     return (
       <div className="scroll anime">
         <EmptyState className="anime-unreachable" action={{ label: "Try again", onClick: () => void refetch() }}>
-          AniList didn't answer. It limits how often it can be asked, so give it a minute.
+          Couldn't load anime catalogs. Check your connection and try again.
         </EmptyState>
       </div>
     );
   }
 
-  // The carousel's shows don't repeat on the shelf they came from.
-  const featured = new Set(hero.featured);
-  // Each heading opens the grid with the filters its shelf asks AniList for (#48).
+  const featured = new Set(heroItems.map((h) => h.id));
   const browse = (title: string, filters: Partial<BrowseFilters>): Route => ({ name: "anime-browse", title, ...filters });
   const seasonTitle = `Airing This ${SEASON_LABEL[now.season]}`;
   const upcomingTitle = `Coming in ${SEASON_LABEL[next.season]} ${next.year}`;
-  const shelves: { id: AnimeShelfId; title: string; shape: Shape; items?: Card[]; label?: (a: Card) => string | undefined; to: Route }[] = [
+  const shelves: { id: AnimeShelfId; title: string; shape: Shape; items?: AnimeItem[]; label?: (a: AnimeItem) => string | undefined; to: Route }[] = [
     { id: "season", title: seasonTitle, shape: "poster", items: data?.season, to: browse(seasonTitle, { ...now, sort: "POPULARITY_DESC" }) },
     {
       id: "trending",
       title: "Trending Now",
       shape: "poster",
-      items: data?.trending.filter((a) => !featured.has(a.id)),
+      items: data?.trending?.filter((a) => !featured.has(a.id)),
       to: browse("Trending Now", { sort: "TRENDING_DESC" }),
     },
     {
@@ -132,40 +226,31 @@ export function Anime() {
     { id: "movies", title: "Movies", shape: "landscape", items: data?.movies, to: browse("Anime Movies", { format: "MOVIE", sort: "POPULARITY_DESC" }) },
   ];
   const on = shelves.filter((s) => visible(s.id));
-  // A day with nothing on it (or an error) leaves the shelf out rather than showing a stub.
-  const showToday = visible("today") && !today.isError && today.slots?.length !== 0;
+  const showToday = visible("today") && !today.isError && today.data?.length !== 0;
   const genres = visible("genres");
-  // Today's airings sit below the first shelves: a schedule, not a headline.
   const todayAt = Math.min(2, on.length);
-  const airing = today.slots?.map((s) => s.media);
+
   const todayRow = showToday && (
     <Shelf
       key="today"
       title="Airing Today"
       onOpen={() => navigate({ name: "anime-schedule" })}
       shape="landscape"
-      action={todayNote}
-      items={airing && forShape(airing, "landscape")}
+      items={today.data}
       skeletons={6}
-      card={(m) => {
-        const s = today.slots!.find((x) => x.media.id === m.id)!;
-        return <AnimeLandscapeCard key={s.id} item={m} label={slotLabel(s)} />;
-      }}
+      card={(item) => <ShowAnimeCard key={item.id} item={item} shape="landscape" label={airingTimeLabel(item)} />}
     />
   );
 
   return (
     <div className="scroll home anime" data-hero={hasHero}>
-      {hasHero && (
-        <HeroCarousel
-          items={hero.items}
-          handlers={heroHandlers}
-          content={heroContent}
-        />
-      )}
+      {hasHero && <HeroCarousel items={heroPreviews} handlers={heroHandlers} content={heroContent} />}
       <AnimeNav />
       <div className="rows home-rows">
-        {on.map((s, i) => [i === todayAt && todayRow, <AnimeShelf key={s.id} title={s.title} shape={s.shape} items={s.items} label={s.label} onOpen={() => navigate(s.to)} />])}
+        {on.map((s, i) => [
+          i === todayAt && todayRow,
+          <AnimeShelf key={s.id} title={s.title} shape={s.shape} items={s.items} label={s.label} onOpen={() => navigate(s.to)} />,
+        ])}
         {todayAt === on.length && todayRow}
         {genres && ANIME_GENRES.map((g, i) => <GenreShelf key={g} genre={g} shape={i % 3 === 0 ? "landscape" : "poster"} />)}
       </div>
@@ -173,9 +258,6 @@ export function Anime() {
   );
 }
 
-const animePreviewId = (a: Card) => animePreview(a, null, "english").id;
-
-/** Where the rest of the section lives: the schedule, the full browser, and a way in by genre or kind of show. */
 function AnimeNav() {
   const { navigate } = useNavigation();
   return (
@@ -201,91 +283,23 @@ function AnimeNav() {
   );
 }
 
-/** How many trending shows the carousel holds, and how far down the list it looks for ones with art. */
-const HERO_COUNT = 6;
-const HERO_POOL = 10;
-
-/**
- * The carousel's titles: trending shows with widescreen art, each held back until its ani.zip record answers so the art doesn't
- * swap mid-view. With seasons grouped, each shows its franchise's base title's art and logo, as the page it opens does, and
- * `parts` names which part is trending (#325).
- * Slide by slide (#380): the carousel shows its first slide as soon as that one's art is known, and each later one joins once
- * it and every one before it are known, so the order never changes and a drawn slide never changes. The first slide's
- * requests go ahead of every shelf's (`PRIORITY.page`); the rest at `PRIORITY.visible`.
- */
-function useAnimeHero(trending?: Card[]) {
-  const { animeTitles } = usePrefs();
-  const pool = useMemo(() => trending?.slice(0, HERO_POOL), [trending]);
-  // Whether a show has art decides which shows are the slides: the first ones come first.
-  const zips = useQueries({ queries: (pool ?? []).map((a) => aniZipQuery(a.id, PRIORITY.page)) });
-  const updated = zips.map((z) => (z.isLoading ? "…" : z.dataUpdatedAt)).join();
-  const picks = useMemo(() => {
-    if (!pool) return undefined;
-    // The shows decided so far, in order: one still being asked holds back the ones after it.
-    const out: { card: Card; zip: AniZip | null | undefined }[] = [];
-    for (let i = 0; i < pool.length && out.length < HERO_COUNT; i++) {
-      if (zips[i]?.isLoading) break;
-      const card = pool[i]!;
-      const zip = zips[i]?.data;
-      if (card.bannerImage || zip?.images?.some((m) => m.coverType === "Fanart")) out.push({ card, zip });
-    }
-    return out;
-    // `zips` is a new array every render; `updated` says when its contents changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, updated]);
-  const settled = !!pool && zips.every((z) => !z.isLoading);
-  const cards = useMemo(() => picks?.map((p) => p.card), [picks]);
-  const banners = useFranchiseBanners(cards, PRIORITY.visible, PRIORITY.page);
-  return useMemo(() => {
-    // The shelves leave out the featured shows once they're all picked, in one go rather than slide by slide.
-    const featured = settled && picks ? picks.map((p) => p.card.id) : [];
-    const none = { items: undefined as MetaPreview[] | undefined, cards: [] as Card[], parts: [] as (string | undefined)[], featured };
-    if (!picks || !banners) return none;
-    const shown = slidesReady(banners);
-    if (!shown) return none;
-    const items = picks.slice(0, shown).map(({ card, zip }, i) => {
-      const own = animePreview(card, zip, animeTitles);
-      const b = banners[i];
-      return b ? { ...own, name: b.name, background: b.background ?? own.background, logo: b.logo, logos: b.logos } : own;
-    });
-    return { items, cards: picks.slice(0, shown).map((p) => p.card), parts: banners.slice(0, shown).map((b) => b?.label), featured };
-  }, [picks, banners, animeTitles, settled]);
-}
-
-function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview; part?: string }) {
-  const open = useOpenAnime(card);
+function AnimeHeroContent({ item, preview }: { item: AnimeItem; preview: MetaPreview }) {
+  const open = useOpenItem(item);
   const phone = useFormFactor().form === "phone";
   const { animeCardCountdown } = usePrefs();
-  const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
-  const year = card.seasonYear ?? card.startDate?.year;
-  const imdb = useLinkedImdb(card.id);
-  const { data: zip } = useAniZip(card.id);
-  const kitsu = zip?.mappings?.kitsu_id;
-  const linkedId = imdb ?? (kitsu ? `kitsu:${kitsu}` : undefined);
-  const libraryItem = useMemo(
-    () =>
-      linkedId
-        ? {
-            ...item,
-            id: linkedId,
-            poster: item.poster ?? card.coverImage.extraLarge ?? card.coverImage.large ?? undefined,
-          }
-        : undefined,
-    [linkedId, item, card.coverImage.extraLarge, card.coverImage.large],
-  );
-  const lead = card.format ? FORMAT_LABEL[card.format] : "Anime";
-  const phoneTags = (card.genres ?? []).slice(0, 3);
+  const airing = animeCardCountdown ? item.airing : undefined;
+  const lead = item.format ? FORMAT_LABEL[item.format as MediaFormat] : "Anime";
+  const phoneTags = (item.genres ?? []).slice(0, 3);
   return (
     <div className="hero-content">
-      <TitleHeading name={item.name} logo={item.logo} logos={item.logos} backdrop={item.background} look="hero" />
-      {/* The franchise's logo above: which of its parts is trending (#325). */}
-      {part && <p className="hero-part t-caption">{part}</p>}
+      <TitleHeading name={preview.name} logo={preview.logo} logos={preview.logos} backdrop={preview.background} look="hero" />
+      {item.seasonLabel && <p className="hero-part t-caption">{item.seasonLabel}</p>}
       <p className="hero-kind t-callout tabular">
         <span className="hero-kind-text">
           {phone ? (
             <>
               <span className="hero-kind-lead">{lead}</span>
-              {(phoneTags.length ? phoneTags : year ? [String(year)] : []).map((tag) => (
+              {(phoneTags.length ? phoneTags : item.year ? [String(item.year)] : []).map((tag) => (
                 <Fragment key={tag}>
                   <span className="hero-kind-dot" aria-hidden>
                     •
@@ -296,41 +310,37 @@ function AnimeHeroContent({ card, item, part }: { card: Card; item: MetaPreview;
             </>
           ) : (
             joinFacts([
-              card.format && FORMAT_LABEL[card.format],
-              ...(card.genres ?? []).slice(0, 2),
-              year,
-              next && `Episode ${next.episode} in ${countdown(untilAiring(next.airingAt))}`,
+              item.format && FORMAT_LABEL[item.format as MediaFormat],
+              ...(item.genres ?? []).slice(0, 2),
+              item.year,
+              airing && `in ${countdown(untilAiring(airing.airingAt))}`,
             ])
           )}
         </span>
       </p>
-      <p className="hero-description t-body">{item.description}</p>
+      <p className="hero-description t-body">{preview.description}</p>
       <div className="hero-actions">
-        <Button variant="primary" {...open}>
+        <Button variant="primary" onClick={open.onClick}>
           <Play size={18} fill="currentColor" /> Watch Now
         </Button>
-        {libraryItem && <LibraryButton item={libraryItem} labelled={phone} />}
+        <LibraryButton item={preview} labelled={phone} />
       </div>
     </div>
   );
 }
 
-function slotLabel(s: AiringSlot) {
-  const time = new Date(s.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `Episode ${s.episode} · ${time}`;
+function airingTimeLabel(item: AnimeItem) {
+  if (!item.airing) return item.seasonLabel ?? "Today";
+  const time = new Date(item.airing.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return item.seasonLabel ? `${item.seasonLabel} · ${time}` : time;
 }
 
-function upcomingLabel(a: Card) {
-  const d = a.startDate;
-  if (d?.month && d.day) return new Date(d.year!, d.month - 1, d.day).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return a.format ? FORMAT_LABEL[a.format] : undefined;
-}
-
-/** Banners aren't universal: a widescreen shelf keeps to the shows that have one, unless too few do. */
-function forShape(items: Card[], shape: Shape) {
-  if (shape === "poster") return items;
-  const banners = items.filter((a) => a.bannerImage);
-  return banners.length >= 6 ? banners : items;
+function upcomingLabel(item: AnimeItem) {
+  if (item.startDate) {
+    const parsed = new Date(`${item.startDate}T12:00:00Z`);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  return item.format ? FORMAT_LABEL[item.format as MediaFormat] : undefined;
 }
 
 function AnimeShelf({
@@ -338,63 +348,39 @@ function AnimeShelf({
   shape,
   items,
   label,
-  action,
   onOpen,
 }: {
   title: string;
   shape: Shape;
-  items?: Card[];
-  label?: (a: Card) => string | undefined;
-  action?: ReactNode;
+  items?: AnimeItem[];
+  label?: (a: AnimeItem) => string | undefined;
   onOpen?: () => void;
 }) {
-  const C = shape === "landscape" ? AnimeLandscapeCard : AnimeCard;
-  const note = useWaitNote(!items);
   return (
     <Shelf
       title={title}
       onOpen={onOpen}
       shape={shape}
-      action={note ?? action}
-      items={items && forShape(items, shape)}
-      card={(a) => <C key={a.id} item={a} label={label?.(a)} />}
+      items={items}
+      card={(a) => <ShowAnimeCard key={a.id} item={a} shape={shape} label={label?.(a)} />}
     />
   );
 }
 
-/** A shelf still waiting its turn behind AniList's limit says so, rather than showing placeholders for a minute (#109). */
-function useWaitNote(loading: boolean) {
-  const busy = useAniListBusy();
-  return loading && busy ? <span className="row-note t-caption">AniList is busy, loading…</span> : undefined;
-}
-
-/**
- * Genre shelves below the fold only ask AniList once they're close; while waiting their turn, one on
- * screen goes before one just below it, and one scrolled far away waits behind both (#109).
- */
-function GenreShelf({ genre, shape, action }: { genre: string; shape: Shape; action?: ReactNode }) {
-  const [ref, near, place] = useViewportPlace<HTMLDivElement>(reprioritiseAniList);
-  const priority = useCallback(() => rowPriority(place.current), [place]);
-  const { data } = useAnimeGenre(genre, near, priority);
+function GenreShelf({ genre, shape }: { genre: string; shape: Shape }) {
+  const [ref, near] = useNearViewport<HTMLDivElement>(false);
+  const { data } = useAnimeGenreShelf(genre, near);
   const { navigate } = useNavigation();
   return (
     <div ref={ref}>
-      <AnimeShelf
-        title={genre}
-        shape={shape}
-        items={data}
-        action={action}
-        onOpen={() => navigate({ name: "anime-browse", genre, sort: "TRENDING_DESC" })}
-      />
+      <AnimeShelf title={genre} shape={shape} items={data} onOpen={() => navigate({ name: "anime-browse", genre, sort: "TRENDING_DESC" })} />
     </div>
   );
 }
 
-/** A page of its own, under the same header as the app's other lists. */
 function SubPage({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="scroll anime">
-      {/* Scrolls away with the page: the title isn't needed once you're in the list. */}
       <header className="screen-header">
         <h1 className="t-title1">{title}</h1>
       </header>
@@ -420,45 +406,38 @@ export function AnimeBrowse() {
   );
 }
 
-// --- Schedule ----------------------------------------------------------------
+// --- Schedule (7-day weekday tabs powered by Rust/Jikan) ---------------------
 
-const DAY_S = 86_400;
-
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-/**
- * The week's airings by day in the viewer's own time zone: today first,
- * yesterday one tap back. Times are when the episode first airs in Japan
- * (streaming services usually follow within the hour).
- */
 function ScheduleView() {
-  const today = startOfDay(new Date());
-  const from = Math.floor(today.getTime() / 1000) - DAY_S;
-  const to = from + 8 * DAY_S;
-  const { data, isLoading, isError } = useAiringSchedule(from, to);
-  const days = useMemo(() => Array.from({ length: 8 }, (_, i) => new Date((from + i * DAY_S) * 1000)), [from]);
-  const [day, setDay] = useState(1); // today
-
-  const slots = useMemo(() => {
-    const start = Math.floor(days[day].getTime() / 1000);
-    return (data ?? []).filter((s) => s.airingAt >= start && s.airingAt < start + DAY_S);
-  }, [data, days, day]);
+  const todayDate = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const days = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(todayDate);
+        d.setDate(d.getDate() + i);
+        return { date: d, weekday: WEEKDAYS[d.getDay()] };
+      }),
+    [todayDate],
+  );
+  const [dayIdx, setDayIdx] = useState(0);
+  const active = days[dayIdx];
+  const { data, isLoading, isError } = useAnimeSchedule(active.weekday);
 
   return (
     <div className="anime-schedule">
       <div className="anime-days" role="radiogroup" aria-label="Day">
         {days.map((d, i) => (
-          <button key={i} role="radio" className="anime-day" aria-checked={i === day} onClick={() => setDay(i)}>
-            <span className="anime-day-name">{i === 1 ? "Today" : i === 0 ? "Yesterday" : i === 2 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "short" })}</span>
-            <span className="anime-day-date tabular">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+          <button key={d.weekday} role="radio" className="anime-day" aria-checked={i === dayIdx} onClick={() => setDayIdx(i)}>
+            <span className="anime-day-name">{i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.date.toLocaleDateString(undefined, { weekday: "short" })}</span>
+            <span className="anime-day-date tabular">{d.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
           </button>
         ))}
       </div>
-      {isError && <EmptyState>Couldn't load the schedule from AniList.</EmptyState>}
+      {isError && <EmptyState>Couldn't load the schedule.</EmptyState>}
       {isLoading && (
         <div className="anime-slots">
           {Array.from({ length: 6 }, (_, i) => (
@@ -466,41 +445,43 @@ function ScheduleView() {
           ))}
         </div>
       )}
-      {data && !slots.length && <EmptyState>Nothing airs this day.</EmptyState>}
+      {data && !data.length && <EmptyState>Nothing airs this day.</EmptyState>}
       <div className="anime-slots">
-        {slots.map((s) => (
-          <ScheduleSlot key={s.id} slot={s} />
+        {(data ?? []).map((item) => (
+          <ScheduleSlot key={item.id} item={item} />
         ))}
       </div>
     </div>
   );
 }
 
-function ScheduleSlot({ slot }: { slot: AiringSlot }) {
-  const title = useAnimeTitle()(slot.media.title);
-  const open = useOpenAnime(slot.media);
-  const left = untilAiring(slot.airingAt);
-  const aired = left <= 0;
-  const time = new Date(slot.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const total = slot.media.episodes;
+function ScheduleSlot({ item }: { item: AnimeItem }) {
+  const { animeTitles } = usePrefs();
+  const title = animeItemName(item, animeTitles);
+  const open = useOpenItem(item);
+  const left = item.airing ? untilAiring(item.airing.airingAt) : 0;
+  const aired = item.airing ? left <= 0 : false;
+  const time = item.airing
+    ? new Date(item.airing.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : "TBA";
   return (
-    <button className="anime-slot" data-aired={aired} {...open}>
+    <button className="anime-slot" data-aired={aired} onClick={open.onClick} onContextMenu={open.onContextMenu}>
       <span className="anime-slot-time tabular">{time}</span>
-      <Img src={slot.media.coverImage.large ?? undefined} alt="" className="anime-slot-cover" />
+      <Img src={item.poster} alt="" className="anime-slot-cover" />
       <span className="anime-slot-text">
         <span className="anime-slot-title t-headline">{title}</span>
         <span className="t-caption muted tabular">
-          Episode {slot.episode}
-          {total ? ` of ${total}` : ""}
-          {slot.media.format && slot.media.format !== "TV" ? ` · ${FORMAT_LABEL[slot.media.format]}` : ""}
+          {[item.seasonLabel, item.episodes ? `${item.episodes} Episodes` : undefined, item.format && item.format !== "TV" ? FORMAT_LABEL[item.format as MediaFormat] : undefined]
+            .filter(Boolean)
+            .join(" · ") || "TV"}
         </span>
       </span>
-      <span className="anime-slot-when tabular">{aired ? "Aired" : `in ${countdown(left)}`}</span>
+      <span className="anime-slot-when tabular">{item.airing ? (aired ? "Aired" : `in ${countdown(left)}`) : ""}</span>
     </button>
   );
 }
 
-// --- Browse ------------------------------------------------------------------
+// --- Browse (powered by Rust/Jikan) -----------------------------------------
 
 const SORTS: { value: BrowseFilters["sort"]; label: string }[] = [
   { value: "POPULARITY_DESC", label: "Popularity" },
@@ -525,7 +506,6 @@ function FilterField({ label, children }: { label: string; children: ReactNode }
 
 const NO_FILTERS = { genre: "", tag: "", season: "", year: 0, format: "", status: "" } as const;
 
-/** `from`: the filters it opens with (a genre chip, a shelf's heading). */
 function BrowseView({ from }: { from: Partial<BrowseFilters> }) {
   const [text, setText] = useState("");
   const [f, setF] = useState<BrowseFilters>(() => ({ ...NO_FILTERS, search: "", sort: "POPULARITY_DESC", ...from }));
@@ -534,16 +514,13 @@ function BrowseView({ from }: { from: Partial<BrowseFilters> }) {
     return () => window.clearTimeout(t);
   }, [text]);
   const set = (patch: Partial<BrowseFilters>) => setF((f) => ({ ...f, ...patch }));
-  const q = useAnimeBrowse(f);
+  const q = useAnimeBrowseCatalog(f);
 
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: thisYear + 2 - 1970 }, (_, i) => thisYear + 1 - i);
-  const seen = new Set<number>();
-  const listed = (q.data?.pages.flatMap((p) => p.media) ?? []).filter((m) => !seen.has(m.id) && seen.add(m.id));
-  const shown = useCardsShown();
-  const items = shown(listed);
+  const seen = new Set<string>();
+  const items = (q.data?.pages.flatMap((p) => p.items) ?? []).filter((m) => !seen.has(m.id) && seen.add(m.id));
   const [panel, setPanel] = useState(false);
-  // What's narrowing the list, each with a way to take it off again.
   type Active = { label: string; clear: Partial<BrowseFilters> };
   const active = [
     f.genre ? { label: f.genre, clear: { genre: "" } } : null,
@@ -610,11 +587,11 @@ function BrowseView({ from }: { from: Partial<BrowseFilters> }) {
       )}
       <PosterGrid pager={q}>
         {items.map((a) => (
-          <AnimeCard key={a.id} item={a} />
+          <ShowAnimeCard key={a.id} item={a} shape="poster" />
         ))}
       </PosterGrid>
       {q.data && !items.length && <EmptyState>Nothing matches. Try fewer filters.</EmptyState>}
-      {q.isError && <EmptyState>AniList didn't answer. Try again in a minute.</EmptyState>}
+      {q.isError && <EmptyState>Couldn't load anime right now. Try again in a moment.</EmptyState>}
     </div>
   );
 }

@@ -20,6 +20,7 @@ const DIM = 0.8;
 export function TitleSheet({
   entries,
   leaving,
+  playing = false,
   origin,
   z,
   onGone,
@@ -28,6 +29,7 @@ export function TitleSheet({
 }: {
   entries: Entry[];
   leaving: boolean;
+  playing?: boolean;
   origin?: Origin;
   z: number;
   onGone: () => void;
@@ -196,17 +198,31 @@ export function TitleSheet({
     let last = { y: 0, t: 0 };
     let state: "idle" | "maybe" | "drag" = "idle";
     const stage = document.querySelector<HTMLElement>(".ph-stage");
+    let moveBound = false;
+    const bindMove = () => {
+      if (moveBound) return;
+      moveBound = true;
+      el.addEventListener("touchmove", onMove, { passive: false });
+    };
+    const unbindMove = () => {
+      if (!moveBound) return;
+      moveBound = false;
+      el.removeEventListener("touchmove", onMove);
+    };
     const onStart = (e: TouchEvent) => {
       state = "idle";
+      unbindMove();
       if (e.touches.length !== 1 || !(e.target instanceof Element)) return;
       const page = e.target.closest<HTMLElement>(".ps-scroll");
       // The page scrolled down scrolls; only at its top (or on the picture) does a pull take the sheet.
+      // Attach the non-passive touchmove only while a pull is possible so normal scrolling stays off the main thread.
       if (!e.target.closest(".ps-media") && page && page.scrollTop > 0) return;
       const t = e.touches[0];
       y0 = t.clientY;
       x0 = t.clientX;
       prev = last = { y: t.clientY, t: performance.now() };
       state = "maybe";
+      bindMove();
     };
     const apply = () => {
       const s = 1 - 0.2 * Math.min(1, dy / 420);
@@ -225,6 +241,7 @@ export function TitleSheet({
         // Sideways (a row, the tabs) or upward (scrolling the page): not a pull.
         if ((Math.abs(ddx) > 10 && Math.abs(ddx) > Math.abs(ddy)) || ddy < -6) {
           state = "idle";
+          unbindMove();
           return;
         }
         if (ddy <= 8) return;
@@ -240,6 +257,7 @@ export function TitleSheet({
       apply();
     };
     const onEnd = () => {
+      unbindMove();
       if (state !== "drag") {
         state = "idle";
         return;
@@ -270,12 +288,11 @@ export function TitleSheet({
       dy = 0;
     };
     el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove", onMove, { passive: false });
-    el.addEventListener("touchend", onEnd);
-    el.addEventListener("touchcancel", onEnd);
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
     return () => {
+      unbindMove();
       el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
       el.removeEventListener("touchend", onEnd);
       el.removeEventListener("touchcancel", onEnd);
     };
@@ -293,10 +310,11 @@ export function TitleSheet({
             const r = e.route;
             const isTop = e === top;
             const back = i > 0 ? onBack : undefined;
+            const active = isTop && !leaving && !playing;
             return (
               <div key={e.key} className="ps-page" data-entry={e.key} data-top={isTop || undefined} inert={!isTop || undefined}>
-                {r.name === "detail" && <TitleBody type={r.type} id={r.id} preview={r.preview} episode={r.episode} top={isTop && !leaving} onClose={onClose} onBack={back} />}
-                {r.name === "anime-detail" && <AnimeBody id={r.id} onClose={onClose} onBack={back} />}
+                {r.name === "detail" && <TitleBody type={r.type} id={r.id} preview={r.preview} episode={r.episode} season={r.season} top={active} onClose={onClose} onBack={back} />}
+                {r.name === "anime-detail" && <AnimeBody id={r.id} preview={r.preview} top={active} onClose={onClose} onBack={back} />}
               </div>
             );
           })}

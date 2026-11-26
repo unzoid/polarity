@@ -235,7 +235,8 @@ test("an add-on's long name and description, unbroken words and a link among the
   const settings = await openSettingsPage(app, "Add-ons");
   const row = settings.getByRole("button", { name: /^Community Archive of Restored Public-Domain Cinema/ });
   await row.tap();
-  const description = settings.getByText(/ExampleProvider1\/ExampleProvider2/);
+  // On a phone an add-on's details open in the settings' tray, over the page.
+  const description = app.locator(".ft-tray").getByText(/ExampleProvider1\/ExampleProvider2/);
   await expect(description).toBeVisible();
   expect(await fitsWidth(app)).toBe(true);
   // The description itself stays on the screen: its words wrap rather than run off the right.
@@ -571,10 +572,16 @@ test.describe("on an iPhone", () => {
     expect(await fitsWidth(app)).toBe(true);
   });
 
-  test("the phone shell draws its own bar, not iOS's tab bar (#449)", async ({ app }) => {
-    await expect(bar(app)).toBeVisible();
+  test("the phone shell's places are iOS's own tab bar, and its drawn bar steps aside", async ({ app }) => {
+    // The fake shell stands in for iOS's bar (lib/platform/fake/tabBar.ts), built from what the app tells it.
+    await expect(app.locator("html")).toHaveAttribute("data-native-tabs", "true");
+    await expect(app.locator(".ph-bar")).toBeHidden();
+    await expect(bar(app)).toHaveAttribute("data-fake-native", "");
     await expect(bar(app).getByRole("button")).toHaveText(["Home", "Search", "Anime", "My Polarity"]);
-    await expect(app.locator("html")).not.toHaveAttribute("data-native-tabs", "true");
+    await expect(bar(app).getByRole("button", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
+    await bar(app).getByRole("button", { name: "Search", exact: true }).tap();
+    await expect(bar(app).getByRole("button", { name: "Search", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(app.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
   });
 
   test("a sheet opens at half the screen, expands and closes like iOS's own (#174)", async ({ app }) => {
@@ -663,13 +670,16 @@ test("on mobile data a torrent source doesn't start and says why, until the sett
 
   await status.getByRole("button", { name: "Open Settings" }).tap();
   await expect(app.locator(".player")).toHaveCount(0);
-  const settings = app.locator(".sheet");
+  // A phone's Settings is its full-screen page, opened at the setting's page.
+  const settings = app.locator(".t3s.fms-root");
   const allow = settings.getByRole("switch", { name: /^Play torrent streams on mobile data/ });
   await expect(allow).not.toBeChecked();
   await allow.tap();
   await expect(allow).toBeChecked();
-  await settings.getByRole("button", { name: "Close", exact: true }).tap();
-  await expect(app.locator(".sheet")).toHaveCount(0);
+  // Back to the list, then closed.
+  await settings.getByRole("button", { name: "Back", exact: true }).tap();
+  await settings.getByRole("button", { name: "Close settings", exact: true }).tap();
+  await expect(settings).toHaveCount(0);
 
   // Allowed: the torrent goes on (to the one-time notice first), from the title's sheet still open.
   await app.getByRole("dialog", { name: "The Glass Orchard" }).getByRole("button", { name: "Play", exact: true }).tap();
@@ -695,8 +705,12 @@ test("each tab's bar sits right under the status bar, its page right under it, w
       expect(gap, `${tab}, inset ${top}`).toBeLessThanOrEqual(12);
     }
   }
-  // Anime with AniList not answering: its message stays clear of the bar too.
-  await app.route("https://graphql.anilist.co/**", (route) => route.fulfill({ status: 503, body: "" }));
+  // Anime when the catalog backend isn't answering: its message stays clear of the bar too.
+  await app.evaluate(() => {
+    (window as { __polarFakeAnime?: { home?: () => unknown } }).__polarFakeAnime = {
+      home: () => Promise.reject({ code: "upstream", message: "offline" }),
+    };
+  });
   await bar(app).getByRole("button", { name: "Anime", exact: true }).tap();
   const note = app.locator(".anime-unreachable");
   await expect(note).toBeVisible({ timeout: 15_000 });
@@ -729,4 +743,43 @@ test("the error screen on a phone keeps clear of the controls, and a panel opene
   const shade = player.locator('.options-overlay[data-open="true"] .options-shade');
   await expect(shade).toBeVisible();
   expect(await shade.evaluate((e) => getComputedStyle(e).backdropFilter || getComputedStyle(e).getPropertyValue("-webkit-backdrop-filter"))).toContain("blur");
+});
+
+test("playing a title hides the phone shell and clears page backgrounds for native mpv playback", async ({ app }) => {
+  await openPlayer(app);
+  const state = await app.evaluate(() => {
+    document.documentElement.dataset.player = "mpv";
+    const ph = document.querySelector<HTMLElement>(".ph")!;
+    const main = document.querySelector<HTMLElement>(".ph-main")!;
+    const sheetClose = document.querySelector<HTMLElement>(".ps-media-buttons .ps-round");
+    return {
+      playingAttr: ph.hasAttribute("data-playing"),
+      mainVisibility: getComputedStyle(main).visibility,
+      closeVisibility: sheetClose ? getComputedStyle(sheetClose).visibility : "none",
+      htmlBg: getComputedStyle(document.documentElement).backgroundColor,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      phBg: getComputedStyle(ph).backgroundColor,
+    };
+  });
+  expect(state.playingAttr).toBe(true);
+  expect(state.mainVisibility).toBe("hidden");
+  expect(state.closeVisibility).toBe("hidden");
+  expect(state.htmlBg).toBe("rgba(0, 0, 0, 0)");
+  expect(state.bodyBg).toBe("rgba(0, 0, 0, 0)");
+  expect(state.phBg).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("floating settings trays sit near the bottom of the screen even with a home indicator inset", async ({ app }) => {
+  await insets(app, { top: 59, right: 0, bottom: 34, left: 0 });
+  const settings = await openSettingsPage(app, "Advanced");
+  await settings.getByRole("button", { name: /^Crop/ }).tap();
+  const tray = app.locator(".ft-tray");
+  await expect(tray).toBeVisible();
+  // Wait for entrance spring to settle.
+  await app.waitForTimeout(350);
+  const box = (await tray.boundingBox())!;
+  const height = app.viewportSize()!.height;
+  // Floating card sits ~20px above the screen bottom on a 34px home-indicator iPhone (never lifted ~100px by a hidden tab bar).
+  expect(height - (box.y + box.height)).toBeLessThanOrEqual(28);
+  expect(height - (box.y + box.height)).toBeGreaterThanOrEqual(12);
 });

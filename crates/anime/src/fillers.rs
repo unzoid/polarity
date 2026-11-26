@@ -201,10 +201,10 @@ impl Fillers {
         }
     }
 
-    /// Jikan's answer, or animefillerlist.com's when Jikan fails or knows no
-    /// filler. `None` when nothing could be learned, so nothing is cached.
+    /// Jikan's answer (when a custom endpoint is configured), or animefillerlist.com's.
+    /// The public `api.jikan.moe` instance shut down in Oct 2026, so skip it to avoid a dead-socket hang.
     async fn fetch(&self, mal_id: u32, slugs: &[String]) -> Option<EpisodeFlags> {
-        let jikan = self.jikan(mal_id).await;
+        let jikan = if self.jikan == JIKAN { None } else { self.jikan(mal_id).await };
         if let Some(f) = &jikan {
             if !f.filler.is_empty() || slugs.is_empty() {
                 return jikan;

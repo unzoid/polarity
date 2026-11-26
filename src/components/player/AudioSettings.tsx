@@ -24,13 +24,7 @@ export function AudioSettings({ delay, onDelay }: { delay: number; onDelay: (sec
     <div className="sub-settings">
       <Setting
         label="Delay"
-        caption={
-          delay === 0
-            ? "Fix sound that doesn't match the picture. Now in sync"
-            : delay > 0
-              ? "Sound plays later than before"
-              : "Sound plays earlier than before"
-        }
+        caption={delay === 0 ? undefined : delay > 0 ? "Later" : "Earlier"}
       >
         <div className="sub-delay-row">
           <Stepper
@@ -49,13 +43,13 @@ export function AudioSettings({ delay, onDelay }: { delay: number; onDelay: (sec
           )}
         </div>
       </Setting>
-      <Setting label="Boost dialogue" caption="Clearer voices on stereo and surround sound">
+      <Setting label="Boost dialogue">
         <Chips value={dialogueBoost ? 1 : 0} options={ON_OFF} onChange={(v) => setPrefs({ dialogueBoost: v === 1 })} />
       </Setting>
-      <Setting label="Even out volume" caption="Quieter explosions, louder whispers">
+      <Setting label="Even out volume">
         <Chips value={volumeLeveling ? 1 : 0} options={ON_OFF} onChange={(v) => setPrefs({ volumeLeveling: v === 1 })} />
       </Setting>
-      <Setting label="Dynamic range" caption="Pure cinema, Living Room, or Late Night">
+      <Setting label="Dynamic range">
         <Chips value={drcProfile} options={DRC_PROFILES} onChange={(v) => setPrefs({ drcProfile: v })} />
       </Setting>
     </div>

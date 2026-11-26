@@ -73,17 +73,17 @@ test("SettingRow: a schema toggle draws its title and caption, and switching it 
   const changed: unknown[] = [];
   const { container } = await render(
     <QueryClientProvider client={client}>
-      <SettingRow id="pauseOnMinimize" onChanged={(v) => changed.push(v)} />
+      <SettingRow id="swipeGestures" onChanged={(v) => changed.push(v)} />
     </QueryClientProvider>,
   );
-  const row = container.querySelector("[data-setting=pauseOnMinimize]")!;
-  expect(row.querySelector(".settings-row-title")!.textContent).toBe("Pause when minimized");
-  expect(row.querySelector(".settings-row-caption")!.textContent).toBe("On this device");
+  const row = container.querySelector("[data-setting=swipeGestures]")!;
+  expect(row.querySelector(".settings-row-title")!.textContent).toBe("Swipe gestures in the player");
+  expect(row.querySelector(".settings-row-caption")!.textContent).toBe("Left for brightness, right for volume");
   const input = row.querySelector<HTMLInputElement>("input[role=switch]")!;
-  expect(input.checked).toBe(false);
-  await click(row);
   expect(input.checked).toBe(true);
-  expect(getPrefs().pauseOnMinimize).toBe(true);
-  expect(changed).toEqual([true]);
+  await click(row);
+  expect(input.checked).toBe(false);
+  expect(getPrefs().swipeGestures).toBe(false);
+  expect(changed).toEqual([false]);
   client.clear();
 });

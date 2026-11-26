@@ -21,14 +21,17 @@ export type Icon = ComponentType<IconProps>;
 /** An icon's `size` as the length its svg is drawn at: px at the 16px root, in rem; a string as given. */
 export const iconLength = (size: number | string) => (typeof size === "number" ? `${size / 16}rem` : size);
 
-function icon(large: HeroIcon, mini: HeroIcon, micro: HeroIcon): Icon {
+function icon(large: HeroIcon, mini: HeroIcon, micro: HeroIcon, opticalX?: string): Icon {
   // `fill` and `strokeWidth` are accepted for call-site compatibility; solid
   // icons are filled shapes, so neither applies.
-  function AppIcon({ size = 24, fill: _fill, strokeWidth: _stroke, ...rest }: IconProps) {
+  function AppIcon({ size = 24, fill: _fill, strokeWidth: _stroke, style, ...rest }: IconProps) {
     const px = typeof size === "number" ? size : 24;
     const Cut = px <= 16 ? micro : px <= 20 ? mini : large;
     const length = iconLength(size);
-    return <Cut width={length} height={length} aria-hidden {...rest} />;
+    const mergedStyle = opticalX
+      ? { ...style, transform: style?.transform ? `${style.transform} translateX(${opticalX})` : `translateX(${opticalX})` }
+      : style;
+    return <Cut width={length} height={length} style={mergedStyle} aria-hidden {...rest} />;
   }
   return AppIcon;
 }
@@ -44,8 +47,8 @@ export const Check = icon(S24.CheckIcon, S20.CheckIcon, S16.CheckIcon);
 /** Select every item in a list (Continue Watching's selection). */
 export const CheckAll = icon(S24.CheckCircleIcon, S20.CheckCircleIcon, S16.CheckCircleIcon);
 export const ChevronDown = icon(S24.ChevronDownIcon, S20.ChevronDownIcon, S16.ChevronDownIcon);
-export const ChevronLeft = icon(S24.ChevronLeftIcon, S20.ChevronLeftIcon, S16.ChevronLeftIcon);
-export const ChevronRight = icon(S24.ChevronRightIcon, S20.ChevronRightIcon, S16.ChevronRightIcon);
+export const ChevronLeft = icon(S24.ChevronLeftIcon, S20.ChevronLeftIcon, S16.ChevronLeftIcon, "-3.5%");
+export const ChevronRight = icon(S24.ChevronRightIcon, S20.ChevronRightIcon, S16.ChevronRightIcon, "3.5%");
 export const Close = icon(S24.XMarkIcon, S20.XMarkIcon, S16.XMarkIcon);
 export const Copy = icon(S24.Square2StackIcon, S20.Square2StackIcon, S16.Square2StackIcon);
 export const LinkIcon = icon(S24.LinkIcon, S20.LinkIcon, S16.LinkIcon);
@@ -80,7 +83,7 @@ export const Warning = icon(S24.ExclamationTriangleIcon, S20.ExclamationTriangle
 export const Pause = icon(S24.PauseIcon, S20.PauseIcon, S16.PauseIcon);
 export const Picture = icon(S24.PhotoIcon, S20.PhotoIcon, S16.PhotoIcon);
 export const PlaylistIcon = icon(S24.ListBulletIcon, S20.ListBulletIcon, S16.ListBulletIcon);
-export const Play =icon(S24.PlayIcon, S20.PlayIcon, S16.PlayIcon);
+export const Play = icon(S24.PlayIcon, S20.PlayIcon, S16.PlayIcon, "7%");
 export const Plus = icon(S24.PlusIcon, S20.PlusIcon, S16.PlusIcon);
 export const Power = icon(S24.PowerIcon, S20.PowerIcon, S16.PowerIcon);
 export const Profile = icon(S24.UserCircleIcon, S20.UserCircleIcon, S16.UserCircleIcon);

@@ -1,5 +1,7 @@
 import "../styles/screens.css";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Selectable, SelectButton, TrashFlow, useSelection, type Selection } from "../components/library/Trash";
+import { buttonClass } from "../components/ui/Button";
 import { FilteredCollection } from "../components/library/CollectionFilters";
 import { ConfirmDeleteButton } from "../components/ConfirmDeleteButton";
 import { DownloadGlyph } from "../components/DownloadButton";
@@ -20,7 +22,9 @@ import {
   createPlaylist,
   MAX_PLAYLISTS,
   deletePlaylist,
+  deletePlaylists,
   removeFromPlaylist,
+  removeManyFromPlaylist,
   renamePlaylist,
   usePlaylists,
   useSavedEntries,
@@ -32,6 +36,8 @@ import { useRouter, type Route, useNavigation } from "../lib/router";
 import { progressFraction, progressItem } from "../lib/catalog";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PosterGrid } from "../components/title/PosterGrid";
+import { NewPlaylistTray } from "../components/library/NewPlaylistTray";
+import { useFormFactor } from "../lib/ui";
 
 type Collection = Extract<Route, { name: "library-collection" }>["view"];
 type Open = { view: Collection } | { view: "playlist"; id: string; fresh: boolean };
@@ -73,11 +79,7 @@ export function LibraryCollection({ view }: { view: Collection }) {
           <WatchedGrid />
         </CollectionPage>
       )}
-      {view === "playlists" && (
-        <CollectionPage title="Playlists" onBack={back}>
-          <Playlists onOpen={(id, fresh = false) => open({ view: "playlist", id, fresh })} />
-        </CollectionPage>
-      )}
+      {view === "playlists" && <Playlists onBack={back} onOpen={(id, fresh = false) => open({ view: "playlist", id, fresh })} />}
       {view === "downloads" && (
         <CollectionPage title="Downloads" onBack={back}>
           <DownloadsPage />
@@ -139,7 +141,7 @@ function Overview({ onOpen }: { onOpen: (o: Open) => void }) {
           {playlists.map((p) => (
             <PlaylistTile key={p.id} playlist={p} onOpen={() => onOpen({ view: "playlist", id: p.id, fresh: false })} />
           ))}
-          {playlists.length < MAX_PLAYLISTS && <NewPlaylistTile onCreate={(id) => onOpen({ view: "playlist", id, fresh: true })} />}
+          {playlists.length < MAX_PLAYLISTS && <NewPlaylistTile onCreate={(id, fresh) => onOpen({ view: "playlist", id, fresh: !!fresh })} />}
         </Row>
         {recentFiles.length > 0 && (
           <Row title="Recent Files" shape="landscape">
@@ -193,20 +195,27 @@ function DownloadsPanel({ downloads, onOpen }: { downloads: DownloadRecord[]; on
 }
 
 /** The last tile among playlists: starts one and opens it with its name ready to type over. */
-function NewPlaylistTile({ onCreate }: { onCreate: (id: string) => void }) {
+/** A new playlist: on a phone its name is asked for first (NewPlaylistTray); elsewhere it opens ready to rename. */
+function NewPlaylistTile({ onCreate }: { onCreate: (id: string, fresh?: boolean) => void }) {
+  const phone = useFormFactor().form === "phone";
+  const [naming, setNaming] = useState(false);
   return (
-    <button
-      className="card card-poster playlist-tile"
-      onClick={() => {
-        const p = createPlaylist("New Playlist");
-        if (p) onCreate(p.id);
-      }}
-    >
-      <div className="card-frame frame-page playlist-new">
-        <Plus size={28} />
-        <span className="t-callout">New Playlist</span>
-      </div>
-    </button>
+    <>
+      <button
+        className="card card-poster playlist-tile"
+        onClick={() => {
+          if (phone) return setNaming(true);
+          const p = createPlaylist("New Playlist");
+          if (p) onCreate(p.id, true);
+        }}
+      >
+        <div className="card-frame frame-page playlist-new">
+          <Plus size={28} />
+          <span className="t-callout">New Playlist</span>
+        </div>
+      </button>
+      {phone && <NewPlaylistTray open={naming} onClose={() => setNaming(false)} onCreated={(p) => onCreate(p.id, false)} />}
+    </>
   );
 }
 
@@ -294,10 +303,13 @@ function usePlayDownload() {
 function CollectionPage({
   title,
   onBack,
+  action,
   children,
 }: {
   title: string;
   onBack: () => void;
+  /** At the header's end, level with the title. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -310,6 +322,7 @@ function CollectionPage({
           </button>
           <h1 className="t-title1">{title}</h1>
         </div>
+        {action}
       </header>
       {children}
     </>
@@ -357,25 +370,48 @@ function WatchedGrid() {
 
 // --- Playlists -------------------------------------------------------------------------------
 
-function Playlists({ onOpen }: { onOpen: (id: string, isNew?: boolean) => void }) {
+/** Every playlist, with Select to delete several at once (components/library/Trash.tsx). */
+function Playlists({ onBack, onOpen }: { onBack: () => void; onOpen: (id: string, isNew?: boolean) => void }) {
   const playlists = usePlaylists();
+  const selection = useSelection(playlists.map((p) => p.id));
+  const scope = useRef<HTMLDivElement>(null);
   return (
-    <>
+    <CollectionPage
+      title="Playlists"
+      onBack={onBack}
+      action={playlists.length > 0 && <SelectButton selection={selection} className={buttonClass("glass", false, undefined, "sm")} />}
+    >
       {playlists.length === 0 && (
         <p className="library-hint t-body muted">Group titles into playlists from their page, or start one here.</p>
       )}
-      <PosterGrid>
-        {playlists.map((p) => (
-          <PlaylistTile key={p.id} playlist={p} onOpen={() => onOpen(p.id)} />
-        ))}
-        {playlists.length < MAX_PLAYLISTS && <NewPlaylistTile onCreate={(id) => onOpen(id, true)} />}
-      </PosterGrid>
-    </>
+      <div ref={scope} style={{ display: "contents" }}>
+        <PosterGrid>
+          {playlists.map((p) => (
+            <Selectable key={p.id} id={p.id} label={p.name} selection={selection}>
+              <PlaylistTile playlist={p} onOpen={() => onOpen(p.id)} />
+            </Selectable>
+          ))}
+          {playlists.length < MAX_PLAYLISTS && !selection.selecting && <NewPlaylistTile onCreate={(id, fresh) => onOpen(id, !!fresh)} />}
+        </PosterGrid>
+      </div>
+      <TrashFlow
+        selection={selection}
+        scope={scope}
+        noun={["playlist", "playlists"]}
+        verb="Delete"
+        title={(n) => (n === 1 ? "Delete Playlist" : "Delete Playlists")}
+        body={(n) => (n === 1 ? "The selected playlist will be deleted from this profile." : "The selected playlists will be deleted from this profile.")}
+        note="Deleting a playlist doesn't take its titles out of My List or Watched."
+        onDelete={deletePlaylists}
+      />
+    </CollectionPage>
   );
 }
 
 function PlaylistView({ id, fresh, onClose, backLabel }: { id: string; fresh: boolean; onClose: () => void; backLabel: string }) {
   const playlist = usePlaylists().find((p) => p.id === id);
+  const selection = useSelection(playlist?.items.map((i) => i.id) ?? []);
+  const scope = useRef<HTMLDivElement>(null);
   if (!playlist) return null;
   const n = playlist.items.length;
 
@@ -413,6 +449,7 @@ function PlaylistView({ id, fresh, onClose, backLabel }: { id: string; fresh: bo
             {n} {n === 1 ? "title" : "titles"}
           </span>
           <span className="playlist-view-spacer" />
+          {n > 0 && !playlist.packed && <SelectButton selection={selection} className={buttonClass("glass", false, undefined, "sm")} />}
           <ConfirmDeleteButton label="playlist" onConfirm={() => (deletePlaylist(id), onClose())} />
         </div>
       </div>
@@ -421,29 +458,44 @@ function PlaylistView({ id, fresh, onClose, backLabel }: { id: string; fresh: bo
       ) : n === 0 ? (
         <EmptyState>Add titles with the playlist button on their page.</EmptyState>
       ) : (
-        <PosterGrid>
-          {playlist.items.map((item) => (
-            <PlaylistEntry key={item.id} playlistId={id} item={item} />
-          ))}
-        </PosterGrid>
+        <div ref={scope} style={{ display: "contents" }}>
+          <PosterGrid>
+            {playlist.items.map((item) => (
+              <PlaylistEntry key={item.id} playlistId={id} item={item} selection={selection} />
+            ))}
+          </PosterGrid>
+        </div>
       )}
+      <TrashFlow
+        selection={selection}
+        scope={scope}
+        noun={["title", "titles"]}
+        verb="Remove"
+        title="Remove from Playlist"
+        body={(k) => `The selected ${k === 1 ? "title" : "titles"} will be taken out of “${playlist.name}”.`}
+        note="Taking a title out of a playlist doesn't take it out of My List or Watched."
+        onDelete={(ids) => removeManyFromPlaylist(id, ids)}
+      />
     </div>
   );
 }
 
-function PlaylistEntry({ playlistId, item }: { playlistId: string; item: PlaylistItem }) {
+function PlaylistEntry({ playlistId, item, selection }: { playlistId: string; item: PlaylistItem; selection: Selection }) {
   const shown = usePlaylistItem(item);
   return (
-    <div className="playlist-entry">
+    <Selectable id={item.id} label={shown?.name ?? "Title"} selection={selection} className="playlist-entry">
       <PosterCard item={shown ?? { id: item.id, type: item.type, name: "" }} />
-      <button
-        className="playlist-remove"
-        aria-label={`Remove ${shown?.name ?? "title"} from playlist`}
-        title="Remove from playlist"
-        onClick={() => removeFromPlaylist(playlistId, item.id)}
-      >
-        <Close size={14} strokeWidth={2.5} />
-      </button>
-    </div>
+      {/* While selecting, the check stands where this was. */}
+      {!selection.selecting && (
+        <button
+          className="playlist-remove"
+          aria-label={`Remove ${shown?.name ?? "title"} from playlist`}
+          title="Remove from playlist"
+          onClick={() => removeFromPlaylist(playlistId, item.id)}
+        >
+          <Close size={14} strokeWidth={2.5} />
+        </button>
+      )}
+    </Selectable>
   );
 }

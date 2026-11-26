@@ -104,7 +104,7 @@ export function Profiles() {
           <Avatar id={me?.avatar ?? "guest"} className="dk-profiles-avatar" />
           <div className="dk-profiles-who">
             <strong>{me?.name ?? "Guest"}</strong>
-            <span>{me ? (account.user?.email ?? "Signed in") : "Not signed in"}</span>
+            {!me && <span>Not signed in</span>}
           </div>
           {me && (
             <button type="button" className="dk-profiles-edit" aria-label="Edit profile" onClick={run(() => account.switchProfile("manage"))}>

@@ -77,6 +77,9 @@ These never go to the account server:
 - The **Letterboxd export** if you import one: it's read on your device. Each film's title and year is looked up in the
   catalog (TMDB or Cinemeta), as a search would be, and nothing is sent to Letterboxd. Only the library and watched
   films you import are kept.
+- A **Letterboxd list** you import as a playlist: when you paste its link, your device reads the list's page on
+  letterboxd.com (as opening it in a browser would) for its name and films, then looks each film up in the catalog.
+  Only the playlist you make is kept.
 - **API keys and add-on links** on your device are kept in the system's keychain where there is one.
 - **Discord Rich Presence** talks only to the Discord app on the same computer, while something plays. By default it
   shows only that you're watching something in Polarity, no title; in Settings → Playback → Show on Discord you can

@@ -57,6 +57,13 @@
       "skillPath": "skills/break-ui/SKILL.md",
       "computedHash": "f089f3663e197fb4e106249df70e815a96e3236520a2e1c0919d1694816baca8"
     },
+    "build-design-system": {
+      "source": "design.how",
+      "sourceUrl": "https://design.how",
+      "sourceType": "well-known",
+      "computedHash": "a1556da26d35b24d39c41f52785365558ba803fae624b49065b46c2852db0bd6",
+      "wellKnownDigest": "sha256:8915004ca4fe7c0c4120df7b729fff5778f74f8357eafb2ef7504e2817732a1a"
+    },
     "choreograph": {
       "source": "emilkowalski/skills",
       "commit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
@@ -99,6 +106,13 @@
       "skillPath": "skills/learn-taste/SKILL.md",
       "computedHash": "edaec540d02abdad48727b7d769574d0ee42e79304826c899a7aba90ef0197c1"
     },
+    "make-font": {
+      "source": "design.how",
+      "sourceUrl": "https://design.how",
+      "sourceType": "well-known",
+      "computedHash": "e34a7c3344c6e1929cb916a48e0688e6b83f458442b67bc9815b779ff28c23b4",
+      "wellKnownDigest": "sha256:30cde0cb24ec96e812c02727727ba65a56dc32e4ca9e84cf81baa398537b941a"
+    },
     "mobile-native": {
       "source": "emilkowalski/skills",
       "commit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
@@ -133,6 +147,13 @@
       "sourceType": "github",
       "skillPath": "skills/review-animations/SKILL.md",
       "computedHash": "50f1de2394b88bb3433eca1e30da6866a4e310963d872a66af20ca77fd77f07d"
+    },
+    "ui-review": {
+      "source": "design.how",
+      "sourceUrl": "https://design.how",
+      "sourceType": "well-known",
+      "computedHash": "3e1f2dbb302131c1df3d3c79a7e05060323a460d9e8eae456bc2b2804331b3c3",
+      "wellKnownDigest": "sha256:9b33e6d03a9433bd24c906461fd614bbc67f9c2a6ba6fa809e6d773bcd908eac"
     },
     "write-swift": {
       "source": "emilkowalski/skills",

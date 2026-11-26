@@ -6,7 +6,7 @@ import { brandIcon } from "../../components/BrandIcon";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { keys, useSettings } from "../../lib/net";
-import type { Settings as SettingsT } from "../../lib/types";
+import type { RatingsProviders, Settings as SettingsT, TmdbModules } from "../../lib/types";
 import { Button } from "../../components/ui/Button";
 import { Card, ExpandRow, FormRow, useExpanded, type Expandable } from "../../components/settings/rows";
 import { useSecretsNote } from "../../components/settings/secretsNote";
@@ -17,6 +17,7 @@ import { TraktSignIn } from "../../components/settings/TraktSignIn";
 import { SimklImport } from "../../components/settings/SimklImport";
 import { SimklSignIn } from "../../components/settings/SimklSignIn";
 import { SettingRow } from "../../components/settings/SettingRow";
+import { useFormFactor } from "../../lib/ui";
 import {
   anilistAuthorizeUrl,
   linkAniList,
@@ -68,7 +69,31 @@ function AskRatingRow() {
   return trakt || simkl ? <SettingRow id="askRating" /> : null;
 }
 
-/** Rotten Tomatoes, Metacritic and Letterboxd scores, from MDBList and/or OMDb. */
+const RATINGS_PROVIDERS: { key: keyof RatingsProviders; label: string }[] = [
+  { key: "imdb", label: "IMDb" },
+  { key: "tmdb", label: "TMDB" },
+  { key: "rottenTomatoes", label: "Rotten Tomatoes" },
+  { key: "metacritic", label: "Metacritic" },
+  { key: "trakt", label: "Trakt" },
+  { key: "letterboxd", label: "Letterboxd" },
+  { key: "audience", label: "Audience Score" },
+  { key: "mal", label: "MyAnimeList" },
+];
+
+const TMDB_MODULES: { key: keyof TmdbModules; label: string; caption: string }[] = [
+  { key: "trailers", label: "Trailers", caption: "Trailer candidates and extras from TMDB videos" },
+  { key: "artwork", label: "Artwork", caption: "Logo, backdrop, and poster images from TMDB" },
+  { key: "basicInfo", label: "Basic Info", caption: "Description, genres, and rating from TMDB" },
+  { key: "details", label: "Details", caption: "Runtime, status, country, language, and certification from TMDB" },
+  { key: "credits", label: "Credits", caption: "Cast with photos, director, and writers from TMDB" },
+  { key: "productions", label: "Productions", caption: "Production companies for movies from TMDB" },
+  { key: "networks", label: "Networks", caption: "Networks for series from TMDB" },
+  { key: "episodes", label: "Episodes", caption: "Episode titles, overviews, thumbnails, and ratings from TMDB" },
+  { key: "moreLikeThis", label: "More Like This", caption: "TMDB recommendations on detail pages" },
+  { key: "collections", label: "Collections", caption: "TMDB movie collections in release order" },
+];
+
+/** Rotten Tomatoes, Metacritic, Letterboxd, Trakt, IMDb, TMDB & MAL scores, from MDBList and/or OMDb. */
 function RatingsRow(props: Expandable) {
   const qc = useQueryClient();
   const { data } = useSettings();
@@ -81,19 +106,37 @@ function RatingsRow(props: Expandable) {
   if (!data) return null;
   const on = !!(data.mdblistKey || data.omdbKey);
   const dirty = mdb.trim() !== (data.mdblistKey ?? "") || omdb.trim() !== (data.omdbKey ?? "");
+  const providers = data.ratingsProviders;
+  const toggleProvider = (key: keyof RatingsProviders, checked: boolean) =>
+    save.mutate({ ratingsProviders: { ...providers, [key]: checked } });
 
   return (
     <ExpandRow
       icon={Star}
       title="Critic and audience scores"
-      caption="Rotten Tomatoes, Metacritic and Letterboxd scores on title pages, with a free key"
+      caption="MDBList / OMDb"
       value={on ? "On" : "Off"}
       {...props}
     >
+      <div className="settings-subcard">
+        <label className="settings-subrow">
+          <span className="settings-subrow-text">
+            <span className="settings-subrow-title">Use Ratings on Hero</span>
+            <span className="settings-subrow-caption">Show MDBList / OMDb ratings on the home hero</span>
+          </span>
+          <Switch
+            checked={on && data.ratingsOnHero}
+            disabled={!on || save.isPending}
+            onChange={(checked) => save.mutate({ ratingsOnHero: checked })}
+          />
+        </label>
+      </div>
+
+      <h3 className="settings-subhead">API Keys</h3>
       <p className="settings-expand-text">
         A free key from <strong>mdblist.com</strong> (Preferences → API) adds IMDb, TMDB, Trakt, Letterboxd, Rotten
-        Tomatoes, its audience score and Metacritic, in a row under each title. A free key from <strong>omdbapi.com</strong> adds Rotten Tomatoes and
-        Metacritic. Either works; with both, OMDb fills any gaps.
+        Tomatoes, its audience score, Metacritic and MyAnimeList. A free key from <strong>omdbapi.com</strong> adds
+        Rotten Tomatoes and Metacritic. Either works; with both, OMDb fills any gaps.
       </p>
       <form
         className="settings-expand-form settings-expand-form-stack"
@@ -132,6 +175,20 @@ function RatingsRow(props: Expandable) {
         </Button>
       </form>
       {gate.warning}
+
+      <h3 className="settings-subhead">External Ratings Providers</h3>
+      <div className="settings-subcard">
+        {RATINGS_PROVIDERS.map(({ key, label }) => (
+          <label key={key} className="settings-subrow">
+            <span className="settings-subrow-title">{label}</span>
+            <Switch
+              checked={on && (providers?.[key] ?? true)}
+              disabled={!on || save.isPending}
+              onChange={(checked) => toggleProvider(key, checked)}
+            />
+          </label>
+        ))}
+      </div>
     </ExpandRow>
   );
 }
@@ -163,7 +220,6 @@ function AniListRow(props: Expandable) {
       icon={AniListIcon}
       title="AniList"
       setting="anilist"
-      caption="Episodes you watch update this profile's AniList list, and you can change it from an anime's page"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -253,7 +309,6 @@ function MalRow(props: Expandable) {
       icon={MalIcon}
       title="MyAnimeList"
       setting="mal"
-      caption="Episodes you watch update this profile's MyAnimeList list, and you can change it from an anime's page"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -330,7 +385,6 @@ function TraktRow(props: Expandable) {
       icon={TraktIcon}
       title="Trakt"
       setting="trakt"
-      caption="What you watch goes to this profile's Trakt history, with its watchlist and ratings kept in step"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -385,7 +439,6 @@ function SimklRow(props: Expandable) {
       icon={SimklIcon}
       title="Simkl"
       setting="simkl"
-      caption="What you watch goes to this profile's Simkl lists, films, shows and anime alike"
       value={state === "linked" ? "Linked" : state === "none" ? "Off" : "Sign in again"}
       {...props}
     >
@@ -436,20 +489,27 @@ function ArtworkRow(props: Expandable) {
   const qc = useQueryClient();
   const { data } = useSettings();
   const [key, setKey] = useState("");
+  const [lang, setLang] = useState("");
   useEffect(() => setKey(data?.tmdbKey ?? ""), [data?.tmdbKey]);
-  // A new data source means every cached catalog is stale.
+  useEffect(() => setLang(data?.language ?? "en-US"), [data?.language]);
+  // A new data source or module selection means cached catalog/meta/collection/rec queries are stale.
   const save = useSaveSettings(() => {
-    for (const k of [keys.catalogAll, keys.discoverAll, keys.metaAll, keys.featured]) qc.invalidateQueries({ queryKey: k });
+    for (const k of [keys.catalogAll, keys.discoverAll, keys.metaAll, keys.featured, keys.anime.catalogAll, ["recommend"], ["collection"]]) {
+      qc.invalidateQueries({ queryKey: k });
+    }
   });
   const gate = useKeyGate();
   if (!data) return null;
   const on = !!data.tmdbKey;
+  const modules = data.tmdbModules;
+  const toggleModule = (mod: keyof TmdbModules, checked: boolean) =>
+    save.mutate({ tmdbModules: { ...modules, [mod]: checked } });
 
   return (
     <ExpandRow
       icon={Picture}
       title="Artwork and episode info"
-      caption="Adds logos, sharper posters and episode details using your free TMDB key"
+      caption="TMDB"
       value={on ? "On" : "Off"}
       {...props}
     >
@@ -469,6 +529,54 @@ function ArtworkRow(props: Expandable) {
         onSubmit={(k) => gate.guard(added([[k, data.tmdbKey]]), () => save.mutate({ tmdbKey: k || null }))}
       />
       {gate.warning}
+
+      <h3 className="settings-subhead">Localization</h3>
+      <div className="settings-subcard settings-subcard-pad">
+        <div className="settings-subrow-text">
+          <span className="settings-subrow-title">Language</span>
+          <span className="settings-subrow-caption">TMDB metadata language for title, logo, and enabled fields (e.g. en-US, de-DE, ja-JP)</span>
+        </div>
+        <FormRow
+          look="expand"
+          placeholder="en-US"
+          aria-label="TMDB language code"
+          autoComplete="off"
+          value={lang}
+          onChange={setLang}
+          saved={data.language}
+          pending={save.isPending}
+          pendingLabel="Saving…"
+          onSubmit={(code) => save.mutate({ language: code || "en-US" })}
+        />
+      </div>
+
+      <h3 className="settings-subhead">Modules</h3>
+      <div className="settings-subcard">
+        <label className="settings-subrow">
+          <span className="settings-subrow-text">
+            <span className="settings-subrow-title">Anime Catalogs</span>
+            <span className="settings-subrow-caption">TMDB Discover for evergreen anime shelves (off uses AniList)</span>
+          </span>
+          <Switch
+            checked={on && data.tmdbAnimeCatalogs}
+            disabled={!on || save.isPending}
+            onChange={(checked) => save.mutate({ tmdbAnimeCatalogs: checked })}
+          />
+        </label>
+        {TMDB_MODULES.map(({ key: modKey, label, caption }) => (
+          <label key={modKey} className="settings-subrow">
+            <span className="settings-subrow-text">
+              <span className="settings-subrow-title">{label}</span>
+              <span className="settings-subrow-caption">{caption}</span>
+            </span>
+            <Switch
+              checked={on && (modules?.[modKey] ?? true)}
+              disabled={!on || save.isPending}
+              onChange={(checked) => toggleModule(modKey, checked)}
+            />
+          </label>
+        ))}
+      </div>
     </ExpandRow>
   );
 }
@@ -476,6 +584,7 @@ function ArtworkRow(props: Expandable) {
 /** Seek-bar thumbnails from Seekr. */
 function PreviewsRow(props: Expandable) {
   const qc = useQueryClient();
+  const phone = useFormFactor().form === "phone";
   const { data } = useSettings();
   const [key, setKey] = useState("");
   useEffect(() => setKey(data?.seekrKey ?? ""), [data?.seekrKey]);
@@ -496,15 +605,23 @@ function PreviewsRow(props: Expandable) {
           ? "Couldn't reach Seekr. Check your connection."
           : null;
 
+  const toggle = (
+    <label className="settings-expand-toggle">
+      <span>Show previews</span>
+      <Switch checked={hasKey && data.seekPreviews} disabled={!hasKey} onChange={(on) => save.mutate({ seekPreviews: on })} />
+    </label>
+  );
+
   return (
     <ExpandRow
       icon={Grid}
       title="Timeline previews"
-      caption="Small preview pictures when you hover over the seek bar, from Seekr"
+      caption="Seekr"
       value={hasKey && data.seekPreviews ? "On" : "Off"}
       {...props}
     >
       <p className="settings-expand-text">Key from seekr.tv.</p>
+      {phone && hasKey && toggle}
       <form
         className="settings-expand-form"
         onSubmit={(e) => {
@@ -535,10 +652,7 @@ function PreviewsRow(props: Expandable) {
           {status}
         </p>
       )}
-      <label className="settings-expand-toggle">
-        <span>Show previews</span>
-        <Switch checked={hasKey && data.seekPreviews} disabled={!hasKey} onChange={(on) => save.mutate({ seekPreviews: on })} />
-      </label>
+      {!phone && toggle}
     </ExpandRow>
   );
 }

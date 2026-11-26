@@ -94,5 +94,14 @@ export const keys = {
     forImdb: (imdbId: string) => ["anime", "for-imdb", imdbId] as const,
     episodeFlags: (malId: number | null | undefined) => ["anime", "episodeFlags", malId] as const,
     episodeFlagsAll: ["anime", "episodeFlags"] as const,
+    /** Show-first Rust anime catalog queries (TMDB Discover + Jikan + local Fribb). */
+    catalogAll: ["anime", "catalog"] as const,
+    catalogHome: ["anime", "catalog", "home"] as const,
+    catalogShelf: (shelf: string, genre = "", page = 1) => ["anime", "catalog", "shelf", shelf, genre, page] as const,
+    catalogSchedule: (day = "all") => ["anime", "catalog", "schedule", day] as const,
+    catalogBrowse: (query: object) => ["anime", "catalog", "browse", query] as const,
+    showInfo: (id: string) => ["anime", "show-info", id] as const,
+    characters: (malId: number) => ["anime", "characters", malId] as const,
+    details: (anilistId: number, malId: number) => ["anime", "details", anilistId, malId] as const,
   },
 };

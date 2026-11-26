@@ -16,6 +16,7 @@ export * from "./episodeOrder";
 export * from "./episodeOrderChoice";
 export * from "./identity";
 export * from "./letterboxdImport";
+export * from "./letterboxdList";
 export * from "./libraryEntries";
 export * from "./libraryView";
 export * from "./playlistChecklist";

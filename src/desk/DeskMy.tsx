@@ -1,10 +1,12 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Avatar } from "../components/Avatar";
 import { Img } from "../components/Img";
+import { ImportPlaylistDialog } from "../components/library/ImportPlaylist";
+import { Selectable, SelectButton, TrashFlow, useSelection } from "../components/library/Trash";
 import { PlaylistTile } from "../components/Playlists";
 import { useAccount } from "../lib/account";
 import { progressFraction, progressItem } from "../lib/catalog";
-import { createPlaylist, MAX_PLAYLISTS, useDownloads, usePlaylists, useUpNextContinueWatching } from "../lib/library";
+import { createPlaylist, deletePlaylists, MAX_PLAYLISTS, useDownloads, usePlaylists, useUpNextContinueWatching } from "../lib/library";
 import { useLibrary, useWatchHistory } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import { cardArtUrl } from "../lib/ui";
@@ -28,6 +30,10 @@ export function DeskMy({ chrome }: { chrome: Chrome }) {
   const { data: history } = useWatchHistory();
   const playlists = usePlaylists();
   const watching = useUpNextContinueWatching();
+  const [importing, setImporting] = useState(false);
+  // Playlists picked to delete (components/library/Trash.tsx); the row is where their tiles are found.
+  const selection = useSelection(playlists.map((p) => p.id));
+  const playlistRow = useRef<HTMLDivElement>(null);
   const profile = (
     <button type="button" className="dk-my-profile" aria-label="Profiles" onClick={openProfiles}>
       <Avatar id={me?.avatar ?? "guest"} className="dk-my-avatar" />
@@ -71,26 +77,59 @@ export function DeskMy({ chrome }: { chrome: Chrome }) {
             )
           )}
           {playlists.length ? (
-            <Row title="Playlists" count={playlists.length} onMore={() => navigate({ name: "library-collection", view: "playlists" })}>
-              {playlists.map((p) => (
-                <PlaylistTile key={p.id} playlist={p} onOpen={() => navigate({ name: "playlist", id: p.id })} />
-              ))}
-              {playlists.length < MAX_PLAYLISTS && (
-                <button type="button" className="dk-list-card dk-list-new" onClick={() => newPlaylist(navigate)}>
-                  <span className="dk-list-mosaic">
-                    <IconPlus size={30} stroke={2} />
-                  </span>
-                  <span className="dk-list-name">New Playlist</span>
-                </button>
-              )}
-            </Row>
+            <div ref={playlistRow} style={{ display: "contents" }}>
+              <Row
+                title="Playlists"
+                count={playlists.length}
+                onMore={() => navigate({ name: "library-collection", view: "playlists" })}
+                action={<SelectButton selection={selection} className="dk-text-btn" />}
+              >
+                {playlists.map((p) => (
+                  <Selectable key={p.id} id={p.id} label={p.name} selection={selection} className="dk-list-pick">
+                    <PlaylistTile playlist={p} onOpen={() => navigate({ name: "playlist", id: p.id })} />
+                  </Selectable>
+                ))}
+                {playlists.length < MAX_PLAYLISTS && !selection.selecting && (
+                  <button type="button" className="dk-list-card dk-list-new" onClick={() => newPlaylist(navigate)}>
+                    <span className="dk-list-mosaic">
+                      <IconPlus size={30} stroke={2} />
+                    </span>
+                    <span className="dk-list-name">New Playlist</span>
+                  </button>
+                )}
+                {playlists.length < MAX_PLAYLISTS && !selection.selecting && (
+                  <button type="button" className="dk-list-card dk-list-new" onClick={() => setImporting(true)}>
+                    <span className="dk-list-mosaic">
+                      <IconDownload size={28} />
+                    </span>
+                    <span className="dk-list-name">Import Playlist</span>
+                  </button>
+                )}
+              </Row>
+              <TrashFlow
+                selection={selection}
+                scope={playlistRow}
+                noun={["playlist", "playlists"]}
+                verb="Delete"
+                title={(n) => (n === 1 ? "Delete Playlist" : "Delete Playlists")}
+                body={(n) => (n === 1 ? "The selected playlist will be deleted from this profile." : "The selected playlists will be deleted from this profile.")}
+                note="Deleting a playlist doesn't take its titles out of My List or Watched."
+                onDelete={deletePlaylists}
+              />
+            </div>
           ) : (
-            <Empty title="Playlists" button="Make a Playlist" onClick={() => newPlaylist(navigate)}>
+            <Empty
+              title="Playlists"
+              button="Make a Playlist"
+              onClick={() => newPlaylist(navigate)}
+              second={{ label: "Import from Letterboxd", onClick: () => setImporting(true) }}
+            >
               Put titles together in your own order, to watch or share.
             </Empty>
           )}
         </div>
       </div>
+      <ImportPlaylistDialog open={importing} onClose={() => setImporting(false)} onCreated={(id) => navigate({ name: "playlist", id })} />
     </div>
   );
 }
@@ -100,7 +139,20 @@ function newPlaylist(navigate: ReturnType<typeof useNavigation>["navigate"]) {
   if (made) navigate({ name: "playlist", id: made.id, fresh: true });
 }
 
-function Empty({ title, button, onClick, children }: { title: string; button: string; onClick: () => void; children: ReactNode }) {
+function Empty({
+  title,
+  button,
+  onClick,
+  second,
+  children,
+}: {
+  title: string;
+  button: string;
+  onClick: () => void;
+  /** A quieter second way in, beside the button. */
+  second?: { label: string; onClick: () => void };
+  children: ReactNode;
+}) {
   return (
     <section className="dk-row">
       <h2 className="dk-row-title">
@@ -111,6 +163,11 @@ function Empty({ title, button, onClick, children }: { title: string; button: st
         <button type="button" className="dk-my-empty-btn" onClick={onClick}>
           {button}
         </button>
+        {second && (
+          <button type="button" className="dk-my-empty-link" onClick={second.onClick}>
+            {second.label}
+          </button>
+        )}
       </div>
     </section>
   );

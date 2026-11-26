@@ -42,7 +42,7 @@ describe("settings schema", () => {
       "src/components/settings/PolarityExport.tsx",
       "src/components/settings/CopySetup.tsx",
       "src/components/settings/HiddenTitlesCard.tsx",
-      "src/components/settings/ThemePicker.tsx",
+      "src/components/settings/AccentPicker.tsx",
       "src/components/friends/FriendsSettings.tsx",
       "src/components/player/SubtitleSettings.tsx",
       "src/lib/catalog/marketplace.ts",

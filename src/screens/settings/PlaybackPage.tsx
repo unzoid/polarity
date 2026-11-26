@@ -3,6 +3,7 @@ import { api } from "../../lib/api";
 import { keys, useSettings, useUpdateSettings } from "../../lib/net";
 import { buildChannel, isDesktop } from "../../lib/platform";
 import { usePrefs } from "../../lib/settings";
+import { useFormFactor } from "../../lib/ui";
 import { Card, PickRow, SectionList, type SectionProps, ToggleRow } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 
@@ -13,6 +14,8 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
   // Desktop builds made with a Discord application only.
   const { data: discord } = useQuery({ queryKey: keys.discord, queryFn: api.discordAvailable, staleTime: Infinity });
   const { discordPresence } = usePrefs();
+  const { form, touch } = useFormFactor();
+  const phone = form === "phone";
   if (!data) return null;
   const recapsOn = data.autoSkipRecaps ?? data.autoSkip;
 
@@ -29,13 +32,12 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
       );
     case "skipping":
       return (
-        <Card footer="Timings come from the IntroDB community database, or from the file's own chapters.">
+        <Card>
           <SettingRow id="autoSkip" />
           {/* Unset follows Skip intros, so it isn't a plain schema row. */}
           <ToggleRow
             setting="autoSkipRecaps"
             title="Skip recaps"
-            caption="Jump past the “previously on” part on its own"
             checked={recapsOn}
             onChange={(v) => update.mutate({ autoSkipRecaps: v })}
           />
@@ -98,6 +100,8 @@ export function PlaybackPage({ section, openSection }: SectionProps) {
           <SettingRow id="holdSpeed" />
           <SettingRow id="clickAction" />
           <SettingRow id="wheelAction" />
+          {/* A phone has no Controls & TV page (PhoneFamilySettings), so the player's swipes live here. */}
+          {phone && touch && <SettingRow id="swipeGestures" />}
         </Card>
       );
     default:

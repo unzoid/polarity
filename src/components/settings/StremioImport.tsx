@@ -153,10 +153,7 @@ export function StremioImport() {
 
   return (
     <>
-      <Card
-        title="Import from Stremio"
-        footer="Your library, where you left off and what you've watched, from the file Stremio exports. Nothing newer here is replaced, and importing the same file again adds nothing."
-      >
+      <Card title="Import from Stremio">
         <ActionRow
           setting="stremioImport"
           title={loaded ? "Export file read" : "Export file"}

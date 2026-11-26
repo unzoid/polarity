@@ -119,3 +119,31 @@ test("outside the shell it is the web view's storage, with no native calls", asy
   expect(local.get("polar.auth")).toBe("{t}");
   expect(calls).toEqual([]);
 });
+
+test("concurrent reads for the same key share one native call", async () => {
+  let resolveGet!: (v: string | null) => void;
+  const calls: string[] = [];
+  const storage = createKeychainStorage({
+    shell: true,
+    call: <T>(command: string) => {
+      calls.push(command);
+      return new Promise<T>((r) => {
+        resolveGet = (v) => r(v as T);
+      });
+    },
+    local: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+  });
+  const a = storage.getItem("polar.auth");
+  const b = storage.getItem("polar.auth");
+  const c = storage.getItem("polar.auth");
+  resolveGet("{session}");
+  expect(await Promise.all([a, b, c])).toEqual(["{session}", "{session}", "{session}"]);
+  expect(calls).toEqual(["keychain_get"]);
+});
+
+test("removing a key already known to be absent skips keychain_delete", async () => {
+  const { storage, calls } = setup();
+  expect(await storage.getItem("polar.auth-code-verifier")).toBeNull();
+  await storage.removeItem("polar.auth-code-verifier");
+  expect(calls).toEqual(["keychain_get"]);
+});

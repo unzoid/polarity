@@ -57,7 +57,7 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "autoplay",
       label: "Autoplay",
-      caption: "Picking a source, the next episode and Still Watching",
+      caption: "Source selection, next episode and Still Watching",
       settings: ["autoPickSource", "autoplayNext", "autoplayCountdown", "stillWatchingAfter", "nextUpTiming"],
     },
     {
@@ -69,25 +69,25 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "resuming",
       label: "Resuming",
-      caption: "Where a video picks up, and when it counts as watched",
+      caption: "Resume position and watched threshold",
       settings: ["resumePlayback", "resumeRewind", "watchedThreshold"],
     },
     {
       id: "downloads",
       label: "Downloads",
-      caption: "Keeping the next episodes downloaded",
+      caption: "Next-episode downloads",
       settings: ["autoDownloadNext", "autoDownloadRemoveWatched"],
     },
     {
       id: "player",
       label: "Player",
-      caption: "Fullscreen, minimizing, playback speed and Discord",
+      caption: "Fullscreen, minimize, speed and Discord",
       settings: ["startFullscreen", "pauseOnMinimize", "discordPresence", "discordJoin", "rememberSpeed"],
     },
     {
       id: "controls",
       label: "On-Screen Controls",
-      caption: "What the controls show, and what clicks, the wheel and holding do",
+      caption: "Clock, skip step, pause behavior, clicks and scroll",
       settings: [
         "timeDisplay",
         "showPlayingFormat",
@@ -106,7 +106,7 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "languages",
       label: "Languages",
-      caption: "Audio and subtitle languages, SDH and a second subtitle",
+      caption: "Audio, subtitles, SDH and second subtitle",
       settings: ["audioLanguage", "subtitleLanguage", "subtitleMode", "preferSdh", "secondSubtitles", "secondSubtitleLanguage"],
     },
     {
@@ -142,13 +142,13 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "pages",
       label: "Home & Title Pages",
-      caption: "The carousel, Continue Watching, hidden titles, trailers and the calendar",
+      caption: "Carousel, Continue Watching, hidden titles, trailers and calendar",
       settings: ["heroAutoplay", "showContinueWatching", "hideWatched", "hiddenTitles", "trailerAutoplay", "trailerSound", "showCalendar"],
     },
     {
       id: "cards",
       label: "Cards & Episodes",
-      caption: "What cards show, the episode list and spoilers",
+      caption: "Cards, ratings, episodes and spoilers",
       settings: [
         "showCardTitles",
         "showCardDetails",
@@ -171,13 +171,13 @@ export const PAGE_SECTIONS: Partial<Record<PageId, readonly PageSection[]>> = {
     {
       id: "browsing",
       label: "Shelves & Cards",
-      caption: "What the Anime page shows, and what its cards show",
+      caption: "Shelves, cards, scores and schedule",
       settings: ["animeShelves", "animeCardTitles", "animeCardPeek", "animeCardScores", "animeScoreFormat", "animeCardCountdown", "animeSeparateEntries", "animeScheduleAll"],
     },
     {
       id: "episodes",
       label: "Episodes & Sources",
-      caption: "Filler, recaps, the franchise and preferred release groups",
+      caption: "Filler, recaps, franchise and release groups",
       settings: [
         "animeReadOn",
         "animeHideUnplayable",

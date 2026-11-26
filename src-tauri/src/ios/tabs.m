@@ -149,8 +149,10 @@ static PolarTabs *controller;
             [tabs addObject:tab];
         }
         self.tabs = tabs;
-        // An iPad's tab bar can open into a sidebar; an iPhone keeps the bar.
-        self.mode = UITabBarControllerModeTabSidebar;
+        // An iPad's tab bar can open into a sidebar; an iPhone keeps the bottom tab bar.
+        self.mode = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
+                        ? UITabBarControllerModeTabSidebar
+                        : UITabBarControllerModeTabBar;
     } else {
         self.viewControllers = list;
     }
@@ -171,12 +173,14 @@ static PolarTabs *controller;
     if (hidden == self.barHidden) return;
     self.barHidden = hidden;
     if (@available(iOS 18.0, *)) {
-        // The sidebar goes with the bar, and comes back if it was open.
-        if (hidden) {
-            self.sidebarWasShown = !self.sidebar.hidden;
-            self.sidebar.hidden = YES;
-        } else if (self.sidebarWasShown) {
-            self.sidebar.hidden = NO;
+        // The sidebar goes with the bar on iPad, and comes back if it was open.
+        if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+            if (hidden) {
+                self.sidebarWasShown = !self.sidebar.hidden;
+                self.sidebar.hidden = YES;
+            } else if (self.sidebarWasShown) {
+                self.sidebar.hidden = NO;
+            }
         }
         [self setTabBarHidden:hidden animated:animated];
     } else {

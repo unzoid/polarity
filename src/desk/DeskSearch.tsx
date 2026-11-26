@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Img } from "../components/Img";
-import { retryTitle, useAnimeAliases, useAnimeResults, withoutAnime, type AnimeCard } from "../lib/anime";
+import { animeItemName, animeItemToPreview, useAnimeSearchCatalog, withoutAnimeItems } from "../lib/anime";
 import { api } from "../lib/api";
 import {
   addRecentSearch,
@@ -22,7 +22,7 @@ import {
 import { useSearch } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import { usePrefs } from "../lib/settings";
-import type { ContentType, MetaPreview } from "../lib/types";
+import type { AnimeItem, ContentType, MetaPreview } from "../lib/types";
 import { IconSearch } from "../phone/icons";
 import { BarActions } from "./Bar";
 import type { Chrome } from "./Nav";
@@ -261,15 +261,14 @@ function Results({ text }: { text: string }) {
   const refetch = pureFilterQuery ? smartCatalog.refetch : textSearch.refetch;
 
   const animeTerm = animeEnabled && !pureFilterQuery ? searchTerm : animeEnabled && activeChips.some((c) => c.mediaType === "anime") ? parsed.genres[0] ?? "anime" : "";
-  const anime = useAnimeResults(animeTerm, retryTitle(rawSeries ?? [], rawMovies ?? []));
-  const aliases = useAnimeAliases();
+  const anime = useAnimeSearchCatalog(animeTerm);
   const movies = useMemo(
-    () => applySmartFilters(withoutAnime(rawMovies, anime.all, aliases), parsed, dismissedChips) ?? [],
-    [rawMovies, anime.all, aliases, parsed, dismissedChips],
+    () => applySmartFilters(withoutAnimeItems(rawMovies, anime.items), parsed, dismissedChips) ?? [],
+    [rawMovies, anime.items, parsed, dismissedChips],
   );
   const series = useMemo(
-    () => applySmartFilters(withoutAnime(rawSeries, anime.all, aliases), parsed, dismissedChips) ?? [],
-    [rawSeries, anime.all, aliases, parsed, dismissedChips],
+    () => applySmartFilters(withoutAnimeItems(rawSeries, anime.items), parsed, dismissedChips) ?? [],
+    [rawSeries, anime.items, parsed, dismissedChips],
   );
   const animeItems = useMemo(() => (animeEnabled ? (anime.items ?? []) : []), [animeEnabled, anime.items]);
   const top = useMemo(() => interleave(series, movies), [series, movies]);
@@ -386,19 +385,19 @@ function Results({ text }: { text: string }) {
   );
 }
 
-function AnimePoster({ anime }: { anime: AnimeCard }) {
+function AnimePoster({ anime }: { anime: AnimeItem }) {
   const { navigate } = useNavigation();
-  const title = anime.title.english || anime.title.romaji || anime.title.native || "";
-  const cover = anime.coverImage?.extraLarge || anime.coverImage?.large;
+  const { animeTitles } = usePrefs();
+  const title = animeItemName(anime, animeTitles);
   return (
     <button
       type="button"
       className="dk-poster scheme-dark"
       data-origin="4"
       aria-label={title}
-      onClick={() => navigate({ name: "anime-detail", id: anime.id, preview: anime })}
+      onClick={() => navigate({ name: "detail", type: anime.type, id: anime.id, preview: animeItemToPreview(anime, animeTitles), season: anime.seasonHint })}
     >
-      {cover ? <Img src={cover} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="dk-poster-name">{title}</span>}
+      {anime.poster ? <Img src={anime.poster} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="dk-poster-name">{title}</span>}
     </button>
   );
 }

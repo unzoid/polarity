@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
+import { pointScale } from "./scripts/pointScale";
 
 /** The commit this build is made from, shown in Settings → About. "unknown" when git isn't available. */
 function gitCommit() {
@@ -11,19 +12,17 @@ function gitCommit() {
   }
 }
 
-/** Preloads the default Latin variable UI font (Instrument Sans, lib/settings/fonts.ts) so first paint never waits for CSS + React mount to discover it. */
+/** Preloads the default UI font (Polarity Sans, lib/settings/fonts.ts) so first paint never waits for CSS + React mount to discover it. */
 function preloadPrimaryFont(): Plugin {
   return {
     name: "polar-preload-font",
     transformIndexHtml: {
       order: "post",
       handler(html, ctx) {
-        const fileName = Object.keys(ctx.bundle ?? {}).find((f) => /instrument-sans-latin-wght-normal.*\.woff2$/.test(f));
-        if (!fileName) return html;
-        return html.replace(
-          "</head>",
-          `  <link rel="preload" as="font" type="font/woff2" href="/${fileName}" crossorigin>\n  </head>`,
-        );
+        const files = Object.keys(ctx.bundle ?? {}).filter((f) => /PolaritySans-(Regular|Medium|SemiBold|Bold|ExtraBold).*\.woff2$/.test(f));
+        if (!files.length) return html;
+        const links = files.map((f) => `  <link rel="preload" as="font" type="font/woff2" href="/${f}" crossorigin>`).join("\n");
+        return html.replace("</head>", `${links}\n  </head>`);
       },
     },
   };
@@ -32,6 +31,8 @@ function preloadPrimaryFont(): Plugin {
 // Tauri expects a fixed dev port and must see Rust compile errors in the terminal.
 export default defineConfig({
   plugins: [react(), preloadPrimaryFont()],
+  // px in our stylesheets is drawn in the desktop shell's points, so every rule scales with the window (scripts/pointScale.ts).
+  css: { postcss: { plugins: [pointScale()] } },
   define: { __GIT_COMMIT__: JSON.stringify(gitCommit()) },
   clearScreen: false,
   server: {

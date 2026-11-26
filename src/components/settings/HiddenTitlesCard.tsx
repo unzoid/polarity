@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { HIDDEN_LIMIT, unhideTitle, useHiddenTitles } from "../../lib/library/hiddenTitles";
+import { unhideTitle, useHiddenTitles } from "../../lib/library/hiddenTitles";
 import { Button } from "../ui/Button";
 import { ActionRow, Card, RowText } from "./rows";
 
@@ -16,10 +16,7 @@ export function HiddenTitlesCard() {
   const shown = all ? list : list.slice(0, FIRST);
   return (
     <div data-setting="hiddenTitles">
-      <Card
-        title="Hidden Titles"
-        footer={`Hidden titles stay out of Home, Movies, Series and recommendations. Search still finds them. Up to ${HIDDEN_LIMIT}: hiding more lets the oldest show again.`}
-      >
+      <Card title="Hidden Titles">
         {!list.length && (
           <div className="settings-row">
             <RowText title="No hidden titles" caption="Hide a title from its card's menu or its page." />

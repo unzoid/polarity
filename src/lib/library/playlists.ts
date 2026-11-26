@@ -166,11 +166,21 @@ const toItem = (m: MetaPreview): PlaylistItem => ({ id: m.id, type: m.type, name
 
 /** A new playlist; `null` when the profile already has MAX_PLAYLISTS. */
 export function createPlaylist(name: string, first?: MetaPreview): Playlist | null {
+  return createPlaylistOf(name, first ? [first] : []);
+}
+
+/**
+ * A new playlist holding `titles` in their order (Import Playlist), each title once and at most
+ * MAX_PLAYLIST_ITEMS; `null` when the profile already has MAX_PLAYLISTS.
+ */
+export function createPlaylistOf(name: string, titles: MetaPreview[]): Playlist | null {
   if (visible.length >= MAX_PLAYLISTS) return null;
+  const seen = new Set<string>();
+  const items = titles.filter((t) => !seen.has(t.id) && seen.add(t.id)).slice(0, MAX_PLAYLIST_ITEMS).map(toItem);
   const playlist: Playlist = {
     id: crypto.randomUUID(),
     name: name.trim().slice(0, 60) || "Untitled Playlist",
-    items: first ? [toItem(first)] : [],
+    items,
     updatedAt: Date.now(),
   };
   publish({ ...state, playlists: [...state.playlists, playlist], dirty: [...state.dirty, playlist.id] });
@@ -191,8 +201,21 @@ export const addToPlaylist = (id: string, item: MetaPreview) =>
       : { ...p, items: [...p.items, toItem(item)] },
   );
 
-export const removeFromPlaylist = (id: string, itemId: string) =>
-  change(id, (p) => (p.packed ? null : { ...p, items: p.items.filter((i) => i.id !== itemId) }));
+export const removeFromPlaylist = (id: string, itemId: string) => removeManyFromPlaylist(id, [itemId]);
+
+/** Several titles out of one playlist as one change (one push, one `updatedAt`). */
+export const removeManyFromPlaylist = (id: string, itemIds: readonly string[]) =>
+  change(id, (p) => {
+    if (p.packed || !itemIds.length) return null;
+    const gone = new Set(itemIds);
+    const items = p.items.filter((i) => !gone.has(i.id));
+    return items.length === p.items.length ? null : { ...p, items };
+  });
+
+/** Several playlists deleted at once (each kept as a tombstone, as deletePlaylist does). */
+export function deletePlaylists(ids: readonly string[]) {
+  for (const id of ids) deletePlaylist(id);
+}
 
 /** Move a title within its playlist (drag or keyboard reorder). */
 export const moveInPlaylist = (id: string, from: number, to: number) =>

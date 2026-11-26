@@ -212,7 +212,8 @@ export function DeskApp({ Screen, Settings }: { Screen: ComponentType<{ route: R
     syncNavScroll(scroller?.scrollTop ?? 0);
   }, [chrome, root.key, hasPushed]);
 
-  const firstDialog = shown.findIndex((r) => r.kind === "dialog" && !r.leaving);
+  // The bar goes under the first dialog, or the first page laid over the window (a person's, PushedPage `overlay`).
+  const firstDialog = shown.findIndex((r) => (r.kind === "dialog" || r.entries[0]?.route.name === "person") && !r.leaving);
   const barZ = firstDialog >= 0 ? 19 + firstDialog * 2 : 500;
 
   return (
@@ -371,12 +372,21 @@ function ScreenTab({ route, Screen, chrome }: { route: Route; Screen: ComponentT
 function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: { entry: Entry; leaving: boolean; z: number; top: boolean; onGone: () => void; onBack: () => void; Screen: ComponentType<{ route: Route }>; chrome: Chrome }) {
   const el = useRef<HTMLElement>(null);
   const under = useRef<HTMLElement | null>(null);
+  // A person's page lies over the one it came from, dark and blurred, as Sources does: it fades in and out on the
+  // spot, the page under it seen through it and left where it is.
+  const overlay = entry.route.name === "person";
   useLayoutEffect(() => {
     let below = el.current?.previousElementSibling as HTMLElement | null;
     while (below && (below.classList.contains("dk-tabs-layer") || below.classList.contains("dk-nav"))) below = below.previousElementSibling as HTMLElement | null;
     under.current = below;
     const clearUnder = () => below?.getAnimations().forEach((a) => a.id === "under" && a.cancel());
     if (reduced()) return clearUnder;
+    // On a computer it's a page like any website's: it takes the window's place under the bar, the page it left
+    // staying put underneath (no slide, no shove), with only a quick fade so the swap doesn't flash.
+    if (chrome === "nav" || overlay) {
+      el.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: overlay ? 200 : 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+      return clearUnder;
+    }
     const frames = samples(OPEN_OMEGA, OPEN_MS);
     el.current?.animate(
       frames.map(({ offset, p }) => ({ offset, transform: `translateX(${((1 - p) * 100).toFixed(3)}%)` })),
@@ -396,6 +406,10 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
       onGone();
     };
     if (reduced() || !el.current) return settle();
+    if (chrome === "nav" || overlay) {
+      void el.current.animate([{ opacity: 1 }, { opacity: 0 }], { duration: overlay ? 160 : 120, easing: "ease-out", fill: "forwards" }).finished.finally(settle);
+      return;
+    }
     const ease = { duration: 320, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "forwards" } as const;
     const a = el.current.animate([{ transform: "none" }, { transform: "translateX(100%)" }], ease);
     below?.getAnimations().forEach((x) => x.id === "under" && x.cancel());
@@ -403,8 +417,26 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
     void a.finished.finally(settle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaving]);
+  // Library's own pages (Playlists, a playlist, My List, Watched) head themselves: their back link over the page's
+  // big title. On a computer that's the only heading, as on a website, rather than a second bar above it.
+  const ownHead = chrome === "nav" && (entry.route.name === "playlist" || (entry.route.name === "library-collection" && entry.route.view !== "downloads"));
   return (
-    <section ref={el} className="page dk-pushed" style={{ zIndex: z }} data-active={top && !leaving} data-page-key={entry.key} inert={!top || leaving || undefined}>
+    <section
+      ref={el}
+      className={overlay ? "page dk-pushed dk-overlay scheme-dark" : "page dk-pushed"}
+      style={{ zIndex: z }}
+      data-active={top && !leaving}
+      data-page-key={entry.key}
+      data-own-head={ownHead || undefined}
+      data-route={entry.route.name}
+      inert={!top || leaving || undefined}
+      // A person's page heads itself with their name: the bar takes it once that has scrolled away.
+      onScrollCapture={
+        entry.route.name === "person"
+          ? (e) => el.current?.toggleAttribute("data-scrolled", (e.target as HTMLElement).scrollTop > 160)
+          : undefined
+      }
+    >
       <div className="dk-pushed-body">
         {entry.route.name === "discover" ? (
           <ErrorBoundary where="section">
@@ -420,15 +452,17 @@ function PushedPage({ entry, leaving, z, top, onGone, onBack, Screen, chrome }: 
           </ErrorBoundary>
         ) : (
           <>
-            <header className="dk-bar dk-pagebar" data-tauri-drag-region>
-              <div className="dk-bar-lead" data-tauri-drag-region>
-                <button type="button" className="dk-round dk-back" aria-label="Back" onClick={onBack}>
-                  <IconBack size={22} stroke={2.2} />
-                </button>
-                <h1 className="dk-bar-title">{titleOf(entry.route)}</h1>
-              </div>
-              {chrome === "tabs" && <BarActions />}
-            </header>
+            {!ownHead && (
+              <header className="dk-bar dk-pagebar" data-tauri-drag-region>
+                <div className="dk-bar-lead" data-tauri-drag-region>
+                  <button type="button" className="dk-round dk-back" aria-label="Back" onClick={onBack}>
+                    <IconBack size={22} stroke={2.2} />
+                  </button>
+                  <h1 className="dk-bar-title">{titleOf(entry.route)}</h1>
+                </div>
+                {chrome === "tabs" && <BarActions />}
+              </header>
+            )}
             <ErrorBoundary where={`page ${entry.route.name}`}>
               <Screen route={entry.route} />
             </ErrorBoundary>

@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { Dropdown } from "../../components/Dropdown";
+import { FamilyPickerTray, MoreDots } from "../../components/settings/FamilyTray";
 import { useSettings, useUpdateSettings } from "../../lib/net";
 import { usePrefs } from "../../lib/settings";
 import { clearRecentSearches } from "../../lib/catalog";
-import { Card, PickRow, SectionList, type SectionProps, ToggleRow } from "../../components/settings/rows";
+import { Card, PickRow, RowText, SectionList, type SectionProps, ToggleRow } from "../../components/settings/rows";
 import { SettingRow } from "../../components/settings/SettingRow";
 import { LimitFromProfile } from "../../components/profileLock/LimitFromProfile";
 import { useLimitFromProfile } from "../../lib/catalog";
 import { HiddenTitlesCard } from "../../components/settings/HiddenTitlesCard";
+import { useFormFactor } from "../../lib/ui";
 
 /** Its sections (PAGE_SECTIONS.browsing): General, Home & Title Pages, Cards & Episodes. */
 export function BrowsingPage({ section, openSection }: SectionProps) {
@@ -14,27 +17,58 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
   const update = useUpdateSettings();
   const prefs = usePrefs();
   const fromProfile = useLimitFromProfile();
+  const phone = useFormFactor().form === "phone";
+  const [startPageOpen, setStartPageOpen] = useState(false);
   if (!data) return null;
+  const startPageVal = data.startPage === "anime" && !prefs.animeEnabled ? "home" : (data.startPage ?? "home");
+  const startPageOptions = [
+    { value: "home" as const, label: "Home" },
+    { value: "movies" as const, label: "Movies" },
+    { value: "series" as const, label: "Shows" },
+    ...(prefs.animeEnabled ? [{ value: "anime" as const, label: "Anime" }] : []),
+    { value: "library" as const, label: "Library" },
+  ];
   switch (section) {
     case "general":
       return (
         <>
           <Card>
             {/* Anime is offered only while the Anime section is on. */}
-            <PickRow setting="startPage" title="Open the app on">
-              <Dropdown
-                label="Open the app on"
-                value={data.startPage === "anime" && !prefs.animeEnabled ? "home" : (data.startPage ?? "home")}
-                onChange={(v) => update.mutate({ startPage: v })}
-                options={[
-                  { value: "home", label: "Home" },
-                  { value: "movies", label: "Movies" },
-                  { value: "series", label: "Shows" },
-                  ...(prefs.animeEnabled ? [{ value: "anime" as const, label: "Anime" }] : []),
-                  { value: "library", label: "Library" },
-                ]}
-              />
-            </PickRow>
+            {phone ? (
+              <>
+                <button
+                  type="button"
+                  className="settings-row settings-row-button ft-choice-row"
+                  data-setting="startPage"
+                  aria-haspopup="dialog"
+                  aria-expanded={startPageOpen}
+                  onClick={() => setStartPageOpen(true)}
+                >
+                  <RowText title="Open the app on" />
+                  <span className="ft-choice-right">
+                    <span className="ft-choice-value">{startPageOptions.find((o) => o.value === startPageVal)?.label ?? "Home"}</span>
+                    <MoreDots size={16} className="ft-choice-dots" />
+                  </span>
+                </button>
+                <FamilyPickerTray
+                  open={startPageOpen}
+                  onClose={() => setStartPageOpen(false)}
+                  title="Open the app on"
+                  value={startPageVal}
+                  options={startPageOptions}
+                  onPick={(v) => update.mutate({ startPage: v })}
+                />
+              </>
+            ) : (
+              <PickRow setting="startPage" title="Open the app on">
+                <Dropdown
+                  label="Open the app on"
+                  value={startPageVal}
+                  onChange={(v) => update.mutate({ startPage: v })}
+                  options={startPageOptions}
+                />
+              </PickRow>
+            )}
             <SettingRow id="language" caption={data.tmdbKey ? undefined : "Needs a TMDB key (Services → Artwork and episode info)"} />
           </Card>
           <Card title="Family">
@@ -62,7 +96,7 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
             <SettingRow id="trailerAutoplay" />
             {(data.trailerAutoplay ?? true) && <SettingRow id="trailerSound" />}
           </Card>
-          <Card title="Calendar" footer="Like Stremio's calendar: built from the shows in your library and the ones you're watching.">
+          <Card title="Calendar">
             <SettingRow id="showCalendar" />
           </Card>
         </>
@@ -76,7 +110,6 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
             <ToggleRow
               setting="showCardDetails"
               title="Show details"
-              caption="Add the type, genre and year under the name"
               checked={data.showCardTitles && data.showCardDetails}
               disabled={!data.showCardTitles}
               onChange={(v) => update.mutate({ showCardDetails: v })}
@@ -88,7 +121,7 @@ export function BrowsingPage({ section, openSection }: SectionProps) {
           <Card title="Episodes">
             <SettingRow id="episodeLayout" />
           </Card>
-          <Card title="Spoilers" footer="Episodes you've finished show as normal.">
+          <Card title="Spoilers">
             <SettingRow id="hideEpisodeThumbs" />
             <SettingRow id="hideEpisodeDescriptions" />
           </Card>

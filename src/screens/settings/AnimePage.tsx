@@ -35,7 +35,7 @@ export function AnimePage({ section, openSection }: SectionProps) {
     case "browsing":
       return (
         <>
-          <Card title="Shelves" footer="What the Anime page shows, top to bottom, in desktop and TV mode. Featured is the carousel at the top; Genres adds a shelf for each genre.">
+          <Card title="Shelves">
             <div className="settings-row settings-chip-row">
               <div className="srcf-tags" role="group" aria-label="Shelves on the Anime page">
                 {ANIME_SHELVES.map((s) => {
@@ -51,7 +51,6 @@ export function AnimePage({ section, openSection }: SectionProps) {
             <SettingRow id="animeCardScores" />
             <SettingRow id="animeScoreFormat" />
             <SettingRow id="animeCardCountdown" />
-            <SettingRow id="animeSeparateEntries" />
           </Card>
           <Card title="Schedule">
             <SettingRow id="animeScheduleAll" />
@@ -61,7 +60,7 @@ export function AnimePage({ section, openSection }: SectionProps) {
     case "episodes":
       return (
         <>
-          <Card title="Episodes" footer="Blurring unwatched pictures and hiding their descriptions are under Browsing → Cards & Episodes, and apply here too.">
+          <Card title="Episodes">
             <SettingRow id="animeSkipFiller" />
             <SettingRow id="animeHideRecaps" />
             <SettingRow id="animeNo4k" />
@@ -73,9 +72,12 @@ export function AnimePage({ section, openSection }: SectionProps) {
           </Card>
           <Card
             title="Preferred Release Groups"
-            footer="Their sources score higher in Best Match, the first group you list most, so autoplay usually picks them first. A much better file from another group can still come first. Separate with commas. Filters and other sorts still apply."
+            footer="Separate with commas. Earlier groups rank higher in Best Match."
           >
             <FormRow
+              title="Preferred release groups"
+              trayHint="Separate with commas. Earlier groups rank higher in Best Match."
+              emptyValue="None"
               placeholder="Group A, Group B"
               aria-label="Preferred release groups"
               value={groups}

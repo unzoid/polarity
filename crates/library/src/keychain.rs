@@ -90,7 +90,7 @@ impl<S: SecretStore> Chunked<S> {
     }
 
     pub fn set(&self, name: &str, value: &[u8]) -> Result<(), StoreError> {
-        let old = self.head(name).unwrap_or(None);
+        let old = self.head(name)?;
         if value.len() < self.max {
             let mut head = Vec::with_capacity(value.len() + 1);
             head.push(WHOLE);
@@ -117,7 +117,7 @@ impl<S: SecretStore> Chunked<S> {
     }
 
     pub fn delete(&self, name: &str) -> Result<(), StoreError> {
-        if let Some(Head::Split { generation, count }) = self.head(name).unwrap_or(None) {
+        if let Some(Head::Split { generation, count }) = self.head(name)? {
             self.delete_chunks(name, generation, count)?;
         }
         self.store.delete(name)
@@ -290,5 +290,30 @@ mod tests {
         // and it can be written over.
         keys.set("j", b"ok").unwrap();
         assert_eq!(keys.get("j").unwrap().unwrap(), b"ok");
+    }
+
+    #[test]
+    fn a_failing_read_stops_set_and_delete_without_a_second_call() {
+        struct Denied(Cell<usize>);
+        impl SecretStore for &Denied {
+            fn get(&self, _name: &str) -> Result<Option<Vec<u8>>, StoreError> {
+                self.0.set(self.0.get() + 1);
+                Err(StoreError::Unavailable("denied".into()))
+            }
+            fn set(&self, _name: &str, _value: &[u8]) -> Result<(), StoreError> {
+                self.0.set(self.0.get() + 1);
+                Ok(())
+            }
+            fn delete(&self, _name: &str) -> Result<(), StoreError> {
+                self.0.set(self.0.get() + 1);
+                Ok(())
+            }
+        }
+        let denied = Denied(Cell::new(0));
+        let keys = Chunked::new(&denied, 100);
+        assert!(matches!(keys.set("k", b"v"), Err(StoreError::Unavailable(_))));
+        assert_eq!(denied.0.get(), 1);
+        assert!(matches!(keys.delete("k"), Err(StoreError::Unavailable(_))));
+        assert_eq!(denied.0.get(), 2);
     }
 }

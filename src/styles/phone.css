@@ -28,6 +28,29 @@
   --nav-h: calc(56px + var(--safe-top));
   background: var(--bg);
 }
+/* On iOS the sections are iOS's own tab bar (components/NativeTabs.tsx, Liquid Glass on iOS 26): it's part of the
+   bottom safe area, so the pages pad by `--tabbar-h` alone and this shell's bar isn't drawn. */
+:root[data-phone-ui][data-native-tabs] {
+  --ph-bar-h: 0px;
+  --ph-bar-bottom: var(--tabbar-h);
+  --tabbar-h: var(--safe-bottom);
+}
+:root[data-native-tabs] .ph-bar {
+  display: none;
+}
+/* The player draws its picture under a clear page (mpv): hide the phone shell (including open title sheets
+   and their Close button) and clear page backgrounds while playing so native mpv shows through cleanly. */
+.ph[data-playing] .ph-main {
+  visibility: hidden;
+}
+html[data-player="mpv"][data-phone-ui],
+html[data-player="mpv"][data-phone-ui] body,
+html[data-player="mpv"] .ph {
+  background: transparent;
+}
+html[data-player="mpv"] .ph[data-player-leaving="true"] .ph-main {
+  visibility: visible;
+}
 /* Drawn on artwork (`scheme-dark` in the markup: the featured card, posters, stills, a title's picture): the phone's
    own colours as dark mode has them, whatever the scheme. */
 :root[data-phone-ui] .scheme-dark {
@@ -267,10 +290,8 @@
   padding: 0 15px;
   border: 1px solid rgb(var(--ink) / 0.13);
   border-radius: 10px;
-  background: rgb(var(--ink) / 0.15);
+  background: rgb(var(--ink) / 0.16);
   box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.16);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
   font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
@@ -458,10 +479,8 @@
   color: var(--bg) !important;
 }
 .ph-btn-glass {
-  background: rgb(var(--ink) / 0.2);
+  background: rgb(32 32 36 / 0.62);
   box-shadow: inset 0 1px 0 rgb(var(--ink) / 0.18);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
   color: var(--text);
 }
 
@@ -621,9 +640,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.14);
+  background: rgb(0 0 0 / 0.22);
   color: var(--text);
-  filter: drop-shadow(0 1px 6px rgb(0 0 0 / 0.55));
 }
 .ph-continue-bar {
   display: flex;
@@ -1176,10 +1194,8 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgb(var(--ink) / 0.12);
+  background: rgb(var(--ink) / 0.16);
   box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
 }
 .ph-round:active {
   opacity: 0.6;
@@ -1198,9 +1214,7 @@
   padding: 0 16px;
   border: 1px solid rgb(var(--ink) / 0.13);
   border-radius: 10px;
-  background: rgb(var(--ink) / 0.13);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  background: rgb(var(--ink) / 0.15);
   font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
@@ -1286,13 +1300,11 @@
   margin-bottom: 6px;
   padding: 2px 8px;
   border-radius: 6px;
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.2);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 .ph-hero-desc {
   display: -webkit-box;
@@ -1392,7 +1404,6 @@
   border-radius: 12px 12px 0 0;
   background: var(--bg);
   transform-origin: 0 0;
-  will-change: transform;
 }
 .ps-surface {
   position: absolute;
@@ -1462,9 +1473,6 @@
   display: flex;
   gap: 13px;
 }
-.ps-anime .ps-media-buttons {
-  top: calc(10px + var(--safe-top) * 0);
-}
 .ps-flex {
   flex: 1;
 }
@@ -1476,10 +1484,8 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgb(32 36 40 / 0.66);
-  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  backdrop-filter: blur(16px) saturate(160%);
+  background: rgb(24 26 30 / 0.72);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.1);
 }
 .ps-mute {
   position: absolute;
@@ -1860,10 +1866,8 @@
   height: 34px;
   padding-left: 2px;
   border-radius: 50%;
-  background: rgb(0 0 0 / 0.45);
+  background: rgb(0 0 0 / 0.62);
   box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.25);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 .ps-ep-next,
 .ps-ep-soon {
@@ -1960,8 +1964,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.2);
-  filter: drop-shadow(0 1px 5px rgb(0 0 0 / 0.5));
+  background: rgb(0 0 0 / 0.25);
 }
 .ps-episode-name {
   flex: 1;
@@ -2088,11 +2091,109 @@
 .ps-sk-short {
   width: 70%;
 }
-.ps-anime {
-  overflow: hidden;
+/* --- An anime in the sheet (phone/AnimeTitle.tsx): a show's layout, plus what only anime has. */
+.ps-subtitle {
+  margin: -2px 0 8px;
+  color: var(--ph-text-3);
+  font-size: 14px;
 }
-.ps-anime > .ps-media-buttons {
-  position: absolute;
+.ps-airing {
+  margin: -2px 0 12px;
+  color: var(--ph-text-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-anime-link {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 4px !important;
+}
+.ps-anime-link button {
+  color: var(--ph-fg) !important;
+  font-weight: 600;
+}
+/* The season of a franchise: its name as a button that opens the chooser. */
+.ps-season-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 19px;
+  background: rgb(var(--ink) / 0.1);
+  color: var(--ph-fg);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ps-season-btn span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ps-season-btn svg,
+.ps-chip svg {
+  flex: none;
+}
+.ps-season-btn:active,
+.ps-chip:active {
+  background: rgb(var(--ink) / 0.16);
+}
+/* A long season's range and Hide recaps, under the season. */
+.ps-ep-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 14px;
+}
+.ps-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: rgb(var(--ink) / 0.08);
+  color: var(--ph-text-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-chip[aria-pressed="true"] {
+  background: rgb(var(--ink) / 0.16);
+  color: var(--ph-fg);
+}
+.ps-ep-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgb(var(--ink) / 0.12);
+  color: var(--ph-text-2);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 2px;
+}
+.ps-anime-details {
+  padding: 4px 12px 24px;
+}
+.ph-poster-name {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* --- Netflix's full-screen chooser (Categories, seasons). */

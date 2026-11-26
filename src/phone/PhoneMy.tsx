@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import { Avatar } from "../components/Avatar";
 import { Img } from "../components/Img";
+import { ImportPlaylistDialog } from "../components/library/ImportPlaylist";
 import { openProfileSheet } from "../components/ProfileMenu";
 import { useAccount } from "../lib/account";
 import { progressFraction, progressItem } from "../lib/catalog";
-import { createPlaylist, MAX_PLAYLISTS, useDownloads, usePlaylists, type Playlist } from "../lib/library";
+import { NewPlaylistTray } from "../components/library/NewPlaylistTray";
+import { MAX_PLAYLISTS, useDownloads, usePlaylists, type Playlist } from "../lib/library";
 import { useLibrary, useWatchHistory } from "../lib/net";
 import { useNavigation } from "../lib/router";
 import { cardArtUrl } from "../lib/ui";
 import { TabHeader } from "./Header";
-import { BrandMark, IconChevronRight, IconPlus } from "./icons";
+import { BrandMark, IconChevronRight, IconDownload, IconPlus } from "./icons";
 import { Poster, Row } from "./Rows";
 import { ContinueRow } from "../components/ContinueRow";
 
@@ -27,6 +29,7 @@ export function PhoneMy() {
   const { data: history } = useWatchHistory();
   const playlists = usePlaylists();
   const empty = saved?.length === 0 && history?.length === 0 && playlists.length === 0;
+  const [importing, setImporting] = useState(false);
   return (
     <div className="ph-tab-page ph-my">
       <TabHeader
@@ -81,11 +84,23 @@ export function PhoneMy() {
               {playlists.map((p) => (
                 <PlaylistCard key={p.id} playlist={p} onOpen={() => navigate({ name: "playlist", id: p.id })} />
               ))}
-              {playlists.length < MAX_PLAYLISTS && <NewPlaylist onMade={(p) => navigate({ name: "playlist", id: p.id, fresh: true })} />}
+              {playlists.length < MAX_PLAYLISTS && <NewPlaylist onMade={(p) => navigate({ name: "playlist", id: p.id, fresh: false })} />}
+              {playlists.length < MAX_PLAYLISTS && (
+                <button type="button" className="ph-list-card ph-list-new" onClick={() => setImporting(true)}>
+                  <span className="ph-list-mosaic">
+                    <span className="ph-list-plus">
+                      <IconDownload size={24} />
+                    </span>
+                  </span>
+                  <span className="ph-list-name">Import Playlist</span>
+                </button>
+              )}
             </Row>
           </div>
         )}
       </div>
+      <ImportPlaylistDialog open={importing} onClose={() => setImporting(false)} onCreated={(id) => navigate({ name: "playlist", id })} />
+
     </div>
   );
 }
@@ -131,27 +146,20 @@ function PlaylistCard({ playlist, onOpen }: { playlist: Playlist; onOpen: () => 
   );
 }
 
-/** Starts a playlist and opens it, its name ready to type over. */
+/** New Playlist: asks for its name in a tray, then opens it. */
 function NewPlaylist({ onMade }: { onMade: (p: Playlist) => void }) {
-  const [busy, setBusy] = useState(false);
+  const [naming, setNaming] = useState(false);
   return (
-    <button
-      type="button"
-      className="ph-list-card ph-list-new"
-      disabled={busy}
-      onClick={() => {
-        setBusy(true);
-        const made = createPlaylist("New Playlist");
-        setBusy(false);
-        if (made) onMade(made);
-      }}
-    >
-      <span className="ph-list-mosaic">
-        <span className="ph-list-plus">
-          <IconPlus size={26} stroke={2} />
+    <>
+      <button type="button" className="ph-list-card ph-list-new" onClick={() => setNaming(true)}>
+        <span className="ph-list-mosaic">
+          <span className="ph-list-plus">
+            <IconPlus size={26} stroke={2} />
+          </span>
         </span>
-      </span>
-      <span className="ph-list-name">New Playlist</span>
-    </button>
+        <span className="ph-list-name">New Playlist</span>
+      </button>
+      <NewPlaylistTray open={naming} onClose={() => setNaming(false)} onCreated={onMade} />
+    </>
   );
 }

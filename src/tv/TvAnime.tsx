@@ -1,62 +1,38 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { EmptyState } from "../components/ui/EmptyState";
 import {
   ANIME_GENRES,
-  fetchAnime,
+  SEASON_LABEL,
+  animeItemToPreview,
+  countdown,
+  formatAnimeItemScore,
   nextSeason,
   seasonOf,
-  useAiringToday,
-  useAnimeGenre,
-  useAniListBusy,
-  useAnimeHome,
-  type Anime,
-  type AnimeCard,
-} from "../lib/anime";
-import {
-  animePreview,
-  aniZipQuery,
-  countdown,
-  entryZip,
-  imdbForAnime,
-  isMature,
-  knowsNothing,
-  linkAnime,
-  lineUpEntry,
-  prequelOf,
-  SEASON_LABEL,
   untilAiring,
-  useAnimeScore,
-  useAniZip,
-  useFranchiseBanners,
-  useLinkedImdb,
-  useAnimePageArt,
+  useAnimeGenreShelf,
+  useAnimeHomeCatalog,
+  useAnimeToday,
   useShelfVisible,
-  withLinkedArt,
 } from "../lib/anime";
-import { cachedLookup } from "../lib/net";
-import { usePrefs } from "../lib/settings";
-import { useNavigation } from "../lib/router";
 import type { Shape } from "../lib/catalog";
 import { useMatureContent } from "../lib/catalog";
-import { playSound } from "./sounds";
+import { call } from "../lib/platform/bridge";
+import { useNavigation } from "../lib/router";
+import { usePrefs } from "../lib/settings";
+import type { AnimeItem, AnimeSeasonMapping } from "../lib/types";
 import { TvBrowse, TvCard, TvRail, TvSkeletonRail, type RailRow } from "./TvRails";
 import { useStage } from "./TvStage";
-import { EmptyState } from "../components/ui/EmptyState";
-
-/** Resting on a card this long fetches its widescreen art and logo; a held D-pad passes every card. */
-const ART_AFTER_MS = 300;
 
 const NO_SOURCE = "Not available from your sources yet";
 
 /**
- * Anime on the 10-foot screen, built like TV Home: the stage on top, rails
- * below. A card opens the show's normal title page (the same seasons, sources
- * and history as everything else), through ani.zip's link to its IMDb id.
+ * Show-first Anime on the 10-foot screen: powered by the Rust backend (zero per-card AniList calls).
+ * Every card already carries its canonical show id, 16:9 fanart, logo, and optional season hint.
  */
 export function TvAnime() {
-  const { data, isError } = useAnimeHome();
+  const { data, isError } = useAnimeHomeCatalog();
   const visible = useShelfVisible();
-  const today = useAiringToday(visible("today"));
+  const today = useAnimeToday(visible("today"));
   const now = seasonOf();
   const next = nextSeason(now);
 
@@ -64,42 +40,39 @@ export function TvAnime() {
     return (
       <div className="tv-note">
         <h1 className="tv-heading">Anime</h1>
-        <EmptyState variant="tv">AniList didn't answer. Give it a minute and come back.</EmptyState>
+        <EmptyState variant="tv">Couldn't load anime right now. Check your connection and try again.</EmptyState>
       </div>
     );
   }
 
-  const rail = (id: Parameters<typeof visible>[0], title: string, shape: Shape, items?: AnimeCard[]): RailRow[] =>
-    visible(id) ? [{ key: id, render: (near: boolean) => <TvAnimeRail title={title} items={items} shape={shape} near={near} /> }] : [];
+  const rail = (id: Parameters<typeof visible>[0], title: string, shape: Shape, items?: AnimeItem[]): RailRow[] =>
+    visible(id) ? [{ key: id, render: () => <TvAnimeRail title={title} items={items} shape={shape} /> }] : [];
 
-  // Today's airings sit below the first shelves: mostly brand-new shows, often not playable yet.
   const todayRows: RailRow[] = [
     ...(visible("today") && !today.isError
       ? [
           {
             key: "today",
-            render: (near: boolean) => (
+            render: () => (
               <TvAnimeRail
                 title="Airing Today"
                 shape="landscape"
-                near={near}
-                items={today.slots?.map((s) => s.media)}
-                chip={(a) => {
-                  const s = today.slots?.find((x) => x.media.id === a.id);
-                  return s && `Episode ${s.episode} at ${new Date(s.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-                }}
+                items={today.data}
+                chip={(a) =>
+                  a.airing
+                    ? new Date(a.airing.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+                    : "Today"
+                }
               />
             ),
           },
         ]
       : []),
   ];
-  const lead = [
-    ...rail("season", `Airing This ${SEASON_LABEL[now.season]}`, "poster", data?.season),
-    ...(visible("trending") ? [{ key: "trending", render: (near: boolean) => <TvAnimeRail title="Trending Now" items={data?.trending} shape="poster" near={near} franchise /> }] : []),
-  ];
+
   const rows: RailRow[] = [
-    ...lead,
+    ...rail("season", `Airing This ${SEASON_LABEL[now.season]}`, "poster", data?.season),
+    ...rail("trending", "Trending Now", "poster", data?.trending),
     ...todayRows,
     ...rail("upcoming", `Coming in ${SEASON_LABEL[next.season]} ${next.year}`, "poster", data?.upcoming),
     ...rail("top", "Highest Rated", "landscape", data?.top),
@@ -125,8 +98,8 @@ export function TvAnime() {
 }
 
 function TvGenreRail({ genre, near, shape }: { genre: string; near: boolean; shape: Shape }) {
-  const { data } = useAnimeGenre(genre, near);
-  return <TvAnimeRail title={genre} items={data} shape={shape} near={near} />;
+  const { data } = useAnimeGenreShelf(genre, near);
+  return <TvAnimeRail title={genre} items={data} shape={shape} />;
 }
 
 export function TvAnimeRail({
@@ -134,189 +107,83 @@ export function TvAnimeRail({
   items,
   shape,
   chip,
-  near = false,
-  franchise = false,
 }: {
   title: string;
-  items?: AnimeCard[];
+  items?: AnimeItem[];
   shape: Shape;
-  chip?: (a: AnimeCard) => string | undefined;
-  /** The row is on or near the screen: widescreen cards then ask for their page's art (#431). */
-  near?: boolean;
-  /** The featured row: the stage shows each franchise's base title's art and logo, and names the trending part (#325). */
-  franchise?: boolean;
+  chip?: (a: AnimeItem) => string | undefined;
 }) {
   const matureContent = useMatureContent();
-  // Waiting its turn behind AniList's limit: said beside the title (#109).
-  const busy = useAniListBusy();
-  if (!items) return <TvSkeletonRail title={title} shape={shape} note={busy ? "AniList is busy, loading…" : undefined} />;
-  // TV has no blur: the stage would show the art full-size the moment the
-  // card has focus, so "blur" leaves it out here too.
-  const kept = matureContent === "show" ? items : items.filter((a) => !isMature(a));
+  if (!items) return <TvSkeletonRail title={title} shape={shape} />;
+  const kept = matureContent === "show" ? items : items.filter((a) => !a.mature);
   if (!kept.length) return null;
-  const banners = kept.filter((a) => a.bannerImage);
-  const shown = shape === "landscape" && banners.length >= 6 ? banners : kept;
   return (
     <TvRail title={title}>
-      {shown.map((a, i) => (
-        <TvAnimeCard key={a.id} card={a} shape={shape} chip={chip?.(a)} eager={i === 0} near={near} franchise={franchise} />
+      {kept.map((item) => (
+        <TvAnimeCard key={item.id} item={item} shape={shape} chip={chip?.(item)} />
       ))}
     </TvRail>
   );
 }
 
-function TvAnimeCard({
-  card,
-  shape,
-  chip,
-  eager,
-  near,
-  franchise,
-}: {
-  card: AnimeCard;
-  shape: Shape;
-  chip?: string;
-  eager: boolean;
-  near: boolean;
-  franchise: boolean;
-}) {
+function TvAnimeCard({ item, shape, chip }: { item: AnimeItem; shape: Shape; chip?: string }) {
   const { navigate } = useNavigation();
-  const qc = useQueryClient();
   const stage = useStage();
   const prefs = usePrefs();
-  const score = useAnimeScore()(prefs.animeCardScores ? card.averageScore : undefined);
-  // The first card of a rail can end up on the stage before anything has focus, so it asks right away.
-  const [wanted, setWanted] = useState(eager);
-  const { data: zip } = useAniZip(card.id, wanted);
-  const [missing, setMissing] = useState(false);
+  const score = prefs.animeCardScores ? formatAnimeItemScore(item.score, prefs.animeScoreFormat) : undefined;
   const focused = useRef(false);
-  const timer = useRef<number>(undefined);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  // The linked IMDb title's backdrop or poster first, opened or not (#34), the same for every season of a show (#27);
-  // the entry's own art first with seasons as separate shows (#194).
-  const imdb = useLinkedImdb(card.id);
-  const separateArt = prefs.animeSeparateEntries;
-  const own = useMemo(
-    () => withLinkedArt(animePreview(card, zip, prefs.animeTitles), imdb, shape, separateArt),
-    [card, zip, prefs.animeTitles, shape, imdb, separateArt],
+  const preview = useMemo(() => animeItemToPreview(item, prefs.animeTitles), [item, prefs.animeTitles]);
+  const fallbacks = useMemo(
+    () => (shape === "landscape" ? [item.poster].filter((u): u is string => !!u) : [item.background].filter((u): u is string => !!u)),
+    [shape, item.poster, item.background],
   );
-  // The backdrop and logo of the page the card opens, chosen as desktop chooses them (#336, #431): the franchise's with
-  // seasons grouped, else the entry's own page's. Widescreen cards draw it once their row is near; every card's stage
-  // shows it, with neither art nor name until it's known (#343). null: AniList couldn't be asked, so the card's own.
-  const page = useAnimePageArt(card, wanted || (shape === "landscape" && near));
-  const { item, fallbacks } = useMemo(() => {
-    if (shape !== "landscape" || page === null) return own;
-    if (!page) return { ...own, item: { ...own.item, logo: undefined, logos: undefined } };
-    const art = [page.background, own.item.background, ...own.fallbacks].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
-    return { item: { ...own.item, background: art[0], logo: page.logo, logos: page.logos }, fallbacks: art.slice(1) };
-  }, [own, page, shape]);
-  // On the featured row with seasons grouped, the stage names the franchise's base title and the trending part (#325).
-  // The card itself keeps the entry's own poster and name.
-  const grouped = franchise && !separateArt;
-  const banners = useFranchiseBanners(useMemo(() => (grouped && wanted ? [card] : undefined), [grouped, wanted, card]));
-  const banner = grouped ? banners?.[0] : undefined;
-  const staged = useMemo(() => {
-    const named = banner ? { ...item, name: banner.name } : item;
-    if (page === null) return named;
-    if (!page) return { ...named, background: undefined, logo: undefined, logos: undefined };
-    return { ...named, background: page.background ?? own.item.background, logo: page.logo, logos: page.logos };
-  }, [item, own, page, banner]);
-  const stagePending = page === undefined;
-  const next = prefs.animeCardCountdown ? card.nextAiringEpisode : undefined;
-  const nextText = next && `Episode ${next.episode} in ${countdown(untilAiring(next.airingAt))}`;
-  // What's on the card stays artwork; when it airs goes on the stage above.
-  const kicker = missing ? NO_SOURCE : [banner?.label, score && `★ ${score}`, chip ?? nextText].filter(Boolean).join(" · ") || undefined;
+  const nextText = prefs.animeCardCountdown && item.airing ? `in ${countdown(untilAiring(item.airing.airingAt))}` : undefined;
+  const kicker = [item.seasonLabel, score && `★ ${score}`, chip ?? nextText].filter(Boolean).join(" · ") || undefined;
 
-  // The art and logo arrived, or the show turned out not to be playable, while you're on it.
   useEffect(() => {
-    if (focused.current) stage({ item: staged, kicker, pending: stagePending });
-  }, [staged, kicker, stagePending, stage]);
-
-  const open = async () => {
-    const z = await qc.fetchQuery(aniZipQuery(card.id)).catch(() => null);
-    // ani.zip's IMDb show, or the one that has this entry's episodes when that one stops short.
-    let sure = true;
-    const imdb = await imdbForAnime(card, z, cachedLookup(qc)).catch(() => {
-      sure = false;
-      return z?.mappings.imdb_id;
-    });
-    // As the desktop page does: the backend learns which id this entry plays from (only a looked-up answer).
-    if (imdb && sure) void linkAnime(qc, { canonical: imdb, anilist: card.id, mal: card.idMal ?? z?.mappings.mal_id, kitsu: z?.mappings.kitsu_id });
-    if (!imdb) {
-      playSound("edge");
-      setMissing(true);
-      return;
-    }
-    // Seasons as separate shows (#22): the title's page with just this entry's episodes.
-    const separate = prefs.animeSeparateEntries && item.type === "series";
-    // What the sources need to find this entry's episodes, as the desktop page leaves it (#422, #431).
-    await lineUpEntry(qc, card, z, imdb, prefs.animeTitles, { sure, entry: separate });
-    navigate({ name: "detail", type: item.type, id: imdb, entry: separate ? card.id : undefined });
-  };
+    if (focused.current) stage({ item: preview, kicker });
+  }, [preview, kicker, stage]);
 
   return (
     <TvCard
-      item={item}
+      item={preview}
       shape={shape}
       artFallbacks={fallbacks}
       kicker={kicker}
       localOnly
-      staged={staged}
-      stagePending={stagePending}
-      logoPending={shape === "landscape" && stagePending}
-      onOpen={() => void open()}
+      staged={preview}
+      onOpen={() => navigate({ name: "detail", type: item.type, id: item.id, preview, season: item.seasonHint })}
       onFocusChange={(f) => {
         focused.current = f;
-        window.clearTimeout(timer.current);
-        if (f) timer.current = window.setTimeout(() => setWanted(true), ART_AFTER_MS);
+        if (f) stage({ item: preview, kicker });
       }}
     />
   );
 }
 
-/** An anime link in TV mode (arriving from desktop mode, say): on to the show's title page. */
+/** Compatibility redirect for legacy `anime-detail` links in TV mode: resolves via local Fribb in 0ms. */
 export function TvAnimeDetail({ id }: { id: number }) {
   const { replace } = useNavigation();
-  const qc = useQueryClient();
-  const { animeSeparateEntries: separate, animeTitles } = usePrefs();
   const [missing, setMissing] = useState(false);
   useEffect(() => {
     let live = true;
-    void (async () => {
-      let z = await qc.fetchQuery(aniZipQuery(id)).catch(() => null);
-      // As on desktop: the IMDb show with this entry's episodes, else Kitsu.
-      let sure = true;
-      let mal = z?.mappings.mal_id;
-      let anime: Anime | undefined;
-      const imdb = await fetchAnime(id)
-        .then(async (a) => {
-          anime = a;
-          mal = a.idMal ?? mal;
-          // The second half of a split part ani.zip lists under its prequel (lib/anime/splitParts.ts).
-          const prequel = prequelOf(a);
-          if (knowsNothing(z) && prequel !== undefined) z = entryZip(a, z, await qc.fetchQuery(aniZipQuery(prequel)).catch(() => null)) ?? null;
-          return imdbForAnime(a, z, cachedLookup(qc));
-        })
-        .catch(() => {
-          sure = false;
-          return z?.mappings.imdb_id;
-        });
-      const target = imdb ?? (z?.mappings.kitsu_id ? `kitsu:${z.mappings.kitsu_id}` : null);
-      if (target && sure) void linkAnime(qc, { canonical: target, anilist: id, mal, kitsu: z?.mappings.kitsu_id });
-      const movie = z?.mappings.type?.toLowerCase() === "movie";
-      // Seasons as separate shows (#22): the title's page with just this entry's episodes.
-      const entry = separate && !movie && anime && target ? anime : undefined;
-      // What the sources need to find this entry's episodes, as the desktop page leaves it (#422, #431).
-      if (anime && target && !movie) await lineUpEntry(qc, anime, z, target, animeTitles, { sure, entry: !!entry });
-      if (!live) return;
-      if (target) replace({ name: "detail", type: movie ? "movie" : "series", id: target, entry: entry?.id });
-      else setMissing(true);
-    })();
+    void call<AnimeSeasonMapping | null>("anime_ids", { key: "anilist_id", value: String(id) })
+      .catch(() => null)
+      .then((m) => {
+        if (!live) return;
+        const target = m?.imdb_id ?? (m?.kitsu_id ? `kitsu:${m.kitsu_id}` : m?.mal_id ? `mal:${m.mal_id}` : null);
+        if (target) {
+          const movie = m?.type?.toLowerCase() === "movie";
+          replace({ name: "detail", type: movie ? "movie" : "series", id: target, season: m?.season?.tmdb ?? m?.season?.tvdb });
+        } else {
+          setMissing(true);
+        }
+      });
     return () => {
       live = false;
     };
-  }, [id, replace, qc, separate, animeTitles]);
+  }, [id, replace]);
   if (!missing) return null;
   return (
     <div className="tv-note">

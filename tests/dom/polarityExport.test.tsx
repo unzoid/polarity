@@ -19,7 +19,7 @@ const EXPORT = JSON.stringify({
 const calls: [string, Record<string, unknown>][] = [];
 (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
   invoke: async (cmd: string, args: Record<string, unknown>) => {
-    calls.push([cmd, args]);
+    if (cmd === "library_import" || cmd === "library_export") calls.push([cmd, args]);
     if (cmd === "library_import") return { library: 1, progress: 1 };
     if (cmd === "library_export") return `polarity-library-2026-01-01.${args.format}`;
     return null;

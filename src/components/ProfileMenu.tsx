@@ -1,7 +1,9 @@
 import "../styles/account.css";
+import "../styles/family-settings-phone.css";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Calendar, ChevronLeft, ChevronRight, Edit, Feedback, Lock, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
+import { Calendar, ChevronLeft, ChevronRight, Edit, Feedback, Lock, More, OpenFile, Profile, Settings, SignOut, Users, WatchParty } from "./icons";
 import { api } from "../lib/api";
 import { appVersion } from "../lib/updater";
 import { feedbackContext, feedbackUrl } from "../lib/feedback";
@@ -22,17 +24,16 @@ import { hasPin } from "../lib/account/profileRules";
 import { closeSettings, openSettings, useSettingsOverlay } from "../lib/settings";
 import { JoinForm, LinkForm } from "./party/PartyUI";
 import { useSettings } from "../lib/net";
-import { canPreloadChunks, lazyNamed, useFormFactor, whenIdle } from "../lib/ui";
+import { canPreloadChunks, lazyNamed, prefersReducedMotion, useDismiss, useFormFactor, whenIdle } from "../lib/ui";
+import { maskStyle, useAppleCorners } from "../lib/ui/cornerSmoothing";
 import type { SettingsHead } from "./SettingsOverlay";
 import { Spinner } from "./Spinner";
 import { useGuard } from "./profileLock/useGuard";
 import { Avatar } from "./Avatar";
-import { Sheet } from "./Sheet";
 import { PopoverPopup, PopoverRoot, PopoverTrigger } from "./ui/Popover";
 import { FitHeight, backOnEscape, useViewSlide } from "./ViewStack";
 import { anchorOf, buildChannel, nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
-import { IconPencil } from "../phone/icons";
 
 /** Settings, as the profile sheet's next view on a phone: loaded when it's first opened, as the window is (App.tsx). */
 const SettingsOverlay = lazyNamed(() => import("./SettingsOverlay"), "SettingsOverlay");
@@ -105,8 +106,8 @@ export function ProfileMenu({ trigger = true }: { trigger?: boolean } = {}) {
     ...(me && friendsAvailable() ? [{ id: "friends", label: "Friends", count: requests, icon: <Users />, run: () => setFriendsOpen(true), stay: true, view: true }] : []),
     ...(canOpenFiles ? [{ id: "open-file", label: "Open File…", icon: <OpenFile />, run: () => setOpenFilesOpen(true) }] : []),
     ...(!settings?.showCalendar || phone ? [{ id: "calendar", label: "Calendar", icon: <Calendar />, run: () => tab({ name: "calendar" }) }] : []),
-    { id: "settings", label: "Settings", icon: <Settings />, run: () => openSettings(), stay: true },
-    ...(me ? [{ id: "account", label: "Account", icon: <Profile />, run: () => openSettings("account"), stay: true }] : []),
+    { id: "settings", label: "Settings", icon: <Settings />, run: () => openSettings(undefined, phone ? { embedded: true } : undefined), stay: true },
+    ...(me ? [{ id: "account", label: "Account", icon: <Profile />, run: () => openSettings("account", phone ? { embedded: true } : undefined), stay: true }] : []),
     // The bug form in the browser, filled in with this device (#205); Settings → About has the other kinds.
     { id: "report", label: "Report a Problem", icon: <Feedback />, run: reportProblem },
   ];
@@ -145,7 +146,7 @@ export function ProfileMenu({ trigger = true }: { trigger?: boolean } = {}) {
   }
 
   const status = me ? undefined : !account.enabled && buildChannel === "dev" ? "No database connected" : "Not signed in";
-  const props = { name, avatar, me, meLocked, badgeCount, email: me ? account.user?.email : undefined, status, profiles, manage: manage[0], groups: [actions, session] };
+  const props = { name, avatar, me, meLocked, badgeCount, status, profiles, manage: manage[0], groups: [actions, session] };
   return phone ? <ProfileSheet {...props} trigger={trigger} /> : <ProfilePopover {...props} />;
 }
 
@@ -155,7 +156,6 @@ type MenuProps = {
   me: Me | null;
   meLocked?: boolean;
   badgeCount?: number;
-  email?: string;
   /** Under the name when there's no account: why. */
   status?: string;
   profiles: Choice[];
@@ -230,7 +230,7 @@ function JoinView({ me, done }: { me: Me; done: () => void }) {
  * click each), then the rest as rows. Friends and Join open as views inside it, with a Back (and Escape) to
  * the list; its height follows the view. Any other choice closes it as it runs.
  */
-function ProfilePopover({ name, avatar, me, meLocked, badgeCount = 0, email, status, profiles, manage, groups }: MenuProps) {
+function ProfilePopover({ name, avatar, me, meLocked, badgeCount = 0, status, profiles, manage, groups }: MenuProps) {
   const { view, open, slide, list, close, back, done } = useProfileViews(!!me);
   const pick = (c: Choice) => {
     // A view's choice keeps the menu open through its surface; the rest close it.
@@ -270,7 +270,7 @@ function ProfilePopover({ name, avatar, me, meLocked, badgeCount = 0, email, sta
             onKeyDown={view === "list" ? arrowKeys : backOnEscape(back)}
           >
             {view === "list" ? (
-              <ProfilePopList name={name} avatar={avatar} me={me} meLocked={meLocked} email={email} status={status} profiles={profiles} manage={manage} groups={groups} pick={pick} />
+              <ProfilePopList name={name} avatar={avatar} me={me} meLocked={meLocked} status={status} profiles={profiles} manage={manage} groups={groups} pick={pick} />
             ) : (
               <>
                 <div className="profile-pop-title">
@@ -307,14 +307,14 @@ function arrowKeys(e: KeyboardEvent<HTMLElement>) {
   items[next].focus();
 }
 
-function ProfilePopList({ name, avatar, me, meLocked, email, status, profiles, manage, groups, pick }: MenuProps & { pick: (c: Choice) => void }) {
+function ProfilePopList({ name, avatar, me, meLocked, status, profiles, manage, groups, pick }: MenuProps & { pick: (c: Choice) => void }) {
   return (
     <>
       <div className="profile-menu-head">
         <Avatar id={avatar} />
         <div>
           <strong>{name}</strong>
-          {email ? <span className="profile-menu-email">{email}</span> : <span>{status}</span>}
+          {status && <span>{status}</span>}
         </div>
       </div>
       {me && (
@@ -375,34 +375,35 @@ function ProfilePopList({ name, avatar, me, meLocked, email, status, profiles, m
   );
 }
 
+const PROFILE_ENTER = { duration: 0.26, ease: [0.22, 1, 0.36, 1] as const };
+const PROFILE_PUSH = { type: "spring" as const, stiffness: 560, damping: 44, mass: 0.85 };
+const PROFILE_CARD_SPRING = { type: "spring" as const, stiffness: 460, damping: 38, mass: 0.85 };
+
 /**
- * On a phone: a sheet from the bottom edge. Who's watching first (the profile, then the others to switch to, a
- * tap each), then the rest as rows in cards. Friends, Join Watch Party and Settings (Account too, a page of it) open
- * as views inside it, with a Back to the list; the sheet is the screen's full height throughout, as Netflix's account
- * sheet is, so a view comes in without the sheet changing size under it. Any other choice closes it as it runs.
+ * On a phone: full-screen Family-style Profiles page (modeled on Family's Wallets page — no bottom drawer).
+ * Top section shows Apple-smoothed profile cards ("Your Profiles"); below are borderless Family rows.
+ * Friends, Join Watch Party, Edit Profile, and App Settings push horizontally with zero darkening.
  */
-function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, status, profiles, manage, groups, trigger = true }: MenuProps & { trigger?: boolean }) {
-  const settingsOpen = useSettingsOverlay().open;
-  // Manage: the list's profiles each take a pencil, and a tap opens that profile's page (`editing`) in the sheet.
+function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, status, profiles, manage, groups, trigger = true }: MenuProps & { trigger?: boolean }) {
+  const settingsState = useSettingsOverlay();
+  const settingsOpen = settingsState.open && settingsState.embedded;
   const [managing, setManaging] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editHead, setEditHead] = useState<{ label: string; back: () => void }>();
-  // From a restricted profile, Manage asks first (lib/account/profileRules.ts).
   const guard = useGuard();
-  const { view, open, slide, list, close, back, done } = useProfileViews(!!me, settingsOpen ? "settings" : editing ? "edit" : undefined);
-  // What Settings says its view is (its name, and where its Back goes), for the sheet's header.
+  const reduced = prefersReducedMotion();
+  const { view, open, list, close, back, done } = useProfileViews(!!me, settingsOpen ? "settings" : editing ? "edit" : undefined);
   const [settingsHead, setSettingsHead] = useState<SettingsHead>();
-  const shut = () => {
+  const shut = useCallback(() => {
     close();
     closeSettings();
     setManaging(false);
     setEditing(null);
-  };
-  const toList = () => {
+  }, [close]);
+  const toList = useCallback(() => {
     setEditing(null);
     back();
-  };
-  // Settings' own list goes back to the profiles, however Settings was opened.
+  }, [back]);
   const leaveSettings = useCallback(() => {
     closeSettings();
     list(true);
@@ -411,12 +412,31 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
     list(!!c.stay);
     c.run();
   };
+
   useEffect(() => {
-    const open = () => list(true);
-    sheetOpeners.add(open);
-    return () => void sheetOpeners.delete(open);
+    const openFn = () => list(true);
+    sheetOpeners.add(openFn);
+    return () => void sheetOpeners.delete(openFn);
   }, [list]);
-  // Settings is loaded once the app has genuinely settled on fast connections, so initial load on slow networks never competes with it.
+
+  // Slide .ph-main down pixel-locked with the full-screen Family Profiles page.
+  useLayoutEffect(() => {
+    if (!open) return;
+    document.documentElement.dataset.profilesOpen = "";
+    return () => void delete document.documentElement.dataset.profilesOpen;
+  }, [open]);
+
+  // Escape / Android back dismisses sub-views first (Settings handles its own Escape), then closes Profiles.
+  useDismiss(
+    open && view !== "settings",
+    useCallback(() => {
+      if (view === "edit" && editHead) editHead.back();
+      else if (view !== "list") toList();
+      else if (managing) setManaging(false);
+      else shut();
+    }, [view, editHead, managing, toList, shut]),
+  );
+
   useEffect(() => {
     if (!canPreloadChunks()) return;
     let cancelIdle: (() => void) | undefined;
@@ -428,27 +448,39 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
       cancelIdle?.();
     };
   }, []);
-  // The sheet sits in its own place beside the pages and the top bar (App.tsx `.sheet-host`), not among the bar's
-  // actions: anything that scales them or the pages under it (the actions once scrolled, the pages stepping back as
-  // it opens) would otherwise hold the sheet's fixed layers inside its box.
+
   const [bar, setBar] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => setBar(document.querySelector<HTMLElement>(".sheet-host") ?? document.body), []);
-  const title =
-    view === "list" ? (
-      "Profiles"
-    ) : (
-      <span className="profile-sheet-title">
-        <button
-          className="profile-sheet-back pressable"
-          aria-label="Back"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={view === "settings" ? (settingsHead?.back ?? leaveSettings) : view === "edit" && editHead ? editHead.back : toList}
-        >
-          <ChevronLeft size={22} strokeWidth={2.25} />
-        </button>
-        {view === "settings" ? (settingsHead?.label ?? VIEW_TITLES.settings) : view === "edit" && editHead ? editHead.label : VIEW_TITLES[view]}
-      </span>
-    );
+
+  const headerTitle =
+    view === "list"
+      ? "Profiles"
+      : view === "settings"
+        ? (settingsHead?.label ?? VIEW_TITLES.settings)
+        : view === "edit" && editHead
+          ? editHead.label
+          : VIEW_TITLES[view];
+
+  const onHeaderLeft =
+    view === "list"
+      ? shut
+      : view === "settings"
+        ? (settingsHead?.back ?? leaveSettings)
+        : view === "edit" && editHead
+          ? editHead.back
+          : toList;
+
+  const isRoot = view === "list";
+  const isSettings = view === "settings";
+  const isEdit = view === "edit";
+  const lastSubViewRef = useRef<View>("friends");
+  if (!isRoot) lastSubViewRef.current = view;
+  const verticalSettings = isSettings || (isRoot && lastSubViewRef.current === "settings");
+  const morphEdit = isEdit || (isRoot && lastSubViewRef.current === "edit");
+  // The profile whose card scales to its page and back (still wanted on the way back, once `editing` is cleared).
+  const lastEditedRef = useRef<string | null>(null);
+  if (editing) lastEditedRef.current = editing;
+
   return (
     <>
       {trigger && (
@@ -463,155 +495,419 @@ function ProfileSheet({ name, avatar, me, meLocked, badgeCount = 0, email, statu
           {badgeCount > 0 && <span className="navbar-profile-badge" aria-hidden />}
         </button>
       )}
-      {bar && createPortal(
-      <Sheet open={open} onClose={shut} title={title} full closeButton={!trigger}>
-        <div key={view} className="profile-sheet" data-view={view} data-slide={slide}>
-          {view === "friends" && (
-            <Suspense fallback={null}>
-              <FriendsBody inDialog={false} />
-            </Suspense>
-          )}
-          {view === "join" && me && <JoinView me={me} done={done} />}
-          {view === "settings" && (
-            <Suspense
-              fallback={
-                <div className="profile-sheet-loading">
-                  <Spinner size={22} />
-                </div>
-              }
-            >
-              <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
-            </Suspense>
-          )}
-          {view === "edit" && editing && (
-            <Suspense fallback={null}>
-              <ProfileEditSheet id={editing} onDone={() => setEditing(null)} onHead={setEditHead} />
-            </Suspense>
-          )}
-          {view === "list" && (
-            <ProfileList
-              name={name}
-              avatar={avatar}
-              meLocked={meLocked}
-              email={email ?? status}
-              profiles={profiles}
-              manage={manage}
-              groups={groups}
-              pick={pick}
-              managing={managing}
-              onManage={() => (managing ? setManaging(false) : void guard.manage().then((ok) => ok && setManaging(true)))}
-              onEdit={(id) => setEditing(id)}
-              meId={me?.id}
-            />
-          )}
-        </div>
-      </Sheet>,
-      bar,
-      )}
+      {bar &&
+        createPortal(
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                className="sheet fms-root fms-profiles-page"
+                role="dialog"
+                aria-modal="true"
+                aria-label={headerTitle}
+                initial={reduced ? { opacity: 0 } : { y: "-100%" }}
+                animate={reduced ? { opacity: 1 } : { y: "0%" }}
+                exit={reduced ? { opacity: 0 } : { y: "-100%" }}
+                transition={reduced ? { duration: 0.1 } : PROFILE_ENTER}
+              >
+                <header className="fms-header">
+                  <button
+                    type="button"
+                    className="fms-head-btn"
+                    aria-label={isRoot ? "Close" : "Back"}
+                    onClick={onHeaderLeft}
+                  >
+                    {isRoot ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    ) : (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M15 5l-7 7 7 7" />
+                      </svg>
+                    )}
+                  </button>
+                  <div className="fms-head-title-wrap">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.h2
+                        key={headerTitle}
+                        className="fms-head-title"
+                        initial={reduced ? { opacity: 0 } : verticalSettings ? { opacity: 0, y: isSettings ? 10 : -10 } : { opacity: 0, x: isRoot ? -20 : 20 }}
+                        animate={{ opacity: 1, x: 0, y: 0 }}
+                        exit={reduced ? { opacity: 0 } : verticalSettings ? { opacity: 0, y: isSettings ? -10 : 10 } : { opacity: 0, x: isRoot ? 20 : -20 }}
+                        transition={{ duration: reduced ? 0.08 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      >
+                        {headerTitle}
+                      </motion.h2>
+                    </AnimatePresence>
+                  </div>
+                  {isRoot && manage ? (
+                    <button
+                      type="button"
+                      className="fmp-head-action"
+                      aria-label={managing ? "Done" : "Manage Profiles"}
+                      aria-pressed={managing}
+                      onClick={() => (managing ? setManaging(false) : void guard.manage().then((ok) => ok && setManaging(true)))}
+                    >
+                      {managing ? "Done" : "Edit"}
+                    </button>
+                  ) : (
+                    <span className="fms-head-spacer" aria-hidden />
+                  )}
+                </header>
+
+                <LayoutGroup id="family-profiles">
+                  <div className="fms-stack">
+                    {/* Layer 0: Profiles root. Pulls up in lockstep when opening Settings. For a profile's page it stays
+                        put and its content blurs out around the card (FamilyProfilesList `veiled`). */}
+                    <motion.div
+                      className="fms-layer fms-layer-list"
+                      aria-hidden={!isRoot || undefined}
+                      style={{ pointerEvents: isRoot ? "auto" : "none" }}
+                      animate={
+                        reduced
+                          ? { opacity: isRoot ? 1 : 0 }
+                          : isRoot
+                            ? { x: "0%", y: "0%", opacity: 1 }
+                            : isSettings
+                              ? { x: "0%", y: "-100%", opacity: 1 }
+                              : isEdit
+                                ? { x: "0%", y: "0%", opacity: 1 }
+                                : { x: "-35%", y: "0%", opacity: 0 }
+                      }
+                      transition={
+                        reduced
+                          ? { duration: 0.08 }
+                          : verticalSettings
+                            ? PROFILE_ENTER
+                            : morphEdit
+                              ? { duration: 0 }
+                              : PROFILE_PUSH
+                      }
+                    >
+                      <div className="fms-scroll">
+                        <FamilyProfilesList
+                          name={name}
+                          avatar={avatar}
+                          meLocked={meLocked}
+                          email={status}
+                          profiles={profiles}
+                          groups={groups}
+                          pick={pick}
+                          managing={managing}
+                          onEdit={(id) => setEditing(id)}
+                          meId={me?.id}
+                          editingId={isEdit ? editing : null}
+                          veiled={isEdit && !reduced}
+                          morphId={morphEdit ? lastEditedRef.current : null}
+                        />
+                      </div>
+                    </motion.div>
+
+                    <AnimatePresence initial={false}>
+                      {!isRoot && (
+                        <motion.div
+                          key={view}
+                          className={`fms-layer fms-layer-pushed${isEdit ? " fmp-edit-layer" : ""}`}
+                          initial={
+                            reduced
+                              ? { opacity: 0 }
+                              : isSettings
+                                ? { y: "100%", x: "0%", opacity: 1 }
+                                : isEdit
+                                  ? { x: "0%", y: "0%", opacity: 1 }
+                                  : { x: "100%", y: "0%", opacity: 0.35 }
+                          }
+                          animate={{ x: "0%", y: "0%", opacity: 1 }}
+                          exit={
+                            reduced
+                              ? { opacity: 0 }
+                              : isSettings
+                                ? { y: "100%", x: "0%", opacity: 1 }
+                                : isEdit
+                                  ? // Stays while its own content blurs out (ProfileEditSheet) and the card scales back.
+                                    { x: "0%", y: "0%", opacity: 1 }
+                                  : { x: "100%", y: "0%", opacity: 0 }
+                          }
+                          transition={reduced ? { duration: 0.08 } : isSettings ? PROFILE_ENTER : isEdit ? { duration: 0 } : PROFILE_PUSH}
+                        >
+                          {view === "settings" ? (
+                            <Suspense
+                              fallback={
+                                <div className="profile-sheet-loading">
+                                  <Spinner size={22} />
+                                </div>
+                              }
+                            >
+                              <SettingsOverlay embedded onExit={leaveSettings} onHead={setSettingsHead} />
+                            </Suspense>
+                          ) : (
+                            <div className="fms-scroll fmp-sub-scroll">
+                              {view === "friends" && (
+                                <Suspense fallback={null}>
+                                  <FriendsBody inDialog={false} />
+                                </Suspense>
+                              )}
+                              {view === "join" && me && <JoinView me={me} done={done} />}
+                              {view === "edit" && editing && (
+                                <Suspense fallback={null}>
+                                  <ProfileEditSheet id={editing} onDone={() => setEditing(null)} onHead={setEditHead} />
+                                </Suspense>
+                              )}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </LayoutGroup>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          bar,
+        )}
     </>
   );
 }
 
-function ProfileList({
+type SmoothProfileCardProps = {
+  profileId?: string;
+  hiddenForMorph?: boolean;
+  active?: boolean;
+  locked?: boolean;
+  managing?: boolean;
+  name: string;
+  sub?: string;
+  avatarNode: ReactNode;
+  onClick?: () => void;
+  onEditClick?: () => void;
+};
+
+/**
+ * Apple 60% corner-smoothed profile card (modeled on Family's "Your Wallets" cards). While its profile's page is
+ * open the page's hero card holds the shared `layoutId`, so the grid keeps a placeholder in its slot. The card
+ * itself is its own component so it measures its corners again each time it comes back.
+ */
+function SmoothProfileCard({ hiddenForMorph, veil, ...props }: SmoothProfileCardProps & { veil?: boolean }) {
+  // The slot takes the press scale and the blur: the card's own transform is the layout animation's.
+  return (
+    <div className={`fmp-card-slot${veil ? " fmp-veil" : ""}`}>
+      {hiddenForMorph ? <div className="fmp-card-placeholder" aria-hidden /> : <SmoothProfileCardBody {...props} />}
+    </div>
+  );
+}
+
+function SmoothProfileCardBody({ profileId, active, locked, managing, name, sub, avatarNode, onClick, onEditClick }: Omit<SmoothProfileCardProps, "hiddenForMorph">) {
+  const ref = useRef<HTMLDivElement>(null);
+  // 18 at 60% smoothing: the corner reaches 29 along each edge (cornerSmoothing.ts).
+  const corners = useAppleCorners(ref, 18, 60);
+  const interactive = !!onClick;
+  // The picture shares its layoutId with the profile page's hero picture (ProfileEditSheet): one picture that moves.
+  const picture = profileId ? (
+    <motion.span className="fmp-card-avatar-art" layoutId={`profile-avatar-${profileId}`} transition={PROFILE_CARD_SPRING}>
+      {avatarNode}
+    </motion.span>
+  ) : (
+    avatarNode
+  );
+  return (
+    <motion.div
+      ref={ref}
+      layoutId={profileId ? `profile-card-${profileId}` : undefined}
+      transition={PROFILE_CARD_SPRING}
+      className={`fmp-card${active ? " is-active" : ""}${managing ? " is-managing" : ""}`}
+      style={maskStyle(corners.mask)}
+    >
+      {interactive ? (
+        <button type="button" className="fmp-card-hit" aria-label={managing ? `Edit ${name}` : name} onClick={onClick}>
+          <div className="fmp-card-top">
+            <span className="fmp-card-avatar">
+              {picture}
+              {locked && (
+                <span className="fmp-card-lock" aria-hidden>
+                  <Lock size={10} />
+                </span>
+              )}
+            </span>
+            {managing ? (
+              <span className="fmp-card-badge" aria-hidden>
+                <Edit size={13} />
+              </span>
+            ) : active ? (
+              <span className="fmp-card-dots" aria-hidden>
+                <More size={15} />
+              </span>
+            ) : null}
+          </div>
+          <div className="fmp-card-foot">
+            <strong className="fmp-card-name">{name}</strong>
+            {sub && <span className="fmp-card-sub">{sub}</span>}
+          </div>
+        </button>
+      ) : (
+        <div className="fmp-card-inner">
+          <div className="fmp-card-top">
+            <span className="fmp-card-avatar">
+              {picture}
+              {locked && (
+                <span className="fmp-card-lock" aria-hidden>
+                  <Lock size={10} />
+                </span>
+              )}
+            </span>
+            {onEditClick && (
+              <button type="button" className="fmp-card-dots" aria-label={`Edit ${name}`} onClick={onEditClick}>
+                <More size={15} />
+              </button>
+            )}
+          </div>
+          <div className="fmp-card-foot">
+            <strong className="fmp-card-name">{name}</strong>
+            {sub && <span className="fmp-card-sub">{sub}</span>}
+          </div>
+        </div>
+      )}
+      {corners.active && (
+        <svg
+          className="ft-smooth-stroke"
+          width={corners.width}
+          height={corners.height}
+          viewBox={`0 0 ${corners.width} ${corners.height}`}
+          aria-hidden
+        >
+          <path
+            d={corners.strokePath(active ? 1.25 : 0.75)}
+            fill="none"
+            stroke={active ? "var(--fmp-active-ring)" : "var(--fmp-card-rim)"}
+            strokeWidth={active ? 2.5 : 1}
+          />
+        </svg>
+      )}
+    </motion.div>
+  );
+}
+
+function FamilyProfilesList({
   name,
   avatar,
   meLocked,
   email,
   profiles,
-  manage,
   groups,
   pick,
   managing,
-  onManage,
   onEdit,
   meId,
+  editingId,
+  veiled,
+  morphId,
 }: {
   name: string;
   avatar: string;
   meLocked?: boolean;
   email?: string;
   profiles: Choice[];
-  manage?: Choice;
   groups: Choice[][];
   pick: (c: Choice) => void;
   managing: boolean;
-  onManage: () => void;
   onEdit: (id: string) => void;
   meId?: string;
+  editingId?: string | null;
+  /** A profile's page is open over the list: everything but that profile's card blurs out (Family's card scale). */
+  veiled?: boolean;
+  /** The card scaling to or from a profile's page, which stays sharp while the rest blurs. */
+  morphId?: string | null;
 }) {
-  // Netflix's account sheet: the profile you're on in a card (its pencil edits it), the others a tap each to switch
-  // to, Manage Profiles (a pencil on each, the rest dimmed, until Done), then each choice a row of its own and the
-  // version at the foot.
   const [version, setVersion] = useState<string>();
   useEffect(() => {
     void appVersion()
       .then(setVersion)
       .catch(() => {});
   }, []);
+
+  const primaryGroup = groups[0] ?? [];
+  const sessionGroup = groups[1] ?? [];
+
   return (
-    <div className="nfp" data-managing={managing || undefined}>
-      <div className="nfp-me">
-        {meId && (
-          <button type="button" className="nfp-me-edit" aria-label={`Edit ${name}`} onClick={() => onEdit(meId)}>
-            <PhonePencil />
-          </button>
-        )}
-        <span className="nfp-face">
-          <Avatar id={avatar} />
-          {meLocked && (
-            <span className="nfp-lock" aria-hidden>
-              <Lock size={12} />
-            </span>
-          )}
-        </span>
-        <strong>{name}</strong>
-        {!meId && <span className="nfp-status">{email ?? "Not signed in"}</span>}
-      </div>
-      {profiles.length > 0 && (
-        <div className="nfp-others">
-          {profiles.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="nfp-other"
-              aria-label={managing ? `Edit ${c.label}` : c.label}
-              onClick={() => (managing ? onEdit(c.id.replace(/^profile:/, "")) : pick(c))}
-            >
-              <span className="nfp-face">
-                {c.icon}
-                {c.locked && (
-                  <span className="nfp-lock" aria-hidden>
-                    <Lock size={11} />
+    <div className="fmp-body" data-managing={managing || undefined} data-veiled={veiled || undefined}>
+      <section className="fmp-wallets">
+        <div className="fmp-section-head fmp-veil">
+          <h3 className="fmp-section-title">Your Profiles</h3>
+          {email && <span className="fmp-section-sub">{email}</span>}
+        </div>
+        <div className="fmp-grid" role="group" aria-label="Profiles">
+          <SmoothProfileCard
+            profileId={meId}
+            veil={!meId || morphId !== meId}
+            hiddenForMorph={!!meId && editingId === meId}
+            active
+            locked={meLocked}
+            managing={managing}
+            name={name}
+            sub={meId ? "Active" : (email ?? "Not signed in")}
+            avatarNode={<Avatar id={avatar} />}
+            onClick={meId ? () => onEdit(meId) : undefined}
+          />
+          {profiles.map((c) => {
+            const pid = c.id.replace(/^profile:/, "");
+            return (
+              <SmoothProfileCard
+                key={c.id}
+                profileId={pid}
+                veil={morphId !== pid}
+                hiddenForMorph={editingId === pid}
+                locked={c.locked}
+                managing={managing}
+                name={c.label}
+                sub={managing ? "Tap to edit" : "Switch"}
+                avatarNode={c.icon}
+                onClick={() => (managing ? onEdit(pid) : pick(c))}
+              />
+            );
+          })}
+        </div>
+      </section>
+
+      {primaryGroup.length > 0 && (
+        <div className="fms-group fmp-veil">
+          <h3 className="fms-eyebrow">Account</h3>
+          <div className="fms-list">
+            {primaryGroup.map((c) => (
+              <button key={c.id} type="button" className="fms-row" data-id={c.id} onClick={() => pick(c)}>
+                <span className="fms-row-ico fmp-row-ico">{c.icon}</span>
+                <span className="fms-row-label">{c.id === "settings" ? "App Settings" : c.label}</span>
+                {!!c.count && (
+                  <span className="fmp-count-pill" aria-label={`${c.count} waiting`}>
+                    {c.count}
                   </span>
                 )}
-                <span className="nfp-pencil" aria-hidden>
-                  <PhonePencil />
-                </span>
-              </span>
-              <span className="nfp-other-name">{c.label}</span>
-            </button>
-          ))}
+                <ChevronRight size={17} className="fms-row-chev" aria-hidden />
+              </button>
+            ))}
+          </div>
         </div>
       )}
-      {manage && (
-        <button type="button" className="nfp-manage" aria-pressed={managing} onClick={onManage}>
-          {managing ? "Done" : "Manage Profiles"}
-        </button>
+
+      {sessionGroup.length > 0 && (
+        <div className="fms-group fmp-veil">
+          <div className="fms-list">
+            {sessionGroup.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`fms-row${c.id === "sign-out" ? " fms-row-danger" : ""}`}
+                data-id={c.id}
+                onClick={() => pick(c)}
+              >
+                <span className="fms-row-ico fmp-row-ico">{c.icon}</span>
+                <span className="fms-row-label">{c.label}</span>
+                {c.id !== "sign-out" && <ChevronRight size={17} className="fms-row-chev" aria-hidden />}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
-      <div className="nfp-rows">
-        {groups.flat().map((c) => (
-          <button key={c.id} type="button" className="nfp-row" data-id={c.id} onClick={() => pick(c)}>
-            <span className="nfp-row-glyph">{c.icon}</span>
-            <span>{c.id === "settings" ? "App Settings" : labelOf(c)}</span>
-            <ChevronRight size={20} aria-hidden />
-          </button>
-        ))}
-      </div>
-      {version && <p className="nfp-version">Version: {version}</p>}
+
+      {version && <p className="fmp-version fmp-veil">Version {version}</p>}
     </div>
   );
-}
-
-function PhonePencil() {
-  return <IconPencil size={24} />;
 }

@@ -39,8 +39,10 @@ pub struct Ratings {
     pub imdb_votes: Option<u64>,
     /// TMDB user score, percent.
     pub tmdb: Option<u32>,
+    /// MyAnimeList user score, out of 10.
+    pub mal: Option<f64>,
     /// The title's page on each site with a score, keyed like the fields above
-    /// ("rottenTomatoes", "audience", "metacritic", "letterboxd", "trakt", "tmdb", "imdb").
+    /// ("rottenTomatoes", "audience", "metacritic", "letterboxd", "trakt", "tmdb", "imdb", "mal").
     pub links: BTreeMap<&'static str, String>,
     /// "Won 3 Oscars. 120 wins & 300 nominations total."
     pub awards: Option<String>,
@@ -58,6 +60,7 @@ impl Ratings {
         self.imdb = self.imdb.or(o.imdb);
         self.imdb_votes = self.imdb_votes.or(o.imdb_votes);
         self.tmdb = self.tmdb.or(o.tmdb);
+        self.mal = self.mal.or(o.mal);
         for (k, v) in o.links {
             self.links.entry(k).or_insert(v);
         }
@@ -185,6 +188,10 @@ impl RatingsClient {
                     r.imdb = Some(value);
                     r.imdb_votes = item["votes"].as_u64().filter(|n| *n > 0);
                 }
+                "myanimelist" | "mal" => {
+                    link("mal", "https://myanimelist.net");
+                    r.mal = Some(value);
+                }
                 _ => {}
             }
         }
@@ -194,6 +201,9 @@ impl RatingsClient {
         }
         if let Some(id) = v["ids"]["tmdb"].as_u64().filter(|_| r.tmdb.is_some()) {
             r.links.insert("tmdb", format!("https://www.themoviedb.org/{}/{id}", if series { "tv" } else { "movie" }));
+        }
+        if let Some(id) = v["ids"]["mal"].as_u64().filter(|_| r.mal.is_some()) {
+            r.links.entry("mal").or_insert_with(|| format!("https://myanimelist.net/anime/{id}"));
         }
         r.rated = v["certification"].as_str().filter(|s| !s.is_empty()).map(str::to_owned);
         Some(r)
