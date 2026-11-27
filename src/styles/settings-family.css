@@ -1,0 +1,898 @@
+/*
+ * Settings on a computer, in Family's manner (benji.org/family-values): one quiet surface, the view's name large,
+ * rounded cards of rows, controls as soft pills, and things that move from where they are to where they go (a page
+ * from its side of the sidebar, a row growing open, a menu out of its pill, a confirmation in a tray).
+ *
+ * Scoped to the desktop window (`:root:not([data-form="phone"]) .t3s[data-family]`, SettingsOverlay.tsx) and to the menus it opens
+ * (`[data-look="family"]`, Dropdown.tsx); a phone's Settings is PhoneFamilySettings with its own stylesheet.
+ */
+
+:root:not([data-form="phone"]) .t3s[data-family] {
+  --fd-window: #161618;
+  --fd-pane: #0e0e0f;
+  --fd-card: #1c1c1e;
+  --fd-card-hover: #232325;
+  --fd-fill: rgb(255 255 255 / 0.075);
+  --fd-fill-hover: rgb(255 255 255 / 0.11);
+  --fd-hair: rgb(255 255 255 / 0.07);
+  --fd-fg: #f5f5f7;
+  --fd-muted: #8e8e93;
+  --fd-icon: #8e8e93;
+  --fd-cta-bg: #ffffff;
+  --fd-cta-fg: #0a0a0b;
+  --fd-r-window: 30px;
+  --fd-r-card: 20px;
+  --fd-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --fd-spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+
+  grid-template-columns: 248px minmax(0, 1fr);
+  border-radius: var(--fd-r-window);
+  corner-shape: superellipse(1.6);
+  background: var(--fd-window);
+  color: var(--fd-fg);
+  font-size: 14px;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.06),
+    0 40px 90px -20px rgb(0 0 0 / 0.7);
+}
+:root[data-scheme="light"]:not([data-form="phone"]) .t3s[data-family] {
+  --fd-window: #ebebf0;
+  --fd-pane: #f5f5f7;
+  --fd-card: #ffffff;
+  --fd-card-hover: #fafafc;
+  --fd-fill: rgb(0 0 0 / 0.05);
+  --fd-fill-hover: rgb(0 0 0 / 0.08);
+  --fd-hair: rgb(0 0 0 / 0.07);
+  --fd-fg: #0a0a0b;
+  --fd-muted: #86868b;
+  --fd-icon: #86868b;
+  --fd-cta-bg: #0a0a0b;
+  --fd-cta-fg: #ffffff;
+  background: var(--fd-window);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.06),
+    0 40px 90px -24px rgb(0 0 0 / 0.28);
+}
+@media (max-width: 820px) {
+  :root:not([data-form="phone"]) .t3s[data-family] {
+    grid-template-columns: 216px minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  :root:not([data-form="phone"]) .t3s[data-family] {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+}
+/* Opening: the window settles up out of a slight blur, as Family's trays arrive. */
+:root:not([data-form="phone"]) .t3s[data-family] {
+  transition:
+    opacity 220ms var(--fd-ease),
+    transform 320ms var(--fd-ease),
+    filter 220ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family][data-starting-style] {
+  opacity: 0;
+  transform: translateY(14px) scale(0.97);
+  filter: blur(6px);
+}
+:root:not([data-form="phone"]) .t3s[data-family][data-ending-style] {
+  opacity: 0;
+  transform: scale(0.98);
+  filter: blur(4px);
+  transition-duration: 140ms;
+}
+
+/* --- Sidebar ------------------------------------------------------------- */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-sidebar {
+  gap: 14px;
+  padding: 18px 12px 12px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-search {
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border-radius: 12px;
+  corner-shape: superellipse(1.5);
+  background: var(--fd-fill);
+  box-shadow: none;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-search:focus-within {
+  background: var(--fd-fill-hover);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-search:hover {
+    background: var(--fd-fill-hover);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-search input {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fd-fg);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-search .search-field-kbd {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--fd-fill);
+  box-shadow: none;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-groups {
+  gap: 18px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-group {
+  gap: 2px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-group-heading {
+  padding: 0 12px 5px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item {
+  position: relative;
+  isolation: isolate;
+  gap: 11px;
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 12px;
+  corner-shape: superellipse(1.5);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: color-mix(in srgb, var(--fd-fg) 78%, transparent);
+  transition:
+    color 140ms var(--fd-ease),
+    background-color 140ms var(--fd-ease),
+    scale 160ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--fd-icon);
+  transition: color 160ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item:active {
+  background: none;
+  scale: 0.98;
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item:not([data-active="true"]):hover {
+    background: var(--fd-fill);
+    color: var(--fd-fg);
+  }
+}
+/* The page you're on: a soft pill that glides from the last one (`.t3s-nav-pill`, a shared layout), its icon lit. */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item[data-active="true"] {
+  background: none;
+  color: var(--fd-fg);
+  font-weight: 600;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item[data-active="true"] > svg {
+  color: var(--accent);
+}
+.t3s-nav-item > .t3s-nav-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  corner-shape: inherit;
+  background: var(--fd-fill-hover);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-result {
+  padding: 8px 11px;
+  border-radius: 12px;
+  corner-shape: superellipse(1.5);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-result[aria-selected="true"] {
+  background: var(--fd-fill-hover);
+  color: var(--fd-fg);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-result[aria-selected="true"] > svg {
+  color: var(--accent);
+  opacity: 1;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-result[aria-selected="true"] .t3s-result-page {
+  color: var(--fd-muted);
+  opacity: 1;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-result-title {
+  font-size: 14px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-result-page {
+  font-size: 12px;
+  color: var(--fd-muted);
+}
+
+/* --- The page pane: one step darker, no rim, the same rounding as the window less its inset ---------------- */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-main {
+  --t3-inset: 8px;
+  margin: var(--t3-inset) var(--t3-inset) var(--t3-inset) 0;
+  border-radius: calc(var(--fd-r-window) - var(--t3-inset));
+  corner-shape: superellipse(1.6);
+  background: var(--fd-pane);
+  box-shadow: none;
+}
+:root[data-scheme="light"]:not([data-form="phone"]) .t3s[data-family] .t3s-main {
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.04);
+}
+
+/* --- Header: where you are small, the view's name large; round buttons ------------------------------------ */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-header {
+  justify-content: flex-start;
+  gap: 14px;
+  height: auto;
+  min-height: 84px;
+  padding: 22px 20px 10px 36px;
+  border-bottom: 0;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-header:has(.t3s-section-back) {
+  padding-left: 24px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-crumbs {
+  flex: 1;
+  display: grid;
+  grid-template-areas:
+    "root"
+    "page";
+  align-content: center;
+  gap: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-crumb-sep {
+  display: none;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-crumb-root[data-hidden] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:root:not([data-form="phone"]) .t3s[data-family] :is(.t3s-crumb-root, .t3s-crumb-parent) {
+  grid-area: root;
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: -0.005em;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-crumb-page {
+  grid-area: page;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.028em;
+  color: var(--fd-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The name comes in from the side the view does: from below or above between pages, from the right into a
+   section and from the left back out of one. The words above it follow a beat later. */
+:root:not([data-form="phone"]) .t3s[data-family] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+  transition:
+    opacity 260ms var(--fd-ease),
+    transform 360ms var(--fd-ease),
+    filter 260ms var(--fd-ease);
+}
+@starting-style {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-header[data-move] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-header[data-move="next"] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+    transform: translateY(10px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-header[data-move="prev"] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+    transform: translateY(-10px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-header[data-move="in"] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+    transform: translateX(16px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-header[data-move="out"] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+    transform: translateX(-16px);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-header-actions {
+  align-self: flex-start;
+  gap: 8px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-round {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fd-fill);
+  color: var(--fd-fg);
+  cursor: default;
+  transition:
+    background-color 140ms var(--fd-ease),
+    scale 160ms var(--fd-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-round:hover {
+    background: var(--fd-fill-hover);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-round:active {
+  scale: 0.92;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-round:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Back out of a section grows in beside the name, where it will be pressed. */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-section-back {
+  align-self: center;
+  margin-top: 16px;
+  transition:
+    background-color 140ms var(--fd-ease),
+    scale 220ms var(--fd-spring),
+    opacity 180ms var(--fd-ease);
+}
+@starting-style {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-section-back {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-ghost {
+  height: 34px;
+  padding: 0 14px 0 12px;
+  gap: 7px;
+  border-radius: 999px;
+  background: var(--fd-fill);
+  color: var(--fd-fg);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition:
+    background-color 140ms var(--fd-ease),
+    scale 160ms var(--fd-ease),
+    opacity 140ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-ghost svg {
+  color: var(--fd-muted);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-ghost:not(:disabled):hover {
+    background: var(--fd-fill-hover);
+    color: var(--fd-fg);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-ghost:not(:disabled):active {
+  background: var(--fd-fill-hover);
+  scale: 0.96;
+}
+/* Nothing to restore: it steps back rather than greying out. */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-ghost:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- Pages: a page arrives from its side of the sidebar, a section from the right ------------------------- */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-scroll {
+  scrollbar-gutter: stable;
+}
+/* Full width under the title, so the cards' edge is the title's. */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-page {
+  gap: 28px;
+  max-width: none;
+  margin: 0;
+  padding: 8px 36px 44px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move] {
+  transition:
+    opacity 260ms var(--fd-ease),
+    transform 380ms var(--fd-ease),
+    filter 260ms var(--fd-ease);
+}
+@starting-style {
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move] {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move="next"] {
+    transform: translateY(18px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move="prev"] {
+    transform: translateY(-18px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move="in"] {
+    transform: translateX(28px);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move="out"] {
+    transform: translateX(-28px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-form="phone"]) .t3s[data-family],
+  :root:not([data-form="phone"]) .t3s[data-family] .t3s-page[data-move],
+  :root:not([data-form="phone"]) .t3s[data-family] :is(.t3s-crumb-page, .t3s-crumb-parent, .t3s-crumb-root:not([data-hidden])) {
+    filter: none !important;
+    transform: none !important;
+  }
+}
+
+/* --- Cards and rows -------------------------------------------------------------------------------------- */
+:root:not([data-form="phone"]) .t3s[data-family] .settings-group {
+  gap: 8px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-group-title {
+  min-height: 0;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card {
+  border-radius: var(--fd-r-card);
+  corner-shape: superellipse(1.5);
+  background: var(--fd-card);
+  box-shadow: none;
+  overflow: clip;
+}
+:root[data-scheme="light"]:not([data-form="phone"]) .t3s[data-family] .settings-card {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card > :first-child,
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card > :last-child {
+  border-radius: 0;
+}
+/* Hairlines between rows start where the words do, as an iOS list's. */
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card > * + * {
+  border-top: 0;
+  background-image: linear-gradient(var(--fd-hair), var(--fd-hair));
+  background-repeat: no-repeat;
+  background-size: calc(100% - 18px) 1px;
+  background-position: right top;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card > :is(.settings-expand, :has(> .settings-row-icon)) + * {
+  background-size: calc(100% - 50px) 1px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row {
+  min-height: 58px;
+  gap: 24px;
+  padding: 12px 18px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-button {
+  gap: 14px;
+  transition: background-color 140ms var(--fd-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .settings-row-button:hover {
+    background-color: var(--fd-card-hover);
+  }
+  :root:not([data-form="phone"]) .t3s[data-family] .settings-row-button:hover .settings-row-icon {
+    color: var(--fd-fg);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-button:active {
+  background-color: var(--fd-card-hover);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-text {
+  gap: 3px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-title {
+  font-size: 14.5px;
+  font-weight: 550;
+  letter-spacing: -0.014em;
+  line-height: 19px;
+  color: var(--fd-fg);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-caption {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--fd-icon);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row-value {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--fd-muted);
+}
+/* An open row: its chevron turns down, toward what it opened. `rotate`, since the icon's own optical nudge is an
+   inline transform (icons.tsx), which a stylesheet's transform couldn't turn. */
+:root:not([data-form="phone"]) .t3s[data-family] .settings-expand .settings-chevron {
+  transition:
+    color 140ms var(--fd-ease),
+    rotate 320ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-expand[data-open="true"] .settings-chevron {
+  rotate: 90deg;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-expand-reveal {
+  overflow: hidden;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-expand-body {
+  gap: 12px;
+  padding: 0 18px 18px 50px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-expand-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-footer {
+  padding: 0 18px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-error {
+  padding: 0 18px;
+  font-size: 12.5px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-subcard {
+  border: 0;
+  border-radius: 14px;
+  background: var(--fd-fill);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-subrow + .settings-subrow {
+  border-top-color: var(--fd-hair);
+}
+:root:not([data-form="phone"]) .t3s[data-family] [data-search-hit] {
+  animation-name: t3s-family-hit;
+}
+@keyframes t3s-family-hit {
+  0%,
+  35% {
+    background-color: color-mix(in srgb, var(--accent) 18%, var(--fd-card));
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* --- Controls -------------------------------------------------------------------------------------------- */
+/* Buttons: pills. The one to press is the bright one (Family's CTA), the rest a soft fill. */
+:root:not([data-form="phone"]) .t3s[data-family] .btn {
+  height: 34px;
+  padding: 0 15px;
+  gap: 7px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--fd-fill);
+  box-shadow: none;
+  color: var(--fd-fg);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  transition:
+    background-color 140ms var(--fd-ease),
+    scale 160ms var(--fd-ease),
+    opacity 140ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .btn svg {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .btn:not(:disabled):hover {
+    background: var(--fd-fill-hover);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .btn:not(:disabled):active {
+  scale: 0.96;
+  box-shadow: none;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--fd-pane), 0 0 0 4px var(--accent);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .btn:disabled {
+  opacity: 0.4;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .btn-primary {
+  background: var(--fd-cta-bg);
+  color: var(--fd-cta-fg);
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .btn-primary:not(:disabled):hover {
+    background: color-mix(in srgb, var(--fd-cta-bg) 88%, var(--fd-muted));
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .btn-danger {
+  background: rgb(255 69 58 / 0.14);
+  color: #ff453a;
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .btn-danger:not(:disabled):hover {
+    background: rgb(255 69 58 / 0.22);
+  }
+}
+
+:root:not([data-form="phone"]) .t3s[data-family] .text-field {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
+  corner-shape: superellipse(1.5);
+  background: var(--fd-fill);
+  box-shadow: none;
+  color: var(--fd-fg);
+  font-size: 14px;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .text-field::placeholder {
+  color: var(--fd-muted);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .text-field:focus {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* Sliders: a thick rounded track filled in the accent, a white knob with a soft shadow, the value in a pill. */
+:root:not([data-form="phone"]) .t3s[data-family] .srcf-slider-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--fd-fill-hover);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .srcf-slider-fill {
+  border-radius: 999px;
+  background: var(--accent);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .srcf-slider-thumb {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.08),
+    0 2px 6px rgb(0 0 0 / 0.3);
+  transition: scale 160ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .srcf-slider-thumb:active,
+:root:not([data-form="phone"]) .t3s[data-family] .srcf-slider-thumb[data-dragging] {
+  scale: 1.12;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .slider-field-box {
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fd-fill);
+  box-shadow: none;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .slider-field-box:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* A choice: the value and its chevrons as a quiet pill, the menu growing out of it (below). */
+:root:not([data-form="phone"]) .t3s[data-family] .select-trigger[data-look="family"] {
+  width: auto;
+  max-width: 18rem;
+  height: 34px;
+  min-height: 34px;
+  gap: 8px;
+  padding: 0 11px 0 14px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--fd-fill);
+  box-shadow: none;
+  color: var(--fd-fg);
+  font-size: 13.5px;
+  font-weight: 550;
+  letter-spacing: -0.012em;
+  transition:
+    background-color 140ms var(--fd-ease),
+    scale 160ms var(--fd-ease);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .select-trigger[data-look="family"] .select-icon {
+  color: var(--fd-muted);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-form="phone"]) .t3s[data-family] .select-trigger[data-look="family"]:hover {
+    background: var(--fd-fill-hover);
+  }
+}
+:root:not([data-form="phone"]) .t3s[data-family] .select-trigger[data-look="family"]:active {
+  scale: 0.97;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .select-trigger[data-look="family"][data-popup-open] {
+  background: var(--fd-fill-hover);
+  box-shadow: none;
+}
+:root:not([data-form="phone"]) .t3s[data-family] .select-trigger[data-look="family"]:focus-visible {
+  box-shadow: 0 0 0 2px var(--fd-pane), 0 0 0 4px var(--accent);
+}
+
+/* The menu (in a portal, so scoped by its own data-look): Family's tray in small, scaling up out of its pill. */
+.select-popup[data-look="family"] {
+  --fd-menu: #1c1c1e;
+  --fd-menu-hover: #2c2c2e;
+  --fd-fg: #f5f5f7;
+  --fd-muted: #8e8e93;
+  min-width: max(var(--anchor-width), 13.5rem);
+  border-radius: 20px;
+  corner-shape: superellipse(1.5);
+  background: var(--fd-menu);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.07),
+    0 24px 48px -12px rgb(0 0 0 / 0.6);
+  color: var(--fd-fg);
+  transition:
+    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    filter 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+:root[data-scheme="light"] .select-popup[data-look="family"] {
+  --fd-menu: #ffffff;
+  --fd-menu-hover: #f2f2f7;
+  --fd-fg: #0a0a0b;
+  --fd-muted: #86868b;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.06),
+    0 24px 48px -16px rgb(0 0 0 / 0.24);
+}
+.select-popup[data-look="family"][data-starting-style],
+.select-popup[data-look="family"][data-ending-style] {
+  opacity: 0;
+  transform: scale(0.88);
+  filter: blur(4px);
+}
+.select-popup[data-look="family"][data-ending-style] {
+  transition-duration: 130ms;
+}
+.select-popup[data-look="family"] .select-list {
+  padding: 6px;
+}
+.select-popup[data-look="family"] .select-item {
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px;
+  padding: 0 10px 0 14px;
+  border-radius: 14px;
+  corner-shape: superellipse(1.5);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--fd-fg);
+  transition: background-color 110ms ease;
+}
+.select-popup[data-look="family"] .select-item[data-highlighted] {
+  background: var(--fd-menu-hover);
+  color: var(--fd-fg);
+}
+.select-popup[data-look="family"] .select-item[data-selected] {
+  font-weight: 600;
+}
+/* The tick: a filled accent circle that springs in on the chosen row (Family's picker). */
+.select-popup[data-look="family"] .select-item-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 140ms ease,
+    transform 300ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+.select-popup[data-look="family"] .select-item[data-selected] .select-item-check {
+  opacity: 1;
+  transform: scale(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .select-popup[data-look="family"],
+  .select-popup[data-look="family"] .select-item-check {
+    filter: none !important;
+    transform: none !important;
+  }
+}
+
+/* --- Family trays on a computer: in the middle of the window, not at the foot of a phone's screen ------------ */
+:root:not([data-form="phone"]) .ft-backdrop {
+  align-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.38);
+}
+:root:not([data-form="phone"]) .ft-tray-wrap {
+  max-width: 400px;
+}
+
+/* Liquid Glass's slider (settings/GlassSlider.tsx): it takes the room beside the number, its track a step lighter
+   than the card, filled in the accent (its `tint`). Its own rules are in a layer, so these sit over them. */
+:root:not([data-form="phone"]) .t3s[data-family] [data-lg-slider] {
+  flex: 1;
+  min-width: 0;
+  --lg-slider-track: var(--fd-fill-hover);
+  --lg-slider-height: 28px;
+  --lg-slider-track-height: 6px;
+  --lg-slider-thumb-width: 24px;
+  --lg-slider-thumb-height: 18px;
+}
+
+/* --- Concentric corners ---------------------------------------------------------------------------------------
+   A control in a card's row sits 11px from the card's edge, so its corner is the card's less 11px (20 → 9) and every
+   control in a row (field, button, choice, number) shares that one height and radius: corners inside corners, rather
+   than a field's rounded box beside a button's capsule. The squircle masks (SettingsOverlay.tsx useFamilyCorners) are
+   drawn to the same radii. */
+:root:not([data-form="phone"]) .t3s[data-family] {
+  --fd-row-pad-y: 11px;
+  --fd-ctl-h: 36px;
+  --fd-r-ctl: calc(var(--fd-r-card) - var(--fd-row-pad-y));
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-row {
+  padding-block: var(--fd-row-pad-y);
+}
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card :is(.text-field, .btn, .select-trigger[data-look="family"], .slider-field-box) {
+  height: var(--fd-ctl-h);
+  min-height: var(--fd-ctl-h);
+  border-radius: var(--fd-r-ctl);
+  corner-shape: superellipse(1.5);
+}
+/* Their keyboard rings are drawn inside: the squircle mask would cut away a ring outside. */
+:root:not([data-form="phone"]) .t3s[data-family] .settings-card :is(.btn, .select-trigger[data-look="family"]):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* The search sits 12px in from the window's corner: the window's 30 less 12, a capsule. */
+:root:not([data-form="phone"]) .t3s[data-family] .t3s-search {
+  border-radius: 18px;
+}
+
+/* --- The window's squircle ------------------------------------------------------------------------------------
+   The window is masked to Apple's continuous corners (SettingsOverlay.tsx WindowShape), which would cut its shadow
+   away; the shadow and the rim are drawn by the same outline in an SVG behind it, in the same centred box. */
+:root:not([data-form="phone"]) .t3s[data-family] {
+  box-shadow: none;
+}
+.t3s-shadow {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  margin: auto;
+  overflow: visible;
+  pointer-events: none;
+  fill: #161618;
+  stroke: rgb(255 255 255 / 0.08);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 40px 60px rgb(0 0 0 / 0.55));
+  transition:
+    opacity 220ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+:root[data-scheme="light"] .t3s-shadow {
+  fill: #ebebf0;
+  stroke: rgb(0 0 0 / 0.07);
+  filter: drop-shadow(0 40px 60px rgb(0 0 0 / 0.22));
+}
+html[data-os="mac"]:not([data-fullscreen]) .t3s-shadow {
+  /* Centred in the same box as the window (settings-overlay.css), which a Mac's windowed title row shortens. */
+  margin-block: auto;
+}
+@starting-style {
+  .t3s-shadow {
+    opacity: 0;
+  }
+}
+/* It comes and goes with the window. */
+.t3s-shadow:has(~ .t3s[data-starting-style]) {
+  opacity: 0;
+  transform: translateY(14px) scale(0.97);
+}
+.t3s-shadow:has(~ .t3s[data-ending-style]) {
+  opacity: 0;
+  transform: scale(0.98);
+  transition-duration: 140ms;
+}

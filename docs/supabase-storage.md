@@ -466,6 +466,37 @@ Sign-in in the app (`src/lib/account/twoStep.ts`). What the owner switches on in
    the current and the new address and the app asks for both; off, only the new address gets one. The app works
    either way; on is the one to choose.
 3. **Two-step sign-in:** Authentication → Multi-Factor (MFA): TOTP (App Authenticator) "Enabled" for both enroll
-   and verify. Phone and WebAuthn stay off: the app only uses authenticator apps. Off, the app says two-step
-   sign-in isn't turned on on the server.
+   and verify. Phone and WebAuthn MFA stay off: the app only uses authenticator apps for two-step sign-in. Off, the
+   app says two-step sign-in isn't turned on on the server.
 4. **Rate limits** (§8.2) cover the email change's emails and the code checks too; nothing of its own.
+
+## 11. Passkeys (WebAuthn)
+
+Supabase Auth Passkeys (`supabase.auth.registerPasskey()`, `signInWithPasskey()`, `passkey.*`) require no database
+migrations or Edge Functions — credentials live in Supabase Auth once enabled under **Authentication → Sign In /
+Providers → Passkeys**:
+
+- **Local development (`POLARITY-DEV`, `bun run app` / `bun run dev`):**
+  - **Relying Party Display Name:** `Polarity` (or `Polarity Dev`)
+  - **Relying Party ID:** `localhost`
+  - **Relying Party Origins:** `http://localhost:1420` (Vite / Tauri dev server port from `vite.config.ts`)
+- **Production / hosted web or native origins:**
+  - **Relying Party Display Name:** `Polarity`
+  - **Relying Party ID:** `getpolar.app`
+  - **Relying Party Origins:** `https://getpolar.app` (plus `android:apk-key-hash:<base64url-sha256>` for Android apps
+    and Associated Domains `webcredentials:getpolar.app` for Apple apps; WebAuthn does not allow custom schemes like
+    `tauri://localhost`).
+
+### Desktop system-browser handoff
+
+Desktop Tauri builds run inside embedded webviews (e.g. macOS `WKWebView`, which blocks `navigator.credentials`, and
+production `tauri://localhost`, which cannot bind to `getpolar.app`). On desktop (`src-tauri/src/passkey.rs` +
+`src/lib/account/supabase.ts`), Polarity starts the WebAuthn challenge locally with Supabase, opens the ceremony page in
+the user's default browser (`http://localhost:1420/passkey.html` in dev, `https://getpolar.app/passkey/` in prod,
+overridable via `VITE_PASSKEY_HANDOFF_URL`) with only the public WebAuthn options in the URL fragment, and receives the
+signed WebAuthn credential back on an ephemeral `127.0.0.1` loopback callback before verifying it with Supabase. No
+session token or secret ever leaves the app.
+
+Right after signing up or signing into an account without any passkeys on a WebAuthn-capable non-TV device, the app
+shows the **Setup Passkey** step (`Add Passkey` or `Skip for now`). Returning users can sign in directly via **Sign In
+with Passkey** on the login screen and manage passkeys under **Settings → Account → Passkeys**.

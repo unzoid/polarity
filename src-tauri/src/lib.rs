@@ -25,6 +25,7 @@ mod native_back;
 mod native_dialogs;
 mod native_tabs;
 mod notifications;
+mod passkey;
 mod player;
 mod ratings;
 mod seekr;
@@ -351,6 +352,8 @@ pub fn run() {
             commands::settings_reset,
             commands::settings_defaults,
             commands::open_external,
+            passkey::passkey_handoff,
+            passkey::passkey_handoff_cancel,
             commands::window_can_pin,
             commands::anime_episode_flags,
             commands::anime_ids,

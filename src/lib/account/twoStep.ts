@@ -3,7 +3,7 @@
  * account's email: the parts the provider, the screens and the tests share. The server's side is
  * `AccountBackend.twoStep` and `auth.changeEmail` (supabase.ts, fake/account.ts).
  */
-import type { AccountBackend, AccountUser, Authenticator, AuthenticatorSetup } from "./backend";
+import type { AccountBackend, AccountUser, Authenticator, AuthenticatorSetup, Passkey } from "./backend";
 
 /** Authenticator codes are six digits. */
 export const TWO_STEP_CODE_LENGTH = 6;
@@ -85,10 +85,19 @@ export interface AccountSecurity {
   confirmAuthenticator(id: string, code: string): Promise<void>;
   cancelAuthenticator(id: string): Promise<void>;
   removeAuthenticators(ids: string[], proof: { id: string; code: string }): Promise<void>;
+  /** Whether this runtime supports WebAuthn passkeys. */
+  passkeysSupported?: boolean;
+  /** Registered passkeys on this account (optional when constructed in older test stubs). */
+  passkeys?(): Promise<Passkey[]>;
+  addPasskey?(friendlyName?: string): Promise<Passkey>;
+  removePasskey?(id: string): Promise<void>;
 }
 
 /** The account's `security`, over a backend; `onUser` gets the user whenever it's read again. */
-export function accountSecurity(b: Pick<AccountBackend, "auth" | "twoStep">, onUser: (user: AccountUser) => void): AccountSecurity {
+export function accountSecurity(
+  b: Pick<AccountBackend, "auth" | "twoStep"> & Partial<Pick<AccountBackend, "passkeys">>,
+  onUser: (user: AccountUser) => void,
+): AccountSecurity {
   return {
     async changeEmail(email) {
       await b.auth.changeEmail(email.trim().toLowerCase());
@@ -112,5 +121,13 @@ export function accountSecurity(b: Pick<AccountBackend, "auth" | "twoStep">, onU
     confirmAuthenticator: (id, code) => b.twoStep.confirmAdd(id, tidyCode(code)),
     cancelAuthenticator: (id) => b.twoStep.cancelAdd(id),
     removeAuthenticators: (ids, proof) => b.twoStep.remove(ids, { id: proof.id, code: tidyCode(proof.code) }),
+    ...(b.passkeys
+      ? {
+          passkeysSupported: b.passkeys.supported(),
+          passkeys: () => b.passkeys!.list(),
+          addPasskey: (name?: string) => b.passkeys!.register(name),
+          removePasskey: (id: string) => b.passkeys!.remove(id),
+        }
+      : {}),
   };
 }

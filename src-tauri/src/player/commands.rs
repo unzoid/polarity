@@ -64,8 +64,9 @@ pub fn player_system_bars(hidden: bool) {
 }
 
 /// Keep the screen from dimming and locking while a video plays, and let it again when it stops. On
-/// iPhones and iPads the idle timer (ios/system_bars.m); Android's comes through the page's bridge
-/// (src/lib/platform/back.ts). Elsewhere nothing changes.
+/// iPhones and iPads the idle timer (ios/system_bars.m); on a Mac a display-sleep activity
+/// (macos/power.m), since libmpv drawing through the render API doesn't hold one itself. Android's
+/// comes through the page's bridge (src/lib/platform/back.ts); Windows' mpv process holds its own.
 #[tauri::command]
 pub fn player_keep_awake(on: bool) {
     #[cfg(target_os = "ios")]
@@ -75,7 +76,14 @@ pub fn player_keep_awake(on: bool) {
         }
         unsafe { polar_set_keep_awake(on.into()) }
     }
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(target_os = "macos")]
+    {
+        extern "C" {
+            fn polar_macos_set_keep_awake(on: std::ffi::c_int);
+        }
+        unsafe { polar_macos_set_keep_awake(on.into()) }
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "macos")))]
     let _ = on;
 }
 

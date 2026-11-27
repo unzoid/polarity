@@ -16,6 +16,7 @@ import {
   type FriendPresence,
   type FriendSettings,
   type FriendRequestResult,
+  type Passkey,
   type Profile,
   type PushResult,
   type RemotePlaylist,
@@ -28,6 +29,8 @@ import { lockFromRow, lockToRow, type LockRow } from "./profileLock";
 import { fromHex, toHex } from "../library/playlistCodec";
 import { decodeEntries, encodeEntries, newestAt, type EntryToPack } from "./progressCodec";
 import { keychainStorage } from "../platform/keychain";
+import { call as nativeCall, inShell } from "../platform/bridge";
+import { isDesktop, isMac } from "../platform/device";
 import { normalizeTvCode, type TvClaim, type TvSignInRequest } from "./tvSignIn";
 import { qrImage } from "./twoStep";
 import { warnFailed } from "../errors";
@@ -314,6 +317,91 @@ export function createSupabaseBackend(url: string, key: string): AccountBackend 
         return u;
       },
       refreshUser,
+    },
+
+    // Supabase Auth Passkeys (WebAuthn). Turned on in the dashboard (docs/supabase-storage.md §11).
+    // On desktop Tauri builds, embedded webviews (e.g. macOS WKWebView) block WebAuthn or run on
+    // custom schemes; hand the public challenge to the system browser on the real RP origin instead.
+    passkeys: {
+      supported: () => useBrowserPasskeyHandoff() || browserSupportsPasskeys(),
+      async list() {
+        const { data, error } = await db.auth.passkey.list();
+        if (error) throw passkeyError(error);
+        return (data ?? []).map((p, i) => ({
+          id: p.id,
+          name: p.friendly_name?.trim() || `Passkey ${i + 1}`,
+          createdAt: p.created_at,
+          ...(p.last_used_at ? { lastUsedAt: p.last_used_at } : {}),
+        }));
+      },
+      async register(friendlyName) {
+        let data: { id: string; friendly_name?: string | null; created_at: string } | null = null;
+        if (useBrowserPasskeyHandoff()) {
+          const { data: started, error: startError } = await db.auth.passkey.startRegistration();
+          if (startError) throw passkeyError(startError);
+          if (!started) throw new AccountError("unknown", "Passkey registration didn't start. Try again.");
+          const credential = await handoffPasskey("register", started.options);
+          const verified = await db.auth.passkey.verifyRegistration({
+            challengeId: started.challenge_id,
+            credential: credential as unknown as Parameters<typeof db.auth.passkey.verifyRegistration>[0]["credential"],
+          });
+          if (verified.error) throw passkeyError(verified.error);
+          data = verified.data;
+        } else {
+          const started = performance.now();
+          const res = await db.auth.registerPasskey();
+          if (res.error) throw passkeyError(res.error, performance.now() - started);
+          data = res.data;
+        }
+        if (!data) throw new AccountError("unknown", "Passkey registration didn't finish. Try again.");
+        let name = data.friendly_name?.trim() || "";
+        if (!name && friendlyName?.trim()) {
+          const clean = friendlyName.trim().slice(0, 120);
+          const renamed = await db.auth.passkey.update({ passkeyId: data.id, friendlyName: clean }).catch(() => null);
+          if (renamed && !renamed.error && renamed.data?.friendly_name) name = renamed.data.friendly_name.trim();
+          else name = clean;
+        }
+        return {
+          id: data.id,
+          name: name || "Passkey",
+          createdAt: data.created_at,
+        } satisfies Passkey;
+      },
+      async signIn(opts) {
+        if (useBrowserPasskeyHandoff()) {
+          if (opts?.conditional) {
+            throw new AccountError("cancelled", "Passkey autofill is skipped during browser handoff.");
+          }
+          const { data: started, error: startError } = await db.auth.passkey.startAuthentication(
+            opts?.captchaToken ? { options: { captchaToken: opts.captchaToken } } : undefined,
+          );
+          if (startError) throw passkeyError(startError);
+          if (!started) throw new AccountError("unknown", "Passkey sign-in didn't start. Try again.");
+          const credential = await handoffPasskey("authenticate", started.options, opts?.signal);
+          const { data, error } = await db.auth.passkey.verifyAuthentication({
+            challengeId: started.challenge_id,
+            credential: credential as unknown as Parameters<typeof db.auth.passkey.verifyAuthentication>[0]["credential"],
+          });
+          if (error) throw passkeyError(error);
+          if (!data?.user) throw new AccountError("invalid_code", "No account matched that passkey.");
+          return toUser(data.user);
+        }
+        const started = performance.now();
+        const { data, error } = await db.auth.signInWithPasskey({
+          options: {
+            ...(opts?.captchaToken ? { captchaToken: opts.captchaToken } : {}),
+            ...(opts?.signal ? { signal: opts.signal } : {}),
+            ...(opts?.conditional ? { mediation: "conditional" as const } : {}),
+          },
+        });
+        if (error) throw passkeyError(error, performance.now() - started);
+        if (!data?.user) throw new AccountError("invalid_code", "No account matched that passkey.");
+        return toUser(data.user);
+      },
+      async remove(id) {
+        const { error } = await db.auth.passkey.delete({ passkeyId: id });
+        if (error) throw passkeyError(error);
+      },
     },
 
     // Supabase MFA, TOTP factors only. Turned on in the dashboard (docs/supabase-storage.md).
@@ -792,6 +880,117 @@ export function authenticators(factors: readonly Factor[]): Authenticator[] {
   return factors
     .filter((f) => f.factor_type === "totp" && f.status === "verified")
     .map((f, i) => ({ id: f.id, name: f.friendly_name || `Authenticator ${i + 1}` }));
+}
+
+export function useBrowserPasskeyHandoff(): boolean {
+  return isDesktop && inShell;
+}
+
+export function passkeyHandoffUrl(): string {
+  const configured = (import.meta.env.VITE_PASSKEY_HANDOFF_URL as string | undefined)?.trim();
+  if (configured) return configured;
+  return import.meta.env.DEV ? "http://localhost:1420/passkey.html" : "https://getpolar.app/passkey/";
+}
+
+async function handoffPasskey(
+  mode: "register" | "authenticate",
+  options: unknown,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  if (signal?.aborted) throw new AccountError("cancelled", "Passkey request was cancelled.");
+  const onAbort = () => void nativeCall<void>("passkey_handoff_cancel").catch(() => {});
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const raw = await nativeCall<string>("passkey_handoff", {
+      baseUrl: passkeyHandoffUrl(),
+      mode,
+      optionsJson: JSON.stringify(options),
+    });
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) throw new AccountError("unknown", "Passkey verification returned an invalid response.");
+    return parsed;
+  } catch (e) {
+    throw passkeyError(e);
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+export function browserSupportsPasskeys(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.isSecureContext === false) return false;
+  return (
+    "PublicKeyCredential" in window &&
+    typeof window.PublicKeyCredential === "function" &&
+    typeof navigator?.credentials?.create === "function" &&
+    typeof navigator?.credentials?.get === "function"
+  );
+}
+
+/** Translate WebAuthnError, desktop handoff errors, and Supabase Auth passkey errors into clean `AccountError`s. */
+export function passkeyError(e: unknown, elapsedMs = 1000): AccountError {
+  if (e instanceof AccountError) return e;
+  console.warn("[passkey]", e);
+  const rawMessage = isRecord(e) ? str(e.message) : typeof e === "string" ? e : undefined;
+  if (rawMessage?.startsWith("passkey:")) {
+    const reason = rawMessage.slice("passkey:".length).trim();
+    if (reason === "cancelled") return new AccountError("cancelled", "Passkey request was cancelled.");
+    if (reason === "timeout") return new AccountError("invalid_code", "That passkey prompt timed out. Try again.");
+    if (reason === "already_registered") {
+      return new AccountError("unknown", "This device already has a passkey saved for this account.");
+    }
+    return new AccountError("unknown", reason || "Passkey verification didn't go through.");
+  }
+  if (isRecord(e) && "__isWebAuthnError" in e) {
+    const code = str(e.code);
+    const cause = isRecord(e.cause) ? e.cause : null;
+    const causeName = cause ? str(cause.name) : undefined;
+    const msg = str(e.message) || (cause ? str(cause.message) : undefined) || "";
+    if (code === "ERROR_CEREMONY_ABORTED" || causeName === "AbortError") {
+      return new AccountError("cancelled", "Passkey request was cancelled.");
+    }
+    if (causeName === "NotAllowedError") {
+      // Only treat NotAllowedError as a silent user cancel if an OS prompt actually had time to appear;
+      // instant rejections (e.g. macOS WKWebView blocking WebAuthn) must surface to the user.
+      if (elapsedMs >= 500) return new AccountError("cancelled", "Passkey request was cancelled.");
+      if (isMac && isDesktop) {
+        return new AccountError(
+          "not_set_up",
+          "Passkeys are blocked inside macOS's embedded webview (WKWebView). Test passkeys in a browser at http://localhost:1420, or wire native Apple AuthenticationServices.",
+        );
+      }
+      return new AccountError("unknown", msg || "This browser blocked the passkey prompt.");
+    }
+    if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
+      return new AccountError("unknown", "This device already has a passkey saved for this account.");
+    }
+    if (code === "ERROR_INVALID_DOMAIN" || code === "ERROR_INVALID_RP_ID") {
+      return new AccountError("not_set_up", msg || "Passkeys aren't configured for this app origin on the server.");
+    }
+    if (
+      code === "ERROR_AUTHENTICATOR_MISSING_DISCOVERABLE_CREDENTIAL_SUPPORT" ||
+      code === "ERROR_AUTHENTICATOR_MISSING_USER_VERIFICATION_SUPPORT" ||
+      code === "ERROR_AUTHENTICATOR_NO_SUPPORTED_PUBKEYCREDPARAMS_ALG"
+    ) {
+      return new AccountError("not_set_up", "This device doesn't support passkeys.");
+    }
+    return new AccountError("unknown", msg || "Passkey verification didn't go through.");
+  }
+  if (isRecord(e)) {
+    const code = str(e.code);
+    const status = count(e.status);
+    if (code === "webauthn_disabled" || code === "passkey_disabled" || code === "feature_disabled" || status === 404) {
+      return new AccountError("not_set_up", "Passkeys aren't turned on on this account server.");
+    }
+    if (code === "webauthn_challenge_expired") {
+      return new AccountError("invalid_code", "That passkey prompt timed out. Try again.");
+    }
+    if (code === "webauthn_credential_not_found") {
+      return new AccountError("invalid_code", "No account matched that passkey.");
+    }
+    if (e instanceof Error) return authError(e as unknown as AuthError);
+  }
+  return new AccountError("unknown", "Something went wrong with your passkey. Try again.");
 }
 
 export function authError(e: AuthError): AccountError {

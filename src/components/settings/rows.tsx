@@ -1,7 +1,8 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { ChevronRight, type Icon as IconT } from "../icons";
 import { PAGE_SECTIONS, type PageId } from "../../lib/settings/pages";
-import { useFormFactor } from "../../lib/ui";
+import { prefersReducedMotion, springs, useFormFactor } from "../../lib/ui";
 import { FamilyTray, MoreDots } from "./FamilyTray";
 import { SECTION_ICONS } from "./pages";
 import { SliderField } from "../SliderField";
@@ -367,7 +368,21 @@ export function ExpandRow({
       ) : (
         row
       )}
-      {open && <div className="settings-expand-body">{children}</div>}
+      {/* Opening grows the card to fit what's inside and closing folds it back (Family: a surface changes its height
+          rather than jumping), the rows below carried along. */}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className="settings-expand-reveal"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={prefersReducedMotion() ? { duration: 0 } : { ...springs.sheet, opacity: { duration: 0.18 } }}
+          >
+            <div className="settings-expand-body">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

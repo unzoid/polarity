@@ -13,10 +13,18 @@ function files(dir: string): string[] {
   );
 }
 
-const GATES = [/disabled(=\{|:)\s*!\s*(released|isReleased\()/, /\{\s*released\s*&&\s*<DownloadButton/, /`Coming \$\{formatDate\(/];
+const GATES = [
+  /disabled(=\{|:)\s*!\s*(released|isReleased\()/,
+  /\{\s*released\s*&&\s*<DownloadButton/,
+  /`Coming \$\{formatDate\(/,
+  // isReleased written out under another name (`aired`, `future`): the desk and phone title pages did (0.22.0).
+  /new Date\(\w+\.released\)\.getTime\(\)\s*(<=|>)\s*Date\.now\(\)(?!\s*\+)/,
+];
+/** Where isReleased and isOpenable themselves are written. */
+const HOME = "lib/format.ts";
 
 test("no episode list disables, hides Download or dates by the listed date alone", () => {
-  const found = files(SRC).flatMap((f) => {
+  const found = files(SRC).filter((f) => !f.endsWith(HOME)).flatMap((f) => {
     const lines = readFileSync(f, "utf8").split("\n");
     return lines.flatMap((l, i) => (GATES.some((g) => g.test(l)) ? [`${f.slice(SRC.length + 1)}:${i + 1}: ${l.trim()}`] : []));
   });
@@ -24,6 +32,14 @@ test("no episode list disables, hides Download or dates by the listed date alone
 });
 
 test("the check itself catches the rail's old gate", () => {
-  for (const old of ["disabled={!released}", "disabled: !released,", "{released && <DownloadButton item={meta} />}", "`Coming ${formatDate(v.released)}`"])
+  for (const old of [
+    "disabled={!released}",
+    "disabled: !released,",
+    "{released && <DownloadButton item={meta} />}",
+    "`Coming ${formatDate(v.released)}`",
+    "const aired = !v.released || new Date(v.released).getTime() <= Date.now();",
+    "const future = !!v.released && new Date(v.released).getTime() > Date.now();",
+  ])
     expect(GATES.some((g) => g.test(old))).toBe(true);
+  expect(GATES.some((g) => g.test("new Date(v.released).getTime() <= Date.now() + EARLY_DAYS * 86_400_000"))).toBe(false);
 });

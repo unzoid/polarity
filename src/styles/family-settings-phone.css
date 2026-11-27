@@ -949,6 +949,48 @@
 .ft-picker-foot {
   margin-top: 18px;
 }
+/* Add to Playlist: several can be ticked, so an unticked row keeps an empty ring; each shows how many it holds. */
+.ft-picker-meta {
+  flex: none;
+  color: var(--ft-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.ft-picker-multi .ft-picker-opt:not(.ft-picker-new) .ft-picker-check {
+  transform: none;
+  opacity: 1;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--ft-muted);
+  transition: background-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+}
+.ft-picker-multi .ft-picker-opt.is-selected .ft-picker-check {
+  background: var(--accent);
+  box-shadow: none;
+}
+.ft-picker-multi .ft-picker-opt:not(.is-selected) .ft-picker-check svg {
+  opacity: 0;
+}
+.ft-picker-new {
+  color: var(--accent);
+}
+/* My List heads the Add to List tray, set apart from the playlists by a hairline. */
+.ft-picker-library {
+  position: relative;
+  margin-bottom: 8px;
+}
+.ft-picker-library::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -5px;
+  height: 1px;
+  background: var(--ft-row);
+}
+.ft-picker-new svg {
+  flex: none;
+  width: 24px;
+}
 
 /* Family tray forms, inputs, switches & buttons (Services, Add-ons, FormRow trays) */
 .ft-tray-body,

@@ -1,79 +1,89 @@
-/* --- A title's right-click menu (components/CardMenu.tsx), drawn the way Family draws its option trays
-   (benji.org/family-values): a floating panel with large corners; what it's about at the top (the poster, its
-   name, the year); the choices in filled, rounded groups with air between them instead of rules; rows tall enough
-   to aim at, a soft fill under the pointer rather than an accent bar; what takes something away in red. It grows
-   out of the pointer quickly and settles without a bounce: a menu is used too often for a show. */
+/* --- A title's right-click menu (components/CardMenu.tsx), drawn as a Mac's context menu is: one sheet of frosted
+   material (what's behind shows through, blurred and a little more saturated), a hairline edge and a soft shadow; the
+   title it's about at the top, small; the choices in groups parted by hairlines, not in boxes of their own; compact
+   rows in regular weight, one outline glyph each; the row under the pointer filled in the accent, white on it, and
+   red for what takes something away. It's as wide as its longest choice, and it grows quickly out of the pointer. */
 .menu.fam-menu {
-  --fam-m-panel: #1c1c1f;
-  --fam-m-group: rgb(255 255 255 / 0.055);
-  --fam-m-hover: rgb(255 255 255 / 0.09);
-  --fam-m-text: #f5f5f7;
-  --fam-m-text-2: rgb(235 235 245 / 0.56);
-  --fam-m-icon: rgb(235 235 245 / 0.72);
-  --fam-m-danger: #ff5a52;
+  --fam-m-panel: rgb(40 40 43 / 0.72);
+  --fam-m-solid: #28282b;
+  --fam-m-rim: rgb(255 255 255 / 0.12);
+  --fam-m-rule: rgb(255 255 255 / 0.1);
+  --fam-m-text: rgb(255 255 255 / 0.92);
+  --fam-m-text-2: rgb(235 235 245 / 0.55);
+  --fam-m-icon: rgb(235 235 245 / 0.7);
+  --fam-m-hi: var(--dk-accent, var(--accent));
+  --fam-m-hi-text: #fff;
+  --fam-m-danger: #ff453a;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 272px;
-  min-width: 0;
-  max-width: calc(100vw - 24px);
-  padding: 8px;
-  border-radius: 22px;
-  corner-shape: superellipse(1.3);
+  width: max-content;
+  min-width: 228px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 5px;
+  border-radius: 14px;
+  corner-shape: superellipse(1.5);
   background: var(--fam-m-panel);
+  -webkit-backdrop-filter: blur(36px) saturate(1.8);
+  backdrop-filter: blur(36px) saturate(1.8);
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.07),
-    0 4px 14px rgb(0 0 0 / 0.28),
-    0 26px 64px rgb(0 0 0 / 0.5);
+    inset 0 0 0 0.5px var(--fam-m-rim),
+    0 0 0 0.5px rgb(0 0 0 / 0.5),
+    0 10px 30px rgb(0 0 0 / 0.32),
+    0 2px 6px rgb(0 0 0 / 0.2);
   color: var(--fam-m-text);
   font-family: var(--font);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.006em;
   transition:
-    opacity 140ms ease-out,
-    transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
-    filter 180ms ease-out;
+    opacity 120ms ease-out,
+    transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 :root[data-scheme="light"] .menu.fam-menu {
-  --fam-m-panel: #fff;
-  --fam-m-group: #f2f2f5;
-  --fam-m-hover: #e6e6eb;
-  --fam-m-text: #111113;
+  --fam-m-panel: rgb(246 246 248 / 0.8);
+  --fam-m-solid: #f6f6f8;
+  --fam-m-rim: rgb(255 255 255 / 0.6);
+  --fam-m-rule: rgb(0 0 0 / 0.09);
+  --fam-m-text: rgb(0 0 0 / 0.88);
   --fam-m-text-2: rgb(60 60 67 / 0.6);
-  --fam-m-icon: rgb(60 60 67 / 0.72);
+  --fam-m-icon: rgb(60 60 67 / 0.75);
   --fam-m-danger: #e5322b;
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.06),
-    0 4px 14px rgb(0 0 0 / 0.08),
-    0 26px 64px rgb(0 0 0 / 0.18);
+    inset 0 0 0 0.5px var(--fam-m-rim),
+    0 0 0 0.5px rgb(0 0 0 / 0.12),
+    0 10px 30px rgb(0 0 0 / 0.14),
+    0 2px 6px rgb(0 0 0 / 0.06);
 }
-/* Out of the pointer: from a little smaller and soft, sharp as it reaches size. */
+/* Where the frosting can't be drawn, the sheet is solid rather than see-through. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .menu.fam-menu {
+    background: var(--fam-m-solid);
+  }
+}
+/* Out of the pointer: from a little smaller, quickly; going, a quick fade. No blur: it would fight the frosting. */
 .menu.fam-menu[data-starting-style] {
   opacity: 0;
-  transform: scale(0.9);
-  filter: blur(3px);
+  transform: scale(0.94);
 }
 .menu.fam-menu[data-ending-style] {
   opacity: 0;
-  transform: scale(0.96);
-  filter: none;
-  transition-duration: 110ms;
+  transform: none;
+  transition-duration: 100ms;
 }
 
-/* What the menu is about: the poster, the name, the year (or the episode). */
+/* What the menu is about: the poster small, the name, the year (or the episode), then a hairline. */
 .fam-menu-head {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 4px 6px 6px;
+  gap: 10px;
+  padding: 5px 9px 9px;
 }
 .fam-menu-art {
   flex: none;
-  width: 34px;
-  height: 51px;
+  width: 26px;
+  height: 39px;
   overflow: hidden;
-  border-radius: 7px;
-  background: var(--fam-m-group);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  border-radius: 4px;
+  background: var(--fam-m-rule);
+  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.1);
 }
 .fam-menu-art img {
   display: block;
@@ -83,7 +93,7 @@
 }
 .fam-menu-name {
   display: grid;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
 }
 .fam-menu-name :is(strong, span) {
@@ -92,88 +102,106 @@
   white-space: nowrap;
 }
 .fam-menu-name strong {
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 19px;
-  letter-spacing: -0.015em;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: -0.012em;
 }
 .fam-menu-name span {
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 16px;
   color: var(--fam-m-text-2);
 }
 
-/* A group: one filled, rounded card of rows. */
+/* Groups: parted by an inset hairline, nothing round them. */
 .fam-menu-group {
   display: grid;
-  padding: 4px;
-  border-radius: 16px;
-  corner-shape: superellipse(1.3);
-  background: var(--fam-m-group);
+}
+:is(.fam-menu-head, .fam-menu-group) + .fam-menu-group::before {
+  content: "";
+  display: block;
+  height: 1px;
+  margin: 5px 9px;
+  background: var(--fam-m-rule);
 }
 
-/* Rows. */
+/* Rows: concentric with the sheet (its 14 less its 5px inset), regular weight, the glyph secondary. */
 .menu.fam-menu .menu-item {
-  gap: 11px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
+  gap: 9px;
+  height: 28px;
+  padding: 0 10px 0 9px;
+  border-radius: 9px;
+  corner-shape: superellipse(1.5);
+  font-size: 13.5px;
+  font-weight: 450;
   line-height: 18px;
+  letter-spacing: -0.006em;
   color: var(--fam-m-text);
-  transition: background-color 90ms ease;
+  white-space: nowrap;
 }
 .menu.fam-menu .menu-item > svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--fam-m-icon);
 }
 .menu.fam-menu .menu-item[data-highlighted],
 .menu.fam-menu .menu-item[data-popup-open],
 :root[data-input="keyboard"] .menu.fam-menu .menu-item[data-highlighted] {
-  background: var(--fam-m-hover);
-  color: var(--fam-m-text);
+  background: var(--fam-m-hi);
+  color: var(--fam-m-hi-text);
 }
 .menu.fam-menu .menu-item[data-highlighted] > svg,
 .menu.fam-menu .menu-item[data-popup-open] > svg {
-  color: var(--fam-m-text);
-}
-.menu.fam-menu .menu-item:active {
-  background: var(--fam-m-hover);
-  scale: 0.985;
+  color: var(--fam-m-hi-text);
 }
 .menu.fam-menu .menu-item[data-disabled] {
-  opacity: 0.38;
+  opacity: 0.35;
+  background: none;
   color: var(--fam-m-text);
 }
 .menu.fam-menu .menu-item > .menu-chevron {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
+  margin-left: 16px;
   color: var(--fam-m-text-2);
 }
-/* What takes something away: red, its glyph too. */
+.menu.fam-menu .menu-item:is([data-highlighted], [data-popup-open]) > .menu-chevron {
+  color: var(--fam-m-hi-text);
+}
+/* What takes something away: red, its glyph too; under the pointer, white on red. */
 .menu.fam-menu .menu-item:has(.fam-menu-danger),
 .menu.fam-menu .menu-item:has(.fam-menu-danger) > svg {
   color: var(--fam-m-danger);
 }
 .menu.fam-menu .menu-item:has(.fam-menu-danger)[data-highlighted] {
-  background: color-mix(in srgb, var(--fam-m-danger) 14%, transparent);
+  background: var(--fam-m-danger);
 }
-/* The playlists submenu: the same panel, its rows straight in it. */
+.menu.fam-menu .menu-item:has(.fam-menu-danger)[data-highlighted],
+.menu.fam-menu .menu-item:has(.fam-menu-danger)[data-highlighted] > svg {
+  color: #fff;
+}
+
+/* The playlists submenu: the same sheet. */
 .menu.fam-menu.fam-menu-sub {
-  gap: 0;
-  width: 248px;
-  padding: 6px;
-  border-radius: 18px;
+  min-width: 212px;
 }
 .menu.fam-menu .menu-check {
-  color: var(--dk-accent, var(--accent));
+  color: var(--fam-m-hi);
 }
 .menu.fam-menu .menu-item[data-highlighted] .menu-check {
-  color: var(--dk-accent, var(--accent));
+  color: var(--fam-m-hi-text);
+}
+.menu.fam-menu .menu-meta {
+  background: none;
+  box-shadow: none;
+  font-size: 12px;
+  color: var(--fam-m-text-2);
+}
+.menu.fam-menu .menu-item[data-highlighted] .menu-meta {
+  color: var(--fam-m-hi-text);
 }
 .menu.fam-menu .menu-sep {
-  margin: 4px 10px;
-  background: var(--fam-m-group);
+  height: 1px;
+  margin: 5px 9px;
+  background: var(--fam-m-rule);
 }

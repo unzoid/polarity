@@ -160,6 +160,31 @@ test("a title's action row fits a phone", async ({ app }) => {
   expect(box!.x + box!.width).toBeLessThanOrEqual(app.viewportSize()!.width);
 });
 
+test("a title's Add to List saves it to a new playlist from the sheet", async ({ app }) => {
+  const sheet = await openTitle(app, "kingsbridge", "Kingsbridge");
+  const add = sheet.locator(".ps-actions").getByRole("button", { name: /^(Add to List|Added)$/ });
+  await add.tap();
+  const list = app.getByRole("dialog", { name: "Add to List" });
+  await expect(list.getByRole("checkbox", { name: /My List/ })).toBeVisible();
+  await list.getByRole("button", { name: "New Playlist" }).tap();
+  const naming = app.getByRole("dialog", { name: "New Playlist" });
+  await naming.getByLabel("Playlist name").fill("Weekend");
+  await naming.getByRole("button", { name: "Create Playlist" }).tap();
+  await expect(list.getByRole("checkbox", { name: /Weekend/ })).toHaveAttribute("aria-checked", "true");
+  await list.getByRole("button", { name: "Done" }).tap();
+  await expect(add).toHaveAttribute("aria-pressed", "true");
+  await expect(add).toHaveText("Added");
+});
+
+test("an episode listed for the coming week can be played from the sheet; one further off can't (#143)", async ({ app }) => {
+  // Kingsbridge's S1E2 is listed for 12 Mar 2021 and E3 for 13 Apr: on 9 Mar the first may be out already.
+  await app.clock.setFixedTime(new Date("2021-03-09T12:00:00Z"));
+  const sheet = await openTitle(app, "kingsbridge", "Kingsbridge");
+  await expect(sheet.getByRole("button", { name: "Play episode 2", exact: true })).toBeEnabled();
+  await expect(sheet.getByText(/Airs /).first()).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Play episode 3", exact: true })).toBeDisabled();
+});
+
 test("on touch, an episode's Download is always there, not waiting for a hover (#79)", async ({ app }) => {
   const sheet = await openTitle(app, "fieldwork", "Fieldwork");
   const download = sheet.locator(".ps-episode-dl").first();

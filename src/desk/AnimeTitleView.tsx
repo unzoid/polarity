@@ -15,7 +15,6 @@ import { Img } from "../components/Img";
 import { preloadPlayerNow } from "../components/PlayerLayer";
 import { TitleLogo } from "../components/TitleLogo";
 import { useEpisodeRatings } from "../components/title/EpisodeRatings";
-import { useLibraryToggle } from "../components/title/LibraryButton";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
 import { ScoreRow } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
@@ -61,7 +60,7 @@ import {
   type HeroImdb,
 } from "../lib/anime";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
-import { formatRemaining } from "../lib/format";
+import { formatRemaining, isOpenable, isReleased } from "../lib/format";
 import { episodeEntry, watchedFraction } from "../lib/library";
 import { useMeta, useProgressOf, useRatings } from "../lib/net";
 import type { PlayRequest } from "../lib/playback";
@@ -69,13 +68,13 @@ import { useNavigation } from "../lib/router";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../lib/settings";
 import type { Meta, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
-import { IconCheck, IconChevronRight, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "../phone/icons";
+import { IconCheck, IconChevronRight, IconMuted, IconPlay, IconPlayRing, IconSound, IconSources, IconTrailer } from "../phone/icons";
 import { AnimatedSwap, EpisodeSearch, filterEpisodes } from "./EpisodeTools";
 import { ListDialog } from "./ListDialog";
 import { DeskRatingsOverlay } from "./RatingsOverlay";
 import { ProgressLine as ProgressBar } from "./Rows";
 import { SeasonChooser, type SeasonOption } from "./SeasonChooser";
-import { CompactPlay, IconRatingsGrid, NextUp, PinnedBar, useCardStrip } from "./TitleParts";
+import { CompactPlay, IconRatingsGrid, ListAction, NextUp, PinnedBar, useCardStrip } from "./TitleParts";
 
 type AnimeTab = "episodes" | "more" | "details" | "trailers";
 
@@ -548,7 +547,7 @@ function AnimeActionBar({
 
   return (
     <div className="dk-t-actions">
-      {meta && <AnimeLibraryAction item={meta} />}
+      {meta && <ListAction item={meta} />}
       {ytTrailerId && (
         <DeskActionBtn label="Trailer" onClick={() => openTrailer({ name, imdbId, ytId: ytTrailerId, ytFrom: "AniList" })}>
           <IconTrailer size={27} />
@@ -559,15 +558,6 @@ function AnimeActionBar({
       </DeskActionBtn>
       {meta && activeAnime && !activePb.isMovie && downloads.length > 0 && <AnimeSeasonDownload item={meta} videos={downloads} part={activeAnime.id} />}
     </div>
-  );
-}
-
-function AnimeLibraryAction({ item }: { item: Meta }) {
-  const { inLibrary, toggle } = useLibraryToggle(item);
-  return (
-    <DeskActionBtn label="My List" pressed={inLibrary} onClick={toggle}>
-      {inLibrary ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}
-    </DeskActionBtn>
   );
 }
 
@@ -849,8 +839,9 @@ function DeskAnimeEpisodes({
               const p = pb.byVideo.get(v.id);
               const flag = flags?.get(v.episode);
               const pending = v.id.startsWith(PENDING_EPISODE);
-              const future = !!v.released && new Date(v.released).getTime() > Date.now();
-              const unreleased = pending || future;
+              // Listed for the coming week: it may be out already (#143), so it plays; "Airs …" says when it's listed.
+              const unreleased = pending || !isOpenable(v);
+              const soon = !unreleased && !isReleased(v);
               const playable = !!req && !unreleased;
               const fraction = p && p.duration > 0 ? p.position / p.duration : 0;
               const watched = fraction >= watchedFraction();
@@ -881,7 +872,9 @@ function DeskAnimeEpisodes({
                           <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
                             <IconPlayRing size={34} />
                           </span>
-                          {timeLabel && (
+                          {soon && shortDate ? (
+                            <span className="dk-ep-soon">{shortDate}</span>
+                          ) : timeLabel && (
                             <span className="dk-ep-runtime tabular" aria-hidden>
                               <IconPlay size={9} />
                               {timeLabel}
@@ -909,7 +902,7 @@ function DeskAnimeEpisodes({
                       </span>
                       {v.overview && <span className="dk-ep-text">{v.overview}</span>}
                       <span className="dk-ep-date tabular">
-                        {unreleased ? (shortDate ? `Coming ${shortDate}` : "Not yet released") : fullDate}
+                        {unreleased ? (shortDate ? `Coming ${shortDate}` : "Not yet released") : soon && fullDate ? `Airs ${fullDate}` : fullDate}
                       </span>
                     </span>
                   </button>
@@ -1010,8 +1003,9 @@ function AnimeEpStrip({
         {episodes.map((v) => {
           const p = progress.get(v.id);
           const pending = v.id.startsWith(PENDING_EPISODE);
-          const future = !!v.released && new Date(v.released).getTime() > Date.now();
-          const unreleased = pending || future;
+          // Listed for the coming week: it may be out already (#143), so it plays; "Airs …" says when it's listed.
+          const unreleased = pending || !isOpenable(v);
+          const soon = !unreleased && !isReleased(v);
           const on = !unreleased && !!meta;
           const fraction = p && p.duration > 0 ? p.position / p.duration : 0;
           const watched = fraction >= watchedFraction();
@@ -1035,7 +1029,9 @@ function AnimeEpStrip({
                     <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
                       <IconPlayRing size={40} />
                     </span>
-                    {timeLabel && (
+                    {soon && shortDate ? (
+                      <span className="dk-ep-soon">Airs {shortDate}</span>
+                    ) : timeLabel && (
                       <span className="dk-ep-runtime tabular" aria-hidden>
                         <IconPlay size={10} />
                         {timeLabel}
@@ -1068,7 +1064,7 @@ function AnimeEpStrip({
               </strong>
               {v.overview && <p className="dk-ep-text">{v.overview}</p>}
               <span className="dk-ep-date tabular">
-                {unreleased ? (shortDate ? `Coming ${shortDate}` : "Not yet released") : fullDate}
+                {unreleased ? (shortDate ? `Coming ${shortDate}` : "Not yet released") : soon && fullDate ? `Airs ${fullDate}` : fullDate}
               </span>
             </li>
           );

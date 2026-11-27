@@ -43,6 +43,19 @@ export interface Account {
   /** Email a sign-in code (new emails get an account automatically). */
   sendCode(email: string, captchaToken?: string): Promise<void>;
   verifyCode(email: string, code: string): Promise<void>;
+  /** Whether this runtime supports WebAuthn passkeys. */
+  passkeysSupported: boolean;
+  /** Sign in directly with a registered passkey. */
+  signInWithPasskey(captchaToken?: string): Promise<void>;
+  /**
+   * True right after signing in (or creating an account) when the account has no passkeys yet and
+   * this device supports them: AuthScreen shows the "Setup Passkey" step before entering the app.
+   */
+  passkeyPrompt: boolean;
+  /** Register a passkey from the post-login prompt and finish entering the app. */
+  addPasskey(): Promise<void>;
+  /** Dismiss the post-login passkey prompt and finish entering the app. */
+  skipPasskeySetup(): Promise<void>;
   /**
    * Signing in on a TV from a device that's already signed in (#133): `start` and `wait` on the
    * device signing in (it lands on the profiles once approved), `look` and `answer` on the one
@@ -117,6 +130,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [profilesView, setProfilesView] = useState<"pick" | "manage">("pick");
   const [signOutBlocked, setSignOutBlocked] = useState<number | null>(null);
   const [twoStep, setTwoStep] = useState<Authenticator[] | null>(null);
+  const [passkeyPromptUser, setPasskeyPromptUser] = useState<AccountUser | null>(null);
   /** The second step was asked on launch: "Who's watching?" follows it, as after any launch. */
   const twoStepOnLaunch = useRef(false);
   const statusRef = useRef(status);
@@ -186,6 +200,25 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     [enter, setProfiles],
   );
 
+  /**
+   * Right after signing in or creating an account on a passkey-capable non-TV device: if the account
+   * has no passkeys yet (and the server has passkeys turned on), show the Setup Passkey step before
+   * entering onboarding / profiles. Any error listing passkeys skips the prompt silently.
+   */
+  const maybeOfferPasskey = useCallback(
+    async (b: NonNullable<typeof backend>, u: AccountUser) => {
+      if (!isTvDevice && b.passkeys.supported()) {
+        const existing = await b.passkeys.list().catch(() => null);
+        if (existing && existing.length === 0) {
+          setPasskeyPromptUser(u);
+          return;
+        }
+      }
+      await afterSignIn(u, { launch: false });
+    },
+    [afterSignIn],
+  );
+
   // Restore the session on launch.
   useEffect(() => {
     if (!backend) {
@@ -243,7 +276,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     return backend.auth.onChange((u) => {
       // The same user read again (an email change confirmed): the address shown follows.
       if (u) setUser((cur) => (cur && cur.id === u.id && !sameUser(cur, u) ? u : cur));
-      if (!u) setTwoStep(null);
+      if (!u) {
+        setTwoStep(null);
+        setPasskeyPromptUser(null);
+      }
       if (u || !["ready", "profiles", "onboarding"].includes(statusRef.current)) return;
       forgetSignedInByDevice();
       sync.stop();
@@ -347,13 +383,46 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           twoStepOnLaunch.current = false;
           return setTwoStep(second);
         }
+        await maybeOfferPasskey(b, u);
+      },
+      passkeysSupported: !!backend && backend.passkeys.supported(),
+      async signInWithPasskey(captchaToken) {
+        const b = need();
+        forgetSignedInByDevice();
+        const u = await b.passkeys.signIn(captchaToken ? { captchaToken } : undefined);
+        const second = await secondStepFor(b, u);
+        if (second) {
+          twoStepOnLaunch.current = false;
+          return setTwoStep(second);
+        }
+        await afterSignIn(u, { launch: false });
+      },
+      passkeyPrompt: !!passkeyPromptUser,
+      async addPasskey() {
+        const b = need();
+        const u = passkeyPromptUser ?? (await b.auth.current());
+        if (!u) throw new Error("Your sign-in expired. Sign in again.");
+        await b.passkeys.register(deviceLabel(os, formFactor().form, isTvDevice));
+        setPasskeyPromptUser(null);
+        await afterSignIn(u, { launch: false });
+      },
+      async skipPasskeySetup() {
+        const b = need();
+        const u = passkeyPromptUser ?? (await b.auth.current());
+        setPasskeyPromptUser(null);
+        if (!u) return;
         await afterSignIn(u, { launch: false });
       },
       twoStep,
       async verifyTwoStep(id, code) {
-        const u = await need().twoStep.verify(id, tidyCode(code));
+        const b = need();
+        const u = await b.twoStep.verify(id, tidyCode(code));
         setTwoStep(null);
-        await afterSignIn(u, { launch: twoStepOnLaunch.current });
+        if (twoStepOnLaunch.current) {
+          await afterSignIn(u, { launch: true });
+        } else {
+          await maybeOfferPasskey(b, u);
+        }
       },
       async cancelTwoStep() {
         setTwoStep(null);
@@ -482,7 +551,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         setStatus("signed-out");
       },
     };
-  }, [status, user, profiles, profile, canCancelSignIn, profilesView, signOutBlocked, twoStep, security, afterSignIn, enter, setProfiles]);
+  }, [status, user, profiles, profile, canCancelSignIn, profilesView, signOutBlocked, twoStep, passkeyPromptUser, security, afterSignIn, maybeOfferPasskey, enter, setProfiles]);
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
 }

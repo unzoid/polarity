@@ -2,10 +2,12 @@ import "../styles/screens.css";
 import "../styles/settings-overlay.css";
 import "../styles/family-settings-phone.css";
 import "../styles/marketplace.css";
+import "../styles/settings-family.css";
 import { Dialog } from "@base-ui/react/dialog";
-import { animate } from "motion/react";
+import { animate, motion } from "motion/react";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -19,6 +21,7 @@ import { ChevronLeft, ChevronRight, Close, Reset, SignOut } from "./icons";
 import { iconButtonClass } from "./ui/Button";
 import { useNativeBack } from "./NativeBack";
 import { dismissDepth, isTextField, onDismissDepth, prefersReducedMotion, project, rubberband, springs, useFormFactor } from "../lib/ui";
+import { useAppleCorners, useSmoothCorners } from "../lib/ui/cornerSmoothing";
 import { tvModeAvailable } from "../tv/tvMode";
 import { SearchField } from "./ui/SearchField";
 import { useAccount } from "../lib/account";
@@ -36,9 +39,13 @@ import {
 import { searchSettings, type SettingEntry } from "../lib/settings/catalog";
 import { SettingsPageBody } from "../screens/settings/SettingsPageBody";
 import { PhoneFamilySettings } from "./settings/PhoneFamilySettings";
+import { FamilyResetTray } from "./settings/FamilyTray";
+import { DropdownLook } from "./Dropdown";
 import { PAGES } from "./settings/pages";
 import { GlassScene } from "@glass-sdk/liquid-glass/react";
 import { SettingsGlassSwitch } from "./settings/GlassSwitch";
+import { SettingsGlassSlider } from "./settings/GlassSlider";
+import { SliderProvider } from "./SliderField";
 import { SwitchProvider } from "./ui/Switch";
 
 /** The app's colour scheme (`data-scheme`, lib/theme/apply.ts), which the glass is drawn for. */
@@ -55,12 +62,14 @@ const scheme = () => (document.documentElement.dataset.scheme === "light" ? "lig
  */
 const glassAvailable = typeof WebGL2RenderingContext !== "undefined";
 
-/** The page pane: a Liquid Glass scene, what its switches' lenses refract (settings/GlassSwitch.tsx). */
+/** The page pane: a Liquid Glass scene, what its switches' and sliders' lenses refract (settings/GlassSwitch.tsx, GlassSlider.tsx). */
 function Pane({ appearance, children }: { appearance: "light" | "dark"; children: ReactNode }) {
   if (!glassAvailable) return <div className="t3s-main">{children}</div>;
   return (
     <GlassScene className="t3s-main" appearance={appearance}>
-      <SwitchProvider value={SettingsGlassSwitch}>{children}</SwitchProvider>
+      <SwitchProvider value={SettingsGlassSwitch}>
+        <SliderProvider value={SettingsGlassSlider}>{children}</SliderProvider>
+      </SwitchProvider>
     </GlassScene>
   );
 }
@@ -157,7 +166,9 @@ function DesktopSettingsOverlay({
   const [sectionId, setSection] = useState<string | null>(null);
   // Which way the last move between a page and its sections went, for the page's slide in (settings-overlay.css);
   // null for any other change (another page, a search result), which shows at once.
-  const [move, setMove] = useState<"in" | "out" | null>(null);
+  // On a computer, moving between pages comes from the side the new one lies on in the sidebar: "next" from below,
+  // "prev" from above (Family: views fly in from where they are rather than teleport).
+  const [move, setMove] = useState<"in" | "out" | "next" | "prev" | null>(null);
   const openSection = (id: string) => (setMove("in"), setSection(id));
   const closeSection = () => (setMove("out"), setSection(null));
   const section = PAGE_SECTIONS[page]?.find((s) => s.id === sectionId) ?? null;
@@ -177,6 +188,9 @@ function DesktopSettingsOverlay({
     setView(next);
   };
   const [mounted, setMounted] = useState(false);
+  // The window, once drawn: its corners, its cards' and its controls' are Apple's continuous ones (useFamilyCorners).
+  const [popupEl, setPopupEl] = useState<HTMLDivElement | null>(null);
+  useFamilyCorners(popupEl, !phone);
   useEffect(() => setMounted(true), []);
   const appearance = useSyncExternalStore(onScheme, scheme, () => "dark" as const);
   // On iOS the system draws a section's Back, while no menu covers it (lib/platform/nativeBack.ts).
@@ -274,9 +288,12 @@ function DesktopSettingsOverlay({
   }, [target, page, sectionId]);
 
   const go = (id: PageId, inSection: string | null = null) => {
+    const order = GROUPS.flatMap((g) => g.pages);
+    const from = order.indexOf(page);
+    const to = order.indexOf(id);
     setPage(id);
     setSection(inSection);
-    setMove(null);
+    setMove(phone || id === page || from < 0 || to < 0 ? null : to > from ? "next" : "prev");
     showView("page");
     setQuery("");
   };
@@ -322,6 +339,8 @@ function DesktopSettingsOverlay({
   };
 
   const [resetArmed, setResetArmed] = useState(false);
+  // A computer asks in a Family tray (what's reset, then press and hold), as a phone does.
+  const [resetTray, setResetTray] = useState(false);
   useEffect(() => {
     if (!resetArmed) return;
     const t = window.setTimeout(() => setResetArmed(false), 4000);
@@ -457,6 +476,7 @@ function DesktopSettingsOverlay({
                 title={account.profile.name}
                 onClick={() => go("account")}
               >
+                {!phone && page === "account" && <NavPill />}
                 <Avatar id={account.profile.avatar} style={{ width: 18, borderRadius: 5 }} />
                 <span>{account.profile.name}</span>
               </button>
@@ -467,7 +487,7 @@ function DesktopSettingsOverlay({
 
       <Pane appearance={appearance}>
         {!embedded && (
-          <header className="t3s-header">
+          <header className="t3s-header" data-move={move ?? undefined}>
             {phone && (
               <button
                 ref={backButton}
@@ -479,12 +499,26 @@ function DesktopSettingsOverlay({
                 <ChevronLeft size={20} strokeWidth={2.2} />
               </button>
             )}
+            {/* A computer: the view's name large, where it sits above it small; in a section, a round Back to its page. */}
+            {!phone && section && (
+              <button className="t3s-round t3s-section-back" aria-label={`Back to ${current.label}`} title={current.label} onClick={closeSection}>
+                <ChevronLeft size={17} strokeWidth={2.4} />
+              </button>
+            )}
             <Dialog.Title className="t3s-crumbs">
-              <span className="t3s-crumb-root">Settings</span>
+              {/* Always "Settings" first, so the window keeps its name; in a section a computer shows its page instead. */}
+              <span className="t3s-crumb-root" data-hidden={section && !phone ? "" : undefined}>
+                Settings
+              </span>
+              {section && !phone && (
+                <span className="t3s-crumb-parent" key={current.label}>
+                  {current.label}
+                </span>
+              )}
               <span className="t3s-crumb-sep" aria-hidden>
                 /
               </span>
-              {section ? (
+              {section && phone ? (
                 <>
                   {/* Back to the page's list of sections. */}
                   <button className="t3s-crumb-link" onClick={closeSection}>
@@ -496,7 +530,9 @@ function DesktopSettingsOverlay({
                   <span className="t3s-crumb-page">{section.label}</span>
                 </>
               ) : (
-                <span className="t3s-crumb-page">{current.label}</span>
+                <span className="t3s-crumb-page" key={`${page}/${sectionId ?? ""}`}>
+                  {section?.label ?? current.label}
+                </span>
               )}
             </Dialog.Title>
             <div className="t3s-header-actions">
@@ -504,19 +540,18 @@ function DesktopSettingsOverlay({
                       it's at the foot of the list of sections there. */}
               {!phone && (
                 <button
-                  className={resetArmed ? "t3s-ghost btn-danger" : "t3s-ghost"}
+                  className="t3s-ghost"
                   disabled={!prefsCustomized(prefs)}
-                  onClick={triggerReset}
-                  onBlur={() => setResetArmed(false)}
-                  data-armed={resetArmed || undefined}
+                  onClick={() => setResetTray(true)}
+                  aria-haspopup="dialog"
                   title="Resets all preferences saved on this device (playback, layout, downloads, sounds)"
                 >
                   <Reset size={14} strokeWidth={2.2} />
-                  <span className="t3s-ghost-label">{resetArmed ? "Confirm reset?" : "Restore device defaults"}</span>
+                  <span className="t3s-ghost-label">Restore device defaults</span>
                 </button>
               )}
-              <Dialog.Close className={iconButtonClass("settings")} aria-label="Close settings">
-                <Close size={16} strokeWidth={2.2} />
+              <Dialog.Close className={phone ? iconButtonClass("settings") : "t3s-round"} aria-label="Close settings">
+                <Close size={phone ? 16 : 15} strokeWidth={2.4} />
               </Dialog.Close>
             </div>
           </header>
@@ -554,14 +589,26 @@ function DesktopSettingsOverlay({
       // Drawn closed first: a dialog that's open from its first render (the first time Settings is asked for,
       // before App.tsx has it loaded) shows without its opening motion.
       open={open && mounted}
-      onOpenChange={(o) => {
-        if (!o) closeSettings();
+      onOpenChange={(o, details) => {
+        if (o) return;
+        // A Family tray (the reset's, a row's) sits outside the window in the page: a press in it isn't a press
+        // outside, and Escape with one open closes the tray (useDismiss) and leaves Settings open.
+        const target = details?.event?.target;
+        const inTray = target instanceof Element && !!target.closest(".ft-backdrop");
+        if ((details?.reason === "outside-press" && inTray) || (details?.reason === "escape-key" && document.querySelector(".ft-backdrop"))) {
+          details.cancel?.();
+          return;
+        }
+        closeSettings();
       }}
     >
       <Dialog.Portal>
         <Dialog.Backdrop className="t3s-backdrop" />
+        {!phone && <WindowShape el={popupEl} />}
         <Dialog.Popup
+          ref={setPopupEl}
           className="t3s"
+          data-family={phone ? undefined : ""}
           data-view={phone ? view : undefined}
           data-push={phone ? (push ?? undefined) : undefined}
           aria-label="Settings"
@@ -573,10 +620,56 @@ function DesktopSettingsOverlay({
               <div className="t3s-grabber" />
             </div>
           )}
-          {body}
+          <DropdownLook.Provider value={phone ? "default" : "family"}>{body}</DropdownLook.Provider>
+          {!phone && <FamilyResetTray open={resetTray} onClose={() => setResetTray(false)} onConfirmReset={resetPrefs} />}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+/** The window's corner radius on a computer, and its pane's (the window's less the pane's 8px inset): concentric. */
+const WINDOW_RADIUS = 30;
+const PANE_RADIUS = 22;
+/** Controls in a card's row: the card's radius less the row's 11px inset, so their corners follow the card's. */
+const CONTROLS = ".settings-card :is(.text-field, .btn, .select-trigger, .slider-field-box)";
+
+/**
+ * Apple's continuous corners ("squircles", lib/ui/cornerSmoothing.ts) on everything rounded in a computer's Settings:
+ * the page pane, the cards, the sidebar's pill and search, and the controls in the cards, each a mask drawn to its
+ * size and kept to it. WebKit (the Mac app) has no CSS `corner-shape`, so without these they'd be plain arcs.
+ */
+function useFamilyCorners(el: HTMLElement | null, on: boolean) {
+  const ref = useMemo(() => ({ current: el }), [el]);
+  const active = on && !!el;
+  useSmoothCorners(ref, ".t3s-main", PANE_RADIUS, 60, active);
+  useSmoothCorners(ref, ".settings-card", 20, 60, active);
+  useSmoothCorners(ref, ".settings-subcard", 14, 60, active);
+  useSmoothCorners(ref, ".t3s-nav-pill, .t3s-result", 12, 60, active);
+  useSmoothCorners(ref, ".t3s-search", 18, 60, active);
+  useSmoothCorners(ref, CONTROLS, 9, 60, active);
+}
+
+/**
+ * The window's own squircle: a mask on it, and its shadow and rim drawn in the same outline behind it (settings-
+ * family.css `.t3s-shadow`), since a mask would cut a box-shadow away. Same box as the window: fixed, centred.
+ */
+function WindowShape({ el }: { el: HTMLElement | null }) {
+  const ref = useMemo(() => ({ current: el }), [el]);
+  const corners = useAppleCorners(ref, WINDOW_RADIUS, 60, !!el);
+  useLayoutEffect(() => {
+    if (!el || !corners.mask) return;
+    for (const prefix of ["", "-webkit-"]) {
+      el.style.setProperty(`${prefix}mask-image`, corners.mask);
+      el.style.setProperty(`${prefix}mask-size`, "100% 100%");
+      el.style.setProperty(`${prefix}mask-repeat`, "no-repeat");
+    }
+  }, [el, corners.mask]);
+  if (!corners.active) return null;
+  return (
+    <svg className="t3s-shadow" width={corners.width} height={corners.height} viewBox={`0 0 ${corners.width} ${corners.height}`} aria-hidden>
+      <path d={corners.strokePath(0)} />
+    </svg>
   );
 }
 
@@ -602,10 +695,23 @@ function NavItem({
       title={page.label}
       onClick={onClick}
     >
+      {active && <NavPill />}
       <page.icon size={16} strokeWidth={2} />
       <span>{page.label}</span>
       {chevron && <ChevronRight size={18} className="t3s-nav-chevron" aria-hidden />}
     </button>
+  );
+}
+
+/** The page you're on in the sidebar: one pill that glides from the page you left to this one (settings-family.css). */
+function NavPill() {
+  return (
+    <motion.i
+      layoutId="t3s-nav-pill"
+      className="t3s-nav-pill"
+      aria-hidden
+      transition={prefersReducedMotion() ? { duration: 0 } : springs.tabs}
+    />
   );
 }
 

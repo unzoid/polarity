@@ -66,6 +66,11 @@ function changed<T>(value: T): T {
 export const api = {
   /** Opens an https page in the default browser. */
   openExternal: (url: string) => call<void>("open_external", { url }),
+  /** Runs a WebAuthn passkey ceremony in the system browser and returns the serialized credential JSON. */
+  passkeyHandoff: (baseUrl: string, mode: "register" | "authenticate", optionsJson: string) =>
+    call<string>("passkey_handoff", { baseUrl, mode, optionsJson }),
+  /** Cancels an in-flight system-browser passkey handoff listener, if any. */
+  passkeyHandoffCancel: () => call<void>("passkey_handoff_cancel"),
   /** The anime cache folder (fillers.json, anime-list-mini.json, anime-catalog) and their size. */
   animeCache: () => call<CacheInfo>("anime_cache"),
   animeCacheClear: () => call<void>("anime_cache_clear"),

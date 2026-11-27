@@ -70,6 +70,7 @@ export const Download = icon(S24.ArrowDownTrayIcon, S20.ArrowDownTrayIcon, S16.A
 /** A whole season or show at once (BatchDownload), set apart from one episode's Download. */
 export const DownloadAll = icon(S24.ArrowDownOnSquareStackIcon, S20.ArrowDownOnSquareStackIcon, S16.ArrowDownOnSquareStackIcon);
 export const Instant =icon(S24.BoltIcon, S20.BoltIcon, S16.BoltIcon);
+export const Key = icon(S24.KeyIcon, S20.KeyIcon, S16.KeyIcon);
 export const LayoutList = icon(S24.ListBulletIcon, S20.ListBulletIcon, S16.ListBulletIcon);
 export const LayoutRow = icon(S24.ViewColumnsIcon, S20.ViewColumnsIcon, S16.ViewColumnsIcon);
 export const Lock = icon(S24.LockClosedIcon, S20.LockClosedIcon, S16.LockClosedIcon);

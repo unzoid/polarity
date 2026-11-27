@@ -334,7 +334,7 @@ export function Player({
   const { save, saveIfDue } = useProgressSaver({ media: videoRef, meta, type, metaId, videoId, current, state: source.state, keep: !shuffled });
   useTraktScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local && !shuffled });
   useSimklScrobble({ media: videoRef, videoId, type, playing: started && !paused, enabled: !local && !shuffled });
-  // A phone or tablet doesn't dim and lock while the video plays; paused, it does in its own time.
+  // The screen doesn't dim and lock while the video plays (phones, tablets and Macs); paused, it does in its own time.
   const playingNow = started && !paused;
   useEffect(() => {
     if (!playingNow) return;

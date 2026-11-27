@@ -3,21 +3,21 @@ import { CodeInput } from "../../components/ui/CodeInput";
 import { isTwoStepCode, TWO_STEP_CODE_LENGTH, useAccount } from "../../lib/account";
 import { errorMessage } from "../../lib/errors";
 import { AccountShell } from "./AccountShell";
-import { ErrorLine, errorCode, Primary, SignInFrame, WrongCode } from "./SignInFrame";
+import { ErrorLine, errorCode, SignInFrame, WrongCode } from "./SignInFrame";
 
 /**
  * Signing in, second step: the email code was right, and the account has two-step sign-in on, so a
  * code from an authenticator app comes before anything is signed in (AccountProvider's `twoStep`).
  * One authenticator is asked; "Use another authenticator" picks one of the others.
  *
- * `TwoStepBody` is a step of AuthScreen's SignInFrame (so the bar and the button stay put);
+ * `TwoStepBody` is a step of AuthScreen's SignInFrame (so the top badge morphs from mail to lock);
  * `TwoStepScreen` gives it a frame of its own for standalone rendering.
  */
 export function TwoStepScreen() {
   const account = useAccount();
   return (
     <AccountShell plain>
-      <SignInFrame step="two-step" order={3} progress={[2, 3]} lead={{ icon: "back", label: "Back to sign in", onPress: () => void account.cancelTwoStep() }}>
+      <SignInFrame step="two-step" badge="lock" lead={{ label: "Back to sign in", onPress: () => void account.cancelTwoStep() }}>
         <TwoStepBody />
       </SignInFrame>
     </AccountShell>
@@ -58,7 +58,7 @@ export function TwoStepBody() {
     return (
       <div className="si-step-body">
         <h1 className="si-title">Use Another Authenticator</h1>
-        <p className="si-sub">Pick the app you'll get the code from.</p>
+        <p className="si-sub">Pick the app you&apos;ll get the code from.</p>
         <div className="si-choices">
           {authenticators.map((a, i) => (
             <button
@@ -110,14 +110,15 @@ export function TwoStepBody() {
           autoFocus
         />
       </div>
+      {authenticators.length > 1 && (
+        <p className="si-resend">
+          <button type="button" onClick={() => setChoosing(true)}>
+            Use another authenticator
+          </button>
+        </p>
+      )}
       <WrongCode show={wrong} />
       <ErrorLine error={error ? { message: error } : null} />
-      <Primary label="Continue" enabled={code.length === TWO_STEP_CODE_LENGTH} busy={busy} onPress={() => void verify(code)} />
-      {authenticators.length > 1 && (
-        <button type="button" className="si-text-link" onClick={() => setChoosing(true)}>
-          Use another authenticator
-        </button>
-      )}
       <button type="submit" hidden />
     </form>
   );
