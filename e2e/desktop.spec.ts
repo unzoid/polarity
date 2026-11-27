@@ -40,9 +40,14 @@ test("each section opens", async ({ app }) => {
     await nav.getByRole("button", { name: section, exact: true }).click();
     await expect(app.getByRole("heading", { level: 1, name: section })).toBeVisible();
   }
-  // Anime asks AniList from the page; with every outside host refused it says so and offers to try again.
+  // When the anime catalog backend fails to load, the Anime tab says so and offers to try again.
+  await app.evaluate(() => {
+    (window as { __polarFakeAnime?: { home?: () => unknown } }).__polarFakeAnime = {
+      home: () => Promise.reject({ code: "upstream", message: "offline" }),
+    };
+  });
   await nav.getByRole("button", { name: "Anime", exact: true }).click();
-  await expect(app.getByText("AniList didn't answer")).toBeVisible();
+  await expect(app.getByText("Couldn't load anime catalogs. Check your connection and try again.")).toBeVisible();
   await expect(app.getByRole("button", { name: "Try again" })).toBeVisible();
   await nav.getByRole("button", { name: "Movies", exact: true }).click();
   await app.getByRole("radio", { name: "Top Rated" }).click();
@@ -80,12 +85,15 @@ test("search finds movies and series", async ({ app }) => {
 });
 
 test("an anime genre leads with its anime; a shared genre's anime sits with the genre rows; a title search is unchanged (#338)", async ({ app }) => {
-  // AniList answers a genre or kind of show with an invented show, a title search with nothing.
-  await app.route("https://graphql.anilist.co/**", async (route) => {
-    const { variables } = JSON.parse(route.request().postData() ?? "{}") as { variables?: { genre?: string; tag?: string } };
-    const media = variables?.genre || variables?.tag ? [longAnimeMedia(SHORT_ANIME)] : [];
-    await route.fulfill({ json: { data: { Page: { media, pageInfo: { hasNextPage: false } } } } });
-  });
+  // The show-first anime catalog answers a genre or tag query with an invented show, a title search with nothing.
+  await app.evaluate((show) => {
+    (window as { __polarFakeAnime?: { browse?: (q: { genre?: string; tag?: string }) => unknown } }).__polarFakeAnime = {
+      browse: (q) => ({
+        items: q.genre || q.tag ? [{ id: show.imdb, type: "series", name: show.name, titles: { english: show.name }, anilistId: show.anilist, format: "TV" }] : [],
+        hasNextPage: false,
+      }),
+    };
+  }, SHORT_ANIME);
   const titles = app.locator(".search-rows .row-title");
   await app.getByRole("button", { name: "Search", exact: true }).click();
   await app.locator(".search-suggest").getByRole("button", { name: "Slice of Life", exact: true }).click();
@@ -1581,7 +1589,6 @@ test.describe("signed in, on a fresh profile", () => {
     await app.locator(".profile-pop").getByRole("button", { name: "Account", exact: true }).click();
     const row = app.locator('[data-setting="shareSetup"]');
     await expect(row).toContainText("Share add-ons and keys");
-    await expect(row).toContainText("sync to their accounts");
     const pick = row.getByRole("combobox");
     await expect(pick).toContainText("Between this account's profiles");
     await pick.click();
@@ -2051,6 +2058,22 @@ test("notifications: New episodes switched on, a new episode is one note, and it
   expect(await notes()).toHaveLength(0);
 });
 
+test("a refused sign-in code empties the cells and says so until the next one is typed", async ({ app }) => {
+  await app.goto("/fake.html?account=signed-out");
+  await app.getByRole("button", { name: "Continue with Email" }).click();
+  await app.getByRole("textbox", { name: "Email address" }).fill("someone@example.com");
+  await app.getByRole("button", { name: "Continue", exact: true }).click();
+  const code = app.getByRole("textbox", { name: "Verification code" });
+  // The fake account refuses 000000.
+  await code.pressSequentially("000000");
+  await expect(app.getByText("Oops! That’s incorrect.")).toBeVisible();
+  await expect(code).toHaveValue("");
+  await expect(app.locator(".code-input")).toHaveAttribute("data-wrong", "true");
+  await code.pressSequentially("1");
+  await expect(app.getByText("Oops! That’s incorrect.")).toHaveCount(0);
+  await expect(app.locator(".code-input")).not.toHaveAttribute("data-wrong");
+});
+
 test.describe("signing in with another device (#133)", () => {
   test("signed out: the code waits for approval, then the app opens on the account", async ({ app }) => {
     await app.goto("/fake.html?account=signed-out");
@@ -2349,11 +2372,9 @@ test("subtitle Font starts at From the subtitles; a picked font is kept (#347)",
   let settings = await open();
   const font = () => settings.getByRole("combobox", { name: "Subtitle font" });
   await expect(font()).toHaveText(/From the subtitles/);
-  await expect(settings.getByText("Styled subtitles keep their own font")).toBeVisible();
   await font().click();
   await app.getByRole("option", { name: "Segoe UI", exact: true }).click();
   await expect(font()).toHaveText(/^Segoe UI/);
-  await expect(settings.getByText("Styled subtitles keep their own font")).toHaveCount(0);
   await settings.getByRole("button", { name: "Close settings" }).click();
   settings = await open();
   await expect(font()).toHaveText(/^Segoe UI/);

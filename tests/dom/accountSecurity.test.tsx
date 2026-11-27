@@ -166,16 +166,18 @@ test("Signing in with two-step on: no user until the authenticator code; a wrong
   }
   await fakeAccount.auth.signOut();
   const { unmount } = await mount(null);
-  await act(() => account.verifyCode("robin@example.com", "000000"));
+  // Any emailed code but 000000 gets through (the fake refuses that one, for the wrong-code look).
+  await act(() => account.verifyCode("robin@example.com", "123456"));
   await settle();
-  expect(byText(document.body, "h1", "Two-step sign-in")).toBeTruthy();
+  expect(byText(document.body, "h1", "Two-Step Sign-In")).toBeTruthy();
   expect(account.user).toBeNull();
   expect(document.querySelector("[data-testid=who]")).toBeNull();
   expect(text()).toContain("Authenticator 1");
 
   await type(field("Authenticator code"), "000000");
   await settle();
-  expect(alerts()).toContain("That code is wrong");
+  // A wrong code is the sign-in's badge (SignInFrame's WrongCode), read out by its live region.
+  expect(document.querySelector(".si-wrong")?.textContent).toContain("incorrect");
   expect(account.user).toBeNull();
 
   await click(byText(document.body, "button", "Use another authenticator"));
@@ -191,9 +193,11 @@ test("Back to sign in from the second step drops the half-done session", async (
   const s = await fakeAccount.twoStep.add();
   await fakeAccount.twoStep.confirmAdd(s.id, FAKE_TWO_STEP_CODE);
   const { unmount } = await mount(null);
-  await act(() => account.verifyCode("robin@example.com", "000000"));
+  // Any emailed code but 000000 gets through (the fake refuses that one, for the wrong-code look).
+  await act(() => account.verifyCode("robin@example.com", "123456"));
   await settle();
-  await click(byText(document.body, "button", "Back to sign in"));
+  // The sign-in's back arrow (SignInFrame's bar), named for screen readers.
+  await click(document.querySelector<HTMLElement>('button[aria-label="Back to sign in"]')!);
   await settle();
   expect(text()).toContain("Signed out");
   expect(await fakeAccount.auth.current()).toBeNull();

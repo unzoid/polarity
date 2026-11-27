@@ -154,7 +154,8 @@ class Session {
   }
 
   checked(el: Ref) {
-    return this.run<boolean>("return arguments[0].checked", el);
+    // A checkbox's own state, or a switch button's `aria-checked`.
+    return this.run<boolean>('const el = arguments[0]; return el.checked ?? el.getAttribute("aria-checked") === "true"', el);
   }
 
   /** Whether the window still answers: on Windows the sign that the app has gone. */
@@ -236,7 +237,8 @@ async function enter(s: Session) {
 async function skipIntros(s: Session) {
   await s.click("the profile menu", "[aria-label^='Profile:']");
   await s.click("Settings in the menu", "[role=menuitem]", "Settings");
-  const sw = await until("the Skip intros switch", () => s.find("input[role=switch]", "Skip intros"));
+  // The desktop Settings window's switches are buttons (Liquid Glass's), the rest checkboxes.
+  const sw = await until("the Skip intros switch", () => s.find("[role=switch]", "Skip intros"));
   const close = async () => {
     await s.click("Close settings", "[aria-label='Close settings']");
     // Settings plays its way out before it leaves the page; till then its backdrop lies over the app.

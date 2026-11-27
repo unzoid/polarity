@@ -12,11 +12,11 @@ import { Chip } from "../ui/Chip";
 import { dialogueOverrides, dialogueStyles, parseAssHeader, type DialogueLook } from "./assStyles";
 
 // The platform's own UI face: plain-text subtitles use it unless you pick another.
-const DEFAULT_FONT = isMac ? "Helvetica Neue" : "Segoe UI Semibold";
+export const DEFAULT_FONT = isMac ? "Helvetica Neue" : "Segoe UI Semibold";
 /** What the default used to be called on either platform (styles sync between devices). */
 const EARLIER_DEFAULT_FONTS = ["Segoe UI Semibold", "Helvetica Neue"];
 /** The Font menu's "From the subtitles": only in the menu, saved as `fontFromSubtitles`. */
-const FROM_SUBTITLES = "from-subtitles";
+export const FROM_SUBTITLES = "from-subtitles";
 
 const ON_OFF = [
   { value: 0, label: "Off" },
@@ -41,14 +41,14 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
  * subtitles never showed until something else was changed: those keep the
  * release's font now; a font picked from the list stays forced.
  */
-const keepsReleaseFont = (style: SubtitleStyle) => style.fontFromSubtitles ?? (!style.font || EARLIER_DEFAULT_FONTS.includes(style.font));
+export const keepsReleaseFont = (style: SubtitleStyle) => style.fontFromSubtitles ?? (!style.font || EARLIER_DEFAULT_FONTS.includes(style.font));
 
 /** Styles saved before a setting existed are missing it: fill in the defaults. */
-const complete = (style: SubtitleStyle): Required<SubtitleStyle> => {
+export const complete = (style: SubtitleStyle): Required<SubtitleStyle> => {
   const fromSubtitles = keepsReleaseFont(style);
   return { ...DEFAULT_SUBTITLE_STYLE, ...style, font: fromSubtitles ? DEFAULT_FONT : style.font || DEFAULT_FONT, fontFromSubtitles: fromSubtitles } as Required<SubtitleStyle>;
 };
-const isDefaultStyle = (style: SubtitleStyle) => JSON.stringify(complete(style)) === JSON.stringify(complete(DEFAULT_SUBTITLE_STYLE));
+export const isDefaultStyle = (style: SubtitleStyle) => JSON.stringify(complete(style)) === JSON.stringify(complete(DEFAULT_SUBTITLE_STYLE));
 
 /**
  * Fonts that ship with the OS, so mpv and the preview both find them, plus
@@ -59,7 +59,7 @@ const isDefaultStyle = (style: SubtitleStyle) => JSON.stringify(complete(style))
 const DYSLEXIC = { value: OPEN_DYSLEXIC, label: "OpenDyslexic" };
 const MAC_FONTS = ["Arial", "Avenir Next", "Verdana", "Trebuchet MS", "Futura", "Georgia", "Times New Roman", "Menlo", "Comic Sans MS", "Impact"];
 const FROM = { value: FROM_SUBTITLES, label: "From the subtitles" };
-const FONTS = isMac
+export const FONTS = isMac
   ? [FROM, { value: DEFAULT_FONT, label: "Helvetica Neue" }, DYSLEXIC, ...MAC_FONTS.map((f) => ({ value: f, label: f }))]
   : [
   FROM,
@@ -85,25 +85,25 @@ const fontVars = (font: string) => ({
   "--sub-weight": font === DEFAULT_FONT ? 600 : 400,
 });
 
-const TEXT_COLORS = [
+export const TEXT_COLORS = [
   { value: "#FFFFFF", label: "White" },
   { value: "#FFE45C", label: "Yellow" },
   { value: "#6BE3FF", label: "Cyan" },
   { value: "#7CF29A", label: "Green" },
   { value: "#FF8AD8", label: "Pink" },
 ];
-const OUTLINE_COLORS = [
+export const OUTLINE_COLORS = [
   { value: "#000000", label: "Black" },
   { value: "#4A4A4A", label: "Grey" },
   { value: "#FFFFFF", label: "White" },
 ];
-const OUTLINES: { value: SubtitleStyle["outline"]; label: string }[] = [
+export const OUTLINES: { value: SubtitleStyle["outline"]; label: string }[] = [
   { value: "none", label: "None" },
   { value: "thin", label: "Thin" },
   { value: "medium", label: "Medium" },
   { value: "thick", label: "Thick" },
 ];
-const BACKGROUNDS = [
+export const BACKGROUNDS = [
   { value: 0, label: "None" },
   { value: 40, label: "Light" },
   { value: 75, label: "Dark" },
@@ -273,13 +273,7 @@ export function SubtitleSettings({
       {canPosition && onDelay && delay !== undefined && (
         <Setting
           label="Delay"
-          caption={
-            delay === 0
-              ? "Fix subtitles that don't match the speech. Now in sync"
-              : delay > 0
-                ? "Subtitles show later than before"
-                : "Subtitles show earlier than before"
-          }
+          caption={delay === 0 ? undefined : delay > 0 ? "Later" : "Earlier"}
         >
           <div className="sub-delay-row">
             <Stepper
@@ -300,7 +294,7 @@ export function SubtitleSettings({
         </Setting>
       )}
       {onStepLine && (
-        <Setting label="Match a line" caption="Show the line you just heard now, whether it's still to come or already gone">
+        <Setting label="Match a line">
           <div className="source-chips">
             <Chip variant="choice" onClick={() => onStepLine(-1)}>
               Previous Line
@@ -312,11 +306,11 @@ export function SubtitleSettings({
         </Setting>
       )}
       {second && (
-        <Setting label="Second subtitle" caption="Another language at the top of the picture">
+        <Setting label="Second subtitle">
           <Chips value={second.on ? 1 : 0} options={ON_OFF} onChange={(v) => second.onChange(v === 1)} />
         </Setting>
       )}
-      <Setting label="Font" caption={keepsReleaseFont(style) ? "Styled subtitles keep their own font" : undefined}>
+      <Setting label="Font">
         <Dropdown
           label="Subtitle font"
           value={keepsReleaseFont(style) ? FROM_SUBTITLES : style.font || DEFAULT_FONT}
@@ -328,7 +322,7 @@ export function SubtitleSettings({
         <Stepper value={style.size} step={10} min={50} max={200} format={(v) => `${v}%`} onChange={(size) => onChange({ size })} label="Size" />
       </Setting>
       {canPosition && (
-        <Setting label="Position" caption="Lift subtitles higher up the screen">
+        <Setting label="Position">
           <Stepper value={style.raise} step={2} min={0} max={40} format={(v) => (v === 0 ? "Default" : `+${v}%`)} onChange={(raise) => onChange({ raise })} label="Position" />
         </Setting>
       )}
@@ -430,10 +424,7 @@ function SubtitleStudio({
           )}
           {second && (
             <label className="sub-line sub-toggle">
-              <span className="sub-line-label">
-                Second subtitle
-                <span className="sub-line-hint">At the top of the picture</span>
-              </span>
+              <span className="sub-line-label">Second subtitle</span>
               <Switch checked={second.on} onChange={second.onChange} />
             </label>
           )}
@@ -443,10 +434,7 @@ function SubtitleStudio({
       <section className="sub-group" aria-label="Text">
         <h3 className="sub-group-title">Text</h3>
         <div className="sub-line">
-          <span className="sub-line-label">
-            Font
-            {fromSubtitles && <span className="sub-line-hint">Styled tracks keep theirs</span>}
-          </span>
+          <span className="sub-line-label">Font</span>
           <Dropdown
             label="Subtitle font"
             value={fromSubtitles ? FROM_SUBTITLES : style.font}
@@ -639,7 +627,17 @@ export function Stepper({
   );
 }
 
-function Swatches({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+export function Swatches({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+  label?: string;
+}) {
   const isCustom = !options.some((o) => o.value.toUpperCase() === value.toUpperCase());
   // The native picker reports every drag step; save once it settles.
   const timer = useRef<number>(undefined);
@@ -649,7 +647,7 @@ function Swatches({ value, options, onChange }: { value: string; options: { valu
     timer.current = window.setTimeout(() => onChange(hex.toUpperCase()), 120);
   };
   return (
-    <div className="sub-swatches" role="radiogroup">
+    <div className="sub-swatches" role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button
           key={o.value}

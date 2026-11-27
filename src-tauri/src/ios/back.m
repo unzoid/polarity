@@ -54,6 +54,7 @@ static PolarBackSwipe *swipe;
 
 /// The web view's scrolling (the page's and each scrolling part's) waits for the swipe to fail.
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)other {
+    if (!swipe_on) return NO;
     UIView *web = polar_web_view();
     return web && [other isKindOfClass:UIPanGestureRecognizer.class] && [other.view isKindOfClass:UIScrollView.class] &&
            [other.view isDescendantOfView:web];

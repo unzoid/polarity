@@ -349,7 +349,7 @@ export function DeskPlayerChrome(p: DeskPlayerChromeProps) {
             {...p.controlHover}
           >
             {p.spinner ? (
-              <Spinner className="player-spinner" size="48px" label="Buffering" />
+              <Spinner className="player-spinner" size="calc(48 * var(--pl-pt, 1px))" label="Buffering" />
             ) : (
               <SwapIcon state={p.paused ? "play" : "pause"}>
                 {p.paused ? <IconPlaySolid size={52} className="dk-pl-play-tri" /> : <IconPauseSolid size={50} />}

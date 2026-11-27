@@ -12,12 +12,7 @@ import { notifications } from "./store";
  */
 export function TabHeader({ lead, children, scroller, actions = true, tint }: { lead?: ReactNode; children: ReactNode; scroller: RefObject<HTMLElement | null>; actions?: boolean; tint?: CSSProperties }) {
   const head = useRef<HTMLElement>(null);
-  // On the tab's page, not just the bar: the chips under it fade with the same value (phone.css).
-  const page = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    page.current = head.current?.parentElement ?? null;
-  });
-  useCollapse(scroller, page, 56);
+  useCollapse(scroller, head, 56);
   const { navigate } = useNavigation();
   return (
     <header className="ph-head" ref={head}>
@@ -45,7 +40,7 @@ export function TabHeader({ lead, children, scroller, actions = true, tint }: { 
   );
 }
 
-/** `--c` on `target`: how far `scroller` has scrolled through its first `span` px, 0 to 1, a frame at a time. */
+/** `--c` on `head` (and `.ph-chips` if present, never the whole page subtree): 0 to 1 over the first `span` px. */
 export function useCollapse(scroller: RefObject<HTMLElement | null>, target: RefObject<HTMLElement | null>, span: number) {
   useEffect(() => {
     const el = scroller.current;
@@ -58,8 +53,11 @@ export function useCollapse(scroller: RefObject<HTMLElement | null>, target: Ref
       const c = Math.min(1, Math.max(0, el.scrollTop / span));
       if (c === last) return;
       last = c;
-      out.style.setProperty("--c", c.toFixed(3));
+      const v = c.toFixed(3);
+      out.style.setProperty("--c", v);
       out.toggleAttribute("data-scrolled", c >= 1);
+      const chips = el.querySelector<HTMLElement>(".ph-chips");
+      if (chips) chips.style.setProperty("--c", v);
     };
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(apply);

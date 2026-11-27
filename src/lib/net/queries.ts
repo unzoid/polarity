@@ -164,13 +164,13 @@ export function useIsAnime(videoId: string | undefined) {
 }
 
 /** Scores from the ratings services, once a key is set (re-asks when one is). */
-export function useRatings(type: ContentType, id: string) {
+export function useRatings(type: ContentType, id: string, enabled = true) {
   const { data: settings } = useSettings();
   const keyed = !!(settings?.mdblistKey?.trim() || settings?.omdbKey?.trim());
   return useQuery({
     queryKey: keys.ratings(type, id, settings?.mdblistKey ?? "", settings?.omdbKey ?? ""),
     queryFn: () => api.ratings(type, id),
-    enabled: keyed && id.startsWith("tt"),
+    enabled: enabled && keyed && id.startsWith("tt"),
     staleTime: 6 * 60 * 60_000,
   });
 }

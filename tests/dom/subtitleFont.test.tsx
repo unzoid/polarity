@@ -119,9 +119,8 @@ test("the Font menu says From the subtitles by default, also for a style saved b
   );
   const menu = () => container.querySelector<HTMLSelectElement | HTMLElement>("[aria-label='Subtitle font']");
   expect(container.textContent).toContain("From the subtitles");
-  expect(container.textContent).toContain("Styled subtitles keep their own font");
   await rerender(<SubtitleSettings style={{ ...old, font: "Georgia" }} onChange={(p) => picked.push(p)} canPosition />);
-  expect(container.textContent).not.toContain("Styled subtitles keep their own font");
+  expect(container.textContent).toContain("Georgia");
   expect(menu()).not.toBeNull();
   await unmount();
 });

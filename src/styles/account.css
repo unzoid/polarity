@@ -119,36 +119,8 @@
   padding: 2rem var(--gutter) 4rem;
 }
 
-/* --- Sign in, after Linear's: a dark vertical gradient, one narrow centred
-       column, generous spacing, pill buttons. Steps change with a sink-out /
-       spring-in (see .auth-body below). */
-.account-shell[data-plain] {
-  background: linear-gradient(180deg, var(--tone-1) 0%, var(--tone-0) 50%, var(--tone-sunk) 100%);
-}
-/* Anchored from the top, not centred: each step is a different height, and
-   centring would shift the logo and the step's first line every time it
-   changed. Like Linear, the logo sits ~27% down the window on every step and
-   only what's below it changes. */
-.account-shell[data-plain] .account-main {
-  place-items: start center;
-  padding-top: 0;
-}
-.auth {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 18rem;
-  margin-top: max(1rem, calc(27.5vh - var(--nav-h)));
-  text-align: center;
-}
-.auth-form {
-  display: contents;
-}
-.auth-mark {
-  height: 2.375rem;
-  width: auto;
-  margin-bottom: 2.25rem;
-}
+/* --- Sign in (the plain shell) is styles/signin.css. What follows is shared with the profile screens and the
+       device sign-in step. */
 .auth-title {
   margin: 0 0 1.5rem;
   font-size: 1.1875rem;
@@ -166,24 +138,6 @@
 .auth-sub strong {
   font-weight: 500;
   color: var(--text);
-}
-.auth-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-}
-/* The code: the app's font with even-width digits, centred and spaced. */
-.text-field.auth-code {
-  font-size: var(--fs-lg);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.2em;
-  text-align: center;
-}
-.text-field.auth-code::placeholder {
-  font-weight: 400;
-  letter-spacing: normal;
 }
 /* The code another device enters (#133): large enough to read across a room. */
 .auth-device-code {
@@ -252,32 +206,11 @@
 .auth-link:disabled {
   opacity: 0.5;
 }
-.auth-link-quiet {
-  color: var(--text-3);
-}
 .auth-fine {
   margin: 2.75rem 0 0;
   font-size: var(--fs-md);
   line-height: 1.45;
   color: var(--text-2);
-}
-/* Privacy Policy · Terms of Use (#157): quiet links under the sign-in steps. */
-.auth-legal {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin: 1.5rem 0 0;
-  font-size: var(--fs-sm);
-  color: var(--text-3);
-}
-.auth-legal button {
-  color: inherit;
-  transition: color 150ms var(--ease-std);
-}
-@media (hover: hover) and (pointer: fine) {
-  .auth-legal button:hover {
-    color: rgb(var(--ink-text) / 0.85);
-  }
 }
 .auth-error {
   display: flex;
@@ -301,25 +234,6 @@
   min-height: 65px;
   margin-top: 0.875rem;
 }
-/* One step's content; AuthScreen animates it between steps (Motion). */
-.auth-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-}
-/* Opening the page: the whole column - logo and step together - fades in as
-   it drops the last few px into place from just above. Once per page load;
-   step changes are AuthScreen's own motion. */
-.auth {
-  animation: auth-arrive 450ms var(--ease-out) both;
-}
-@keyframes auth-arrive {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-}
 @keyframes auth-in {
   from {
     opacity: 0;
@@ -327,7 +241,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .auth,
   .auth-error {
     animation-name: fade-in;
   }
@@ -1015,22 +928,6 @@
   font-size: var(--fs-xs);
   color: var(--text-3);
 }
-/* Keep the email private on screen shares; reveal on hover. */
-.profile-menu-email {
-  filter: blur(3px);
-  transition: filter var(--dur-fast) var(--ease-std);
-  overflow-wrap: anywhere;
-}
-/* On touch a press reveals it (hover is a mouse's). */
-.profile-menu-head:active .profile-menu-email {
-  filter: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  .profile-menu-head:hover .profile-menu-email {
-    filter: none;
-  }
-}
-
 /* --- The profile menu on a desktop or tablet (ProfileMenu.tsx ProfilePopover): native macOS Tahoe
        floating popover — crisp solid surface, 20px corners, hairline border, and full-pill action rows. */
 .profile-pop {

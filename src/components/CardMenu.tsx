@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import "../styles/ui/card-menu.css";
 import { api } from "../lib/api";
 import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
@@ -10,7 +11,8 @@ import { warnFailed } from "../lib/errors";
 import { imdbUrl } from "./RatingRing";
 import { trailerFor } from "../lib/playback";
 import { openTrailer } from "./Trailer";
-import { MenuHeader, MenuItem, MenuPopup, MenuRoot, MenuSeparator, MenuSub } from "./ui/Menu";
+import { sizedArt } from "../lib/ui";
+import { MenuItem, MenuPopup, MenuRoot, MenuSub } from "./ui/Menu";
 
 /**
  * A title's options on right-click (or the Menu key) in desktop mode, and on a
@@ -204,27 +206,52 @@ function OpenMenu({ target }: { target: Target }) {
   return nativeDialogsAvailable ? <NativeMenu target={target} choices={choices} /> : <WebMenu target={target} choices={choices} />;
 }
 
+/**
+ * The menu as Family draws its option trays (benji.org/family-values): what it's about at the top (the poster, its
+ * name, the year or the episode), then the choices in filled, rounded groups with air between them rather than
+ * rules, each row a soft fill under the pointer, the ones that take something away in red. It grows out of the
+ * pointer (styles/ui/card-menu.css).
+ */
 function WebMenu({ target, choices }: { target: Target; choices: Choices }) {
   const { item, x, y } = target;
+  const year = item.releaseInfo?.match(/\d{4}/)?.[0];
+  const kind = item.type === "series" ? "Show" : item.type === "movie" ? "Movie" : undefined;
+  const detail = choices.detail ?? ([year, kind].filter(Boolean).join(" · ") || undefined);
+  const poster = sizedArt(item.poster, "w185");
   return (
     <MenuRoot open modal={false} onOpenChange={(open) => !open && set(null)}>
-      <MenuPopup anchor={pointAnchor(x, y)} side="bottom" align="start" sideOffset={2} collisionPadding={12} aria-label={`${item.name} options`}>
-        <MenuHeader title={item.name} detail={choices.detail} />
-        {choices.groups.map((group, i) => (
-          <Fragment key={group[0].id}>
-            {i > 0 && <MenuSeparator />}
+      <MenuPopup
+        anchor={pointAnchor(x, y)}
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        collisionPadding={12}
+        className="fam-menu"
+        aria-label={`${item.name} options`}
+      >
+        <div className="fam-menu-head">
+          <span className="fam-menu-art" aria-hidden>
+            {poster && <img src={poster} alt="" decoding="async" />}
+          </span>
+          <span className="fam-menu-name">
+            <strong>{item.name}</strong>
+            {detail && <span>{detail}</span>}
+          </span>
+        </div>
+        {choices.groups.map((group) => (
+          <div key={group[0].id} className="fam-menu-group" role="group">
             {group.map((c) =>
               c.playlists ? (
-                <MenuSub key={c.id} icon={c.icon} label={c.label}>
+                <MenuSub key={c.id} icon={c.icon} label={c.label} popupClassName="fam-menu fam-menu-sub">
                   <PlaylistChecklist item={item} look="menu" />
                 </MenuSub>
               ) : (
                 <MenuItem key={c.id} icon={c.icon} disabled={c.disabled} onClick={() => c.run?.()}>
-                  {c.label}
+                  {c.destructive ? <span className="fam-menu-danger">{c.label}</span> : c.label}
                 </MenuItem>
               ),
             )}
-          </Fragment>
+          </div>
         ))}
       </MenuPopup>
     </MenuRoot>

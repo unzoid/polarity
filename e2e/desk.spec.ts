@@ -64,7 +64,8 @@ test("the avatar opens Profiles under it, and playing hides the page under the p
   await expect(profiles.getByRole("button", { name: "App Settings" })).toBeVisible();
   await app.keyboard.press("Escape");
   await expect(profiles).toBeHidden();
-  await app.locator(".dk-cw-art").first().click();
+  await app.locator(".dk-cw").first().hover();
+  await app.locator(".dk-cw-play-btn").first().click();
   await expect(app.locator(".dk-main")).toBeHidden();
   // mpv draws under the page: with it playing, nothing of the desk app may paint a background over it.
   const painted = await app.evaluate(() => {
@@ -115,7 +116,8 @@ test("desk player uses Netflix chrome and edge sheets (Episodes, Audio & Subtitl
   await expect(tracksSheet).toBeVisible();
   await expect(player.locator(".dk-pl-bottom")).toHaveCSS("opacity", "1");
   await tracksSheet.getByRole("button", { name: "Subtitle settings" }).click();
-  await expect(tracksSheet.locator(".sub-studio")).toBeVisible();
+  await expect(tracksSheet.locator(".dk-pl-style")).toBeVisible();
+  await expect(tracksSheet.getByRole("radiogroup", { name: "Outline", exact: true })).toBeVisible();
   await expect(player.locator(".sub-preview")).toHaveCount(0);
   await app.keyboard.press("Escape");
   await expect(tracksSheet).toBeHidden();

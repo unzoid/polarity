@@ -2,7 +2,7 @@ import type { NativeTabsState } from "./platform/nativeTabs";
 import { rootTab, type Entry, type Route, type TabRoute } from "./router";
 
 /** The app's sections, as NavBar lists them and iOS's tab bar shows them (components/NativeTabs.tsx). */
-export type NavLink = { route: TabRoute; label: string };
+export type NavLink = { route: TabRoute; label: string; /** An SF Symbol other than the section's usual one. */ icon?: string };
 
 /** Each section's SF Symbol. */
 const ICONS: Record<string, string> = {
@@ -31,7 +31,7 @@ export function tabId(route: TabRoute): string {
  * hidden over the player and over anything that covers the screen (`covered`).
  */
 export function nativeTabsState(links: NavLink[], stack: Entry[], covered: boolean): NativeTabsState {
-  const tabs = links.slice(0, MAX_NATIVE_TABS).map((l) => ({ id: tabId(l.route), title: l.label, icon: ICONS[tabId(l.route)] ?? "square" }));
+  const tabs = links.slice(0, MAX_NATIVE_TABS).map((l) => ({ id: tabId(l.route), title: l.label, icon: l.icon ?? ICONS[tabId(l.route)] ?? "square" }));
   const root = tabId(rootTab(stack));
   const playing = stack[stack.length - 1].route.name === "player";
   return { tabs, selected: tabs.some((t) => t.id === root) ? root : null, hidden: playing || covered };

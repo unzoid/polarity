@@ -1,4 +1,5 @@
-import { detailBackdropUrl, useCardIntent } from "../lib/ui";
+import { detailBackdropUrl, sizedArt, useCardIntent } from "../lib/ui";
+import { warmLogo } from "./TitleLogo";
 import { prefetchMeta, preloadImage } from "../lib/net";
 import { prefetchTitlePage, useEntryShown } from "../lib/anime";
 import { useNavigation } from "../lib/router";
@@ -17,6 +18,11 @@ export function useIntent(item: MetaPreview) {
     prefetchTitlePage(item.type, item.id, item);
     prefetchMeta(item.type, item.id);
     preloadImage(detailBackdropUrl(item.background));
+    // The logo as the title's page draws it (desk TitleView), so it arrives with the art instead of after it.
+    warmLogo(
+      sizedArt(item.logo, "w500"),
+      item.logos?.map((u) => sizedArt(u, "w500") ?? u),
+    );
   }, INTENT_DELAY);
 }
 

@@ -401,19 +401,8 @@
   outline-offset: 4px;
 }
 
-/* --- Appearance → Colour scheme and Theme (components/settings/ThemePicker.tsx). Each tile is .themed: it
-       sets the theme inputs inline, so its little window is drawn from the same tokens as the app. */
-/* The heading with its actions on the right, their edge on the card's. */
-.theme-picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.theme-picker-actions {
-  display: flex;
-  gap: 0.5rem;
-}
+/* --- Appearance → Colour scheme (components/settings/AccentPicker.tsx). Each tile is .themed: it sets the
+       colour inputs inline, so its little window is drawn from the same tokens as the app. */
 /* Three across, sharing the card's whole width (over .theme-grid's auto-fill columns). */
 .theme-grid.scheme-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -625,256 +614,6 @@
   margin-top: -4.5px;
   border-radius: 3px;
   background: var(--accent);
-}
-
-/* Create / edit theme. Drawn in the draft's colours (.themed), centred like any modal, above Settings. */
-/* Over Settings: the whole window dims under it. */
-.theme-dialog-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-modal) + 1);
-  background: rgb(0 0 0 / 0.55);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
-  transition: opacity var(--dur-base) var(--ease-out);
-}
-.theme-dialog {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-  z-index: calc(var(--z-modal) + 2);
-  width: min(30rem, calc(100vw - 2rem));
-  max-height: calc(100dvh - 2rem);
-  overflow: hidden auto;
-  border-radius: var(--r-lg);
-  background: var(--tone-2);
-  color: var(--text);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--ink) / 0.06),
-    0 0 0 1px rgb(var(--ink) / 0.1),
-    0 2px 8px rgb(0 0 0 / 0.2),
-    0 32px 72px -16px rgb(0 0 0 / 0.65);
-  outline: none;
-  /* A modal isn't anchored to a trigger: it settles from its centre. */
-  transition:
-    opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out),
-    background-color var(--dur-base) var(--ease-std);
-}
-.theme-dialog-scrim[data-starting-style],
-.theme-dialog-scrim[data-ending-style],
-.theme-dialog[data-starting-style],
-.theme-dialog[data-ending-style] {
-  opacity: 0;
-}
-.theme-dialog[data-starting-style] {
-  transform: scale(0.96);
-}
-.theme-dialog[data-ending-style] {
-  transform: scale(0.98);
-}
-/* Leaving is quicker than arriving. */
-.theme-dialog-scrim[data-ending-style],
-.theme-dialog[data-ending-style] {
-  transition-duration: 120ms;
-}
-@media (prefers-reduced-motion: reduce) {
-  .theme-dialog[data-starting-style],
-  .theme-dialog[data-ending-style] {
-    transform: none;
-  }
-}
-/* Up top, the draft on its own page colour, lit faintly by its accent. */
-.theme-dialog-stage {
-  display: grid;
-  place-items: center;
-  padding: 1.75rem 0 1.5rem;
-  background:
-    radial-gradient(60% 90% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
-    var(--tone-0);
-  border-bottom: 1px solid var(--hairline);
-  transition: background-color var(--dur-base) var(--ease-std);
-}
-.theme-dialog-stage .theme-thumb {
-  width: 13.5rem;
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--ink) / 0.08),
-    0 12px 32px -12px rgb(0 0 0 / 0.5);
-}
-/* The picture's colours ease from one choice to the next. */
-.theme-dialog-stage :is(.theme-thumb, .theme-thumb-page),
-.theme-dialog-stage .theme-thumb-field::after {
-  transition: background-color var(--dur-base) var(--ease-std);
-}
-.theme-dialog-body {
-  padding: 1.25rem 1.5rem 1.5rem;
-}
-.theme-dialog-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.theme-dialog-description {
-  margin: 0.25rem 0 0;
-  font-size: 13.5px;
-  color: var(--text-2);
-}
-/* Label left, control right, one line each. */
-.theme-dialog-rows {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.875rem 1rem;
-  margin-top: 1.25rem;
-}
-.theme-dialog-row {
-  display: contents;
-}
-.theme-dialog-label {
-  font-size: 13.5px;
-  color: var(--text-2);
-}
-.theme-dialog-row .segmented {
-  justify-self: start;
-}
-.theme-dialog-input {
-  height: 2.125rem;
-  min-width: 0;
-  padding: 0 0.75rem;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-sm);
-  background: var(--fill-1);
-  color: var(--text);
-  font: inherit;
-  font-size: 14.5px;
-  outline: none;
-  transition:
-    border-color var(--dur-fast) var(--ease-std),
-    box-shadow var(--dur-fast) var(--ease-std);
-}
-.theme-dialog-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-.theme-dialog-swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.theme-dialog-swatch {
-  position: relative;
-  width: 1.625rem;
-  height: 1.625rem;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-round);
-  background: var(--swatch);
-  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.16);
-  cursor: pointer;
-  transition:
-    transform var(--dur-press) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
-}
-.theme-dialog-swatch::before {
-  content: "";
-  position: absolute;
-  inset: -6px;
-}
-:root[data-touch="true"] .theme-dialog-swatches {
-  gap: 0.625rem;
-}
-:root[data-touch="true"] .theme-dialog-swatch {
-  width: 2rem;
-  height: 2rem;
-}
-.theme-dialog-swatch:active {
-  transform: scale(0.9);
-}
-.theme-dialog-swatch[aria-checked="true"] {
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--ink) / 0.18),
-    0 0 0 2px var(--tone-2),
-    0 0 0 4px color-mix(in srgb, var(--swatch) 82%, rgb(var(--ink)));
-}
-.theme-dialog-swatch:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 4px;
-}
-/* Delete on the left, apart from the two that close the dialog. */
-.theme-dialog-foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0.875rem 1.5rem;
-  border-top: 1px solid var(--hairline);
-  background: var(--fill-1);
-}
-.theme-dialog-btn,
-.theme-dialog-delete {
-  height: 2rem;
-  padding: 0 0.875rem;
-  border: 0;
-  border-radius: var(--r-sm);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--dur-fast) var(--ease-std),
-    color var(--dur-fast) var(--ease-std),
-    transform var(--dur-press) var(--ease-out);
-}
-.theme-dialog-btn {
-  background: var(--fill-2);
-  color: var(--text);
-}
-.theme-dialog-btn-primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-}
-.theme-dialog-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.theme-dialog-delete {
-  margin-right: auto;
-  padding: 0 0.625rem;
-  background: none;
-  color: var(--danger);
-}
-.theme-dialog-delete[data-armed] {
-  background: var(--danger);
-  color: #fff;
-}
-@media (hover: hover) and (pointer: fine) {
-  .theme-dialog-btn:not(:disabled):hover {
-    background: var(--fill-3);
-  }
-  .theme-dialog-btn-primary:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 88%, white);
-  }
-  .theme-dialog-delete:not([data-armed]):hover {
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
-  }
-}
-:is(.theme-dialog-btn, .theme-dialog-delete):not(:disabled):active {
-  transform: scale(0.97);
-}
-:is(.theme-dialog-btn, .theme-dialog-delete):focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-@media (max-width: 480px) {
-  .theme-dialog-rows {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.375rem;
-  }
-  .theme-dialog-label:not(:first-child) {
-    margin-top: 0.5rem;
-  }
 }
 
 .settings-row-value {
@@ -1124,6 +863,55 @@
   max-width: 420px;
   font-size: var(--fs-base);
   font-weight: 500;
+}
+
+/* Sub-sections inside expanded service panels (TMDB Localization / Modules, MDBList Providers). */
+.settings-subhead {
+  margin: 0.5rem 0 -0.25rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3, var(--text-2));
+}
+.settings-subcard {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgb(var(--ink) / 0.03);
+  overflow: hidden;
+}
+.settings-subcard-pad {
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+}
+.settings-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
+.settings-subrow + .settings-subrow {
+  border-top: 1px solid var(--border);
+}
+.settings-subrow-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.settings-subrow-title {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text);
+}
+.settings-subrow-caption {
+  font-size: var(--fs-sm, 12.5px);
+  line-height: 1.4;
+  color: var(--text-2);
 }
 
 /* Subtitle sample on the Subtitles page: a small screen set inside the card,
@@ -2751,7 +2539,7 @@
 }
 /* The card is a button: on its own it shrinks to its caption, so posters
    with short titles came out narrower. Fill the grid cell like every other. */
-.playlist-entry > .card {
+.playlist-entry .card {
   width: 100%;
 }
 /* An empty playlist's note sits right under its title, on the same left edge. */

@@ -38,35 +38,34 @@ export type Action =
 
 export type ActionGroup = "player" | "app";
 
-/** `when` says where a shortcut works, if not everywhere its group's does. */
-export const ACTIONS: { id: Action; label: string; group: ActionGroup; when?: string }[] = [
+export const ACTIONS: { id: Action; label: string; group: ActionGroup }[] = [
   { id: "playPause", label: "Play / pause", group: "player" },
   { id: "seekBack", label: "Skip back", group: "player" },
   { id: "seekForward", label: "Skip forward", group: "player" },
-  { id: "frameBack", label: "Back one frame", group: "player", when: "While watching (pauses first)" },
-  { id: "frameForward", label: "Forward one frame", group: "player", when: "While watching (pauses first)" },
+  { id: "frameBack", label: "Back one frame", group: "player" },
+  { id: "frameForward", label: "Forward one frame", group: "player" },
   { id: "volumeUp", label: "Volume up", group: "player" },
   { id: "volumeDown", label: "Volume down", group: "player" },
   { id: "mute", label: "Mute", group: "player" },
   { id: "fullscreen", label: "Fullscreen", group: "player" },
-  { id: "pinWindow", label: "Pin window on top", group: "player", when: "While watching, on desktop" },
-  { id: "miniPlayer", label: "Picture in Picture", group: "player", when: "While watching, on desktop" },
-  { id: "fill", label: "Crop mode: Fit, Crop black bars, Fill window", group: "player" },
+  { id: "pinWindow", label: "Pin window on top", group: "player" },
+  { id: "miniPlayer", label: "Picture in Picture", group: "player" },
+  { id: "fill", label: "Crop mode", group: "player" },
   { id: "skip", label: "Skip intro / recap", group: "player" },
   { id: "nextEpisode", label: "Next episode", group: "player" },
   { id: "tracks", label: "Subtitles & audio", group: "player" },
   { id: "episodes", label: "Episodes", group: "player" },
   { id: "sources", label: "Sources", group: "player" },
   { id: "speed", label: "Playback speed", group: "player" },
-  { id: "screenshot", label: "Save a screenshot", group: "player", when: "While watching, on desktop" },
-  { id: "toggleTv", label: "Switch TV / desktop mode", group: "app", when: "Anywhere, even while watching" },
-  { id: "search", label: "Search", group: "app", when: "While browsing" },
-  { id: "openFile", label: "Open file", group: "app", when: "Anywhere, even while watching" },
+  { id: "screenshot", label: "Save a screenshot", group: "player" },
+  { id: "toggleTv", label: "Switch TV / desktop mode", group: "app" },
+  { id: "search", label: "Search", group: "app" },
+  { id: "openFile", label: "Open file", group: "app" },
 ];
 
-export const GROUPS: { id: ActionGroup; label: string; when: string }[] = [
-  { id: "player", label: "Player", when: "While watching" },
-  { id: "app", label: "App", when: "While browsing" },
+export const GROUPS: { id: ActionGroup; label: string }[] = [
+  { id: "player", label: "Player" },
+  { id: "app", label: "App" },
 ];
 
 export const DEFAULT_BINDINGS: Record<Action, string[]> = {

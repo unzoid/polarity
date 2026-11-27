@@ -42,10 +42,8 @@ import { PinHost } from "./components/profileLock/PinHost";
 import { DetailPending } from "./components/title/HeroSkeleton";
 import { ProfileSwitchHost } from "./desk/ProfileSwitch";
 import { useDeskUi } from "./desk/mode";
-import { useQuery } from "@tanstack/react-query";
-import { titlePageQuery } from "./lib/anime";
 import type { ContentType, MetaPreview } from "./lib/types";
-import { applyTheme, resolveScheme, resolveTheme, useSystemPrefersLight } from "./lib/theme";
+import { applyAccent, resolveAccent, resolveScheme, useSystemPrefersLight } from "./lib/theme";
 
 // Each platform shell and off-boot screen lives in its own chunk so Desk, Phone, Classic Desktop
 // and TV never download each other's JS or CSS on cold start.
@@ -116,7 +114,7 @@ const Screen = memo(function Screen({ route }: { route: Route }) {
     case "settings":
       return <SettingsRoute page={route.page} />;
     case "detail":
-      return <TitleRoute type={route.type} id={route.id} preview={route.preview} episode={route.episode} />;
+      return <TitleRoute type={route.type} id={route.id} preview={route.preview} episode={route.episode} season={route.season} />;
     case "anime":
       return (
         <Suspense fallback={null}>
@@ -153,12 +151,22 @@ const Screen = memo(function Screen({ route }: { route: Route }) {
 });
 
 /**
- * A title's one page (test report 1, item 1): an anime reached by any of its ids opens on its anime
- * page, and which page it is is settled before either renders: a skeleton until then, never one
- * page swapped for the other.
+ * Unified show-first title route: every show, movie, and anime renders directly in Detail
+ * without an AniList redirect waterfall. Optional `season` opens a series directly on that season.
  */
-function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: string; preview?: MetaPreview; episode?: string }) {
-  const { data: page } = useQuery(titlePageQuery(type, id, preview));
+function TitleRoute({
+  type,
+  id,
+  preview,
+  episode,
+  season,
+}: {
+  type: ContentType;
+  id: string;
+  preview?: MetaPreview;
+  episode?: string;
+  season?: number;
+}) {
   // On a phone the page opens under the card's picture (lib/ui/cardMotion.ts), which hides it briefly:
   // start preloading the detail backdrop on frame 0 and mount the full Detail tree in a non-blocking transition.
   const phone = useFormFactor().form === "phone";
@@ -172,16 +180,10 @@ function TitleRoute({ type, id, preview, episode }: { type: ContentType; id: str
     return () => cancelAnimationFrame(frame);
   }, [ready]);
   const loading = <DetailPending />;
-  if (!page || !ready) return loading;
-  if (page.kind === "anime")
-    return (
-      <Suspense fallback={loading}>
-        <LazyAnimeDetail id={page.anilist} episode={episode} />
-      </Suspense>
-    );
+  if (!ready) return loading;
   return (
     <Suspense fallback={loading}>
-      <LazyDetail type={type} id={id} preview={preview} episode={episode} />
+      <LazyDetail type={type} id={id} preview={preview} episode={episode} season={season} />
     </Suspense>
   );
 }
@@ -205,7 +207,7 @@ function SettingsRoute({ page }: { page?: string }) {
 
 /**
  * Sign-in and profile picking come before the app itself; sign-out may stop to ask over any of them.
- * Theme, colour scheme, font, card size, spoiler flags and reduced motion sync onto `<html>` before
+ * Accent, colour scheme, font, card size, spoiler flags and reduced motion sync onto `<html>` before
  * paint so AuthScreen, OnboardingScreen, ProfilesScreen, SignOutDialog, PinHost and portalled menus
  * all receive the user's preferences on frame 0.
  */
@@ -231,6 +233,31 @@ export function App() {
     };
   }, [nativeFrame]);
 
+  // Fullscreen, on the root: macOS hides the traffic lights then, so the bars stop making room for them (shell.css).
+  // Kept on App (not MainApp) so Sign In, Onboarding and Profiles also track fullscreen transitions.
+  useEffect(() => {
+    if (!isDesktop) return;
+    const root = document.documentElement;
+    let alive = true;
+    const read = () =>
+      void appWindow
+        .isFullscreen()
+        .then((fs) => {
+          if (!alive) return;
+          if (fs) root.dataset.fullscreen = "";
+          else delete root.dataset.fullscreen;
+        })
+        .catch(() => {});
+    read();
+    window.addEventListener("resize", read);
+    const unlisten = appWindow.onResized(read).catch(() => () => {});
+    return () => {
+      alive = false;
+      window.removeEventListener("resize", read);
+      void unlisten.then((fn) => fn());
+    };
+  }, []);
+
   useLayoutEffect(() => {
     document.documentElement.dataset.font = uiFontOf(settings?.uiFont);
   }, [settings?.uiFont]);
@@ -238,7 +265,7 @@ export function App() {
   useLayoutEffect(() => {
     if (!settings) return;
     const root = document.documentElement;
-    applyTheme(resolveTheme(settings), scheme, root);
+    applyAccent(resolveAccent(settings), scheme, root);
     root.dataset.cardSize = settings.cardSize ?? "medium";
     root.dataset.reduceMotion = settings.reduceMotion ?? "system";
     root.dataset.hideThumbs = String(!!settings.hideEpisodeThumbs);
@@ -341,23 +368,6 @@ function MainApp() {
     // The page's zoom, for what has to stay put on screen whatever it is: room for macOS's traffic lights (shell.css).
     document.documentElement.style.setProperty("--ui-zoom", String(zoom));
   }, [uiScale]);
-
-  // Fullscreen, on the root: macOS hides the traffic lights then, so the bars stop making room for them (shell.css).
-  useEffect(() => {
-    if (!isDesktop) return;
-    const root = document.documentElement;
-    const read = () =>
-      void appWindow
-        .isFullscreen()
-        .then((fs) => {
-          if (fs) root.dataset.fullscreen = "";
-          else delete root.dataset.fullscreen;
-        })
-        .catch(() => {});
-    read();
-    window.addEventListener("resize", read);
-    return () => window.removeEventListener("resize", read);
-  }, []);
 
   // Look for a new version shortly after launch, then every few hours (TV mode too).
   useEffect(() => startUpdateChecks(), []);

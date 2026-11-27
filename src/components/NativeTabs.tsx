@@ -15,9 +15,10 @@ import { resolveScheme, useSystemPrefersLight } from "../lib/theme";
  * (lib/navTabs.ts): Search and the Calendar stay buttons in the top bar. The web-drawn tabs hide (shell.css).
  * Elsewhere nothing.
  */
-export function useNativeTabs(links: NavLink[]) {
+export function useNativeTabs(links: NavLink[], sheetOpen = false) {
   const { stack, tab } = useRouter();
-  const settingsOpen = useSettingsOverlay().open;
+  // `sheetOpen`: the phone shell's title sheet, which covers the bar as Settings does.
+  const settingsOpen = useSettingsOverlay().open || sheetOpen;
   const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
   // Drawn in the app's scheme: on a light page iOS's dark bar stood out (it would follow the system's otherwise).
   const { data: settings } = useSettings();
@@ -51,31 +52,33 @@ export function useNativeTabs(links: NavLink[]) {
     if (nativeTabsAvailable) setNativeTabs(JSON.parse(key) as NativeTabsState).catch(warnFailed("native tab bar"));
   }, [key]);
 
-  useHeldSafeArea(nativeTabsAvailable && (settingsOpen || layers > 0));
+  const playing = stack[stack.length - 1].route.name === "player";
+  useHeldTabBarInset(nativeTabsAvailable && !playing && (settingsOpen || layers > 0));
 }
 
-/** How long the bar takes to come back, and a little to spare, before the bottom safe area is let go again. */
+/** How long the bar takes to come back, and a little to spare, before the held tab bar inset is let go again. */
 const BAR_BACK_MS = 700;
 
 /**
- * While a sheet covers the screen, iOS's tab bar hides, and with it goes the part of the bottom safe area it took:
- * the pages and the sheet would lay themselves out again mid-motion, a bump as the sheet rises and another as it
- * goes. The bottom safe area is held where it was until the bar is back.
+ * While a sheet covers the screen, iOS's tab bar hides, and with it goes the part of the bottom safe area it took.
+ * Hold only `--tabbar-h` (used by underlying tab pages' bottom scroll padding) rather than `--safe-bottom`, so
+ * `--safe-bottom` stays live `env(safe-area-inset-bottom)` for overlays, floating trays, and the video player.
  */
-function useHeldSafeArea(covered: boolean) {
+function useHeldTabBarInset(covered: boolean) {
   useLayoutEffect(() => {
     if (!covered) return;
     const root = document.documentElement;
-    if (!root.style.getPropertyValue("--safe-bottom")) {
+    if (root.dataset.fakeNativeBar !== undefined) return;
+    if (!root.style.getPropertyValue("--tabbar-h")) {
       const probe = document.createElement("div");
       probe.style.cssText = "position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
       document.body.append(probe);
-      root.style.setProperty("--safe-bottom", getComputedStyle(probe).paddingBottom);
+      root.style.setProperty("--tabbar-h", getComputedStyle(probe).paddingBottom);
       probe.remove();
     }
     clearTimeout(letGo);
     return () => {
-      letGo = window.setTimeout(() => root.style.removeProperty("--safe-bottom"), BAR_BACK_MS);
+      letGo = window.setTimeout(() => root.style.removeProperty("--tabbar-h"), BAR_BACK_MS);
     };
   }, [covered]);
 }

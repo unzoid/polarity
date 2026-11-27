@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight, type Icon as IconT } from "../icons";
 import { PAGE_SECTIONS, type PageId } from "../../lib/settings/pages";
+import { useFormFactor } from "../../lib/ui";
+import { FamilyTray, MoreDots } from "./FamilyTray";
 import { SECTION_ICONS } from "./pages";
 import { SliderField } from "../SliderField";
 import { Button, type ButtonVariant } from "../ui/Button";
@@ -126,6 +128,11 @@ export function ActionRow({
  */
 export function FormRow({
   setting,
+  title,
+  trayTitle,
+  trayHint,
+  emptyValue = "Add",
+  icon: Icon,
   value,
   onChange,
   onSubmit,
@@ -141,6 +148,15 @@ export function FormRow({
   ...field
 }: Omit<TextFieldProps, "onSubmit" | "look"> & {
   setting?: string;
+  /** Row label used on phone to open the Family input tray (falls back to aria-label or submit). */
+  title?: string;
+  /** Heading inside the phone Family input tray. */
+  trayTitle?: string;
+  /** Optional hint line shown inside the phone Family input tray above the field. */
+  trayHint?: string;
+  /** Right-side label on phone when no saved value is present. */
+  emptyValue?: string;
+  icon?: IconT;
   onSubmit: (value: string) => void;
   saved?: string;
   tidy?: (value: string) => string;
@@ -152,8 +168,61 @@ export function FormRow({
   error?: ReactNode;
   look?: "row" | "expand";
 }) {
+  const phone = useFormFactor().form === "phone";
+  const [trayOpen, setTrayOpen] = useState(false);
   const next = tidy(value);
   const ready = saved === undefined ? next !== "" : next !== saved;
+
+  if (phone && look === "row") {
+    const rowTitle = title ?? (typeof field["aria-label"] === "string" ? field["aria-label"] : typeof submit === "string" ? submit : "Edit");
+    const display = saved && saved.trim() ? saved : emptyValue;
+    return (
+      <>
+        <button
+          type="button"
+          className="settings-row settings-row-button ft-choice-row"
+          data-setting={setting}
+          aria-haspopup="dialog"
+          aria-expanded={trayOpen}
+          onClick={() => setTrayOpen(true)}
+        >
+          {Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />}
+          <RowText title={rowTitle} />
+          <span className="ft-choice-right">
+            <span className="ft-choice-value">{display}</span>
+            <MoreDots size={16} className="ft-choice-dots" />
+          </span>
+        </button>
+        <FamilyTray open={trayOpen} onClose={() => setTrayOpen(false)} title={trayTitle ?? rowTitle} stepKey={rowTitle}>
+          {trayHint && <p className="ft-desc">{trayHint}</p>}
+          <form
+            className="ft-input-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (ready && !pending) {
+                onSubmit(next);
+                if (!error) setTrayOpen(false);
+              }
+            }}
+          >
+            <TextField value={value} onChange={onChange} spellCheck={spellCheck} autoFocus {...field} />
+            {error && (
+              <p className="ft-desc ft-desc-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="ft-actions">
+              <button type="submit" className="ft-pill ft-pill-cta" disabled={!ready || pending}>
+                {glyph}
+                {pending ? (pendingLabel ?? submit) : submit}
+              </button>
+            </div>
+          </form>
+        </FamilyTray>
+      </>
+    );
+  }
+
   return (
     <>
       <form
@@ -224,6 +293,7 @@ export function ExpandRow({
   setting,
   accessory,
   handle,
+  inline,
   children,
 }: Expandable & {
   /** The schema id (lib/settings/schema.ts) or another name the page finds the row by. */
@@ -239,8 +309,45 @@ export function ExpandRow({
   accessory?: ReactNode;
   /** A control of its own at the row's start, over its edge (an add-on's drag handle). */
   handle?: ReactNode;
+  /** Keep inline expansion even on phone when a caller explicitly opts out of the Family tray. */
+  inline?: boolean;
   children: ReactNode;
 }) {
+  const phone = useFormFactor().form === "phone";
+  if (phone && !inline) {
+    const row = (
+      <button
+        type="button"
+        className="settings-row settings-row-button ft-choice-row"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        {lead ?? (Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />)}
+        <RowText title={title} caption={caption} />
+        <span className="ft-choice-right">
+          {value != null && <span className="ft-choice-value">{value}</span>}
+          <MoreDots size={16} className="ft-choice-dots" />
+        </span>
+      </button>
+    );
+    return (
+      <div className="settings-expand" data-open={open} data-setting={setting}>
+        {handle ? (
+          <div className="settings-expand-head">
+            {row}
+            <div className="settings-expand-handle">{handle}</div>
+          </div>
+        ) : (
+          row
+        )}
+        <FamilyTray open={open} onClose={onToggle} title={title} stepKey={title}>
+          <div className="ft-tray-body">{children}</div>
+        </FamilyTray>
+      </div>
+    );
+  }
+
   const row = (
     <button className="settings-row settings-row-button" aria-expanded={open} onClick={onToggle} data-accessory={accessory ? "" : undefined}>
       {lead ?? (Icon && <Icon className="settings-row-icon" size={20} strokeWidth={1.9} />)}

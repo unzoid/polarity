@@ -154,10 +154,7 @@ export function LetterboxdImport() {
 
   return (
     <>
-      <Card
-        title="Import from Letterboxd"
-        footer="Your watchlist and the films you've watched, from the ZIP Letterboxd lets you export in its settings. It's read on this device and films are found by title and year; nothing is sent to Letterboxd. Nothing newer here is replaced, and importing the same file again adds nothing."
-      >
+      <Card title="Import from Letterboxd">
         <ActionRow
           setting="letterboxdImport"
           title={loaded ? "Export read" : "Export file"}

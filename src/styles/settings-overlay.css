@@ -47,6 +47,10 @@
     grid-template-columns: 208px minmax(0, 1fr);
   }
 }
+/* macOS windowed: keep the Settings window clear of the top-left traffic lights on shorter screens. */
+html[data-os="mac"]:not([data-fullscreen]) .t3s {
+  height: min(780px, calc(100dvh - var(--mac-row) * 1.5));
+}
 @media (max-width: 560px) {
   .t3s {
     grid-template-columns: 168px minmax(0, 1fr);
@@ -638,6 +642,24 @@
 }
 .t3s .settings-expand-toggle {
   font-size: 13.5px;
+}
+.t3s .settings-subhead {
+  font-size: 10.5px;
+  color: var(--t3-muted-fg);
+}
+.t3s .settings-subcard {
+  border-color: var(--t3-border);
+  background: color-mix(in srgb, var(--t3-surface, transparent) 60%, transparent);
+}
+.t3s .settings-subrow + .settings-subrow {
+  border-top-color: var(--t3-border);
+}
+.t3s .settings-subrow-title {
+  font-size: 13.5px;
+}
+.t3s .settings-subrow-caption {
+  font-size: 12px;
+  color: var(--t3-muted-fg);
 }
 .t3s .settings-footer,
 .t3s .settings-error {
@@ -1264,4 +1286,10 @@
   :root:not([data-reduce-motion="off"]) .t3s .settings-chevron {
     transition: none;
   }
+}
+
+/* The window's switches are Liquid Glass's (settings/GlassSwitch.tsx); its own stylesheet sizes and colours
+   them (`--lg-*`, under `@layer liquid-glass`). Here only its keyboard ring, in the window's own. */
+.t3s {
+  --lg-focus-ring: 2px solid var(--t3-primary);
 }

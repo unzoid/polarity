@@ -1,8 +1,8 @@
 import "../styles/anime.css";
-import { useQueries } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, memo, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useOpenAnime } from "../components/anime/AnimeCard";
+import { openCardMenu, menuPoint } from "../components/CardMenu";
 import { useArtFocus } from "../components/DetailArt";
 import { Star, Warning } from "../components/icons";
 import { Img } from "../components/Img";
@@ -12,41 +12,29 @@ import {
   FORMAT_LABEL,
   SEASON_LABEL,
   STATUS_LABEL,
-  aniZipQuery,
-  animePreview,
-  cardFacts,
-  cleanDescription,
+  animeItemName,
+  animeItemToPreview,
   countdown,
-  isMature,
-  landscapeArt,
+  formatAnimeItemScore,
   nextSeason,
-  reprioritiseAniList,
-  rowPriority,
   seasonOf,
-  slidesReady,
   untilAiring,
-  useAiringToday,
-  useAnimeGenre,
-  useAnimeHome,
-  useAnimePageArt,
-  useAnimeScore,
-  useAnimeTitle,
-  useCardsShown,
-  useFranchiseBanners,
-  useLinkedImdb,
+  useAnimeGenreShelf,
+  useAnimeHomeCatalog,
+  useAnimeToday,
   useShelfVisible,
-  type AiringSlot,
-  type AnimeCard as Card,
   type AnimeShelfId,
-  type AniZip,
   type BrowseFilters,
+  type MediaFormat,
+  type MediaStatus,
 } from "../lib/anime";
 import { useMatureContent } from "../lib/catalog";
 import { joinFacts } from "../lib/format";
-import { PRIORITY } from "../lib/net";
+import { metaQuery } from "../lib/net";
 import { useNavigation, type Route } from "../lib/router";
 import { usePrefs } from "../lib/settings";
-import { heroBackdropUrl, lazyNamed, prefersReducedMotion, sizedArt, useNearViewport, useOffscreenMark, useViewportPlace } from "../lib/ui";
+import type { AnimeItem } from "../lib/types";
+import { heroBackdropUrl, lazyNamed, prefersReducedMotion, sizedArt, useCardIntent, useNearViewport, useOffscreenMark } from "../lib/ui";
 import { IconPlay } from "../phone/icons";
 import { useArtTint } from "../phone/tint";
 import { TopBar } from "./Bar";
@@ -58,9 +46,9 @@ const ListDialog = lazyNamed(() => import("./ListDialog"), "ListDialog");
 type Shape = "poster" | "landscape";
 
 const HERO_COUNT = 6;
-const HERO_POOL = 10;
 const ADVANCE_MS = 9000;
 const PEEK_DELAY_MS = 360;
+const INTENT_DELAY = 150;
 
 /** Compact single-unit countdown ("4d", "6h", "18m") so card subtitles stay calm and readable. */
 function shortCountdown(seconds: number) {
@@ -72,17 +60,44 @@ function shortCountdown(seconds: number) {
   return `${Math.max(1, Math.floor(seconds / 60))}m`;
 }
 
+function itemFacts(item: AnimeItem): string {
+  const fmt = item.format && FORMAT_LABEL[item.format as MediaFormat];
+  const eps = item.format === "MOVIE" ? (item.duration ? `${item.duration} min` : undefined) : item.episodes ? `${item.episodes} ep` : undefined;
+  return [item.year, fmt, eps].filter(Boolean).join(" · ");
+}
+
+/** Click, right-click, and hover prefetch for a show-first `AnimeItem` (zero AniList calls). */
+function useOpenAnimeItem(item: AnimeItem) {
+  const { navigate } = useNavigation();
+  const { animeTitles } = usePrefs();
+  const qc = useQueryClient();
+  const preview = useMemo(() => animeItemToPreview(item, animeTitles), [item, animeTitles]);
+  const openPage = useCallback(
+    () => navigate({ name: "detail", type: item.type, id: item.id, preview, season: item.seasonHint }),
+    [navigate, item.type, item.id, preview, item.seasonHint],
+  );
+  const intent = useCardIntent(() => void qc.prefetchQuery(metaQuery(item.type, item.id)), INTENT_DELAY);
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      e.preventDefault();
+      openCardMenu(preview, menuPoint(e), openPage);
+    },
+    [preview, openPage],
+  );
+  return { onClick: openPage, onContextMenu, ...intent };
+}
+
 // --- Shared Hover Quick-Peek -----------------------------------------------
 
 interface PeekTarget {
-  card: Card;
+  item: AnimeItem;
   rect: DOMRect;
   kicker?: string;
 }
 
 interface PeekActions {
-  enter: (card: Card, el: HTMLElement, kicker?: string) => void;
-  leave: (cardId: number) => void;
+  enter: (item: AnimeItem, el: HTMLElement, kicker?: string) => void;
+  leave: (itemId: string) => void;
   hide: () => void;
 }
 
@@ -96,7 +111,7 @@ function useFineHover() {
 function AnimePeekProvider({ enabled, scroller, children }: { enabled: boolean; scroller: React.RefObject<HTMLDivElement | null>; children: ReactNode }) {
   const [peek, setPeek] = useState<PeekTarget | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const pendingId = useRef<number | null>(null);
+  const pendingId = useRef<string | null>(null);
 
   const hide = useCallback(() => {
     window.clearTimeout(timer.current);
@@ -106,27 +121,27 @@ function AnimePeekProvider({ enabled, scroller, children }: { enabled: boolean; 
   }, []);
 
   const enter = useCallback(
-    (card: Card, el: HTMLElement, kicker?: string) => {
+    (item: AnimeItem, el: HTMLElement, kicker?: string) => {
       if (!enabled || !useFineHover()) return;
       window.clearTimeout(timer.current);
-      pendingId.current = card.id;
+      pendingId.current = item.id;
       timer.current = window.setTimeout(() => {
-        if (pendingId.current !== card.id || !el.isConnected) return;
+        if (pendingId.current !== item.id || !el.isConnected) return;
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.bottom < 0 || rect.top > window.innerHeight) return;
-        setPeek({ card, rect, kicker });
+        setPeek({ item, rect, kicker });
       }, PEEK_DELAY_MS);
     },
     [enabled],
   );
 
-  const leave = useCallback((cardId: number) => {
-    if (pendingId.current === cardId) {
+  const leave = useCallback((itemId: string) => {
+    if (pendingId.current === itemId) {
       window.clearTimeout(timer.current);
       timer.current = undefined;
       pendingId.current = null;
     }
-    setPeek((p) => (p?.card.id === cardId ? null : p));
+    setPeek((p) => (p?.item.id === itemId ? null : p));
   }, []);
 
   useEffect(() => {
@@ -158,25 +173,24 @@ function AnimePeekProvider({ enabled, scroller, children }: { enabled: boolean; 
 }
 
 function AnimeHoverPeek({ target }: { target: PeekTarget }) {
-  const { card, rect, kicker } = target;
-  const name = useAnimeTitle()(card.title);
-  const { animeCardScores, animeCardCountdown } = usePrefs();
-  const score = useAnimeScore()(animeCardScores ? card.averageScore : undefined);
-  const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
-  const synopsis = useMemo(() => cleanDescription(card.description).slice(0, 2).join(" "), [card.description]);
-  const facts = cardFacts(card);
+  const { item, rect, kicker } = target;
+  const { animeTitles, animeCardScores, animeScoreFormat, animeCardCountdown } = usePrefs();
+  const name = animeItemName(item, animeTitles);
+  const score = animeCardScores ? formatAnimeItemScore(item.score, animeScoreFormat) : undefined;
+  const airing = animeCardCountdown ? item.airing : undefined;
+  const synopsis = item.description;
+  const facts = itemFacts(item);
   const statusPill =
     kicker ??
-    (next
-      ? `Ep ${next.episode} in ${countdown(untilAiring(next.airingAt))}`
-      : card.status === "RELEASING"
+    item.seasonLabel ??
+    (airing
+      ? `${airing.episode ? `Ep ${airing.episode} ` : ""}in ${countdown(untilAiring(airing.airingAt))}`
+      : item.status === "RELEASING"
         ? "Airing"
-        : card.status === "NOT_YET_RELEASED"
-          ? card.season && card.seasonYear
-            ? `${SEASON_LABEL[card.season]} ${card.seasonYear}`
-            : "Upcoming"
-          : card.status
-            ? STATUS_LABEL[card.status]
+        : item.status === "NOT_YET_RELEASED"
+          ? "Upcoming"
+          : item.status
+            ? STATUS_LABEL[item.status as MediaStatus]
             : undefined);
 
   const width = 304;
@@ -209,7 +223,7 @@ function AnimeHoverPeek({ target }: { target: PeekTarget }) {
       {(facts || statusPill) && (
         <div className="dk-apeek-meta tabular">
           {statusPill && (
-            <span className="dk-apeek-status" data-airing={card.status === "RELEASING" || !!next || undefined}>
+            <span className="dk-apeek-status" data-airing={item.status === "RELEASING" || !!airing || undefined}>
               {statusPill}
             </span>
           )}
@@ -217,9 +231,9 @@ function AnimeHoverPeek({ target }: { target: PeekTarget }) {
         </div>
       )}
       {synopsis && <p className="dk-apeek-desc">{synopsis}</p>}
-      {card.genres && card.genres.length > 0 && (
+      {item.genres && item.genres.length > 0 && (
         <div className="dk-apeek-genres">
-          {card.genres.slice(0, 3).map((g) => (
+          {item.genres.slice(0, 3).map((g) => (
             <span key={g} className="dk-apeek-genre">
               {g}
             </span>
@@ -233,18 +247,17 @@ function AnimeHoverPeek({ target }: { target: PeekTarget }) {
 // --- Desk Anime Screen -----------------------------------------------------
 
 /**
- * Desk Anime: shares DeskHome's visual system (tinted backdrop wash, rounded featured billboard, browse/genre chips)
- * while adapting its shelves for AniList discovery — readable below-poster titles & metadata, ranked Trending,
- * 16:9 fanart + title logos on landscape rows, compact broadcast schedule tiles for Airing Today, and a hover quick-peek.
+ * Show-first Desk Anime screen: powered by the Rust backend (TMDB Discover for evergreen shelves
+ * when enabled + Jikan seasonal/schedule feeds, hydrated in parallel with 16:9 fanart & logos).
+ * Zero per-card API calls, instant Hero billboard, and seamless unified show modals.
  */
 export function DeskAnime({ chrome }: { chrome: Chrome }) {
   const scroller = useRef<HTMLDivElement>(null);
-  const { data, isError, refetch } = useAnimeHome();
-  const { animeCardPeek } = usePrefs();
+  const { data, isError, refetch } = useAnimeHomeCatalog();
+  const { animeCardPeek, animeTitles } = usePrefs();
   const visible = useShelfVisible();
   const hasHero = visible("hero");
-  const hero = useDeskAnimeHero(hasHero ? data?.trending : undefined);
-  const today = useAiringToday(visible("today"));
+  const today = useAnimeToday(visible("today"));
   const now = seasonOf();
   const next = nextSeason(now);
   const { navigate } = useNavigation();
@@ -253,7 +266,22 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
   const [everChoseGenre, setEverChoseGenre] = useState(false);
   if (choosingGenre && !everChoseGenre) setEverChoseGenre(true);
 
-  const currentHero = hero.slides[Math.min(shown, Math.max(0, hero.slides.length - 1))];
+  // Hero slides come straight from the already-hydrated shelf response — zero extra requests, zero blocking.
+  const heroSlides = useMemo(() => {
+    if (!hasHero || !data) return [] as AnimeItem[];
+    const pool = [...(data.trending ?? []), ...(data.season ?? [])];
+    const seen = new Set<string>();
+    const withArt: AnimeItem[] = [];
+    for (const item of pool) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      if (item.background) withArt.push(item);
+      if (withArt.length >= HERO_COUNT) break;
+    }
+    return withArt.length ? withArt : pool.slice(0, HERO_COUNT);
+  }, [hasHero, data]);
+
+  const currentHero = heroSlides[Math.min(shown, Math.max(0, heroSlides.length - 1))];
   const tint = useArtTint(currentHero ? sizedArt(currentHero.background ?? currentHero.poster, "w300") : undefined);
   const tintStyle = useMemo<CSSProperties | undefined>(() => (tint ? ({ "--tint-dark": tint.dark, "--tint-light": tint.light } as CSSProperties) : undefined), [tint]);
 
@@ -263,8 +291,8 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
         {chrome === "tabs" && <TopBar logo title="Anime" scroller={scroller} />}
         <div className="dk-scroll" ref={scroller}>
           <div className="dk-state">
-            <h2>AniList didn't answer</h2>
-            <p>It limits how often it can be asked, so give it a minute.</p>
+            <h2>Couldn't load anime</h2>
+            <p>Check your connection and try again.</p>
             <button type="button" className="dk-btn dk-btn-glass" onClick={() => void refetch()}>
               Try Again
             </button>
@@ -274,7 +302,7 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
     );
   }
 
-  const featuredIds = new Set(hero.featured);
+  const featuredIds = new Set(heroSlides.map((s) => s.id));
   const browse = (title: string, filters: Partial<BrowseFilters>): Route => ({ name: "anime-browse", title, ...filters });
   const seasonTitle = `Airing This ${SEASON_LABEL[now.season]}`;
   const upcomingTitle = `Coming in ${SEASON_LABEL[next.season]} ${next.year}`;
@@ -282,8 +310,8 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
     id: AnimeShelfId;
     title: string;
     shape: Shape;
-    items?: Card[];
-    label?: (a: Card) => string | undefined;
+    items?: AnimeItem[];
+    label?: (a: AnimeItem) => string | undefined;
     to: Route;
   }[] = [
     { id: "season", title: seasonTitle, shape: "landscape", items: data?.season, to: browse(seasonTitle, { ...now, sort: "POPULARITY_DESC" }) },
@@ -291,7 +319,7 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
       id: "trending",
       title: "Trending Now",
       shape: "poster",
-      items: data?.trending.filter((a) => !featuredIds.has(a.id)),
+      items: data?.trending?.filter((a) => !featuredIds.has(a.id)),
       to: browse("Trending Now", { sort: "TRENDING_DESC" }),
     },
     { id: "top", title: "Highest Rated", shape: "landscape", items: data?.top, to: browse("Highest Rated", { sort: "SCORE_DESC" }) },
@@ -307,15 +335,13 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
     { id: "popular", title: "Most Popular", shape: "poster", items: data?.popular, to: browse("Most Popular", { sort: "POPULARITY_DESC" }) },
   ];
   const on = shelves.filter((s) => visible(s.id));
-  const showToday = visible("today") && !today.isError && today.slots?.length !== 0;
+  const showToday = visible("today") && !today.isError && today.data?.length !== 0;
   const showGenres = visible("genres");
   const todayAt = Math.min(2, on.length);
 
   const todayRow = showToday && (
     <Row key="today" title="Airing Today" className="dk-row-air" onMore={() => navigate({ name: "anime-schedule" })}>
-      {today.slots
-        ? today.slots.map((s) => <DeskAiringCard key={s.id} slot={s} />)
-        : <AiringSkeletons count={5} />}
+      {today.data ? today.data.map((item) => <DeskAiringCard key={item.id} item={item} />) : <AiringSkeletons count={5} />}
     </Row>
   );
 
@@ -360,11 +386,11 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
             </nav>
           )}
           {hasHero &&
-            (hero.slides.length ? (
-              <AnimeBillboard slides={hero.slides} onShown={setShown} />
-            ) : (
+            (heroSlides.length ? (
+              <AnimeBillboard slides={heroSlides} titlePref={animeTitles} onShown={setShown} />
+            ) : !data ? (
               <div className="dk-billboard dk-skeleton" aria-hidden />
-            ))}
+            ) : null)}
 
           <div className="dk-rows">
             {on.map((s, i) => [
@@ -397,60 +423,15 @@ export function DeskAnime({ chrome }: { chrome: Chrome }) {
 
 // --- Featured Hero Billboard -----------------------------------------------
 
-interface HeroSlide {
-  card: Card;
-  name: string;
-  background?: string;
-  poster?: string;
-  logo?: string;
-  description?: string;
-  part?: string;
-}
-
-function useDeskAnimeHero(trending?: Card[]) {
-  const { animeTitles } = usePrefs();
-  const pool = useMemo(() => trending?.slice(0, HERO_POOL), [trending]);
-  const zips = useQueries({ queries: (pool ?? []).map((a) => aniZipQuery(a.id, PRIORITY.page)) });
-  const updated = zips.map((z) => (z.isLoading ? "…" : z.dataUpdatedAt)).join();
-  const picks = useMemo(() => {
-    if (!pool) return undefined;
-    const out: { card: Card; zip: AniZip | null | undefined }[] = [];
-    for (let i = 0; i < pool.length && out.length < HERO_COUNT; i++) {
-      if (zips[i]?.isLoading) break;
-      const card = pool[i]!;
-      const zip = zips[i]?.data;
-      if (card.bannerImage || zip?.images?.some((m) => m.coverType === "Fanart")) out.push({ card, zip });
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, updated]);
-  const settled = !!pool && zips.every((z) => !z.isLoading);
-  const cards = useMemo(() => picks?.map((p) => p.card), [picks]);
-  const banners = useFranchiseBanners(cards, PRIORITY.visible, PRIORITY.page);
-
-  return useMemo(() => {
-    const featured = settled && picks ? picks.map((p) => p.card.id) : [];
-    if (!picks || !banners) return { slides: [] as HeroSlide[], featured };
-    const shown = slidesReady(banners);
-    if (!shown) return { slides: [] as HeroSlide[], featured };
-    const slides: HeroSlide[] = picks.slice(0, shown).map(({ card, zip }, i) => {
-      const own = animePreview(card, zip, animeTitles);
-      const b = banners[i];
-      return {
-        card,
-        name: b?.name ?? own.name,
-        background: b?.background ?? own.background,
-        poster: own.poster,
-        logo: b?.logo,
-        description: own.description,
-        part: b?.label,
-      };
-    });
-    return { slides, featured };
-  }, [picks, banners, animeTitles, settled]);
-}
-
-function AnimeBillboard({ slides, onShown }: { slides: HeroSlide[]; onShown: (i: number) => void }) {
+function AnimeBillboard({
+  slides,
+  titlePref,
+  onShown,
+}: {
+  slides: AnimeItem[];
+  titlePref: "romaji" | "english" | "native";
+  onShown: (i: number) => void;
+}) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [{ index, prev }, setState] = useState({ index: 0, prev: -1 });
   const go = useCallback((step: 1 | -1) => setState((s) => ({ index: (s.index + step + slides.length) % slides.length, prev: s.index })), [slides.length]);
@@ -474,17 +455,24 @@ function AnimeBillboard({ slides, onShown }: { slides: HeroSlide[]; onShown: (i:
   const { navigate } = useNavigation();
   const { animeCardCountdown } = usePrefs();
   const [logoFailed, setLogoFailed] = useState(false);
-  useEffect(() => setLogoFailed(false), [slide.card.id]);
+  useEffect(() => setLogoFailed(false), [slide.id]);
 
-  const open = () => navigate({ name: "anime-detail", id: slide.card.id, preview: slide.card });
-  const nextEp = animeCardCountdown ? slide.card.nextAiringEpisode : undefined;
-  const year = slide.card.seasonYear ?? slide.card.startDate?.year;
+  const name = animeItemName(slide, titlePref);
+  const open = () =>
+    navigate({
+      name: "detail",
+      type: slide.type,
+      id: slide.id,
+      preview: animeItemToPreview(slide, titlePref),
+      season: slide.seasonHint,
+    });
+  const airing = animeCardCountdown ? slide.airing : undefined;
   const line = joinFacts([
-    slide.part,
-    slide.card.format && FORMAT_LABEL[slide.card.format],
-    ...(slide.card.genres ?? []).slice(0, 2),
-    year,
-    nextEp && `Ep ${nextEp.episode} in ${shortCountdown(untilAiring(nextEp.airingAt))}`,
+    slide.seasonLabel,
+    slide.format && FORMAT_LABEL[slide.format as MediaFormat],
+    ...(slide.genres ?? []).slice(0, 2),
+    slide.year,
+    airing && `${airing.episode ? `Ep ${airing.episode} ` : ""}in ${shortCountdown(untilAiring(airing.airingAt))}`,
   ]);
 
   return (
@@ -494,7 +482,7 @@ function AnimeBillboard({ slides, onShown }: { slides: HeroSlide[]; onShown: (i:
       data-origin="12"
       role="button"
       tabIndex={0}
-      aria-label={slide.name}
+      aria-label={name}
       aria-roledescription="carousel"
       onClick={(e) => e.currentTarget.contains(e.target as Node) && open()}
       onKeyDown={(e) => {
@@ -512,15 +500,15 @@ function AnimeBillboard({ slides, onShown }: { slides: HeroSlide[]; onShown: (i:
       }}
     >
       <div className="dk-bb-window">
-        <AnimeBillboardArt key={`${index}:${slide.card.id}`} slide={slide} entering={prev >= 0} />
-        {prevSlide && <AnimeBillboardArt key={`${prev}:${prevSlide.card.id}`} slide={prevSlide} under />}
+        <AnimeBillboardArt key={`${index}:${slide.id}`} item={slide} entering={prev >= 0} />
+        {prevSlide && <AnimeBillboardArt key={`${prev}:${prevSlide.id}`} item={prevSlide} under />}
       </div>
       <div className="dk-bb-shade" aria-hidden />
-      <div className="dk-bb-body" key={slide.card.id}>
+      <div className="dk-bb-body" key={slide.id}>
         {slide.logo && !logoFailed ? (
-          <Img className="dk-bb-logo" src={sizedArt(slide.logo, "w500")} alt={slide.name} onFail={() => setLogoFailed(true)} draggable={false} />
+          <Img className="dk-bb-logo" src={sizedArt(slide.logo, "w500")} alt={name} onFail={() => setLogoFailed(true)} draggable={false} />
         ) : (
-          <h2 className="dk-bb-name">{slide.name}</h2>
+          <h2 className="dk-bb-name">{name}</h2>
         )}
         {line && <p className="dk-bb-line tabular">{line}</p>}
         {slide.description && <p className="dk-bb-desc">{slide.description}</p>}
@@ -542,8 +530,8 @@ function AnimeBillboard({ slides, onShown }: { slides: HeroSlide[]; onShown: (i:
   );
 }
 
-function AnimeBillboardArt({ slide, entering, under }: { slide: HeroSlide; entering?: boolean; under?: boolean }) {
-  const art = heroBackdropUrl(slide.background ?? slide.poster);
+function AnimeBillboardArt({ item, entering, under }: { item: AnimeItem; entering?: boolean; under?: boolean }) {
+  const art = heroBackdropUrl(item.background ?? item.poster);
   const focus = useArtFocus(art, true);
   return <Img className="dk-bb-art" data-entering={entering || undefined} data-under={under || undefined} src={art} alt="" loading="eager" style={focus.style} draggable={false} />;
 }
@@ -559,29 +547,20 @@ function DeskAnimeShelf({
 }: {
   title: string;
   shape: Shape;
-  items?: Card[];
-  label?: (a: Card) => string | undefined;
+  items?: AnimeItem[];
+  label?: (a: AnimeItem) => string | undefined;
   onMore: () => void;
 }) {
-  const filterCards = useCardsShown();
   const { animeCardTitles } = usePrefs();
-  const filtered = useMemo(() => {
-    if (!items) return undefined;
-    const shown = filterCards(items);
-    if (shape === "poster") return shown;
-    const withBanner = shown.filter((a) => a.bannerImage);
-    return withBanner.length >= 5 ? withBanner : shown;
-  }, [items, filterCards, shape]);
-
-  if (filtered && !filtered.length) return null;
+  if (items && !items.length) return null;
   return (
     <Row title={title} shape={shape} className={shape === "poster" && animeCardTitles ? "dk-row-acards" : undefined} onMore={onMore}>
-      {filtered
-        ? filtered.map((a) =>
+      {items
+        ? items.map((item) =>
             shape === "landscape" ? (
-              <DeskAnimeLandscapeCard key={a.id} card={a} kicker={label?.(a)} />
+              <DeskAnimeLandscapeCard key={item.id} item={item} kicker={label?.(item)} />
             ) : (
-              <DeskAnimePosterCard key={a.id} card={a} kicker={label?.(a)} />
+              <DeskAnimePosterCard key={item.id} item={item} kicker={label?.(item)} />
             ),
           )
         : shape === "landscape"
@@ -593,7 +572,7 @@ function DeskAnimeShelf({
 
 function DeskAnimeGenreShelf({ genre, shape }: { genre: string; shape: Shape }) {
   const [ref, near] = useNearViewport<HTMLDivElement>(false);
-  const { data } = useAnimeGenre(genre, near);
+  const { data } = useAnimeGenreShelf(genre, near);
   useOffscreenMark(ref, !data);
   const { navigate } = useNavigation();
   return (
@@ -612,30 +591,24 @@ function MatureCover() {
   );
 }
 
-/**
- * Anime poster card: clean, unobstructed 2:3 key art with a quiet below-poster title & metadata line
- * (controlled by Settings → Anime → Show titles & details). Score and airing countdown stay inline in
- * the subtitle rather than stamping multiple badges over the artwork.
- */
-const DeskAnimePosterCard = memo(function DeskAnimePosterCard({ card, kicker }: { card: Card; kicker?: string }) {
-  const name = useAnimeTitle()(card.title);
-  const open = useOpenAnime(card);
+const DeskAnimePosterCard = memo(function DeskAnimePosterCard({ item, kicker }: { item: AnimeItem; kicker?: string }) {
+  const { animeTitles, animeCardTitles, animeCardScores, animeScoreFormat, animeCardCountdown } = usePrefs();
+  const name = animeItemName(item, animeTitles);
+  const open = useOpenAnimeItem(item);
   const peek = useContext(PeekContext);
-  const { animeCardTitles, animeCardScores, animeCardCountdown } = usePrefs();
   const matureContent = useMatureContent();
-  const score = useAnimeScore()(animeCardScores ? card.averageScore : undefined);
+  const score = animeCardScores ? formatAnimeItemScore(item.score, animeScoreFormat) : undefined;
   const [failed, setFailed] = useState(false);
 
-  if (matureContent === "hide" && isMature(card)) return null;
+  if (matureContent === "hide" && item.mature) return null;
 
-  const poster = card.coverImage.extraLarge ?? card.coverImage.large ?? undefined;
-  const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
-  const year = card.seasonYear ?? card.startDate?.year;
+  const airing = animeCardCountdown ? item.airing : undefined;
   const secondary =
     kicker ??
-    (next
-      ? `Ep ${next.episode} · ${shortCountdown(untilAiring(next.airingAt))}`
-      : [year, card.genres?.[0]].filter(Boolean).join(" · ") || cardFacts(card));
+    item.seasonLabel ??
+    (airing
+      ? `${airing.episode ? `Ep ${airing.episode} · ` : ""}${shortCountdown(untilAiring(airing.airingAt))}`
+      : [item.year, item.genres?.[0]].filter(Boolean).join(" · ") || itemFacts(item));
 
   return (
     <button
@@ -652,26 +625,22 @@ const DeskAnimePosterCard = memo(function DeskAnimePosterCard({ card, kicker }: 
       onPointerDown={() => peek.hide()}
       onPointerEnter={(e) => {
         open.onPointerEnter();
-        peek.enter(card, e.currentTarget, kicker);
+        peek.enter(item, e.currentTarget, kicker);
       }}
       onPointerLeave={() => {
         open.onPointerLeave();
-        peek.leave(card.id);
+        peek.leave(item.id);
       }}
     >
-      <span
-        className="dk-poster dk-acard-art scheme-dark"
-        data-origin="4"
-        style={{ "--cover": card.coverImage.color ?? undefined } as CSSProperties}
-      >
-        {!failed && poster ? (
-          <Img src={poster} alt="" loading="lazy" decoding="async" draggable={false} onFail={() => setFailed(true)} />
+      <span className="dk-poster dk-acard-art scheme-dark" data-origin="4">
+        {!failed && item.poster ? (
+          <Img src={item.poster} alt="" loading="lazy" decoding="async" draggable={false} onFail={() => setFailed(true)} />
         ) : (
           <span className="dk-poster-name">{name}</span>
         )}
-        {matureContent === "blur" && isMature(card) && <MatureCover />}
+        {matureContent === "blur" && item.mature && <MatureCover />}
         {!animeCardTitles && score && (
-          <span className="dk-acard-score tabular" title="AniList score">
+          <span className="dk-acard-score tabular" title="Score">
             <Star size={10} />
             {score}
           </span>
@@ -699,50 +668,37 @@ const DeskAnimePosterCard = memo(function DeskAnimePosterCard({ card, kicker }: 
 });
 
 /**
- * Anime landscape card: upgrades to real 16:9 fanart + official logo via `useAnimePageArt` as it approaches
- * the viewport, keeping the artwork free of corner badges just like Home, Shows, and Movies.
+ * Anime landscape card: renders pre-hydrated 16:9 fanart + logo directly from the backend shelf response.
+ * Zero per-card API calls.
  */
-const DeskAnimeLandscapeCard = memo(function DeskAnimeLandscapeCard({ card, kicker }: { card: Card; kicker?: string }) {
-  const name = useAnimeTitle()(card.title);
-  const open = useOpenAnime(card);
+const DeskAnimeLandscapeCard = memo(function DeskAnimeLandscapeCard({ item, kicker }: { item: AnimeItem; kicker?: string }) {
+  const { animeTitles, animeCardScores, animeScoreFormat, animeCardCountdown } = usePrefs();
+  const name = animeItemName(item, animeTitles);
+  const open = useOpenAnimeItem(item);
   const peek = useContext(PeekContext);
-  const { animeCardScores, animeCardCountdown, animeSeparateEntries: separate } = usePrefs();
   const matureContent = useMatureContent();
-  const score = useAnimeScore()(animeCardScores ? card.averageScore : undefined);
+  const score = animeCardScores ? formatAnimeItemScore(item.score, animeScoreFormat) : undefined;
   const [failed, setFailed] = useState(false);
 
-  const [ref, near, place] = useViewportPlace<HTMLButtonElement>(reprioritiseAniList);
-  const priority = useCallback(() => rowPriority(place.current), [place]);
-  const page = useAnimePageArt(card, near, priority);
-  const imdb = useLinkedImdb(page === null ? card.id : 0);
+  if (matureContent === "hide" && item.mature) return null;
 
-  if (matureContent === "hide" && isMature(card)) return null;
-
-  const poster = card.coverImage.extraLarge ?? card.coverImage.large ?? undefined;
-  const own = [card.bannerImage, poster].filter((u): u is string => !!u);
-  const [bg, ...fallbacks] = page
-    ? [page.background, ...own].filter((u, i, all): u is string => !!u && all.indexOf(u) === i)
-    : page === null && imdb !== undefined
-      ? landscapeArt({ imdb, bannerImage: card.bannerImage, cover: poster, separate })
-      : own;
-
-  const next = animeCardCountdown ? card.nextAiringEpisode : undefined;
+  const [bg, ...fallbacks] = [item.background, item.poster].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
+  const airing = animeCardCountdown ? item.airing : undefined;
   const sub = [
+    item.seasonLabel,
     score ? `★ ${score}` : undefined,
-    kicker ?? (next ? `Ep ${next.episode} in ${shortCountdown(untilAiring(next.airingAt))}` : card.seasonYear ?? card.startDate?.year),
-    card.genres?.[0],
+    kicker ?? (airing ? `in ${shortCountdown(untilAiring(airing.airingAt))}` : item.year),
+    item.genres?.[0],
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <button
-      ref={ref}
       type="button"
       className="dk-lc scheme-dark"
       data-origin="10"
       aria-label={name}
-      style={{ "--cover": card.coverImage.color ?? undefined } as CSSProperties}
       onClick={() => {
         peek.hide();
         open.onClick();
@@ -753,11 +709,11 @@ const DeskAnimeLandscapeCard = memo(function DeskAnimeLandscapeCard({ card, kick
       onPointerDown={() => peek.hide()}
       onPointerEnter={(e) => {
         open.onPointerEnter();
-        peek.enter(card, e.currentTarget, kicker);
+        peek.enter(item, e.currentTarget, kicker);
       }}
       onPointerLeave={() => {
         open.onPointerLeave();
-        peek.leave(card.id);
+        peek.leave(item.id);
       }}
     >
       {!failed && bg ? (
@@ -774,11 +730,11 @@ const DeskAnimeLandscapeCard = memo(function DeskAnimeLandscapeCard({ card, kick
       ) : (
         <span className="dk-poster-name">{name}</span>
       )}
-      {matureContent === "blur" && isMature(card) && <MatureCover />}
+      {matureContent === "blur" && item.mature && <MatureCover />}
       <span className="dk-lc-shade" aria-hidden />
       <span className="dk-lc-body" aria-hidden>
         <span className="dk-lc-brand">
-          <ArtTitle name={name} logo={page?.logo} logos={page?.logos} decorative />
+          <ArtTitle name={name} logo={item.logo} logos={item.logos} decorative />
         </span>
         {sub && <span className="dk-lc-sub tabular">{sub}</span>}
       </span>
@@ -787,32 +743,33 @@ const DeskAnimeLandscapeCard = memo(function DeskAnimeLandscapeCard({ card, kick
 });
 
 /**
- * Compact horizontal schedule tile for Airing Today: keeps the crisp 2:3 cover thumbnail uncropped beside
- * the airing time, episode number, title, score, and genres — no stretched vertical covers.
+ * Compact horizontal schedule tile for Airing Today: uncropped 2:3 cover thumbnail beside
+ * local broadcast time, season badge, title, score, and genres.
  */
-const DeskAiringCard = memo(function DeskAiringCard({ slot }: { slot: AiringSlot }) {
-  const card = slot.media;
-  const name = useAnimeTitle()(card.title);
-  const open = useOpenAnime(card);
+const DeskAiringCard = memo(function DeskAiringCard({ item }: { item: AnimeItem }) {
+  const { animeTitles, animeCardScores, animeScoreFormat } = usePrefs();
+  const name = animeItemName(item, animeTitles);
+  const open = useOpenAnimeItem(item);
   const peek = useContext(PeekContext);
-  const { animeCardScores } = usePrefs();
   const matureContent = useMatureContent();
-  const score = useAnimeScore()(animeCardScores ? card.averageScore : undefined);
+  const score = animeCardScores ? formatAnimeItemScore(item.score, animeScoreFormat) : undefined;
   const [failed, setFailed] = useState(false);
 
-  if (matureContent === "hide" && isMature(card)) return null;
+  if (matureContent === "hide" && item.mature) return null;
 
-  const poster = card.coverImage.extraLarge ?? card.coverImage.large ?? undefined;
-  const delta = untilAiring(slot.airingAt);
+  const delta = item.airing ? untilAiring(item.airing.airingAt) : 0;
   const upcomingSoon = delta > 0 && delta <= 6 * 3600;
-  const timeText = slotLabel(slot);
-  const sub = [card.format && FORMAT_LABEL[card.format], ...(card.genres ?? []).slice(0, 2)].filter(Boolean).join(" · ");
+  const timeText = item.airing
+    ? new Date(item.airing.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : "Today";
+  const badge = item.seasonLabel ? `${item.seasonLabel} · ${timeText}` : timeText;
+  const sub = [item.format && FORMAT_LABEL[item.format as MediaFormat], ...(item.genres ?? []).slice(0, 2)].filter(Boolean).join(" · ");
 
   return (
     <button
       type="button"
       className="dk-air"
-      aria-label={`${name} — ${timeText}`}
+      aria-label={`${name} — ${badge}`}
       onClick={() => {
         peek.hide();
         open.onClick();
@@ -823,29 +780,25 @@ const DeskAiringCard = memo(function DeskAiringCard({ slot }: { slot: AiringSlot
       onPointerDown={() => peek.hide()}
       onPointerEnter={(e) => {
         open.onPointerEnter();
-        peek.enter(card, e.currentTarget, timeText);
+        peek.enter(item, e.currentTarget, badge);
       }}
       onPointerLeave={() => {
         open.onPointerLeave();
-        peek.leave(card.id);
+        peek.leave(item.id);
       }}
     >
-      <span
-        className="dk-air-thumb scheme-dark"
-        data-origin="7"
-        style={{ "--cover": card.coverImage.color ?? undefined } as CSSProperties}
-      >
-        {!failed && poster ? (
-          <Img src={poster} alt="" loading="lazy" decoding="async" draggable={false} onFail={() => setFailed(true)} />
+      <span className="dk-air-thumb scheme-dark" data-origin="7">
+        {!failed && item.poster ? (
+          <Img src={item.poster} alt="" loading="lazy" decoding="async" draggable={false} onFail={() => setFailed(true)} />
         ) : (
           <span className="dk-air-thumb-fallback">{name.slice(0, 2)}</span>
         )}
-        {matureContent === "blur" && isMature(card) && <MatureCover />}
+        {matureContent === "blur" && item.mature && <MatureCover />}
       </span>
       <span className="dk-air-body">
         <span className="dk-air-top tabular">
           <span className="dk-air-time" data-soon={upcomingSoon || undefined}>
-            {timeText}
+            {badge}
           </span>
           {score && (
             <span className="dk-air-score">
@@ -889,13 +842,10 @@ function AiringSkeletons({ count = 5 }: { count?: number }) {
   );
 }
 
-function slotLabel(s: AiringSlot) {
-  const time = new Date(s.airingAt * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `Ep ${s.episode} · ${time}`;
-}
-
-function upcomingLabel(a: Card) {
-  const d = a.startDate;
-  if (d?.month && d.day) return new Date(d.year!, d.month - 1, d.day).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return a.format ? FORMAT_LABEL[a.format] : undefined;
+function upcomingLabel(item: AnimeItem) {
+  if (item.startDate) {
+    const parsed = new Date(`${item.startDate}T12:00:00Z`);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  return item.format ? FORMAT_LABEL[item.format as MediaFormat] : undefined;
 }

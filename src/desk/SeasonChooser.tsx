@@ -116,7 +116,7 @@ export function SeasonChooser({
                         {active && <IconCheck size={15} stroke={2.3} />}
                       </span>
                       <span className="dk-season-opt-label">{o.label}</span>
-                      {eps && <span className="dk-season-opt-count tabular">({eps})</span>}
+                      {eps && <span className="dk-season-opt-count tabular">{eps}</span>}
                     </button>
                   </li>
                 );

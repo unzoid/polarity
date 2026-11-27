@@ -282,6 +282,8 @@ impl Tmdb {
             imdb_id: str_of(&d["external_ids"]["imdb_id"]).filter(|i| i.starts_with("tt")),
             logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
             certification: pick_certification(ty, &d, &self.region()),
+            poster: str_of(&d["poster_path"]).map(|p| format!("{}/w342{p}", super::IMG)),
+            background: str_of(&d["backdrop_path"]).map(|p| format!("{}/w1280{p}", super::IMG)),
         };
         if let Some(imdb) = &lookup.imdb_id {
             self.imdb_ids.insert((key.0, imdb.clone()), tmdb_id);

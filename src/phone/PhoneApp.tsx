@@ -1,9 +1,11 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
+import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import "../styles/phone.css";
 import { AccountFullToast } from "../components/AccountFullToast";
 import { Avatar } from "../components/Avatar";
 import { CardMenuHost } from "../components/CardMenu";
 import { useNativeSwipe } from "../components/NativeBack";
+import { useNativeTabs } from "../components/NativeTabs";
+import type { NavLink } from "../lib/navTabs";
 import { OpenFilesHost } from "../components/OpenFiles";
 import { PlayerLayer, usePlayerLayer } from "../components/PlayerLayer";
 import { ProfileMenu } from "../components/ProfileMenu";
@@ -20,7 +22,7 @@ import { ALL_GENRES, BROWSE_GENRES } from "../lib/catalog";
 import { useSettings } from "../lib/net";
 import { leaveApp, systemBack } from "../lib/platform";
 import { rootTab, useRouter, type Entry, type Route } from "../lib/router";
-import { isSettingsOpen, usePrefs } from "../lib/settings";
+import { isSettingsOpen, usePrefs, useSettingsOverlay } from "../lib/settings";
 import { canPreloadChunks, dismissDepth, lazyNamed, onDismissDepth, pressEscape, systemBackAction, useSystemBack, watchInputModality, whenIdle } from "../lib/ui";
 import { IconAnime, IconBack, IconHome, IconSearch } from "./icons";
 import { OPEN_MS, OPEN_OMEGA, samples, reduced } from "./motion";
@@ -35,6 +37,7 @@ const PhoneMy = lazyNamed(() => import("./PhoneMy"), "PhoneMy");
 const PhoneSearch = lazyNamed(() => import("./PhoneSearch"), "PhoneSearch");
 const PhoneSection = lazyNamed(() => import("./PhoneSection"), "PhoneSection");
 const TitleSheet = lazyNamed(() => import("./TitleSheet"), "TitleSheet");
+const SettingsOverlay = lazyNamed(() => import("../components/SettingsOverlay"), "SettingsOverlay");
 
 type Run = { key: number; kind: "sheet"; entries: Entry[] } | { key: number; kind: "page"; entries: [Entry] };
 type Shown = Run & { leaving?: boolean };
@@ -61,6 +64,10 @@ function runsOf(overlays: Entry[]): Run[] {
 export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }) {
   const { stack, kept, current, back, backTo, tab } = useRouter();
   const { playing, player, leaving: playerLeaving } = usePlayerLayer(current);
+  const settingsOverlay = useSettingsOverlay();
+  const standaloneSettings = settingsOverlay.open && !settingsOverlay.embedded;
+  const [settingsMounted, setSettingsMounted] = useState(standaloneSettings);
+  if (standaloneSettings && !settingsMounted) setSettingsMounted(true);
   const { data: settings } = useSettings();
   const pages = useMemo(() => stack.filter((e) => e.route.name !== "player"), [stack]);
   const root = pages[0];
@@ -78,7 +85,11 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     if (!canPreloadChunks()) return;
     let cancelIdle: (() => void) | undefined;
     const t = window.setTimeout(() => {
-      cancelIdle = whenIdle(() => void TitleSheet.preload().catch(() => {}), 3000);
+      cancelIdle = whenIdle(() => {
+        void TitleSheet.preload().catch(() => {});
+        void PhoneSearch.preload().catch(() => {});
+        void PhoneMy.preload().catch(() => {});
+      }, 3000);
     }, 3500);
     return () => {
       window.clearTimeout(t);
@@ -131,9 +142,6 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     },
     () => undefined,
   );
-  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
-  useNativeSwipe(!!playing || layers > 0 || stack.length > 1);
-
   // Kept tab pages, in key order (moving one would reset its scroll); the current one shown.
   const tabs = useMemo(() => [...new Map([...kept, root].map((e) => [e.key, e])).values()].sort((a, b) => a.key - b.key), [kept, root]);
   const stage = useRef<HTMLDivElement>(null);
@@ -142,6 +150,8 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     if (fadeFrom.current.key === root.key) return;
     const from = fadeFrom.current;
     fadeFrom.current = root;
+    // iOS's native tab bar already animates tab selection; switch pages immediately without a second 320ms slide.
+    if (document.documentElement.dataset.nativeTabs === "true") return;
     const el = stage.current?.querySelector<HTMLElement>(`:scope > [data-tab-key="${root.key}"]`);
     const old = stage.current?.querySelector<HTMLElement>(`:scope > [data-tab-key="${from.key}"]`);
     if (!el || reduced()) return;
@@ -150,8 +160,8 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
     const dir = Math.sign(tabIndex(root.route) - tabIndex(from.route)) || 1;
     const ease = "cubic-bezier(0.2, 0.8, 0.2, 1)";
     old?.setAttribute("data-fading", "");
-    const out = old?.animate([{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: `${-dir * 36}px 0` }], { duration: 220, easing: ease, fill: "forwards" });
-    const a = el.animate([{ opacity: 0, translate: `${dir * 48}px 0` }, { opacity: 1, translate: "0 0" }], { duration: 320, easing: ease });
+    const out = old?.animate([{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: `${-dir * 36}px 0` }], { duration: 180, easing: ease, fill: "forwards" });
+    const a = el.animate([{ opacity: 0, translate: `${dir * 36}px 0` }, { opacity: 1, translate: "0 0" }], { duration: 240, easing: ease });
     void a.finished.finally(() => {
       out?.cancel();
       old?.removeAttribute("data-fading");
@@ -166,11 +176,14 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
       data-card-ratings={settings?.showCardRatings ?? false}
       data-rating-position={settings?.cardRatingPosition ?? "poster"}
       data-rating-colors={settings?.ratingColors ?? false}
+      data-playing={playing ? "" : undefined}
       data-player-leaving={playerLeaving}
     >
+      <PhoneNativeSwipe active={!!playing || stack.length > 1} />
       <div
         className="ph-main"
-        inert={!!playing || undefined}
+        data-settings-open={standaloneSettings || undefined}
+        inert={!!playing || standaloneSettings || undefined}
         onPointerDownCapture={(e) => {
           if ((e.target as Element | null)?.closest?.("[data-origin]")) void TitleSheet.preload().catch(() => {});
         }}
@@ -184,7 +197,7 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
             </section>
           ))}
         </div>
-        <TabBar root={root} z={barZ} onTop={(key) => backTo(key)} />
+        <TabBar root={root} z={barZ} covered={firstSheet >= 0} onTop={(key) => backTo(key)} />
         {shown.map((r, i) => {
           const z = 20 + i * 2;
           const close = () => {
@@ -195,7 +208,7 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
             return (
               <ErrorBoundary key={r.key} where="title sheet">
                 <Suspense fallback={null}>
-                  <TitleSheet entries={r.entries} leaving={!!r.leaving} origin={origins.current.get(r.key)} z={z} onGone={() => finish(r.key)} onClose={close} onBack={back} />
+                  <TitleSheet entries={r.entries} leaving={!!r.leaving} playing={!!playing} origin={origins.current.get(r.key)} z={z} onGone={() => finish(r.key)} onClose={close} onBack={back} />
                 </Suspense>
               </ErrorBoundary>
             );
@@ -209,6 +222,11 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
       }} />
       <div className="sheet-host" />
       <ProfileMenu trigger={false} />
+      {settingsMounted && (
+        <Suspense fallback={null}>
+          <SettingsOverlay />
+        </Suspense>
+      )}
       <LazyNotificationsSheet />
       <ErrorBoundary where="toasts" quiet>
         <div className="toast-stack">
@@ -242,7 +260,14 @@ export function PhoneApp({ Screen }: { Screen: ComponentType<{ route: Route }> }
   );
 }
 
-function TabPage({
+/** Keeps iOS's edge-back swipe synchronized without forcing PhoneApp to re-render when any tray/menu opens. */
+function PhoneNativeSwipe({ active }: { active: boolean }) {
+  const layers = useSyncExternalStore(onDismissDepth, dismissDepth);
+  useNativeSwipe(active || layers > 0);
+  return null;
+}
+
+const TabPage = memo(function TabPage({
   route,
   active,
   homeView,
@@ -279,10 +304,10 @@ function TabPage({
       </div>
     </div>
   );
-}
+});
 
 /** The bar's three places. My Polarity's glyph is the profile's picture, as My Netflix's is. */
-function TabBar({ root, z, onTop }: { root: Entry; z: number; onTop: (key: number) => void }) {
+function TabBar({ root, z, covered, onTop }: { root: Entry; z: number; covered: boolean; onTop: (key: number) => void }) {
   const { stack, tab } = useRouter();
   const account = useAccount();
   const me = account.status !== "guest" ? account.profile : null;
@@ -296,6 +321,14 @@ function TabBar({ root, z, onTop }: { root: Entry; z: number; onTop: (key: numbe
     { id: "library", label: "My Polarity", glyph: <Avatar id={me?.avatar ?? "guest"} className="ph-bar-avatar" /> },
   ];
   const index = items.findIndex((i) => i.id === at);
+  // On iOS the same places are iOS's own tab bar (Liquid Glass on iOS 26), and this one hides (phone.css).
+  const links = useMemo(
+    (): NavLink[] => items.map((i) => ({ route: { name: i.id }, label: i.label, icon: i.id === "library" ? "person.crop.circle" : undefined })),
+    // `items` is new each render; what it holds changes with the Anime setting alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [animeEnabled],
+  );
+  useNativeTabs(links, covered);
   return (
     <nav className="ph-bar" style={{ zIndex: z, "--n": items.length, "--at": Math.max(0, index) } as CSSProperties} aria-label="Sections">
       <span className="ph-bar-lens" data-hidden={index < 0 || undefined} aria-hidden />
@@ -509,7 +542,7 @@ function AnimeTab({ Screen, route }: { Screen: ComponentType<{ route: Route }>; 
       ref={page}
       onScrollCapture={(e) => {
         const c = Math.min(1, Math.max(0, (e.target as HTMLElement).scrollTop / 56));
-        page.current?.style.setProperty("--c", c.toFixed(3));
+        page.current?.querySelector<HTMLElement>(":scope > .ph-head")?.style.setProperty("--c", c.toFixed(3));
       }}
     >
       <TabHeader scroller={none}>

@@ -278,6 +278,8 @@ impl Tmdb {
             imdb_id: str_of(&d["external_ids"]["imdb_id"]).filter(|i| i.starts_with("tt")),
             logos: self.logos(tmdb_kind(ty), tmdb_id, &d).await,
             certification: pick_certification(ty, &d, &self.region()),
+            poster: str_of(&d["poster_path"]).map(|p| format!("{IMG}/w342{p}")),
+            background: str_of(&d["backdrop_path"]).map(|p| format!("{IMG}/w1280{p}")),
         };
         if let Some(imdb) = &found.imdb_id {
             self.imdb_ids.insert((key.0, imdb.clone()), tmdb_id);
@@ -286,13 +288,115 @@ impl Tmdb {
         Ok(found)
     }
 
+    /// Cached 16:9 fanart, poster, transparent logos, IMDb id and certification for an anime title,
+    /// resolved from either its TMDB id or its IMDb id (using the shared 24h `lookups` cache).
+    pub async fn art_for(&self, ty: &str, tmdb_id: Option<u64>, imdb_id: Option<&str>) -> Option<TmdbArt> {
+        let id = match tmdb_id {
+            Some(id) => id,
+            None => self.find(ty, imdb_id?).await.ok()?,
+        };
+        let found = self.lookup(ty, id).await.ok()?;
+        Some(TmdbArt {
+            tmdb_id: id,
+            imdb_id: found.imdb_id,
+            poster: found.poster,
+            background: found.background,
+            logo: found.logos.first().cloned(),
+            logos: found.logos,
+            certification: found.certification,
+        })
+    }
+
+    /// Evergreen Japanese animation catalogs directly from TMDB `/discover` (`with_genres=16`,
+    /// `with_original_language=ja`). Returns `Err(IndexError::NotFound)` for anime-only genres
+    /// that TMDB TV doesn't distinguish, so the caller can fall back to Jikan.
+    pub async fn anime_discover(
+        &self,
+        shelf: &str,
+        genre: Option<&str>,
+        page: u32,
+    ) -> Result<(Vec<MetaPreview>, bool)> {
+        let p = page.max(1);
+        let page_str = p.to_string();
+        let (ty, path, mut params): (&str, &str, Vec<(&str, &str)>) =
+            if let Some(g) = genre.filter(|g| !g.trim().is_empty()) {
+                let genres_param = match g.trim().to_ascii_lowercase().as_str() {
+                    "action" | "adventure" => "16,10759",
+                    "comedy" => "16,35",
+                    "drama" => "16,18",
+                    "fantasy" | "sci-fi" => "16,10765",
+                    "mystery" => "16,9648",
+                    _ => return Err(IndexError::NotFound),
+                };
+                let sort = if g.eq_ignore_ascii_case("adventure") || g.eq_ignore_ascii_case("sci-fi") {
+                    "vote_count.desc"
+                } else {
+                    "popularity.desc"
+                };
+                (
+                    "series",
+                    "/discover/tv",
+                    vec![
+                        ("with_genres", genres_param),
+                        ("with_original_language", "ja"),
+                        ("sort_by", sort),
+                        ("vote_count.gte", "30"),
+                    ],
+                )
+            } else {
+                match shelf {
+                    "trending" => (
+                        "series",
+                        "/discover/tv",
+                        vec![
+                            ("with_genres", "16"),
+                            ("with_original_language", "ja"),
+                            ("sort_by", "popularity.desc"),
+                            ("vote_count.gte", "25"),
+                        ],
+                    ),
+                    "top" => (
+                        "series",
+                        "/discover/tv",
+                        vec![
+                            ("with_genres", "16"),
+                            ("with_original_language", "ja"),
+                            ("sort_by", "vote_average.desc"),
+                            ("vote_count.gte", "300"),
+                        ],
+                    ),
+                    "popular" => (
+                        "series",
+                        "/discover/tv",
+                        vec![("with_genres", "16"), ("with_original_language", "ja"), ("sort_by", "vote_count.desc")],
+                    ),
+                    "movies" => (
+                        "movie",
+                        "/discover/movie",
+                        vec![
+                            ("with_genres", "16"),
+                            ("with_original_language", "ja"),
+                            ("sort_by", "popularity.desc"),
+                            ("vote_count.gte", "50"),
+                        ],
+                    ),
+                    _ => return Err(IndexError::NotFound),
+                }
+            };
+        params.push(("page", &page_str));
+        let list: Paged = self.get(path, &params).await?;
+        let has_next = p < list.total_pages.min(LAST_PAGE) && !list.results.is_empty();
+        let previews = self.previews(ty, list.results).await?;
+        Ok((previews, has_next))
+    }
+
     /// The IMDb id of TMDB's title `tmdb_id`, if TMDB lists one ("Open in Polarity" from a TMDB
     /// page, #208). The same cached details request as list results.
     pub async fn imdb_of(&self, ty: &str, tmdb_id: u64) -> Result<Option<String>> {
         Ok(self.lookup(ty, tmdb_id).await?.imdb_id)
     }
 
-    pub async fn meta(&self, ty: &str, imdb_id: &str) -> Result<Meta> {
+    pub async fn meta_with_episodes(&self, ty: &str, imdb_id: &str, fetch_episodes: bool) -> Result<Meta> {
         let tmdb_id = self.find(ty, imdb_id).await?;
         let kind = tmdb_kind(ty);
 
@@ -303,7 +407,7 @@ impl Tmdb {
             )
             .await?;
 
-        let (videos, logos) = if ty == "series" {
+        let (videos, logos) = if ty == "series" && fetch_episodes {
             let (v, l) = futures::join!(self.episodes(tmdb_id, imdb_id, &d), self.logos(kind, tmdb_id, &d));
             (v?, l)
         } else {
@@ -801,11 +905,24 @@ impl Item {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TmdbArt {
+    pub tmdb_id: u64,
+    pub imdb_id: Option<String>,
+    pub poster: Option<String>,
+    pub background: Option<String>,
+    pub logo: Option<String>,
+    pub logos: Vec<String>,
+    pub certification: Option<String>,
+}
+
 #[derive(Clone)]
 struct Lookup {
     imdb_id: Option<String>,
     logos: Vec<String>,
     certification: Option<String>,
+    poster: Option<String>,
+    background: Option<String>,
 }
 
 #[cfg(test)]

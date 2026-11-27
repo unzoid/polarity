@@ -18,6 +18,10 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub tmdb_key: Option<String>,
+    /// Use TMDB Discover for evergreen anime shelves when a TMDB key is set; off uses AniList.
+    pub tmdb_anime_catalogs: bool,
+    /// Per-feature TMDB metadata module switches.
+    pub tmdb_modules: polar_index::TmdbModules,
     pub language: String,
     /// Auto-play the next episode when one ends.
     pub autoplay_next: bool,
@@ -50,7 +54,7 @@ pub struct Settings {
     pub rating_colors: bool,
     /// How a season's episodes are laid out: "row" (horizontal shelf) or "list".
     pub episode_layout: String,
-    /// Interface font: "instrument" (bundled, the default), "inter", … or "system" (Segoe UI Variable on Windows).
+    /// Interface font: "polarity" (bundled Polarity Sans, the default), "inter" (bundled) or "system" (Segoe UI Variable on Windows).
     pub ui_font: String,
     /// How subtitles look in the player.
     pub subtitle_style: SubtitleStyle,
@@ -108,10 +112,14 @@ pub struct Settings {
     pub source_filters_hide: bool,
 
     // --- Services ---
-    /// MDBList (mdblist.com) key: Rotten Tomatoes, Metacritic, Letterboxd and Trakt scores.
+    /// MDBList (mdblist.com) key: Rotten Tomatoes, Metacritic, Letterboxd, Trakt and MAL scores.
     pub mdblist_key: Option<String>,
     /// OMDb (omdbapi.com) key: Rotten Tomatoes and Metacritic scores.
     pub omdb_key: Option<String>,
+    /// Show external ratings (MDBList / OMDb) on the home hero billboard.
+    pub ratings_on_hero: bool,
+    /// Which external ratings providers to display.
+    pub ratings_providers: RatingsProviders,
 
     // --- Subtitles ---
     /// "always": use the preferred subtitle language whenever there is one.
@@ -149,6 +157,35 @@ pub struct Settings {
     pub card_rating_position: String,
     /// The Calendar section: upcoming episodes of your shows. Opt-in.
     pub show_calendar: bool,
+}
+
+/// Which external ratings providers (MDBList / OMDb) are shown on title pages and hero billboards.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RatingsProviders {
+    pub imdb: bool,
+    pub tmdb: bool,
+    pub rotten_tomatoes: bool,
+    pub metacritic: bool,
+    pub trakt: bool,
+    pub letterboxd: bool,
+    pub audience: bool,
+    pub mal: bool,
+}
+
+impl Default for RatingsProviders {
+    fn default() -> Self {
+        Self {
+            imdb: true,
+            tmdb: true,
+            rotten_tomatoes: true,
+            metacritic: true,
+            trakt: true,
+            letterboxd: true,
+            audience: true,
+            mal: true,
+        }
+    }
 }
 
 /// A theme the user made: an accent, the near-black it's built on, and how much of the accent tints
@@ -214,6 +251,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             tmdb_key: None,
+            tmdb_anime_catalogs: true,
+            tmdb_modules: polar_index::TmdbModules::default(),
             language: "en-US".into(),
             autoplay_next: true,
             seekr_key: None,
@@ -230,7 +269,7 @@ impl Default for Settings {
             show_card_ratings: false,
             rating_colors: false,
             episode_layout: "row".into(),
-            ui_font: "instrument".into(),
+            ui_font: "polarity".into(),
             subtitle_style: SubtitleStyle::default(),
             autoplay_countdown: 8,
             still_watching_after: 0,
@@ -257,6 +296,8 @@ impl Default for Settings {
             source_filters_hide: false,
             mdblist_key: None,
             omdb_key: None,
+            ratings_on_hero: false,
+            ratings_providers: RatingsProviders::default(),
             subtitle_mode: "always".into(),
             accent_color: "#0A84FF".into(),
             theme: "polar".into(),

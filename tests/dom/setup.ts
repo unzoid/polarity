@@ -71,8 +71,12 @@ for (const key of ["window", "self"]) Object.defineProperty(globalThis, key, { v
 delete (win.Element.prototype as Partial<Element>).animate;
 
 afterEach(async () => {
-  const { unmountRendered } = await import("./render");
+  const [{ unmountRendered }, { resetTitleLogoForTests }] = await Promise.all([
+    import("./render"),
+    import("../../src/components/TitleLogo"),
+  ]);
   await unmountRendered();
+  resetTitleLogoForTests();
   document.body.replaceChildren();
   localStorage.clear();
 });

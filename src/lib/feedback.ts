@@ -13,11 +13,11 @@ export const FEEDBACK_EMAIL = "support@getpolar.app";
 
 export type FeedbackKind = "bug" | "playback" | "look" | "idea";
 
-export const FEEDBACK_KINDS: { id: FeedbackKind; label: string; caption: string }[] = [
-  { id: "bug", label: "Something doesn't work", caption: "A bug, a crash or an error" },
-  { id: "playback", label: "Playback or a source doesn't work", caption: "A video that doesn't start, stutters or loses sync" },
-  { id: "look", label: "Looks or feels off", caption: "Layout, text, motion or anything that feels wrong" },
-  { id: "idea", label: "Idea or feature request", caption: "Something Polarity could do" },
+export const FEEDBACK_KINDS: { id: FeedbackKind; label: string }[] = [
+  { id: "bug", label: "Something doesn't work" },
+  { id: "playback", label: "Playback or a source doesn't work" },
+  { id: "look", label: "Looks or feels off" },
+  { id: "idea", label: "Idea or feature request" },
 ];
 
 /** Where it runs, as the forms ask for it. */

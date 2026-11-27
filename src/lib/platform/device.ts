@@ -17,7 +17,13 @@ export function detectOs({ platform = "", userAgent, maxTouchPoints = 0 }: Agent
   return "linux";
 }
 
-export const os: Os = typeof navigator === "undefined" ? "linux" : detectOs(navigator);
+/** Dev-only `?phone=1` override for emulating the phone shell in a desktop browser. */
+export const devPhoneEmulation =
+  typeof location !== "undefined" &&
+  !!(import.meta as { env?: { DEV?: boolean } }).env?.DEV &&
+  new URLSearchParams(location.search).has("phone");
+
+export const os: Os = devPhoneEmulation ? "ios" : typeof navigator === "undefined" ? "linux" : detectOs(navigator);
 
 /** An iPad, which asks for the desktop site and so says "Mac" with a touch screen (or, in some views, "iPad"). */
 export function detectIpad({ platform = "", userAgent, maxTouchPoints = 0 }: Agent): boolean {

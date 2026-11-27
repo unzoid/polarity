@@ -44,7 +44,7 @@ const ADVANCE_MS = 8000;
  * in at the edge), then the rows. The page glows with the featured art's colour, easing from one title's to the
  * next as the cards turn.
  */
-export function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeView) => void }) {
+export const PhoneHome = memo(function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeView) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const { items, shelves, excludes, settings, addonRows } = useHomeFeed();
   const typed = view.kind === "type" ? view.type : view.kind === "genre" ? view.type : undefined;
@@ -95,7 +95,7 @@ export function PhoneHome({ view, onView }: { view: HomeView; onView: (v: HomeVi
       </div>
     </div>
   );
-}
+});
 
 const NONE = new Set<string>();
 
@@ -212,14 +212,27 @@ export function Carousel({
     let y0 = 0;
     let dx = 0;
     let state: "idle" | "maybe" | "drag" = "idle";
+    let moveBound = false;
     const set = (v: number) => el.style.setProperty("--drag", `${v.toFixed(1)}px`);
+    const bindMove = () => {
+      if (moveBound) return;
+      moveBound = true;
+      el.addEventListener("touchmove", move, { passive: false });
+    };
+    const unbindMove = () => {
+      if (!moveBound) return;
+      moveBound = false;
+      el.removeEventListener("touchmove", move);
+    };
     const start = (e: TouchEvent) => {
       touching.current = true;
+      unbindMove();
       if (e.touches.length !== 1) return;
       x0 = e.touches[0].clientX;
       y0 = e.touches[0].clientY;
       dx = 0;
       state = "maybe";
+      bindMove();
     };
     const move = (e: TouchEvent) => {
       if (state === "idle") return;
@@ -227,7 +240,11 @@ export function Carousel({
       const mx = t.clientX - x0;
       const my = t.clientY - y0;
       if (state === "maybe") {
-        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) return void (state = "idle");
+        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) {
+          state = "idle";
+          unbindMove();
+          return;
+        }
         if (Math.abs(mx) < 10) return;
         state = "drag";
         el.dataset.dragging = "";
@@ -237,6 +254,7 @@ export function Carousel({
       set(mx * 0.35);
     };
     const end = () => {
+      unbindMove();
       touching.current = false;
       setTick((n) => n + 1);
       if (state === "drag") {
@@ -247,12 +265,11 @@ export function Carousel({
       state = "idle";
     };
     el.addEventListener("touchstart", start, { passive: true });
-    el.addEventListener("touchmove", move, { passive: false });
-    el.addEventListener("touchend", end);
-    el.addEventListener("touchcancel", end);
+    el.addEventListener("touchend", end, { passive: true });
+    el.addEventListener("touchcancel", end, { passive: true });
     return () => {
+      unbindMove();
       el.removeEventListener("touchstart", start);
-      el.removeEventListener("touchmove", move);
       el.removeEventListener("touchend", end);
       el.removeEventListener("touchcancel", end);
     };

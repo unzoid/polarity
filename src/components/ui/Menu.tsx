@@ -112,7 +112,7 @@ export function MenuSeparator() {
 }
 
 /** A row that opens a second menu beside it (compact look). */
-export function MenuSub({ icon, label, children }: { icon?: ReactNode; label: ReactNode; children: ReactNode }) {
+export function MenuSub({ icon, label, children, popupClassName }: { icon?: ReactNode; label: ReactNode; children: ReactNode; popupClassName?: string }) {
   return (
     <Base.SubmenuRoot>
       <Base.SubmenuTrigger className="menu-item">
@@ -120,7 +120,7 @@ export function MenuSub({ icon, label, children }: { icon?: ReactNode; label: Re
         <span>{label}</span>
         <ChevronRight className="menu-chevron" />
       </Base.SubmenuTrigger>
-      <MenuPopup sideOffset={0} alignOffset={-5} collisionPadding={12}>
+      <MenuPopup sideOffset={0} alignOffset={-5} collisionPadding={12} className={popupClassName}>
         {children}
       </MenuPopup>
     </Base.SubmenuRoot>

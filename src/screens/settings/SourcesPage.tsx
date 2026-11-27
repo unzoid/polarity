@@ -30,20 +30,14 @@ export function SourcesPage() {
 
   return (
     <>
-      <Card
-        title="Filters"
-        footer="Hidden sources never play automatically and don't show in the source list. A source that doesn't say its quality or size is always kept."
-      >
+      <Card title="Filters">
         <SettingRow id="maxResolution" />
         <SettingRow id="maxMovieSizeGb" />
         <SettingRow id="maxEpisodeSizeGb" />
         <SettingRow id="hideCam" />
       </Card>
 
-      <Card
-        title="Hide Sources Containing"
-        footer="Separate words with commas, e.g. HC, 3D, KORSUB. Whole words only, upper or lower case."
-      >
+      <Card title="Hide Sources Containing" footer="Comma-separated, whole words only.">
         <FormRow
           placeholder="HC, 3D, KORSUB"
           aria-label="Words to hide"
@@ -57,14 +51,11 @@ export function SourcesPage() {
 
       <Card title="Source List">
         <SettingRow id="sourceSort" />
-        <SettingRow id="preferScreenResolution" caption={`This screen is ${screenLabel}. Best match puts sources it can show first, instead of bigger files it can't`} />
+        <SettingRow id="preferScreenResolution" caption={`This screen is ${screenLabel}`} />
         <SettingRow id="sourceFiltersHide" />
       </Card>
 
-      <Card
-        title="Turn On When Available"
-        footer="When a title has sources with these, the source list starts filtered to them, and autoplay picks from them first. Click one in the list to turn it off again."
-      >
+      <Card title="Turn On When Available">
         <div className="settings-row settings-chip-row">
           <div className="srcf-tags" role="group" aria-label="Tags to turn on by themselves">
             {AUTO_TAG_CHOICES.map((t) => {
@@ -85,7 +76,7 @@ export function SourcesPage() {
       {torrentsPlayHere && (
         <Card
           title="Torrent Sources"
-          footer={`Torrent sources your add-ons list play with the built-in engine. Only the file you watch is downloaded, in the order you watch it, into a cache on this device that's emptied when playback ends or Polarity quits.${ANDROID_FOOTER} Other peers can see your IP address while a torrent plays.`}
+          footer={`Other peers can see your IP address while a torrent plays.${ANDROID_FOOTER}`}
         >
           <SettingRow id="torrentCacheGb" />
           <SettingRow id="torrentSpeedMbps" />

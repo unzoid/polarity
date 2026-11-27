@@ -21,11 +21,13 @@ pub use episode_order::{EpisodeOrder, EpisodeOrderGroup, EpisodeOrderInfo};
 mod person;
 pub mod similar;
 
-pub use person::{PersonHit, PersonPage};
+pub use person::{PersonHit, PersonPage, Role};
+pub use tmdb::TmdbArt;
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 
 use polar_addon::{CatalogExtra, Manifest, ManifestCatalog, ManifestResource, Meta, MetaPreview};
@@ -76,12 +78,48 @@ impl From<polar_addon::AddonError> for IndexError {
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 
+/// Per-feature toggles for TMDB metadata when a TMDB API key is configured.
+/// Turning a module off falls back to Cinemeta/Metahub (or omits TMDB-only sections) for that module.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TmdbModules {
+    pub trailers: bool,
+    pub artwork: bool,
+    pub basic_info: bool,
+    pub details: bool,
+    pub credits: bool,
+    pub productions: bool,
+    pub networks: bool,
+    pub episodes: bool,
+    pub more_like_this: bool,
+    pub collections: bool,
+}
+
+impl Default for TmdbModules {
+    fn default() -> Self {
+        Self {
+            trailers: true,
+            artwork: true,
+            basic_info: true,
+            details: true,
+            credits: true,
+            productions: true,
+            networks: true,
+            episodes: true,
+            more_like_this: true,
+            collections: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct IndexConfig {
     /// TMDB v3 API key or v4 read access token.
     pub tmdb_key: Option<String>,
     /// TMDB language, e.g. `en-US`.
     pub language: Option<String>,
+    /// Per-feature TMDB module switches (all enabled by default).
+    pub tmdb_modules: TmdbModules,
 }
 
 /// Read projection for [`Indexer::meta_with`] (Netflix #451): avoids per-season TMDB fan-out
@@ -103,6 +141,7 @@ enum Backend {
 
 pub struct Indexer {
     backend: Backend,
+    modules: TmdbModules,
     catalogs: TtlCache<String, Vec<MetaPreview>>,
     metas: TtlCache<String, Meta>,
     /// Lightweight `MetaMask::Display` / `Overview` cache so `fillUntitled` never pollutes full `metas`.
@@ -132,6 +171,7 @@ impl Indexer {
         };
         Self {
             backend,
+            modules: config.tmdb_modules,
             catalogs: TtlCache::new(Duration::from_secs(60 * 60), 256),
             metas: TtlCache::new(Duration::from_secs(6 * 60 * 60), 2048),
             display_metas: TtlCache::new(Duration::from_secs(12 * 60 * 60), 2048),
@@ -149,6 +189,38 @@ impl Indexer {
             Backend::Tmdb(_) => "TMDB",
             Backend::Cinemeta(_) => "Cinemeta (fallback)",
         }
+    }
+
+    /// Whether a TMDB API key is configured.
+    pub fn has_tmdb(&self) -> bool {
+        matches!(self.backend, Backend::Tmdb(_))
+    }
+
+    /// Evergreen Japanese animation catalogs from TMDB `/discover` (cached 1h per shelf/page).
+    pub async fn anime_discover(
+        &self,
+        shelf: &str,
+        genre: Option<&str>,
+        page: u32,
+    ) -> Result<(Vec<MetaPreview>, bool)> {
+        let Backend::Tmdb(t) = &self.backend else { return Err(IndexError::NotFound) };
+        let key = format!("anime/{shelf}/{}/{page}", genre.unwrap_or(""));
+        if let Some(hit) = self.catalogs.get(&key) {
+            return Ok((hit, true));
+        }
+        let (items, has_next) = t.anime_discover(shelf, genre, page).await?;
+        let items =
+            self.catalogs.insert_if_valid(key, items, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
+        Ok((items, has_next))
+    }
+
+    /// Cached TMDB 16:9 fanart, logos, IMDb id and certification for an anime title.
+    pub async fn anime_art(&self, ty: &str, tmdb_id: Option<u64>, imdb_id: Option<&str>) -> Option<TmdbArt> {
+        if !self.modules.artwork {
+            return None;
+        }
+        let Backend::Tmdb(t) = &self.backend else { return None };
+        t.art_for(ty, tmdb_id, imdb_id).await
     }
 
     /// 3-level OOM governor hook: sheds cached metadata proportionally to OS/device memory pressure.
@@ -246,28 +318,30 @@ impl Indexer {
             return Ok(hit);
         }
         let metas = match &self.backend {
-            Backend::Tmdb(t) => t.recommendations(ty, id).await?,
-            Backend::Cinemeta(c) => {
-                // Pools for the seed's two main genres, plus the general one
-                // so close matches outside those genres still surface.
-                let seed = self.meta(ty, id).await?.preview;
-                let genres: Vec<Option<String>> = seed.genres.iter().take(2).cloned().map(Some).chain([None]).collect();
-                let pools = futures::future::join_all(genres.iter().map(|g| {
-                    let g = g.as_deref();
-                    self.pooled(format!("{ty}/{}", g.unwrap_or("")), c.pool(ty, g))
-                }));
-                // Its sequels and spin-offs, which the popularity pools may not reach.
-                let root = similar::name_root(&seed.name);
-                let (pools, named) = futures::join!(pools, c.search(ty, &root));
-                let mut lists: Vec<Vec<MetaPreview>> = pools.into_iter().filter_map(|l| l.ok()).collect();
-                lists
-                    .extend(named.ok().map(|n| n.into_iter().filter(|m| similar::same_root(&root, &m.name)).collect()));
-                curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect()
-            }
+            Backend::Tmdb(t) if self.modules.more_like_this => t.recommendations(ty, id).await?,
+            Backend::Tmdb(_) => self.cinemeta_recommend(&self.numbering, ty, id).await?,
+            Backend::Cinemeta(c) => self.cinemeta_recommend(c, ty, id).await?,
         };
         let metas =
             self.catalogs.insert_if_valid(key, metas, Duration::from_secs(60 * 60), |old, new| catalog_valid(old, new));
         Ok(metas)
+    }
+
+    async fn cinemeta_recommend(&self, c: &cinemeta::Cinemeta, ty: &str, id: &str) -> Result<Vec<MetaPreview>> {
+        // Pools for the seed's two main genres, plus the general one
+        // so close matches outside those genres still surface.
+        let seed = self.meta(ty, id).await?.preview;
+        let genres: Vec<Option<String>> = seed.genres.iter().take(2).cloned().map(Some).chain([None]).collect();
+        let pools = futures::future::join_all(genres.iter().map(|g| {
+            let g = g.as_deref();
+            self.pooled(format!("{ty}/{}", g.unwrap_or("")), c.pool(ty, g))
+        }));
+        // Its sequels and spin-offs, which the popularity pools may not reach.
+        let root = similar::name_root(&seed.name);
+        let (pools, named) = futures::join!(pools, c.search(ty, &root));
+        let mut lists: Vec<Vec<MetaPreview>> = pools.into_iter().filter_map(|l| l.ok()).collect();
+        lists.extend(named.ok().map(|n| n.into_iter().filter(|m| similar::same_root(&root, &m.name)).collect()));
+        Ok(curate::similar(&seed, &lists, curate::today()).into_iter().take(CURATED_PAGE).collect())
     }
 
     async fn pooled(
@@ -327,6 +401,9 @@ impl Indexer {
 
     /// Films in a TMDB collection / franchise (`/collection/{id}`); empty without a TMDB key.
     pub async fn collection(&self, id: u64) -> Result<Vec<MetaPreview>> {
+        if !self.modules.collections {
+            return Ok(Vec::new());
+        }
         let Backend::Tmdb(t) = &self.backend else { return Ok(Vec::new()) };
         let key = format!("collection/{id}");
         if let Some(hit) = self.catalogs.get(&key) {
@@ -366,17 +443,22 @@ impl Indexer {
             return Ok(meta);
         }
         let meta = match &self.backend {
-            Backend::Tmdb(t) if ty == "series" => {
-                let (meta, imdb) = futures::join!(t.meta(ty, id), self.numbering.meta(ty, id));
-                let mut meta = meta?;
-                match imdb {
-                    Ok(imdb) => meta.videos = polar_addon::numbering::renumber(meta.videos, &imdb.videos),
-                    // TMDB's own numbers rather than nothing; addons may miss some episodes.
-                    Err(e) => tracing::warn!("no IMDb numbering for a show, keeping TMDB's: {e}"),
-                }
-                meta
+            Backend::Tmdb(t) => {
+                let need_fallback = ty == "series"
+                    || !self.modules.artwork
+                    || !self.modules.basic_info
+                    || !self.modules.credits
+                    || !self.modules.details;
+                let fetch_tmdb_eps = ty == "series" && self.modules.episodes;
+                let (meta, imdb) = if need_fallback {
+                    let (m, c) =
+                        futures::join!(t.meta_with_episodes(ty, id, fetch_tmdb_eps), self.numbering.meta(ty, id));
+                    (m?, c.ok())
+                } else {
+                    (t.meta_with_episodes(ty, id, fetch_tmdb_eps).await?, None)
+                };
+                apply_tmdb_modules(meta, imdb, &self.modules)
             }
-            Backend::Tmdb(t) => t.meta(ty, id).await?,
             Backend::Cinemeta(c) => c.meta(ty, id).await?,
         };
         let ttl = meta_ttl(&meta, curate::today());
@@ -444,6 +526,83 @@ impl Indexer {
 
 fn paged(list: Vec<MetaPreview>, skip: u32) -> Vec<MetaPreview> {
     list.into_iter().skip(skip as usize).take(CURATED_PAGE).collect()
+}
+
+/// Applies per-feature [`TmdbModules`] toggles onto a TMDB `Meta`, gracefully falling back to
+/// Cinemeta fields when a module is switched off and renumbering TMDB episodes onto IMDb ids.
+fn apply_tmdb_modules(mut meta: Meta, fallback: Option<Meta>, m: &TmdbModules) -> Meta {
+    let is_series = meta.preview.ty == "series";
+    if is_series {
+        if m.episodes {
+            if let Some(imdb) = &fallback {
+                meta.videos = polar_addon::numbering::renumber(meta.videos, &imdb.videos);
+            }
+        } else if let Some(imdb) = &fallback {
+            meta.videos = imdb.videos.clone();
+        }
+    }
+    if !m.trailers {
+        meta.trailer_yt_id = None;
+        meta.trailer_source = None;
+        meta.extras.clear();
+    }
+    if !m.artwork {
+        if let Some(c) = &fallback {
+            meta.preview.poster = c.preview.poster.clone();
+            meta.preview.background = c.preview.background.clone();
+            meta.preview.logo = c.preview.logo.clone();
+            meta.preview.logos = c.preview.logos.clone();
+        } else {
+            let id = &meta.preview.id;
+            meta.preview.poster = Some(format!("https://images.metahub.space/poster/medium/{id}/img"));
+            meta.preview.background = Some(format!("https://images.metahub.space/background/medium/{id}/img"));
+            meta.preview.logo = Some(format!("https://images.metahub.space/logo/medium/{id}/img"));
+            meta.preview.logos = meta.preview.logo.clone().into_iter().collect();
+        }
+    }
+    if !m.basic_info {
+        if let Some(c) = &fallback {
+            meta.preview.description = c.preview.description.clone();
+            meta.preview.genres = c.preview.genres.clone();
+            meta.preview.imdb_rating = c.preview.imdb_rating.clone();
+        } else {
+            meta.preview.description = None;
+            meta.preview.genres.clear();
+            meta.preview.imdb_rating = None;
+        }
+    }
+    if !m.details {
+        meta.runtime = fallback.as_ref().and_then(|c| c.runtime.clone());
+        meta.preview.certification = fallback.as_ref().and_then(|c| c.preview.certification.clone());
+        meta.details.tagline = None;
+        meta.details.status = None;
+        meta.details.released = None;
+        meta.details.countries.clear();
+        meta.details.languages.clear();
+        meta.details.budget = None;
+        meta.details.revenue = None;
+        meta.details.seasons = None;
+        meta.details.episodes = None;
+    }
+    if !m.credits {
+        meta.people.clear();
+        meta.crew.clear();
+        meta.details.writers.clear();
+        if let Some(c) = &fallback {
+            meta.cast = c.cast.clone();
+            meta.director = c.director.clone();
+        } else {
+            meta.cast.clear();
+            meta.director.clear();
+        }
+    }
+    if (is_series && !m.networks) || (!is_series && !m.productions) {
+        meta.details.studios.clear();
+    }
+    if !m.collections {
+        meta.details.collection = None;
+    }
+    meta
 }
 
 fn check_type(ty: &str) -> Result<()> {

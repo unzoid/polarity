@@ -1,7 +1,6 @@
 import "../styles/anime.css";
 import "../styles/title/episode-ratings.css";
-import { useQuery } from "@tanstack/react-query";
-import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBatchDownload } from "../components/BatchDownload";
 import { useBackdropTrailer } from "../components/BackdropTrailer";
 import { cardMenu } from "../components/CardMenu";
@@ -14,7 +13,6 @@ import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker"
 import { AgeRatingBadge, ScoreRow } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
 import { EmptyState } from "../components/ui/EmptyState";
-import { titlePageQuery } from "../lib/anime";
 import { extraKind, extraStills, LIMIT_NOTICE, useBrowseVisible, useListable, useTitleVerdict } from "../lib/catalog";
 import { errorMessage } from "../lib/errors";
 import { episodeCode, formatRemaining, formatRuntime } from "../lib/format";
@@ -26,9 +24,11 @@ import { trailerFor, useFileTrailer, usePlayTarget, type PlayRequest } from "../
 import type { ContentType, Extra, Meta, MetaPreview, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
 import { useHorizontalWindow, useVerticalWindow } from "../lib/ui/windowing";
-import { LazyAnimeDetail } from "../screens/lazyScreens";
-import { IconBack, IconCheck, IconClose, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
+import type { AnimeCard } from "../lib/anime";
+import { AnimeTitle } from "./AnimeTitle";
+import { IconCheck, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
 import { ListOverlay } from "./ListOverlay";
+import { Action, MediaButtons, SeasonDownloadGlyph, Synopsis } from "./titleParts";
 import { Poster } from "./Rows";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 
@@ -37,6 +37,7 @@ type Props = {
   id: string;
   preview?: MetaPreview;
   episode?: string;
+  season?: number;
   /** This title is the one showing in its sheet (not one under a title opened from it). */
   top: boolean;
   onClose: () => void;
@@ -45,42 +46,16 @@ type Props = {
 };
 
 /**
- * One title in the sheet. Which page a title gets is settled first (an anime reached by any id opens as the anime,
- * App.tsx TitleRoute), with the sheet's own outline meanwhile, never one page swapped for the other.
+ * Unified show-first title sheet: movies, shows, and anime all open directly in NetflixTitle
+ * with zero AniList redirect waterfall.
  */
 export function TitleBody(props: Props) {
-  const { data: page } = useQuery(titlePageQuery(props.type, props.id, props.preview));
-  if (page?.kind === "anime") return <AnimeBody id={page.anilist} episode={props.episode} onClose={props.onClose} onBack={props.onBack} />;
-  if (!page) return <BodySkeleton {...props} />;
   return <NetflixTitle {...props} />;
 }
 
-/** An anime's own page (by AniList id) in the sheet, under the sheet's Close and Back. */
-export function AnimeBody({ id, episode, onClose, onBack }: { id: number; episode?: string; onClose: () => void; onBack?: () => void }) {
-  return (
-    <div className="ps-body ps-anime">
-      <MediaButtons onClose={onClose} onBack={onBack} />
-      <Suspense fallback={null}>
-        <LazyAnimeDetail id={id} episode={episode} />
-      </Suspense>
-    </div>
-  );
-}
-
-function MediaButtons({ onClose, onBack }: { onClose: () => void; onBack?: () => void }) {
-  return (
-    <div className="ps-media-buttons scheme-dark">
-      {onBack && (
-        <button type="button" className="ps-round" aria-label="Back" onClick={onBack}>
-          <IconBack size={24} stroke={2.2} />
-        </button>
-      )}
-      <span className="ps-flex" />
-      <button type="button" className="ps-round" aria-label="Close" onClick={onClose}>
-        <IconClose size={26} stroke={1.8} />
-      </button>
-    </div>
-  );
+/** An anime's own page (by AniList id) in the sheet: the same layout as a show's (AnimeTitle.tsx). */
+export function AnimeBody({ id, preview, episode, top = true, onClose, onBack }: { id: number; preview?: AnimeCard; episode?: string; top?: boolean; onClose: () => void; onBack?: () => void }) {
+  return <AnimeTitle id={id} preview={preview} episode={episode} top={top} onClose={onClose} onBack={onBack} />;
 }
 
 function BodySkeleton({ preview, onClose, onBack }: Props) {
@@ -114,7 +89,7 @@ type Tab = "episodes" | "collection" | "more" | "trailers";
  * are, what it's about, who's in it, a row of actions, then tabs: Episodes, Collection, More Like This, Trailers &
  * More.
  */
-function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Props) {
+function NetflixTitle({ type, id, preview, episode, season, top, onClose, onBack }: Props) {
   const { data: meta, isError, error } = useMeta(type, id);
   const verdict = useTitleVerdict(meta ?? preview, !!meta || isError);
   const item: MetaPreview | undefined = verdict === "show" ? (meta ?? preview) : undefined;
@@ -246,7 +221,7 @@ function NetflixTitle({ type, id, preview, episode, top, onClose, onBack }: Prop
           ))}
         </nav>
         <div className="ps-tab-body">
-          {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} onSheet={onSheet} />}
+          {shownTab === "episodes" && meta && <Episodes meta={meta} progress={progress} episode={episode} initialSeason={season} onSheet={onSheet} />}
           {shownTab === "collection" && meta?.details?.collection && <CollectionGrid id={meta.details.collection.id} current={meta.id} />}
           {shownTab === "more" && <MoreLikeThis type={type} id={id} />}
           {shownTab === "trailers" && <Trailers item={item} meta={meta} />}
@@ -277,17 +252,6 @@ function Facts({ item, meta, scored }: { item: MetaPreview; meta?: Meta; scored?
       <AgeRatingBadge certification={meta?.certification ?? item.certification} />
       {size && <span>{size}</span>}
       {item.imdbRating && !scored && <span className="ps-fact-badge">IMDb {item.imdbRating}</span>}
-    </p>
-  );
-}
-
-/** Three lines of what it's about; "more" opens the rest. */
-function Synopsis({ text }: { text?: string }) {
-  const [open, setOpen] = useState(false);
-  if (!text) return null;
-  return (
-    <p className="ps-synopsis" data-open={open || undefined} onClick={() => setOpen(true)}>
-      {text}
     </p>
   );
 }
@@ -362,15 +326,6 @@ function Actions({ item, meta, request, onSources, fileTrailer }: { item: MetaPr
   );
 }
 
-function Action({ label, onClick, pressed, disabled, children }: { label: ReactNode; onClick: () => void; pressed?: boolean; disabled?: boolean; children: ReactNode }) {
-  return (
-    <button type="button" className="ps-action" aria-pressed={pressed} disabled={disabled} onClick={onClick}>
-      <span className="ps-action-glyph">{children}</span>
-      <span className="ps-action-label">{label}</span>
-    </button>
-  );
-}
-
 function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta; season: number }) {
   const videos = useMemo(() => downloadableEpisodes(meta.videos.filter((v) => v.season === season)), [meta.videos, season]);
   const d = useBatchDownload({ item, videos, season });
@@ -390,28 +345,38 @@ function SeasonDownload({ item, meta, season }: { item: MetaPreview; meta: Meta;
       disabled={d.disabled && !d.running}
       onClick={d.start}
     >
-      <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M12 3.5v10.5M7.5 9.5l4.5 4.5 4.5-4.5M4 17.5h16M6.5 20.5h11" />
-      </svg>
+      <SeasonDownloadGlyph />
     </Action>
   );
 }
 
 /** A show's episodes: the season (a chooser when there's more than one, else its name and ⓘ), then the list. */
-function Episodes({ meta, progress, episode, onSheet }: { meta: Meta; progress?: Progress[]; episode?: string; onSheet: (open: boolean) => void }) {
+function Episodes({
+  meta,
+  progress,
+  episode,
+  initialSeason,
+  onSheet,
+}: {
+  meta: Meta;
+  progress?: Progress[];
+  episode?: string;
+  initialSeason?: number;
+  onSheet: (open: boolean) => void;
+}) {
   const orders = useEpisodeOrders(meta);
   const view = orders.view;
   const seasons = useMemo(() => seasonsOf(meta), [meta]);
   const groups = useMemo(() => shelfGroups(meta.videos, seasons, view), [meta.videos, seasons, view]);
   const next = useMemo(() => upNext(meta, progress ?? [], view), [meta, progress, view]);
   const linked = episode ? meta.videos.find((v) => v.id === episode) : undefined;
-  const [season, setSeason] = useState<number | undefined>(linked && shelfGroupOf(linked, view));
+  const [season, setSeason] = useState<number | undefined>(() => (linked ? shelfGroupOf(linked, view) : initialSeason));
   const [choosing, setChoosing] = useState(false);
   const [layout, setLayout] = useEpisodeLayout();
   const picker = useSourcePicker(onSheet);
   useEffect(() => {
-    if (season === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
-  }, [next.video, season, progress, view]);
+    if (season === undefined && initialSeason === undefined && progress !== undefined && next.video) setSeason(shelfGroupOf(next.video, view));
+  }, [next.video, season, initialSeason, progress, view]);
   const current = groups.some((g) => g.id === season) ? season! : (groups[0]?.id ?? seasons[0]);
   const group = groups.find((g) => g.id === current);
   const episodes = group?.videos ?? [];

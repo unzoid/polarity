@@ -239,7 +239,11 @@ export const fakeAccount: AccountBackend = {
     current: async () => (signedIn ? user : null),
     onChange: () => () => {},
     sendCode: async () => {},
-    verifyCode: async () => newSession(),
+    // Any code signs in, except 000000: that one's refused, for the sign-in's wrong-code look.
+    verifyCode: async (_email, code) => {
+      if (code === "000000") throw new AccountError("invalid_code", "That code is wrong or has expired.");
+      return newSession();
+    },
     signOut: async () => void (signedIn = false),
     deleteAccount: async () => void (signedIn = false),
     changeEmail: async (email) => {

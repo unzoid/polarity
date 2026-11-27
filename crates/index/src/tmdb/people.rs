@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{str_of, Item, Lookup, Tmdb, IMG};
-use crate::person::{PersonHit, PersonPage};
+use crate::person::{PersonHit, PersonPage, Role};
 use crate::Result;
 
 /// Titles a person acts in that their page keeps.
@@ -48,6 +48,9 @@ struct Credit {
     character: Option<String>,
     #[serde(default)]
     job: Option<String>,
+    /// A show's episodes they're credited in.
+    #[serde(default)]
+    episode_count: Option<u32>,
     #[serde(flatten)]
     item: Item,
 }
@@ -147,22 +150,43 @@ impl Tmdb {
             .try_collect()
             .await?;
         let found: HashMap<(bool, u64), Lookup> = wanted.into_iter().zip(found).collect();
-        let acting = previews(acting, &found);
-        let directing = previews(directing, &found);
-        let writing = previews(writing, &found);
-        Ok(person_page(id, &d, acting, directing, writing))
+        let mut roles = Vec::new();
+        let acting = previews(acting, "acting", &found, &mut roles);
+        let directing = previews(directing, "directing", &found, &mut roles);
+        let writing = previews(writing, "writing", &found, &mut roles);
+        let mut page = person_page(id, &d, acting, directing, writing);
+        page.roles = roles;
+        Ok(page)
     }
 }
 
-/// The credits as the app's titles, those without an IMDb id left out.
-fn previews(list: Vec<Credit>, found: &HashMap<(bool, u64), Lookup>) -> Vec<MetaPreview> {
+/// The credits as the app's titles, those without an IMDb id left out, each one's part added to `roles`.
+fn previews(
+    list: Vec<Credit>,
+    kind: &str,
+    found: &HashMap<(bool, u64), Lookup>,
+    roles: &mut Vec<Role>,
+) -> Vec<MetaPreview> {
     list.into_iter()
         .filter_map(|c| {
             let l = found.get(&c.key())?;
             let ty = c.ty();
-            Some(c.item.into_preview(ty, l.imdb_id.clone()?, l.logos.clone()))
+            let id = l.imdb_id.clone()?;
+            roles.push(role(&c, kind, &id));
+            Some(c.item.into_preview(ty, id, l.logos.clone()))
         })
         .collect()
+}
+
+/// What a credit says they did: the character (acting) or the job, and a show's episode count.
+fn role(c: &Credit, kind: &str, id: &str) -> Role {
+    let name = if kind == "acting" { c.character.as_deref() } else { c.job.as_deref() };
+    Role {
+        id: id.to_owned(),
+        list: kind.to_owned(),
+        name: name.map(str::trim).filter(|n| !n.is_empty()).map(str::to_owned),
+        episodes: c.episode_count.filter(|&n| n > 0 && c.ty() == "series"),
+    }
 }
 
 /// The credits `keep` lets through, each title once, most voted on first (TMDB's order among equals), at
@@ -195,6 +219,7 @@ fn person_page(
         acting,
         directing,
         writing,
+        roles: Vec::new(),
     }
 }
 
@@ -297,6 +322,7 @@ mod tests {
             vote_count: Some(100.0),
             character: None,
             job: Some(job.into()),
+            episode_count: None,
             item: Item {
                 id: 1,
                 title: Some("Example".into()),
@@ -337,6 +363,22 @@ mod tests {
         assert_eq!(series[0].photo.as_deref(), Some("https://image.tmdb.org/t/p/w185/im.jpg"));
         // A film's director comes from the credits.
         assert_eq!(crew(&d, false)[0].character.as_deref(), Some("Director"));
+    }
+
+    #[test]
+    fn a_role_is_the_character_or_the_job_with_a_shows_episodes() {
+        let credit = |v: Value| serde_json::from_value::<Credit>(v).unwrap();
+        let show = credit(json!({ "id": 1, "media_type": "tv", "character": " Nora ", "episode_count": 12 }));
+        let r = role(&show, "acting", "tt0000001");
+        assert_eq!(
+            (r.id.as_str(), r.list.as_str(), r.name.as_deref(), r.episodes),
+            ("tt0000001", "acting", Some("Nora"), Some(12))
+        );
+        let film =
+            credit(json!({ "id": 2, "media_type": "movie", "character": "", "job": "Director", "episode_count": 3 }));
+        let r = role(&film, "acting", "tt0000002");
+        assert_eq!((r.name, r.episodes), (None, None));
+        assert_eq!(role(&film, "directing", "tt0000002").name.as_deref(), Some("Director"));
     }
 
     #[test]

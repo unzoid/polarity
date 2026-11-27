@@ -42,7 +42,7 @@ test("the code screen shows a QR code for the code it shows, and a new code redr
       <AuthScreen />
     </AccountContext.Provider>,
   );
-  await click(byText(container, "button", "Sign in with another device"));
+  await click(byText(container, "button", "Sign In with Another Device"));
   const shown = () => container.querySelector(".auth-device-code")?.textContent ?? "";
   const qr = () => container.querySelector<SVGElement>(".auth-device-qr svg");
   await until(() => shown() === "HJKM-NPQR" && !!qr(), "the first code");
@@ -65,7 +65,7 @@ test("the code screen shows a QR code for the code it shows, and a new code redr
 
   await act(async () => ends[0]("expired"));
   await until(() => !qr(), "the expired code's QR going away");
-  await click(byText(container, "button", "Get a new code"));
+  await click(byText(document.body, "button", "Get a New Code"));
   await until(() => shown() === "2345-6789" && !!qr(), "the new code");
   check("23456789", "2345-6789");
   await unmount();

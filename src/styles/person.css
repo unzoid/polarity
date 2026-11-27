@@ -1,0 +1,389 @@
+/* A person's page (screens/Person.tsx), in the Sources overlay's language (sources-overlay.css): on the desk it lies
+   over the page it came from, dark and blurred (desk.css `.dk-overlay`); translucent fills rather than cards, small
+   uppercase labels over each part, pill chips to pick a list (the one picked white), rows with a hairline between
+   them and no box. One reading column, centred. Sizes are in the desk's points where it sets them (--pt), pixels
+   elsewhere. */
+
+.person-page {
+  --u: var(--pt, 1px);
+  --pp-fill: rgb(var(--ink) / 0.08);
+  --pp-chip: rgb(var(--ink) / 0.1);
+  --pp-chip-hover: rgb(var(--ink) / 0.16);
+  --pp-line: rgb(var(--ink) / 0.08);
+  --pp-text-2: rgb(var(--ink) / 0.56);
+  --pp-text-3: rgb(var(--ink) / 0.42);
+}
+
+.pp {
+  width: min(100% - 2 * var(--gutter), calc(1040 * var(--u)));
+  margin: 0 auto;
+  padding-top: calc(var(--nav-h, 0px) + 28 * var(--u));
+}
+
+/* --- Who: the portrait, the name and what they do, side by side. */
+.pp-head {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(24 * var(--u));
+}
+.pp-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(148 * var(--u));
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: calc(18 * var(--u));
+  corner-shape: superellipse(1.45);
+  background: var(--pp-fill);
+  box-shadow: 0 calc(18 * var(--u)) calc(40 * var(--u)) calc(-14 * var(--u)) rgb(0 0 0 / 0.6);
+  color: var(--pp-text-2);
+  font-size: calc(34 * var(--u));
+  font-weight: 650;
+}
+.pp-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pp-photo-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.pp-who {
+  display: grid;
+  gap: calc(8 * var(--u));
+  min-width: 0;
+  padding-bottom: calc(6 * var(--u));
+}
+.pp-name {
+  margin: 0;
+  font-size: calc(44 * var(--u));
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.pp-does {
+  margin: 0;
+  font-size: calc(15 * var(--u));
+  font-weight: 500;
+  color: var(--pp-text-2);
+}
+
+/* --- About: the biography on the left, the facts on a translucent fill on the right. */
+.pp-about {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+  gap: calc(16 * var(--u)) calc(28 * var(--u));
+  margin-top: calc(28 * var(--u));
+}
+.pp-bio p {
+  margin: 0;
+  font-size: calc(15 * var(--u));
+  line-height: 1.55;
+  white-space: pre-line;
+  color: rgb(var(--ink) / 0.82);
+}
+.pp-more {
+  margin-top: calc(6 * var(--u));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text) !important;
+  font-size: calc(14 * var(--u));
+  font-weight: 650;
+}
+.pp-more:hover {
+  text-decoration: underline;
+}
+.pp-bio-skeleton {
+  display: grid;
+  gap: calc(10 * var(--u));
+}
+.pp-facts {
+  margin: 0;
+  padding: calc(4 * var(--u)) calc(16 * var(--u));
+  border-radius: calc(16 * var(--u));
+  corner-shape: superellipse(1.45);
+  background: var(--pp-fill);
+  font-size: calc(14 * var(--u));
+  line-height: 1.45;
+}
+.pp-facts > div {
+  display: grid;
+  grid-template-columns: calc(88 * var(--u)) minmax(0, 1fr);
+  gap: calc(12 * var(--u));
+  padding: calc(11 * var(--u)) 0;
+}
+.pp-facts > div + div {
+  border-top: 1px solid var(--pp-line);
+}
+.pp-facts dt {
+  color: var(--pp-text-2);
+  font-weight: 500;
+}
+.pp-facts dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* --- Known for, and the credits, each under a small label. */
+.pp-section {
+  margin-top: calc(36 * var(--u));
+}
+.pp-kicker {
+  margin: 0 0 calc(12 * var(--u));
+  font-size: calc(11.5 * var(--u));
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-text-3);
+}
+.pp-known {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: calc(18 * var(--u)) calc(14 * var(--u));
+}
+.pp-section[aria-hidden] .pp-known {
+  margin-top: calc(12 * var(--u));
+}
+
+.pp-chips-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8 * var(--u)) calc(16 * var(--u));
+}
+.pp-chips-bar:empty {
+  display: none;
+}
+.pp-chips {
+  display: flex;
+  gap: calc(6 * var(--u));
+  min-width: 0;
+}
+.pp-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6 * var(--u));
+  height: calc(34 * var(--u));
+  padding: 0 calc(16 * var(--u));
+  border: 0;
+  border-radius: 999px;
+  background: var(--pp-chip);
+  color: rgb(var(--ink) / 0.76) !important;
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  transition:
+    background-color 180ms var(--ease-out),
+    color 180ms var(--ease-out),
+    scale 140ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pp-chip:hover:not([aria-checked="true"]) {
+    background: var(--pp-chip-hover);
+  }
+}
+.pp-chip:active {
+  scale: 0.95;
+}
+.pp-chip[aria-checked="true"] {
+  background: var(--text);
+  color: var(--bg) !important;
+  font-weight: 700;
+}
+.pp-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pp-chip-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+/* A credit: [year] [poster] [title over the part] [score], full width, a hairline between rows (from the title's
+   edge, as Sources' rows start theirs after the lead), no card. */
+.pp-lines {
+  margin: calc(10 * var(--u)) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.pp-lines > li {
+  position: relative;
+}
+.pp-lines > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: calc(122 * var(--u));
+  right: 0;
+  height: 1px;
+  background: var(--pp-line);
+  pointer-events: none;
+}
+.pp-line {
+  display: grid;
+  grid-template-columns: calc(44 * var(--u)) calc(40 * var(--u)) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(18 * var(--u));
+  width: 100%;
+  padding: calc(10 * var(--u)) calc(2 * var(--u));
+  border: 0;
+  background: none;
+  color: var(--text) !important;
+  text-align: left;
+  transition:
+    opacity 140ms var(--ease-out),
+    scale 140ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pp-line:hover .pp-line-name {
+    text-decoration: underline;
+    text-decoration-color: rgb(var(--ink) / 0.4);
+    text-underline-offset: 0.18em;
+  }
+}
+.pp-line:active {
+  opacity: 0.52;
+  scale: 0.985;
+}
+.pp-line:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: calc(8 * var(--u));
+}
+.pp-line-year {
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--pp-text-2);
+}
+.pp-line-art {
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: calc(6 * var(--u));
+  background: var(--pp-fill);
+}
+.pp-line-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pp-line-text {
+  display: grid;
+  gap: calc(3 * var(--u));
+  min-width: 0;
+}
+.pp-line-name,
+.pp-line-part {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pp-line-name {
+  font-size: calc(16 * var(--u));
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.pp-line-part {
+  font-size: calc(13.5 * var(--u));
+  font-weight: 500;
+  color: var(--pp-text-2);
+}
+.pp-line-part-year {
+  display: none;
+}
+.pp-line-score {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  font-size: calc(14 * var(--u));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink) / 0.86);
+}
+.pp-line-score svg {
+  color: var(--pp-text-3);
+}
+
+/* --- Narrower (a small window, a tablet in a split): the facts under the biography, three posters to a row. */
+@media (max-width: 760px) {
+  .pp-name {
+    font-size: calc(34 * var(--u));
+  }
+  .pp-photo {
+    width: calc(120 * var(--u));
+  }
+  .pp-about {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pp-known {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* --- A phone: the portrait smaller beside the name, Known for scrolling sideways, the year in the part line. */
+:root[data-form="phone"] .pp {
+  padding-top: calc(var(--nav-h, 0px) + 8px);
+}
+:root[data-form="phone"] .pp-head {
+  gap: 16px;
+}
+:root[data-form="phone"] .pp-photo {
+  width: 96px;
+  border-radius: 14px;
+  font-size: 26px;
+}
+:root[data-form="phone"] .pp-name {
+  font-size: 28px;
+}
+:root[data-form="phone"] .pp-about {
+  margin-top: 20px;
+}
+:root[data-form="phone"] .pp-section {
+  margin-top: 28px;
+}
+:root[data-form="phone"] .pp-known {
+  display: flex;
+  gap: 10px;
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline: var(--gutter);
+  overflow-x: auto;
+  scroll-padding-inline: var(--gutter);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+:root[data-form="phone"] .pp-known > * {
+  flex: none;
+  width: 116px;
+  scroll-snap-align: start;
+}
+:root[data-form="phone"] .pp-chips-bar {
+  flex-direction: column;
+  align-items: stretch;
+}
+:root[data-form="phone"] .pp-chip {
+  flex: 1 1 0;
+  padding: 0 8px;
+}
+:root[data-form="phone"] .pp-line {
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+}
+:root[data-form="phone"] .pp-lines > li + li::before {
+  left: 48px;
+}
+:root[data-form="phone"] .pp-line-year {
+  display: none;
+}
+:root[data-form="phone"] .pp-line-part-year {
+  display: inline;
+}
