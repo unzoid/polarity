@@ -11,7 +11,6 @@ import { cardMenu } from "../components/CardMenu";
 import { DownloadButton } from "../components/DownloadButton";
 import { Img } from "../components/Img";
 import { preloadPlayerNow } from "../components/PlayerLayer";
-import { useLibraryToggle } from "../components/title/LibraryButton";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
 import { ScoreRow } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
@@ -58,7 +57,7 @@ import {
   type HeroImdb,
 } from "../lib/anime";
 import { LIMIT_NOTICE, useTitleVerdict } from "../lib/catalog";
-import { formatRemaining } from "../lib/format";
+import { formatRemaining, isOpenable, isReleased } from "../lib/format";
 import { episodeEntry, watchedFraction } from "../lib/library";
 import { useMeta, useProgressOf, useRatings } from "../lib/net";
 import type { PlayRequest } from "../lib/playback";
@@ -66,9 +65,9 @@ import { useNavigation } from "../lib/router";
 import { setPrefs, useEpisodeLayout, usePrefs } from "../lib/settings";
 import type { Meta, Progress, Video } from "../lib/types";
 import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
-import { IconCheck, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
+import { IconMuted, IconPlay, IconPlayRing, IconSound, IconSources, IconTrailer } from "./icons";
 import { ListOverlay } from "./ListOverlay";
-import { Action, MediaButtons, SeasonDownloadGlyph, Synopsis } from "./titleParts";
+import { Action, ListAction, MediaButtons, SeasonDownloadGlyph, Synopsis } from "./titleParts";
 
 type Tab = "episodes" | "more" | "details" | "trailers";
 
@@ -442,7 +441,7 @@ export function AnimeTitle({
   );
 }
 
-/** My List, Trailer, Sources, and the open season's download, as a show's row has them. */
+/** Add to List, Trailer, Sources, and the open season's download, as a show's row has them. */
 function AnimeActions({
   meta,
   name,
@@ -468,7 +467,7 @@ function AnimeActions({
   const downloads = useMemo(() => partDownloads(list), [list]);
   return (
     <div className="ps-actions">
-      {meta && <LibraryAction item={meta} />}
+      {meta && <ListAction item={meta} />}
       {ytTrailerId && (
         <Action label="Trailer" onClick={() => openTrailer({ name, imdbId, ytId: ytTrailerId, ytFrom: "AniList" })}>
           <IconTrailer size={27} />
@@ -479,15 +478,6 @@ function AnimeActions({
       </Action>
       {meta && activeAnime && !activePb.isMovie && downloads.length > 0 && <SeasonDownload item={meta} videos={downloads} part={activeAnime.id} />}
     </div>
-  );
-}
-
-function LibraryAction({ item }: { item: Meta }) {
-  const { inLibrary, toggle } = useLibraryToggle(item);
-  return (
-    <Action label="My List" pressed={inLibrary} onClick={toggle}>
-      {inLibrary ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}
-    </Action>
   );
 }
 
@@ -716,12 +706,16 @@ function Chevron() {
 
 type Flag = { filler?: boolean; recap?: boolean };
 
-/** Where an episode stands: out yet, how far along, watched. */
+/**
+ * Where an episode stands: out yet, how far along, watched. One listed for the coming week can already be played
+ * (`soon`): services often put it out before the listed date (#143).
+ */
 function episodeState(v: Video, p: Progress | undefined, meta?: Meta) {
-  const unreleased = v.id.startsWith(PENDING_EPISODE) || (!!v.released && new Date(v.released).getTime() > Date.now());
+  const unreleased = v.id.startsWith(PENDING_EPISODE) || !isOpenable(v);
+  const soon = !unreleased && !isReleased(v);
   const fraction = p && p.duration > 0 ? p.position / p.duration : 0;
   const watched = fraction >= watchedFraction();
-  return { playable: !unreleased && !!meta, unreleased, fraction, watched, inProgress: fraction > 0 && !watched };
+  return { playable: !unreleased && !!meta, unreleased, soon, fraction, watched, inProgress: fraction > 0 && !watched };
 }
 
 function Badges({ flag }: { flag?: Flag }) {
@@ -816,7 +810,7 @@ const EpisodeCard = memo(function EpisodeCard({
         {s.playable && meta && <DownloadButton item={meta} video={v} className="ps-episode-dl" size={20} />}
       </div>
       <span className="ps-ep-meta">
-        {[s.inProgress && p ? formatRemaining(p.position, p.duration) : runtime, v.released && !s.unreleased ? fullDateFmt.format(new Date(v.released)) : undefined]
+        {[s.inProgress && p ? formatRemaining(p.position, p.duration) : runtime, v.released && !s.unreleased ? `${s.soon ? "Airs " : ""}${fullDateFmt.format(new Date(v.released))}` : undefined]
           .filter(Boolean)
           .join(" · ")}
       </span>
@@ -864,7 +858,15 @@ const EpisodeRow = memo(function EpisodeRow({
             {v.episode}. {v.title?.trim() || `Episode ${v.episode}`}
           </strong>
           <span>
-            {s.unreleased ? (v.released ? `Coming ${shortDateFmt.format(new Date(v.released))}` : "Not yet released") : s.inProgress && p ? formatRemaining(p.position, p.duration) : runtime}
+            {s.unreleased
+              ? v.released
+                ? `Coming ${shortDateFmt.format(new Date(v.released))}`
+                : "Not yet released"
+              : s.soon && v.released
+                ? `Airs ${shortDateFmt.format(new Date(v.released))}`
+                : s.inProgress && p
+                  ? formatRemaining(p.position, p.duration)
+                  : runtime}
             <Badges flag={flag} />
           </span>
         </div>

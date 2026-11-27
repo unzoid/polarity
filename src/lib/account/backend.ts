@@ -24,6 +24,14 @@ export interface Authenticator {
   name: string;
 }
 
+/** A WebAuthn passkey registered on this account (Supabase Auth Passkeys). */
+export interface Passkey {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
 /** An authenticator being added: the QR code to scan (an image's address) and the same key as text. */
 export interface AuthenticatorSetup {
   id: string;
@@ -70,6 +78,7 @@ export type AccountErrorCode =
   | "friend_tries_limit"
   | "friend_invite_limit"
   | "not_set_up"
+  | "cancelled"
   | "network"
   | "unknown";
 
@@ -278,6 +287,20 @@ export interface AccountBackend {
     confirmEmailChange(address: string, code: string): Promise<AccountUser>;
     /** The signed-in user as the server has it now; `null` when signed out. */
     refreshUser(): Promise<AccountUser | null>;
+  };
+
+  /** WebAuthn passkeys: passwordless biometric / security-key sign-in. */
+  passkeys: {
+    /** Whether this runtime supports WebAuthn passkey registration and sign-in. */
+    supported(): boolean;
+    /** Passkeys registered on the signed-in account. */
+    list(): Promise<Passkey[]>;
+    /** Register a new passkey for the signed-in account (triggers the platform authenticator prompt). */
+    register(friendlyName?: string): Promise<Passkey>;
+    /** Sign in with a registered passkey. */
+    signIn(opts?: { captchaToken?: string; signal?: AbortSignal; conditional?: boolean }): Promise<AccountUser>;
+    /** Remove a registered passkey from the signed-in account. */
+    remove(id: string): Promise<void>;
   };
 
   /** Two-step sign-in: a code from an authenticator app after the email code. */

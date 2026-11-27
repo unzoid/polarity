@@ -29,13 +29,14 @@ export default defineConfig({
   plugins: [solid(), tailwindcss(), elysiaDev()],
   build: {
     rollupOptions: {
-      // One HTML page per route; served as /, /download/ and /roadmap/, and /watch/ and /party/ (#153).
+      // One HTML page per route; served as /, /download/ and /roadmap/, and /watch/, /party/ (#153) and /passkey/.
       input: {
         home: "index.html",
         download: "download/index.html",
         roadmap: "roadmap/index.html",
         watch: "watch/index.html",
         party: "party/index.html",
+        passkey: "passkey/index.html",
       },
     },
   },

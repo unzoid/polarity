@@ -4,7 +4,20 @@ import { api } from "../lib/api";
 import { useNavigation } from "../lib/router";
 import { useTitleActions } from "../lib/library";
 import type { MetaPreview, Progress } from "../lib/types";
-import { Check, Close, Hidden, Info, Minus, Play, PlaylistIcon, Plus, Reset, Trailer, Watched } from "./icons";
+import ArrowTopRightOnSquare from "@heroicons/react/24/outline/ArrowTopRightOnSquareIcon";
+import ArrowUturnLeft from "@heroicons/react/24/outline/ArrowUturnLeftIcon";
+import CheckIcon from "@heroicons/react/24/outline/CheckIcon";
+import CheckCircle from "@heroicons/react/24/outline/CheckCircleIcon";
+import EyeIcon from "@heroicons/react/24/outline/EyeIcon";
+import EyeSlash from "@heroicons/react/24/outline/EyeSlashIcon";
+import Film from "@heroicons/react/24/outline/FilmIcon";
+import InformationCircle from "@heroicons/react/24/outline/InformationCircleIcon";
+import MinusCircle from "@heroicons/react/24/outline/MinusCircleIcon";
+import PlayIcon from "@heroicons/react/24/outline/PlayIcon";
+import PlusIcon from "@heroicons/react/24/outline/PlusIcon";
+import QueueList from "@heroicons/react/24/outline/QueueListIcon";
+import XMark from "@heroicons/react/24/outline/XMarkIcon";
+import type { ComponentType, SVGProps } from "react";
 import { PlaylistChecklist, usePlaylistChecklist } from "./title/PlaylistChecklist";
 import { nativeDialogsAvailable, showNativeDialog, type DialogAction } from "../lib/platform";
 import { warnFailed } from "../lib/errors";
@@ -89,6 +102,25 @@ export function CardMenuHost() {
   if (target.linked === false) return <UnlinkedMenu key={target.key} target={target} />;
   return <OpenMenu key={target.key} target={target} />;
 }
+
+/**
+ * The menu's glyphs: one outline set (Heroicons, the app's icon library) at one weight, as a Mac's menus draw theirs,
+ * rather than filled and outlined icons side by side. Sized by styles/ui/card-menu.css.
+ */
+const glyph = (Icon: ComponentType<SVGProps<SVGSVGElement>>) => <Icon aria-hidden strokeWidth={1.6} />;
+const Play = () => glyph(PlayIcon);
+const Info = () => glyph(InformationCircle);
+const Trailer = () => glyph(Film);
+const Watched = () => glyph(CheckCircle);
+const Reset = () => glyph(ArrowUturnLeft);
+const Close = () => glyph(XMark);
+const Plus = () => glyph(PlusIcon);
+const Minus = () => glyph(MinusCircle);
+const Check = () => glyph(CheckIcon);
+const PlaylistIcon = () => glyph(QueueList);
+const Hidden = () => glyph(EyeSlash);
+const Shown = () => glyph(EyeIcon);
+const ExternalGlyph = () => glyph(ArrowTopRightOnSquare);
 
 /** A zero-size point where the pointer was. */
 const pointAnchor = (x: number, y: number) => ({ getBoundingClientRect: () => DOMRect.fromRect({ x, y, width: 0, height: 0 }) });
@@ -179,7 +211,7 @@ function useLinkedChoices(target: Target): Choices {
     },
     { id: "playlists", label: a.inPlaylist ? "Playlists" : "Add to Playlist", icon: a.inPlaylist ? <Check /> : <PlaylistIcon />, symbol: "text.badge.plus", playlists: true },
     // Out of Home, Discover and recommendations; Search still finds it (lib/library/hiddenTitles.ts).
-    { id: "hide", label: a.hidden ? "Unhide This Title" : "Hide This Title", icon: <Hidden />, symbol: a.hidden ? "eye" : "eye.slash", run: a.toggleHidden },
+    { id: "hide", label: a.hidden ? "Unhide This Title" : "Hide This Title", icon: a.hidden ? <Shown /> : <Hidden />, symbol: a.hidden ? "eye" : "eye.slash", run: a.toggleHidden },
   ];
 
   const out: Choice[] = [];
@@ -317,15 +349,3 @@ function NativeMenu({ target, choices }: { target: Target; choices: Choices }) {
 
 /** Letterboxd finds a film by its IMDb id. */
 export const letterboxdUrl = (imdbId: string) => `https://letterboxd.com/imdb/${imdbId}/`;
-
-/** An arrow out of a box: "opens in your browser". */
-function ExternalGlyph() {
-  return (
-    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden data-slot="icon">
-      <path
-        fillRule="evenodd"
-        d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Zm7.25-.75a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0V6.56l-5.22 5.22a.75.75 0 1 1-1.06-1.06l5.22-5.22h-1.69a.75.75 0 0 1-.75-.75Z"
-      />
-    </svg>
-  );
-}

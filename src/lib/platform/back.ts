@@ -149,11 +149,11 @@ type ImmersiveBridge = { polarActions?: Actions; polarDevice?: { immersive?: (on
 
 /**
  * Keep the screen on while a video plays, and let it dim and lock again when it pauses or the player closes, as
- * other video apps do: Android through the page's bridge (MainActivity.kt), iOS's idle timer through the shell
- * (ios/system_bars.m). Elsewhere it does nothing.
+ * other video apps do: Android through the page's bridge (MainActivity.kt), iOS's idle timer and a Mac's
+ * display-sleep activity through the shell (ios/system_bars.m, macos/power.m). Elsewhere it does nothing.
  */
 export function keepScreenOn(on: boolean, scope: ImmersiveBridge = globalThis as ImmersiveBridge): void {
-  if (os === "ios" && inShell) {
+  if ((os === "ios" || os === "macos") && inShell) {
     void call<void>("player_keep_awake", { on }).catch(() => {});
     return;
   }

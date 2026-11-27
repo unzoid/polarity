@@ -14,7 +14,6 @@ import { TitleLogo } from "../components/TitleLogo";
 import { imdbUrl } from "../components/RatingRing";
 import { useEpisodeRatings } from "../components/title/EpisodeRatings";
 import { playExtra } from "../components/title/ExtrasShelf";
-import { useLibraryToggle } from "../components/title/LibraryButton";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
 import { ScoreRow } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
@@ -39,7 +38,7 @@ import type { AnimeSeasonMapping, ContentType, ExternalRatings, Extra, Meta, Met
 import { api } from "../lib/api";
 import { extraKind, extraStills, LIMIT_NOTICE, useBrowseVisible, useListable, useTitleVerdict } from "../lib/catalog";
 import { errorMessage } from "../lib/errors";
-import { episodeCode, formatRemaining, formatRuntime } from "../lib/format";
+import { episodeCode, formatRemaining, formatRuntime, isOpenable, isReleased } from "../lib/format";
 import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, shelfGroupOf, shelfGroups, upNext, useEpisodeOrders, watchedFraction } from "../lib/library";
 import { useCollection, useMeta, useProgress, useRatings, useRecommend, useStreams } from "../lib/net";
 import { trailerFor, useFileTrailer, usePlayTarget, type PlayRequest } from "../lib/playback";
@@ -51,7 +50,7 @@ import { AnimatedSwap, EpisodeSearch, filterEpisodes } from "./EpisodeTools";
 import { DeskRatingsOverlay } from "./RatingsOverlay";
 import { Poster, ProgressLine as ProgressBar } from "./Rows";
 import { SeasonChooser } from "./SeasonChooser";
-import { CompactPlay, IconRatingsGrid, NextUp, PinnedBar, useCardStrip } from "./TitleParts";
+import { CompactPlay, IconRatingsGrid, ListAction, NextUp, PinnedBar, useCardStrip } from "./TitleParts";
 
 const AnimeTitleView = lazyNamed(() => import("./AnimeTitleView"), "AnimeTitleView");
 export const preloadAnimeTitleView = () => void AnimeTitleView.preload().catch(() => {});
@@ -163,7 +162,7 @@ function PreviewOutline({ preview, art }: { preview: MetaPreview; art?: string }
             <WaitDownload />
           </div>
           <div className="dk-t-actions">
-            <Action label="My List" disabled wait onClick={() => {}}>
+            <Action label="Add to List" disabled wait onClick={() => {}}>
               <IconPlus size={28} stroke={1.5} />
             </Action>
             <Action label="Trailer" disabled wait onClick={() => {}}>
@@ -620,15 +619,12 @@ function Actions({
   /** Whether there's a trailer isn't known yet. */
   trailerWaiting: boolean;
 }) {
-  const { inLibrary, toggle } = useLibraryToggle(item);
   const trailer = !!(meta?.trailerYtId || fileTrailer);
   // Every tile keeps its place from the first frame, so the row never re-lays itself out as things load: Trailer
   // stays (unavailable) when there isn't one, rather than the others moving up when that turns out.
   return (
     <div className="dk-t-actions">
-      <Action label="My List" pressed={inLibrary} onClick={toggle}>
-        {inLibrary ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}
-      </Action>
+      <ListAction item={item} />
       <Action label="Trailer" disabled={!trailer} wait={!trailer && trailerWaiting} onClick={() => openTrailer(trailerFor(item.name, item.id, meta))}>
         <IconTrailer size={27} />
       </Action>
@@ -908,8 +904,17 @@ function Episodes({
   );
 }
 
-const aired = (v: Video) => !v.released || new Date(v.released).getTime() <= Date.now();
+/** Its sources can be checked: out, or listed for the coming week, since services often beat the listed date (#143). */
+const aired = (v: Video) => isOpenable(v);
+/** Openable but not out by its listed date: "Airs 30 Nov" on it, instead of "Coming", and it plays like the rest. */
+const airsSoon = (v: Video) => isOpenable(v) && !isReleased(v);
 const fullDateFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
+/** Under an episode: its air date, "Airs …" while it may be out early, "Coming …" further ahead. */
+const dateLine = (v: Video) => {
+  if (!v.released) return aired(v) ? undefined : "Not yet released";
+  const date = fullDateFmt.format(new Date(v.released));
+  return isReleased(v) ? date : aired(v) ? `Airs ${date}` : `Coming ${date}`;
+};
 const shortDateFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const compactRuntime = (raw?: string) => raw?.replace(/\s*min\b/i, "m").replace(/\s*hr\b/i, "h");
 
@@ -1097,7 +1102,9 @@ const EpisodeCard = memo(function EpisodeCard({
             <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
               <IconPlayRing size={40} />
             </span>
-            {timeLabel && (
+            {airsSoon(v) && v.released ? (
+              <span className="dk-ep-soon">Airs {shortDateFmt.format(new Date(v.released))}</span>
+            ) : timeLabel && (
               <span className="dk-ep-runtime tabular" aria-hidden>
                 <IconPlay size={10} />
                 {timeLabel}
@@ -1131,7 +1138,7 @@ const EpisodeCard = memo(function EpisodeCard({
       </strong>
       {v.overview && <p className="dk-ep-text">{v.overview}</p>}
       <span className="dk-ep-date tabular">
-        {on ? (v.released ? fullDateFmt.format(new Date(v.released)) : undefined) : v.released ? `Coming ${fullDateFmt.format(new Date(v.released))}` : "Not yet released"}
+        {dateLine(v)}
       </span>
     </li>
   );
@@ -1176,7 +1183,9 @@ const EpisodeRow = memo(function EpisodeRow({
               <span className="dk-ep-play dk-ep-play-hover" aria-hidden>
                 <IconPlayRing size={34} />
               </span>
-              {timeLabel && (
+              {airsSoon(v) && v.released ? (
+                <span className="dk-ep-soon">{shortDateFmt.format(new Date(v.released))}</span>
+              ) : timeLabel && (
                 <span className="dk-ep-runtime tabular" aria-hidden>
                   <IconPlay size={9} />
                   {timeLabel}
@@ -1204,7 +1213,7 @@ const EpisodeRow = memo(function EpisodeRow({
           </span>
           {v.overview && <span className="dk-ep-text">{v.overview}</span>}
           <span className="dk-ep-date tabular">
-            {on ? (v.released ? fullDateFmt.format(new Date(v.released)) : undefined) : v.released ? `Coming ${fullDateFmt.format(new Date(v.released))}` : "Not yet released"}
+            {dateLine(v)}
           </span>
         </span>
       </button>

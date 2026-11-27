@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { IconBack, IconClose } from "./icons";
+import { PlaylistTray } from "../components/library/PlaylistTray";
+import { useLibraryToggle } from "../components/title/LibraryButton";
+import { usePlaylistChecklist } from "../components/title/PlaylistChecklist";
+import type { MetaPreview } from "../lib/types";
+import { IconBack, IconCheck, IconClose, IconPlus } from "./icons";
 
 /** Close (and Back, for a title opened from another) over the top of a title's art. */
 export function MediaButtons({ onClose, onBack }: { onClose: () => void; onBack?: () => void }) {
@@ -36,6 +40,25 @@ export function Action({ label, onClick, pressed, disabled, children }: { label:
       <span className="ps-action-glyph">{children}</span>
       <span className="ps-action-label">{label}</span>
     </button>
+  );
+}
+
+/**
+ * Add to List: opens the tray that ticks My List and the playlists this title is in, or starts a new playlist with it.
+ * Ticked, and "Added", while the title is in any of them.
+ */
+export function ListAction({ item }: { item: MetaPreview }) {
+  const [open, setOpen] = useState(false);
+  const { inLibrary } = useLibraryToggle(item);
+  const { inAny } = usePlaylistChecklist(item);
+  const saved = !!inLibrary || inAny;
+  return (
+    <>
+      <Action label={saved ? "Added" : "Add to List"} pressed={saved} onClick={() => setOpen(true)}>
+        {saved ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}
+      </Action>
+      <PlaylistTray item={item} open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
 

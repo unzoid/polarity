@@ -1,232 +1,80 @@
-/* Sign in (screens/account/AuthScreen.tsx, SignInFrame.tsx, SignInMark.tsx), after Family's: a flat page, the
-   step's title on the left, one wide accent button. On a phone, one column with the button at its foot; wide (a
-   computer, a TV), the column centred under the wordmark (the end of this file). */
-/* A soft accent light from above the column, fading into the page. */
+/* Sign in (screens/account/AuthScreen.tsx, SignInFrame.tsx, SignInMark.tsx, TwoStepScreen.tsx),
+   modelled on Aave Account: a flat, calm canvas, a single centred column anchored by a morphing
+   emblem/badge, rounded filled input with crisp accent focus ring, in-place helper-to-Continue
+   swap, auto-submitting OTP cells, and a quiet bottom capsule + footer. */
+
 .account-shell[data-plain] {
-  background:
-    radial-gradient(60rem 32rem at 50% -8rem, color-mix(in srgb, var(--accent) 26%, transparent), transparent 70%),
-    radial-gradient(40rem 26rem at 50% 115%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
-    var(--bg);
+  background: var(--bg);
 }
-:root[data-scheme="light"] .account-shell[data-plain] {
-  background:
-    radial-gradient(60rem 32rem at 50% -8rem, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
-    var(--bg);
+/* Subtle Bayer-dithered chromatic gradient artwork (components/SignInArtwork.tsx). */
+.si-artwork {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--bg);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 22%, transparent) 0%,
+    transparent 30%
+  );
+}
+:root[data-scheme="light"] .si-artwork {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 13%, transparent) 0%,
+    transparent 30%
+  );
+}
+.si-artwork canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity 420ms var(--ease-out);
+}
+.si-artwork canvas[data-ready] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .si-artwork canvas {
+    transition: none;
+  }
+}
+.account-shell[data-plain] .account-bar {
+  height: 2.75rem;
+}
+:root[data-form="phone"] .account-shell[data-plain] .account-bar,
+:root[data-form="tablet"] .account-shell[data-plain] .account-bar {
+  height: calc(0.5rem + var(--safe-top));
 }
 .account-shell[data-plain] .account-main {
-  place-items: center;
-  padding: 0 1rem max(1rem, var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
+
 .si {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  width: min(25rem, 100%);
-  height: min(46rem, calc(100dvh - var(--nav-h) - 1rem));
-  min-height: 30rem;
-}
-.si :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* --- The bar: close or back, the dashes, help ------------------------------------------------------ */
-.si-bar {
-  display: grid;
-  flex: none;
-  grid-template-columns: 2.75rem 1fr 2.75rem;
-  align-items: center;
-  height: 3rem;
-}
-.si-bar-lead {
-  display: grid;
-}
-.si-icon-btn {
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  margin-left: -0.5rem;
-  border-radius: 50%;
-  color: var(--text);
-  transition:
-    background-color 140ms var(--ease-out),
-    scale 140ms var(--ease-out);
-}
-.si-bar > .si-icon-btn {
-  justify-self: end;
-  margin: 0 -0.5rem 0 0;
-}
-@media (hover: hover) and (pointer: fine) {
-  .si-icon-btn:hover {
-    background: rgb(var(--ink) / 0.08);
-  }
-}
-.si-icon-btn:active {
-  scale: 0.92;
-}
-.si-progress {
-  display: flex;
-  justify-content: center;
-  gap: 4px;
-}
-.si-progress i {
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgb(var(--ink) / 0.2);
-  transition:
-    width 320ms var(--ease-out),
-    background-color 320ms var(--ease-out);
-}
-.si-progress i[data-on] {
-  width: 28px;
-  background: var(--accent);
-}
-.si-help {
-  width: min(18rem, calc(100vw - 2rem));
-  padding: 0.875rem 1rem;
-  border-radius: 1rem;
-  background: var(--surface-popover);
-  -webkit-backdrop-filter: var(--blur-popover);
-  backdrop-filter: var(--blur-popover);
-  box-shadow:
-    inset 0 0 0 0.5px rgb(var(--ink) / 0.12),
-    0 12px 32px rgb(0 0 0 / 0.35);
-  color: var(--text-2);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  transform-origin: var(--transform-origin);
-  transition:
-    opacity 160ms var(--ease-out),
-    scale 160ms var(--ease-out);
-}
-.si-help[data-starting-style],
-.si-help[data-ending-style] {
-  opacity: 0;
-  scale: 0.96;
-}
-.si-help p {
-  margin: 0;
-}
-.si-help p + p {
-  margin-top: 0.5rem;
-}
-.si-help strong {
-  color: var(--text);
-  font-weight: 600;
-}
-
-/* --- The steps. Nothing clips their slide to the column: they travel across the window, as on a phone's whole
-       screen (the shell clips at the window's edges). */
-.si-stage {
-  position: relative;
   flex: 1;
-  min-height: 0;
-}
-.si-step {
-  height: 100%;
-}
-.si-step-body {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding-top: 1.75rem;
-}
-.si-title {
-  margin: 0;
-  font-size: 1.625rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--text);
-}
-.si-sub {
-  margin: 0.5rem 0 0;
-  font-size: 0.9375rem;
-  line-height: 1.45;
-  color: rgb(var(--ink-text) / 0.5);
-}
-.si-sub strong {
-  color: rgb(var(--ink-text) / 0.85);
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-/* The email: no box, just the words and an accent caret, as Family's. */
-.si-input {
+  align-items: center;
   width: 100%;
-  margin-top: 1.75rem;
-  padding: 0.25rem 0;
-  border: 0;
-  outline: none;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 1.125rem;
-  font-weight: 500;
-  caret-color: var(--accent);
-}
-.si-input::placeholder {
-  color: rgb(var(--ink-text) / 0.26);
-}
-/* Fields that show their own focus: the email's caret, the code's ring. */
-.si :is(.si-input, .code-field):focus-visible {
-  outline: none;
-}
-.si-note {
-  margin: 0.875rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: rgb(var(--ink-text) / 0.38);
-}
-/* The other way in, low on the step: "or …" between two dotted rules. */
-.si-or {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: auto;
-  padding: 1.25rem 0 0.25rem;
-}
-.si-or::before,
-.si-or::after {
-  content: "";
-  flex: 1;
-  border-top: 1px dashed rgb(var(--ink) / 0.2);
-}
-.si-or button {
-  font-size: 0.8125rem;
-  color: rgb(var(--ink-text) / 0.5);
-  transition: color 140ms var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-  .si-or button:hover {
-    color: var(--text);
-  }
-}
-.si-code {
-  margin-top: 1.75rem;
-}
-.si-resend {
-  margin: 1.125rem 0 0;
-  font-size: 0.8125rem;
-  color: rgb(var(--ink-text) / 0.5);
-}
-.si-resend button,
-.si-text-link {
-  color: var(--accent-hi);
-  font-weight: 600;
-}
-.si-resend button:disabled {
-  opacity: 0.5;
-}
-.si-text-link {
-  align-self: flex-start;
-  margin-top: 1.125rem;
-  font-size: 0.8125rem;
-}
-/* A refused code: the code's ring and this pill share one red (Family's, brighter than the app's --danger). */
-.si {
+  min-height: 100%;
+  padding: 0 1.25rem max(1.75rem, var(--safe-bottom));
   --si-wrong: #ff2d55;
+  /* Left-to-right purple gradient matching SignInArtwork's horizon sweep (overridden with exact
+     computed stops by SignInArtwork for every theme). */
+  --si-grad: linear-gradient(
+    90deg,
+    var(--si-grad-1, color-mix(in oklab, var(--accent) 85%, #3730a3)),
+    var(--si-grad-2, var(--accent)) 50%,
+    var(--si-grad-3, color-mix(in oklab, var(--accent) 68%, #c084fc))
+  );
 }
 :root[data-scheme="light"] .si {
   --si-wrong: #e0143e;
@@ -234,125 +82,281 @@
 .si .code-input {
   --code-wrong: var(--si-wrong);
 }
-.si-wrong-slot {
-  display: flex;
-  align-items: flex-start;
-  min-height: 2.25rem;
-  margin-top: 1rem;
+/* Match the OTP sliding ring's border to the same left-to-right purple gradient (reverts to solid red on wrong code). */
+.si .code-input:not([data-wrong]) .code-ring {
+  padding: 2px;
+  background: var(--si-grad);
+  box-shadow: none;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
 }
-.si-wrong {
-  margin: 0;
-  padding: 0.4375rem 0.875rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--si-wrong) 18%, transparent);
-  color: var(--si-wrong);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  line-height: 1.4;
-  transform-origin: 1.5rem 50%;
+.si .code-input:not([data-wrong]):has(.code-field:focus-visible) .code-ring {
+  box-shadow: none;
 }
-.si-error {
-  align-items: flex-start;
-  margin-top: 0.875rem;
-  text-align: left;
+.si :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
-.si .auth-captcha {
-  align-items: flex-start;
-}
-.si-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
-}
-.si-choice {
-  height: 3rem;
-  padding: 0 1rem;
-  border-radius: 0.875rem;
-  background: rgb(var(--ink) / 0.07);
-  color: var(--text);
-  font-weight: 600;
-  text-align: left;
-}
-.si-choice[aria-current] {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.si-device {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 2rem;
-  text-align: center;
-}
-.si-device .auth-error {
-  align-items: center;
+/* Fields that draw their own focus ring (rounded input border, OTP sliding ring). */
+.si :is(.si-input, .code-field):focus-visible {
+  outline: none;
 }
 
-/* --- The foot: one wide button, dim until the step's answer is in ----------------------------------- */
-.si-foot {
+/* --- Quiet top-left back chevron --------------------------------------------------------------------- */
+.si-back {
+  position: absolute;
+  top: 0.25rem;
+  left: 1.25rem;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  color: rgb(var(--ink-text) / 0.55);
+  transition:
+    color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    scale 140ms var(--ease-out);
+}
+:root[data-touch="true"] .si-back {
+  width: 2.75rem;
+  height: 2.75rem;
+  left: 0.75rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .si-back:hover {
+    color: var(--text);
+    background: rgb(var(--ink) / 0.06);
+  }
+}
+.si-back:active {
+  scale: 0.92;
+}
+
+/* --- Centred column: anchored badge + step stage ----------------------------------------------------- */
+.si-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(23.5rem, 100%);
+  margin: auto 0;
+  padding: 2.75rem 0 2rem;
+  text-align: center;
+}
+.si-badge-slot {
+  display: grid;
+  place-items: center;
+  min-width: 3.5rem;
+  height: 3.5rem;
   flex: none;
-  min-height: 4.25rem;
-  padding-top: 1rem;
 }
-/* The opening has its own buttons. */
-.si-foot[data-empty] {
-  display: none;
+.si-badge {
+  display: grid;
+  place-items: center;
+  transform-origin: 50% 60%;
 }
-/* The pressed opening button on its way to becoming Continue (SignInFrame's PrimaryButton): over everything,
-   its old words and its new ones stacked, one fading for the other. */
-.si-primary-ghost {
-  position: fixed;
-  z-index: 1100;
+.si-badge-brand {
+  color: var(--text);
+}
+.si-mark {
+  display: block;
+  height: 2.5rem;
+  width: auto;
+}
+.si-badge-circle {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-hi);
+}
+:root[data-scheme="light"] .si-badge-circle {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+}
+
+/* Keep a steady vertical anchor so switching between email, code and two-step stays aligned. */
+.si-stage {
+  position: relative;
+  width: 100%;
+  min-height: 19.25rem;
+}
+.si-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.si-step-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 1.25rem;
+}
+
+/* --- Typography -------------------------------------------------------------------------------------- */
+.si-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  color: var(--text);
+}
+.si-sub {
+  margin: 0.375rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: rgb(var(--ink-text) / 0.52);
+}
+.si-sub strong {
+  color: rgb(var(--ink-text) / 0.85);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* --- Email input: soft rounded box with left-to-right purple gradient focus border ------------------- */
+.si-input-wrap {
+  position: relative;
+  width: 100%;
+  margin-top: 1.75rem;
+  border-radius: 0.875rem;
+  corner-shape: superellipse(1.4);
+}
+.si-input-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  corner-shape: inherit;
+  background: var(--si-grad);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms var(--ease-out);
+}
+.si-input-wrap:focus-within:not([data-busy])::after {
+  opacity: 1;
+}
+.si-input {
+  display: block;
+  width: 100%;
+  height: 3.125rem;
+  padding: 0 1.125rem;
+  border: 0;
+  border-radius: inherit;
+  corner-shape: inherit;
+  outline: none;
+  background: rgb(var(--ink) / 0.06);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 450;
+  caret-color: var(--accent);
+  transition:
+    background-color 160ms var(--ease-out),
+    opacity 160ms var(--ease-out);
+}
+:root[data-scheme="light"] .si-input {
+  background: rgb(var(--ink) / 0.055);
+}
+.si-input::placeholder {
+  color: rgb(var(--ink-text) / 0.36);
+}
+@media (hover: hover) and (pointer: fine) {
+  .si-input:hover:not(:focus):not(:disabled) {
+    background: rgb(var(--ink) / 0.08);
+  }
+}
+.si-input:focus:not(:disabled) {
+  background: rgb(var(--ink) / 0.045);
+}
+:root[data-scheme="light"] .si-input:focus:not(:disabled) {
+  background: rgb(var(--ink) / 0.035);
+}
+.si-input:disabled {
+  opacity: 0.52;
+  cursor: default;
+}
+
+/* --- Fixed-height slot where the helper note rises out as Continue glides up from below -------------- */
+.si-action-slot {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 3.125rem;
+  margin-top: 1rem;
+}
+.si-action-layer {
+  grid-area: 1 / 1;
+  width: 100%;
+}
+.si-hint {
+  align-self: start;
+  margin: 0;
+  padding-top: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: rgb(var(--ink-text) / 0.48);
+  text-align: center;
+}
+
+/* --- Primary & secondary action buttons -------------------------------------------------------------- */
+.si-primary {
+  position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 999px;
-  font-family: var(--font);
-  font-size: 1rem;
-  font-weight: 600;
-  pointer-events: none;
-  transform-origin: 0 0;
-}
-.si-primary-ghost > span {
-  grid-area: 1 / 1;
-  white-space: nowrap;
-}
-.si-primary {
-  position: relative;
   width: 100%;
-  height: 3.25rem;
-  border-radius: 999px;
+  height: 3.125rem;
+  border-radius: 0.875rem;
+  corner-shape: superellipse(1.4);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg, #fff);
   font: inherit;
   font-size: 1rem;
   font-weight: 600;
   transition:
-    background-color 220ms var(--ease-out),
-    color 220ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    opacity 160ms var(--ease-out),
     scale 140ms var(--ease-out);
 }
-.si-primary:disabled:not([data-busy]) {
-  background: color-mix(in srgb, var(--accent) 28%, var(--bg));
-  color: rgb(255 255 255 / 0.42);
-  cursor: default;
-}
-:root[data-scheme="light"] .si-primary:disabled:not([data-busy]) {
-  color: rgb(255 255 255 / 0.9);
+@media (hover: hover) and (pointer: fine) {
+  .si-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 88%, #fff);
+  }
 }
 .si-primary:not(:disabled):active {
-  scale: 0.98;
+  scale: 0.985;
 }
-.si-primary-spin {
-  position: absolute;
-  top: calc(50% - 9px);
-  right: 1.125rem;
-  color: #fff;
+.si-primary:disabled:not([data-busy]) {
+  opacity: 0.45;
+  cursor: default;
 }
-/* Family's spinner (SignInFrame's Spin): the lit quarter goes round once a second, steadily. */
+.si-primary-layer {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+}
 .si-spin {
   flex: none;
-  animation: si-spin 1s linear infinite;
+  animation: si-spin 0.9s linear infinite;
 }
 @keyframes si-spin {
   to {
@@ -360,184 +364,292 @@
   }
 }
 
-/* --- The opening ------------------------------------------------------------------------------------- */
-.si-start {
+/* --- Verification code & two-step -------------------------------------------------------------------- */
+.si-code {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding-bottom: 0.5rem;
+  justify-content: center;
+  margin-top: 1.75rem;
 }
-/* On a phone, the wordmark alone in the room above the words. */
-.si-hero {
-  display: grid;
-  flex: 1;
-  place-items: center;
-  min-height: 8rem;
+.si-resend {
+  margin: 1.5rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: rgb(var(--ink-text) / 0.5);
 }
-.si-mark {
-  display: block;
-  height: 3.25rem;
-  width: auto;
+.si-resend button,
+.si-text-link {
+  color: var(--text);
+  font-weight: 600;
+  transition: opacity 140ms var(--ease-out);
 }
-.si-start-copy {
-  padding: 0 0.5rem;
+@media (hover: hover) and (pointer: fine) {
+  .si-resend button:hover:not(:disabled),
+  .si-text-link:hover {
+    opacity: 0.72;
+  }
+}
+.si-resend button:disabled {
+  opacity: 0.45;
+}
+.si-text-link {
+  margin-top: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.si-wrong-slot {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 2.25rem;
+  margin-top: 1rem;
+}
+.si-wrong {
+  margin: 0;
+  padding: 0.4375rem 0.9375rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--si-wrong) 16%, transparent);
+  color: var(--si-wrong);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.si-error {
+  align-items: center;
+  margin-top: 0.75rem;
   text-align: center;
 }
-.si-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.si .auth-captcha {
+  align-items: center;
 }
-.si-start-sub {
-  max-width: 20rem;
-  margin: 0 auto;
-  font-size: 0.9375rem;
-  line-height: 1.45;
-  color: rgb(var(--ink-text) / 0.55);
+
+/* --- Two-step authenticator picker ------------------------------------------------------------------- */
+.si-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 1.5rem;
 }
+.si-choice {
+  height: 3rem;
+  padding: 0 1rem;
+  border-radius: 0.875rem;
+  corner-shape: superellipse(1.4);
+  background: rgb(var(--ink) / 0.06);
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  transition: background-color 140ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .si-choice:hover {
+    background: rgb(var(--ink) / 0.1);
+  }
+}
+.si-choice[aria-current] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* --- Sign in with another device --------------------------------------------------------------------- */
+.si-device {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 1.75rem;
+  text-align: center;
+}
+.si-device .auth-error {
+  align-items: center;
+}
+.si-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: rgb(var(--ink-text) / 0.45);
+}
+.si-device-retry {
+  width: 100%;
+  margin-top: 1.25rem;
+}
+
+/* --- TV opening step --------------------------------------------------------------------------------- */
 .si-start-actions {
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
+  width: 100%;
   margin-top: 1.75rem;
 }
-.si-btn {
+.si-secondary {
+  width: 100%;
   height: 3.125rem;
-  border-radius: 999px;
+  border-radius: 0.875rem;
+  corner-shape: superellipse(1.4);
+  background: rgb(var(--ink) / 0.07);
+  color: var(--text);
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   transition:
-    scale 140ms var(--ease-out),
-    background-color 160ms var(--ease-out),
-    box-shadow 160ms var(--ease-out);
-}
-.si-btn:active {
-  scale: 0.98;
-}
-/* The way in most people take: plain accent. */
-.si-btn-light {
-  background: var(--accent);
-  color: #fff;
+    background-color 140ms var(--ease-out),
+    scale 140ms var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
-  .si-btn-light:hover {
-    background: color-mix(in srgb, var(--accent) 90%, #fff);
+  .si-secondary:hover {
+    background: rgb(var(--ink) / 0.12);
   }
 }
-.si-btn-dark {
-  background: transparent;
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.22);
+.si-secondary:active {
+  scale: 0.985;
 }
-@media (hover: hover) and (pointer: fine) {
-  .si-btn-dark:hover {
-    background: rgb(var(--ink) / 0.06);
-  }
-}
-.si-btn-text {
+.si-text-btn {
   height: 2.5rem;
-  color: rgb(var(--ink-text) / 0.55);
+  color: rgb(var(--ink-text) / 0.52);
   font-size: 0.875rem;
   font-weight: 500;
   transition: color 140ms var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
-  .si-btn-text:hover {
+  .si-text-btn:hover {
     color: var(--text);
   }
 }
-.si-legal {
-  margin: 0.375rem 0 0;
-  font-size: 0.6875rem;
-  line-height: 1.5;
-  color: rgb(var(--ink-text) / 0.4);
-  text-align: center;
+
+/* --- Post-login Setup Passkey step (1:1 Aave card layout) -------------------------------------------- */
+.si[data-step="passkey"] .si-center {
+  width: min(26.5rem, 100%);
 }
-.si-legal button {
-  color: rgb(var(--ink-text) / 0.75);
+.si-passkey-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.375rem;
+  width: 100%;
+  margin-top: 1.625rem;
+  padding: 1.5rem;
+  border: 1px solid rgb(var(--ink) / 0.09);
+  border-radius: 1.25rem;
+  corner-shape: superellipse(1.4);
+  background: rgb(var(--ink) / 0.028);
+  text-align: left;
+}
+:root[data-scheme="light"] .si-passkey-card {
+  border-color: rgb(var(--ink) / 0.08);
+  background: rgb(255 255 255 / 0.72);
+}
+.si-passkey-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.si-passkey-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 0.0625rem;
+  color: var(--accent-hi);
+}
+:root[data-scheme="light"] .si-passkey-ico {
+  color: var(--accent);
+}
+.si-passkey-copy {
+  min-width: 0;
+}
+.si-passkey-copy h2 {
+  margin: 0;
+  font-size: 0.9375rem;
   font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
 }
-/* --- A phone: the column takes the whole screen under the status bar, rather than a fixed height centred in
-       it; the opening's wordmark and line sit together in the room above the buttons, and the second way in is a
-       filled pill like the phone's other secondary buttons. ---------------------------------------------- */
-.account-shell[data-plain] .account-main:has(> .si:not([data-wide])) {
-  place-items: stretch center;
-  padding: 0 1.25rem max(0.75rem, var(--safe-bottom));
+.si-passkey-copy p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: rgb(var(--ink-text) / 0.52);
 }
-.si:not([data-wide]) {
-  height: auto;
+.si-passkey-actions {
+  width: 100%;
+  margin-top: 1.375rem;
 }
-.si:not([data-wide]) .si-hero {
+.si-passkey-skip {
+  margin-top: 1.125rem;
+}
+.si-passkey-skip button {
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--ink-text) / 0.28);
+  text-underline-offset: 4px;
+}
+
+/* --- Bottom secondary action & dot-separated footer -------------------------------------------------- */
+.si-bottom {
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding-top: 1rem;
+}
+.si-secondary-wrap {
+  display: flex;
   justify-content: center;
-  gap: 1.125rem;
-  padding-bottom: 2.5rem;
 }
-.si:not([data-wide]) .si-start-copy {
-  padding: 0;
+.si-alt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem 0.5rem;
 }
-.si:not([data-wide]) .si-start-sub {
-  max-width: 18.5rem;
+.si-alt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 999px;
+  color: rgb(var(--ink-text) / 0.6);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition:
+    color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    scale 140ms var(--ease-out);
 }
-.si:not([data-wide]) .si-start-actions {
-  margin-top: 0;
+@media (hover: hover) and (pointer: fine) {
+  .si-alt-btn:hover {
+    color: var(--text);
+    background: rgb(var(--ink) / 0.06);
+  }
 }
-.si:not([data-wide]) .si-btn {
-  height: 3.375rem;
-  font-size: 1rem;
-}
-.si:not([data-wide]) .si-btn-dark {
-  background: rgb(var(--ink) / 0.09);
-  box-shadow: none;
-}
-.si:not([data-wide]) .si-btn-dark:active {
-  background: rgb(var(--ink) / 0.14);
-}
-.si:not([data-wide]) .si-legal {
-  margin-top: 0.75rem;
+.si-alt-btn:active {
+  scale: 0.97;
 }
 
-/* --- Wide (a computer, a TV): the column centred in the window under the wordmark, as the sign-in always was,
-       anchored from the top so the wordmark and each step's first line stay put as steps change. Each step's
-       button sits under its field; nothing is pinned to the window's foot. ---------------------------------- */
-.account-shell[data-plain] .account-main:has(> .si[data-wide]) {
-  place-items: start center;
-  padding: 0 1rem 2rem;
-  overflow-x: hidden;
+.si-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgb(var(--ink-text) / 0.42);
 }
-.si[data-wide] {
-  width: min(24rem, 100%);
-  height: auto;
-  min-height: 0;
-  margin-top: max(1rem, calc(22vh - var(--nav-h)));
+.si-footer button {
+  color: inherit;
+  font: inherit;
+  font-weight: 450;
+  transition: color 140ms var(--ease-out);
 }
-.si-wide-mark {
-  align-self: center;
-  margin-bottom: 1.5rem;
+@media (hover: hover) and (pointer: fine) {
+  .si-footer button:hover {
+    color: var(--text);
+  }
 }
-/* The column keeps one height, so a step change doesn't move what's on show up or down. */
-.si[data-wide] .si-stage {
-  flex: none;
-  height: 30rem;
-}
-.si-bar[data-empty] > * {
-  visibility: hidden;
-}
-.si[data-wide] .si-primary {
-  flex: none;
-  margin-top: 1.75rem;
-}
-.si[data-wide] .si-or {
-  margin-top: 1.5rem;
-}
-/* The opening, wide: centred under the wordmark, like the sign-in before it. */
-.si[data-wide] .si-start {
-  padding-top: 0;
+.si-footer-dot {
+  color: rgb(var(--ink-text) / 0.24);
+  user-select: none;
 }

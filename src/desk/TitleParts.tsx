@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { IconPlay } from "../phone/icons";
+import { useLibraryToggle } from "../components/title/LibraryButton";
+import { PlaylistChecklist, usePlaylistChecklist } from "../components/title/PlaylistChecklist";
+import { PopoverPopup, PopoverRoot, PopoverTrigger } from "../components/ui/Popover";
+import type { MetaPreview } from "../lib/types";
+import { IconCheck, IconPlay, IconPlus } from "../phone/icons";
 import { reduced } from "./motion";
 
 /** Play or Resume as the pinned bar draws it: the title's white pill, smaller. */
@@ -107,4 +111,26 @@ export function useCardStrip(strip: RefObject<HTMLElement | null>) {
     [metrics],
   );
   return { alignTo, page };
+}
+
+/**
+ * Add to List in a title's row of actions: My List and the playlists to tick this title into, and New Playlist, in a
+ * popover under the tile (docs/ui-components.md U10). Ticked, and "Added", while the title is in My List or any playlist.
+ */
+export function ListAction({ item }: { item: MetaPreview }) {
+  const { inLibrary } = useLibraryToggle(item);
+  const { inAny } = usePlaylistChecklist(item);
+  const saved = !!inLibrary || inAny;
+  return (
+    <PopoverRoot>
+      <PopoverTrigger className="dk-t-action" aria-pressed={saved}>
+        <span className="dk-t-action-glyph">{saved ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}</span>
+        <span className="dk-t-action-label">{saved ? "Added" : "Add to List"}</span>
+      </PopoverTrigger>
+      <PopoverPopup sideOffset={8} align="center" collisionPadding={12} className="playlist-menu">
+        <p className="playlist-menu-title">Add to List</p>
+        <PlaylistChecklist item={item} look="popover" withLibrary />
+      </PopoverPopup>
+    </PopoverRoot>
+  );
 }

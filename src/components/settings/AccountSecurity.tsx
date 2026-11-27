@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit, Lock } from "../icons";
+import { Edit, Key, Lock } from "../icons";
 import { Button } from "../ui/Button";
 import { Card, ExpandRow, FormRow, type Expandable } from "./rows";
-import { groupSecret, isTwoStepCode, tidyCode, tidyEmail, TWO_STEP_CODE_LENGTH, useAccount, type AccountSecurity, type Authenticator, type AuthenticatorSetup } from "../../lib/account";
+import { deviceLabel, groupSecret, isTwoStepCode, tidyCode, tidyEmail, TWO_STEP_CODE_LENGTH, useAccount, type AccountSecurity, type Authenticator, type AuthenticatorSetup } from "../../lib/account";
+import { formFactor, isTvDevice, os } from "../../lib/platform";
 import { errorMessage } from "../../lib/errors";
 
 const AUTHENTICATORS_KEY = ["account", "authenticators"] as const;
+const PASSKEYS_KEY = ["account", "passkeys"] as const;
 
 /**
- * Settings → Account: changing the account's email address and two-step sign-in (lib/account/twoStep.ts).
- * Shown while signed in with a provider; both go through the account's `security`.
+ * Settings → Account: changing the account's email address, passkeys, and two-step sign-in (lib/account/twoStep.ts).
+ * Shown while signed in with a provider; all go through the account's `security`.
  */
 export function AccountSecurityCard({ expand }: { expand: (id: string) => Expandable }) {
   const account = useAccount();
@@ -18,6 +20,7 @@ export function AccountSecurityCard({ expand }: { expand: (id: string) => Expand
   return (
     <Card title="Sign-in">
       <EmailRow security={account.security} email={account.user.email} waiting={account.user.newEmail} {...expand("email")} />
+      {account.security.passkeys && <PasskeysRow security={account.security} {...expand("passkeys")} />}
       <TwoStepRow security={account.security} {...expand("two-step")} />
     </Card>
   );
@@ -153,6 +156,84 @@ function EmailRow({ security, email, waiting, ...props }: Expandable & { securit
 }
 
 type TwoStepAction = { kind: "add" } | { kind: "remove"; ids: string[]; all: boolean };
+
+/**
+ * Passkeys (Supabase Auth WebAuthn): list, register a new passkey on this device, or remove one.
+ */
+function PasskeysRow({ security, ...props }: Expandable & { security: AccountSecurity }) {
+  const queryClient = useQueryClient();
+  const list = useQuery({ queryKey: PASSKEYS_KEY, queryFn: () => security.passkeys!() });
+  const passkeys = list.data ?? [];
+  const [done, setDone] = useState<string | null>(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: PASSKEYS_KEY });
+
+  const add = useMutation({
+    mutationFn: () => security.addPasskey!(deviceLabel(os, formFactor().form, isTvDevice)),
+    onSuccess: () => {
+      setDone("Passkey added.");
+      void refresh();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => security.removePasskey!(id),
+    onSuccess: () => {
+      setDone("Passkey removed.");
+      void refresh();
+    },
+  });
+
+  const addError = add.isError && (!(add.error instanceof Error) || !("code" in add.error) || add.error.code !== "cancelled");
+
+  return (
+    <ExpandRow
+      setting="passkeys"
+      icon={Key}
+      title="Passkeys"
+      caption="Sign in faster with biometrics or a security key"
+      value={list.isSuccess ? (passkeys.length ? `${passkeys.length} saved` : "None") : undefined}
+      {...props}
+    >
+      {list.isError && <p className="settings-error">{errorMessage(list.error)}</p>}
+      {list.isSuccess && (
+        <>
+          <p className="settings-expand-text">
+            {passkeys.length
+              ? "You can sign in directly with any of these passkeys instead of waiting for an emailed code."
+              : "Add a passkey on this device to sign in with Touch ID, Face ID, Windows Hello, or a password manager."}
+          </p>
+          {passkeys.length > 0 && (
+            <ul className="settings-expand-text" aria-label="Passkeys">
+              {passkeys.map((p) => (
+                <li key={p.id}>
+                  {p.name}{" "}
+                  <Button variant="plain" onClick={() => (setDone(null), remove.mutate(p.id))} disabled={remove.isPending}>
+                    Remove {p.name}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {security.passkeysSupported ? (
+            <div className="settings-expand-form">
+              <Button variant="primary" onClick={() => (setDone(null), add.mutate())} disabled={add.isPending}>
+                {add.isPending ? "Waiting for passkey…" : "Add Passkey"}
+              </Button>
+            </div>
+          ) : (
+            <p className="settings-expand-text">This device doesn&apos;t support WebAuthn passkeys in this build.</p>
+          )}
+          {addError && <p className="settings-error">{errorMessage(add.error)}</p>}
+          {remove.isError && <p className="settings-error">{errorMessage(remove.error)}</p>}
+        </>
+      )}
+      {done && (
+        <p className="settings-expand-text" role="status">
+          {done}
+        </p>
+      )}
+    </ExpandRow>
+  );
+}
 
 /**
  * Two-step sign-in: on with an authenticator app (scan the QR code or type the key, then a code to

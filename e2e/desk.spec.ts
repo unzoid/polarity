@@ -30,6 +30,50 @@ test("a poster opens its title as a dialog over Home, and Escape closes it", asy
   await expect(app.locator(".dk-tab-page[data-active='true']")).toHaveCount(1);
 });
 
+test("a title's Add to List tile offers My List and the playlists without closing the title", async ({ app }) => {
+  const poster = app.locator(".dk-row-slot .dk-poster").first();
+  await poster.waitFor();
+  const name = await poster.getAttribute("aria-label");
+  await poster.click();
+  const dialog = app.getByRole("dialog", { name: name! });
+  await expect(dialog.locator(".dk-t-actions").getByRole("button", { name: "My List", exact: true })).toHaveCount(0);
+  // "Add to List", or "Added" when the sample library already has it.
+  const add = dialog.locator(".dk-t-actions").getByRole("button", { name: /^(Add to List|Added)$/ });
+  await add.click();
+  const menu = app.locator(".playlist-menu");
+  const myList = menu.getByRole("menuitemcheckbox", { name: "My List" });
+  const wasSaved = (await myList.getAttribute("aria-checked")) === "true";
+  await myList.click();
+  await expect(myList).toHaveAttribute("aria-checked", String(!wasSaved));
+  await menu.getByRole("button", { name: "New Playlist" }).click();
+  await menu.getByPlaceholder("Playlist name").fill("Weekend");
+  await menu.getByRole("button", { name: "Create" }).click();
+  await expect(menu.getByRole("menuitemcheckbox", { name: /Weekend/ })).toHaveAttribute("aria-checked", "true");
+  await expect(add).toHaveAttribute("aria-pressed", "true");
+  await expect(add).toHaveText("Added");
+  await expect(dialog).toBeVisible();
+  if (process.env.PLAYLIST_SHOT) {
+    await app.waitForTimeout(700);
+    await app.screenshot({ path: process.env.PLAYLIST_SHOT });
+  }
+});
+
+test("an episode listed for the coming week plays and says when it airs; one further off waits (#143)", async ({ app }) => {
+  // Kingsbridge's S1E2 is listed for 12 Mar 2021 and E3 for 13 Apr: on 9 Mar the first may be out already.
+  await app.clock.setFixedTime(new Date("2021-03-09T12:00:00Z"));
+  await app.getByRole("button", { name: "Search", exact: true }).click();
+  await app.getByRole("searchbox", { name: "Search" }).fill("kingsbridge");
+  await app.locator(".dk-search .dk-poster[aria-label='Kingsbridge']").first().click();
+  const dialog = app.getByRole("dialog", { name: "Kingsbridge" });
+  const soon = dialog.locator(".dk-ep-card").filter({ hasText: "EPISODE 2" });
+  await expect(soon.getByRole("button", { name: "Play episode 2" })).toBeEnabled();
+  await expect(soon.locator(".dk-ep-date")).toHaveText(/^Airs /);
+  await expect(soon.getByRole("button", { name: "Sources for episode 2" })).toBeVisible();
+  const later = dialog.locator(".dk-ep-card").filter({ hasText: "EPISODE 3" });
+  await expect(later.getByRole("button", { name: "Play episode 3" })).toBeDisabled();
+  await expect(later.locator(".dk-ep-date")).toHaveText(/^Coming /);
+});
+
 test("Shows narrows Home, Genres picks a genre, and ✕ goes back to all shows", async ({ app }) => {
   await sections(app).getByRole("button", { name: "Shows" }).click();
   await expect(sections(app).getByRole("button", { name: "Shows" })).toHaveAttribute("aria-current", "page");

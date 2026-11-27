@@ -1289,7 +1289,18 @@ html[data-os="mac"]:not([data-fullscreen]) .t3s {
 }
 
 /* The window's switches are Liquid Glass's (settings/GlassSwitch.tsx); its own stylesheet sizes and colours
-   them (`--lg-*`, under `@layer liquid-glass`). Here only its keyboard ring, in the window's own. */
+   them (`--lg-*`, under `@layer liquid-glass`). Here its keyboard ring, in the window's own. */
 .t3s {
   --lg-focus-ring: 2px solid var(--t3-primary);
+}
+/* And the track's colour, off and on (the accent, GlassSwitch's `tint`): a layered rule loses to any unlayered one,
+   so base.css's `button { background: none }` took it, leaving only the white thumb on nothing. The lift while held
+   is its own background image, given back with it. */
+.t3s [data-lg-switch] {
+  background-color: var(--lg-switch-off, rgb(120 120 128 / 0.32));
+  background-image: linear-gradient(rgb(255 255 255 / calc(0.1 * var(--lg-switch-held, 0))), rgb(255 255 255 / calc(0.1 * var(--lg-switch-held, 0))));
+  transition: background-color 0.2s ease-in-out;
+}
+.t3s [data-lg-switch][data-lg-on] {
+  background-color: var(--lg-switch-on, #8e8e93);
 }

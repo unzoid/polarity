@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import {
   addToPlaylist,
   createPlaylist,
@@ -15,6 +15,7 @@ import { Check, Plus } from "../icons";
 import { Button } from "../ui/Button";
 import { MenuCheckItem, MenuItem, MenuSeparator } from "../ui/Menu";
 import { TextField } from "../ui/TextField";
+import { useLibraryToggle } from "./LibraryButton";
 
 /**
  * Add-to-playlist (docs/ui-components.md U10): the playlists as tickable rows
@@ -36,11 +37,12 @@ export function usePlaylistChecklist(item: MetaPreview) {
 
 /**
  * `look="menu"`: rows inside a `MenuSub`, New Playlist made at once with a free name.
- * `look="popover"`: rows inside a `Popover`, New Playlist asks for a name first.
+ * `look="popover"`: rows inside a `Popover`, New Playlist asks for a name first; `withLibrary` puts My List
+ * above the playlists, for the title pages' one Add to List button.
  */
-export function PlaylistChecklist({ item, look }: { item: MetaPreview; look: "menu" | "popover" }) {
+export function PlaylistChecklist({ item, look, withLibrary }: { item: MetaPreview; look: "menu" | "popover"; withLibrary?: boolean }) {
   const list = usePlaylistChecklist(item);
-  if (look === "popover") return <PopoverChecklist list={list} />;
+  if (look === "popover") return <PopoverChecklist list={list} library={withLibrary ? <LibraryRow item={item} /> : undefined} />;
   return (
     <>
       {list.rows.map((row) => (
@@ -58,8 +60,21 @@ export function PlaylistChecklist({ item, look }: { item: MetaPreview; look: "me
   );
 }
 
+/** My List as the popover's first row, ticked while the title is in it. */
+function LibraryRow({ item }: { item: MetaPreview }) {
+  const { inLibrary, toggle } = useLibraryToggle(item);
+  return (
+    <div className="playlist-menu-list playlist-menu-library">
+      <button className="playlist-menu-item" role="menuitemcheckbox" aria-checked={!!inLibrary} onClick={toggle}>
+        <span className="playlist-menu-check">{inLibrary && <Check size={14} strokeWidth={2.5} />}</span>
+        <span className="playlist-menu-name">My List</span>
+      </button>
+    </div>
+  );
+}
+
 /** The popover's rows; it remounts each time the popover opens, so the name form starts closed and empty. */
-function PopoverChecklist({ list }: { list: ReturnType<typeof usePlaylistChecklist> }) {
+function PopoverChecklist({ list, library }: { list: ReturnType<typeof usePlaylistChecklist>; library?: ReactNode }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -72,6 +87,8 @@ function PopoverChecklist({ list }: { list: ReturnType<typeof usePlaylistCheckli
 
   return (
     <>
+      {library}
+      {library && <p className="playlist-menu-title playlist-menu-subtitle">Playlists</p>}
       {list.rows.length > 0 && (
         <div className="playlist-menu-list">
           {list.rows.map((row) => (

@@ -1,4 +1,4 @@
-import { AccountError, type AccountBackend, type AccountUser, type FriendEntry, type FriendPresence, type FriendSettings, type FriendsHandlers, type PartyHandlers, type PartyPresence, type Profile } from "../../account/backend";
+import { AccountError, type AccountBackend, type AccountUser, type FriendEntry, type FriendPresence, type FriendSettings, type FriendsHandlers, type PartyHandlers, type PartyPresence, type Passkey, type Profile } from "../../account/backend";
 import { normalizeAvatar } from "../../account/avatars";
 import { normalizeTvCode, type TvClaim } from "../../account/tvSignIn";
 import { NO_LOCK, type ProfileLock } from "../../account/profileLock";
@@ -107,19 +107,26 @@ export const FAKE_EMAIL_CODE = "654321";
 const FAKE_QR = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M0 0h3v3H0zM5 0h3v3H5zM0 5h3v3H0zM4 4h1v1H4zM6 6h2v2H6z"/></svg>')}`;
 type FakeFactor = { id: string; name: string; verified: boolean };
 let factors: FakeFactor[] = [];
+let fakePasskeys: Passkey[] = [];
+let nextPasskey = 1;
+let fakePasskeysSupported = true;
 /** The session has given an authenticator code (or the account has none). */
 let secondStepDone = true;
 let emailChange: { to: string; newDone: boolean; currentDone: boolean } | null = null;
 let nextFactor = 1;
-/** Back to the start: one signed-in user, no authenticators, no email change. */
+/** Back to the start: one signed-in user, no authenticators, no passkeys, no email change. */
 export function resetFakeSecurity() {
   factors = [];
+  fakePasskeys = [];
+  nextPasskey = 1;
+  fakePasskeysSupported = true;
   secondStepDone = true;
   emailChange = null;
   nextFactor = 1;
   user.email = "robin@example.com";
   delete user.newEmail;
 }
+export const setFakePasskeysSupported = (on: boolean) => void (fakePasskeysSupported = on);
 const confirmed = () => factors.filter((f) => f.verified).map(({ id, name }) => ({ id, name }));
 const wrongCode = () => new AccountError("invalid_code", "That code is wrong. Check your authenticator app and try again.");
 const checkCode = (id: string, code: string) => {
@@ -265,6 +272,27 @@ export const fakeAccount: AccountBackend = {
       return { ...user };
     },
     refreshUser: async () => (signedIn ? { ...user } : null),
+  },
+  passkeys: {
+    supported: () => fakePasskeysSupported,
+    list: async () => fakePasskeys.map((p) => ({ ...p })),
+    register: async (friendlyName) => {
+      const p: Passkey = {
+        id: `fake-passkey-${nextPasskey}`,
+        name: friendlyName?.trim() || `Passkey ${nextPasskey}`,
+        createdAt: new Date().toISOString(),
+      };
+      nextPasskey++;
+      fakePasskeys = [...fakePasskeys, p];
+      return { ...p };
+    },
+    signIn: async () => {
+      if (!fakePasskeys.length) throw new AccountError("invalid_code", "No account matched that passkey.");
+      return newSession();
+    },
+    remove: async (id) => {
+      fakePasskeys = fakePasskeys.filter((p) => p.id !== id);
+    },
   },
   twoStep: {
     list: async () => confirmed(),

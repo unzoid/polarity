@@ -2060,7 +2060,6 @@ test("notifications: New episodes switched on, a new episode is one note, and it
 
 test("a refused sign-in code empties the cells and says so until the next one is typed", async ({ app }) => {
   await app.goto("/fake.html?account=signed-out");
-  await app.getByRole("button", { name: "Continue with Email" }).click();
   await app.getByRole("textbox", { name: "Email address" }).fill("someone@example.com");
   await app.getByRole("button", { name: "Continue", exact: true }).click();
   const code = app.getByRole("textbox", { name: "Verification code" });

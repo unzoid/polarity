@@ -2,6 +2,7 @@ import "../../styles/account.css";
 import { useEffect, type ReactNode } from "react";
 import logo from "../../assets/polarity-white.png";
 import { FlutedGlow } from "../../components/FlutedGlow";
+import { SignInArtwork } from "../../components/SignInArtwork";
 import { WindowControls } from "../../components/WindowControls";
 import { KEY_DIRS, move, ownsArrows } from "../../tv/spatial";
 import { playSound } from "../../tv/sounds";
@@ -34,7 +35,7 @@ export function AccountShell({
       data-handoff-go={handoffGo || undefined}
       data-nav-scope={tv || undefined}
     >
-      {!plain && <FlutedGlow className="account-glow" paused={leaving} />}
+      {plain ? <SignInArtwork className="si-artwork" /> : <FlutedGlow className="account-glow" paused={leaving} />}
       <header className="account-bar" data-tauri-drag-region>
         {/* Plain (sign-in): the mark sits over the form instead. */}
         <span className="account-brand" data-tauri-drag-region>

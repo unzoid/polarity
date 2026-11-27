@@ -8,14 +8,13 @@ import { DownloadButton } from "../components/DownloadButton";
 import { Img } from "../components/Img";
 import { preloadPlayerNow } from "../components/PlayerLayer";
 import { playExtra } from "../components/title/ExtrasShelf";
-import { useLibraryToggle } from "../components/title/LibraryButton";
 import { SourcePicker, useSourcePicker } from "../components/title/SourcePicker";
 import { AgeRatingBadge, ScoreRow } from "../components/title/TitleDetails";
 import { openTrailer, useTrailerOpen } from "../components/Trailer";
 import { EmptyState } from "../components/ui/EmptyState";
 import { extraKind, extraStills, LIMIT_NOTICE, useBrowseVisible, useListable, useTitleVerdict } from "../lib/catalog";
 import { errorMessage } from "../lib/errors";
-import { episodeCode, formatRemaining, formatRuntime } from "../lib/format";
+import { episodeCode, formatRemaining, formatRuntime, isOpenable, isReleased } from "../lib/format";
 import { downloadableEpisodes, episodeEntry, progressMap, seasonsOf, shelfGroupOf, shelfGroups, upNext, useEpisodeOrders } from "../lib/library";
 import { useCollection, useMeta, useProgress, useRatings, useRecommend, useStreams } from "../lib/net";
 import { useEpisodeLayout } from "../lib/settings";
@@ -26,9 +25,9 @@ import { cardArtUrl, detailBackdropUrl, sizedArt } from "../lib/ui";
 import { useHorizontalWindow, useVerticalWindow } from "../lib/ui/windowing";
 import type { AnimeCard } from "../lib/anime";
 import { AnimeTitle } from "./AnimeTitle";
-import { IconCheck, IconMuted, IconPlay, IconPlayRing, IconPlus, IconSound, IconSources, IconTrailer } from "./icons";
+import { IconMuted, IconPlay, IconPlayRing, IconSound, IconSources, IconTrailer } from "./icons";
 import { ListOverlay } from "./ListOverlay";
-import { Action, MediaButtons, SeasonDownloadGlyph, Synopsis } from "./titleParts";
+import { Action, ListAction, MediaButtons, SeasonDownloadGlyph, Synopsis } from "./titleParts";
 import { Poster } from "./Rows";
 import { SeasonPicker } from "../components/title/SeasonPicker";
 
@@ -304,15 +303,12 @@ function Credits({ meta, series }: { meta?: Meta; series: boolean }) {
   );
 }
 
-/** The row of labelled glyphs under the details: My List, Trailer, Sources, and a show's season download. */
+/** The row of labelled glyphs under the details: Add to List, Trailer, Sources, and a show's season download. */
 function Actions({ item, meta, request, onSources, fileTrailer }: { item: MetaPreview; meta?: Meta; request: PlayRequest | null; onSources: () => void; fileTrailer: boolean }) {
-  const { inLibrary, toggle } = useLibraryToggle(item);
   const season = useMemo(() => (meta && item.type === "series" ? seasonsOf(meta).find((s) => s > 0) : undefined), [meta, item.type]);
   return (
     <div className="ps-actions">
-      <Action label="My List" pressed={inLibrary} onClick={toggle}>
-        {inLibrary ? <IconCheck size={28} stroke={1.6} /> : <IconPlus size={28} stroke={1.5} />}
-      </Action>
+      <ListAction item={item} />
       {(meta?.trailerYtId || fileTrailer) && (
         <Action label="Trailer" onClick={() => openTrailer(trailerFor(item.name, item.id, meta))}>
           <IconTrailer size={27} />
@@ -551,7 +547,9 @@ const EpisodeCard = memo(function EpisodeCard({
   isUpNext: boolean;
   onPlay: (v: Video) => void;
 }) {
-  const aired = !v.released || new Date(v.released).getTime() <= Date.now();
+  // Openable a week before its listed date: services often put an episode out before it (#143).
+  const aired = isOpenable(v);
+  const soon = aired && !isReleased(v);
   return (
     <li className="ps-ep-card" data-up-next={isUpNext || undefined} {...cardMenu(meta, episodeEntry(meta, v, p), { episode: true })}>
       <button type="button" className="ps-ep-still scheme-dark" aria-label={`Play episode ${number}`} disabled={!aired} onClick={() => onPlay(v)}>
@@ -576,7 +574,7 @@ const EpisodeCard = memo(function EpisodeCard({
         </strong>
         {aired && <DownloadButton item={meta} video={v} className="ps-episode-dl" size={20} />}
       </div>
-      <span className="ps-ep-meta">{[runtime, v.released && aired ? fullDateFmt.format(new Date(v.released)) : undefined].filter(Boolean).join(" · ")}</span>
+      <span className="ps-ep-meta">{[runtime, v.released && aired ? `${soon ? "Airs " : ""}${fullDateFmt.format(new Date(v.released))}` : undefined].filter(Boolean).join(" · ")}</span>
       {v.overview && <p className="ps-ep-text">{v.overview}</p>}
     </li>
   );
@@ -599,7 +597,9 @@ const EpisodeRow = memo(function EpisodeRow({
 }) {
   const [failed, setFailed] = useState(false);
   const still = v.thumbnail ? sizedArt(v.thumbnail, "w300") : undefined;
-  const aired = !v.released || new Date(v.released).getTime() <= Date.now();
+  // Openable a week before its listed date: services often put an episode out before it (#143).
+  const aired = isOpenable(v);
+  const soon = aired && !isReleased(v);
   return (
     <li className="ps-episode" {...cardMenu(meta, episodeEntry(meta, v, progress), { episode: true })}>
       <div className="ps-episode-head">
@@ -620,7 +620,7 @@ const EpisodeRow = memo(function EpisodeRow({
           <strong>
             {number}. {v.title?.trim() || `Episode ${v.episode}`}
           </strong>
-          <span>{aired ? runtime : v.released ? `Coming ${shortDateFmt.format(new Date(v.released))}` : ""}</span>
+          <span>{soon && v.released ? `Airs ${shortDateFmt.format(new Date(v.released))}` : aired ? runtime : v.released ? `Coming ${shortDateFmt.format(new Date(v.released))}` : ""}</span>
         </div>
         {aired && <DownloadButton item={meta} video={v} className="ps-episode-dl" size={22} />}
       </div>

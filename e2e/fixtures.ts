@@ -26,17 +26,22 @@ export const test = base.extend<{ tv: boolean; account: boolean; desk: boolean; 
   app: async ({ page, baseURL, tv, account, desk, browserName }, use) => {
     const errors: string[] = [];
     const refused = new Set<string>();
+    const isBlockedExternal = (url: URL) =>
+      url.origin !== new URL(baseURL!).origin && url.protocol.startsWith("http") && url.host !== "media.example";
     page.on("pageerror", (e) => {
-      if (browserName === "webkit" && refusedLoad(e, refused)) return;
+      if (browserName === "webkit" && refusedLoad(e, refused, isBlockedExternal)) return;
       errors.push(String(e));
     });
-    await page.route(
-      (url) => url.origin !== new URL(baseURL!).origin && url.protocol.startsWith("http") && url.host !== "media.example",
-      (route) => {
-        refused.add(route.request().url());
-        return route.abort("blockedbyclient");
-      },
-    );
+    await page.route(isBlockedExternal, (route) => {
+      const reqUrl = route.request().url();
+      refused.add(reqUrl);
+      try {
+        refused.add(new URL(reqUrl).href);
+      } catch {
+        // keep raw url only
+      }
+      return route.abort("blockedbyclient");
+    });
     await serveMedia(page);
     if (browserName === "webkit")
       await page.addInitScript(() =>
@@ -66,11 +71,23 @@ export { expect };
  * TypeError and no "Unhandled Promise Rejection"), even when the app catches the failed fetch. Only the note for a
  * URL this fixture refused is let through.
  */
-function refusedLoad(e: Error, refused: Set<string>): boolean {
-  const first = (e.stack ?? e.message ?? String(e)).split("\n")[0];
-  const m = /^Fetch API cannot load (.+?) due to access control checks\.$/.exec(first);
-  if (!m) return false;
-  return refused.has(m[1].replace(/^(https?):\s+\//, "$1://"));
+function refusedLoad(e: Error, refused: Set<string>, isBlockedExternal: (url: URL) => boolean): boolean {
+  // Playwright's parseError sets `e.stack = ""` when WebKit sends no stack frames, so `e.stack ?? e.message`
+  // evaluates to `""` and misses the message. Check `e.message`, `String(e)`, and the first stack line.
+  for (const candidate of [e.message, String(e), (e.stack ?? "").split("\n")[0]]) {
+    const first = (candidate ?? "").split("\n")[0];
+    const m = /^Fetch API cannot load (.+?) due to access control checks\.$/.exec(first);
+    if (!m) continue;
+    const normalized = m[1].replace(/^(https?):\s+\//, "$1://");
+    if (refused.has(normalized)) return true;
+    try {
+      const u = new URL(normalized);
+      if (refused.has(u.href) || isBlockedExternal(u)) return true;
+    } catch {
+      // malformed URL
+    }
+  }
+  return false;
 }
 
 /** A poster or row card, by the title's name (its accessible name is "<name> <year>"). */
