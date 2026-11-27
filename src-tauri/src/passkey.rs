@@ -28,10 +28,12 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// Maximum HTTP request bytes read from the loopback callback.
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 
-static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-static ACTIVE: OnceLock<Mutex<Option<(u64, oneshot::Sender<()>)>>> = OnceLock::new();
+type ActiveHandoff = (u64, oneshot::Sender<()>);
 
-fn active_slot() -> &'static Mutex<Option<(u64, oneshot::Sender<()>)>> {
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+static ACTIVE: OnceLock<Mutex<Option<ActiveHandoff>>> = OnceLock::new();
+
+fn active_slot() -> &'static Mutex<Option<ActiveHandoff>> {
     ACTIVE.get_or_init(|| Mutex::new(None))
 }
 
@@ -56,13 +58,12 @@ pub async fn passkey_handoff(
     mode: String,
     options_json: String,
 ) -> Result<String> {
-    use tauri::Manager;
     use tauri_plugin_opener::OpenerExt;
 
     validate_base_url(&base_url)?;
     validate_mode(&mode)?;
-    let options: serde_json::Value = serde_json::from_str(&options_json)
-        .map_err(|_| CmdError::Unsupported("invalid passkey options".into()))?;
+    let options: serde_json::Value =
+        serde_json::from_str(&options_json).map_err(|_| CmdError::Unsupported("invalid passkey options".into()))?;
     if !options.is_object() {
         return Err(CmdError::Unsupported("passkey options must be a JSON object".into()));
     }
@@ -70,10 +71,7 @@ pub async fn passkey_handoff(
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| CmdError::Other(format!("failed to start passkey callback listener: {e}")))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| CmdError::Other(format!("failed to read callback port: {e}")))?
-        .port();
+    let port = listener.local_addr().map_err(|e| CmdError::Other(format!("failed to read callback port: {e}")))?.port();
 
     let state = random_state();
     let callback = format!("http://127.0.0.1:{port}/callback");
@@ -103,9 +101,12 @@ pub async fn passkey_handoff(
     let result = run_callback_server(listener, &state, cancel_rx, HANDOFF_TIMEOUT).await;
 
     #[cfg(desktop)]
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+    {
+        use tauri::Manager;
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
     }
 
     result
@@ -129,10 +130,7 @@ fn validate_mode(mode: &str) -> Result<()> {
 }
 
 fn validate_base_url(url: &str) -> Result<()> {
-    if url.is_empty()
-        || url.contains('#')
-        || url.bytes().any(|b| b.is_ascii_control() || b == b' ')
-    {
+    if url.is_empty() || url.contains('#') || url.bytes().any(|b| b.is_ascii_control() || b == b' ') {
         return Err(CmdError::Unsupported("invalid passkey handoff URL".into()));
     }
     if let Some(rest) = url.strip_prefix("https://") {
@@ -151,23 +149,22 @@ fn validate_base_url(url: &str) -> Result<()> {
             return Ok(());
         }
     }
-    Err(CmdError::Unsupported(
-        "passkey handoff URL must use https:// or http://localhost".into(),
-    ))
+    Err(CmdError::Unsupported("passkey handoff URL must use https:// or http://localhost".into()))
 }
 
 fn random_state() -> String {
     let mut bytes = [0u8; 16];
-    let mut filled = false;
-    #[cfg(unix)]
-    {
-        use std::io::Read;
-        if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
-            if f.read_exact(&mut bytes).is_ok() {
-                filled = true;
-            }
+    let filled = {
+        #[cfg(unix)]
+        {
+            use std::io::Read;
+            std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)).is_ok()
         }
-    }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    };
     if !filled {
         use std::collections::hash_map::RandomState;
         use std::hash::{BuildHasher, Hasher};
@@ -297,9 +294,7 @@ async fn run_callback_server(
             let _ = write_plain(&mut stream, "400 Bad Request", "Missing payload").await;
             continue;
         };
-        let raw = URL_SAFE_NO_PAD
-            .decode(payload.as_bytes())
-            .or_else(|_| URL_SAFE.decode(payload.as_bytes()));
+        let raw = URL_SAFE_NO_PAD.decode(payload.as_bytes()).or_else(|_| URL_SAFE.decode(payload.as_bytes()));
         let Ok(bytes) = raw else {
             let _ = write_plain(&mut stream, "400 Bad Request", "Invalid payload encoding").await;
             continue;
@@ -308,18 +303,14 @@ async fn run_callback_server(
             let _ = write_plain(&mut stream, "400 Bad Request", "Invalid UTF-8 payload").await;
             continue;
         };
-        let valid = serde_json::from_str::<serde_json::Value>(&json_str)
-            .is_ok_and(|v| v.is_object());
+        let valid = serde_json::from_str::<serde_json::Value>(&json_str).is_ok_and(|v| v.is_object());
         if !valid {
             let _ = write_plain(&mut stream, "400 Bad Request", "Invalid credential payload").await;
             continue;
         }
 
-        let _ = write_html(
-            &mut stream,
-            &completion_html("All set", "You can close this tab and return to Polarity."),
-        )
-        .await;
+        let _ = write_html(&mut stream, &completion_html("All set", "You can close this tab and return to Polarity."))
+            .await;
         return Ok(json_str);
     }
 }
@@ -327,7 +318,7 @@ async fn run_callback_server(
 async fn read_request_target(stream: &mut TcpStream) -> Option<String> {
     let mut buf = Vec::with_capacity(2048);
     let mut chunk = [0u8; 2048];
-    let read = tokio::time::timeout(READ_TIMEOUT, async {
+    tokio::time::timeout(READ_TIMEOUT, async {
         loop {
             let n = stream.read(&mut chunk).await.ok()?;
             if n == 0 {
@@ -342,7 +333,6 @@ async fn read_request_target(stream: &mut TcpStream) -> Option<String> {
     })
     .await
     .ok()??;
-    let _ = read;
 
     let text = std::str::from_utf8(&buf).ok()?;
     let first_line = text.lines().next()?;
@@ -444,9 +434,8 @@ mod tests {
         let (_tx, rx) = oneshot::channel();
         let state = "deadbeef01234567deadbeef01234567";
 
-        let server = tokio::spawn(async move {
-            run_callback_server(listener, state, rx, Duration::from_secs(5)).await
-        });
+        let server =
+            tokio::spawn(async move { run_callback_server(listener, state, rx, Duration::from_secs(5)).await });
 
         // 1. Stray favicon request should be ignored with 404
         {
@@ -460,9 +449,7 @@ mod tests {
         // 2. Wrong state should be rejected with 400 and keep waiting
         {
             let mut s = TcpStream::connect(addr).await.unwrap();
-            s.write_all(b"GET /callback?state=wrong&payload=e30 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
-                .await
-                .unwrap();
+            s.write_all(b"GET /callback?state=wrong&payload=e30 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").await.unwrap();
             let mut resp = String::new();
             s.read_to_string(&mut resp).await.unwrap();
             assert!(resp.starts_with("HTTP/1.1 400"));
@@ -473,9 +460,7 @@ mod tests {
         let encoded = URL_SAFE_NO_PAD.encode(cred.as_bytes());
         {
             let mut s = TcpStream::connect(addr).await.unwrap();
-            let req = format!(
-                "GET /callback?state={state}&payload={encoded} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
-            );
+            let req = format!("GET /callback?state={state}&payload={encoded} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
             s.write_all(req.as_bytes()).await.unwrap();
             let mut resp = String::new();
             s.read_to_string(&mut resp).await.unwrap();
@@ -494,14 +479,11 @@ mod tests {
         let (_tx, rx) = oneshot::channel();
         let state = "0123456789abcdef0123456789abcdef";
 
-        let server = tokio::spawn(async move {
-            run_callback_server(listener, state, rx, Duration::from_secs(5)).await
-        });
+        let server =
+            tokio::spawn(async move { run_callback_server(listener, state, rx, Duration::from_secs(5)).await });
 
         let mut s = TcpStream::connect(addr).await.unwrap();
-        let req = format!(
-            "GET /callback?state={state}&error=cancelled HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
-        );
+        let req = format!("GET /callback?state={state}&error=cancelled HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
         s.write_all(req.as_bytes()).await.unwrap();
         let mut resp = String::new();
         s.read_to_string(&mut resp).await.unwrap();
@@ -516,8 +498,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let (tx, rx) = oneshot::channel();
         let server = tokio::spawn(async move {
-            run_callback_server(listener, "0123456789abcdef0123456789abcdef", rx, Duration::from_secs(5))
-                .await
+            run_callback_server(listener, "0123456789abcdef0123456789abcdef", rx, Duration::from_secs(5)).await
         });
         let _ = tx.send(());
         let err = server.await.unwrap().unwrap_err();
